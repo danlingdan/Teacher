@@ -6,7 +6,7 @@
 
 本阶段验证范围：
 
-- Maven + Java 25 工程可编译。
+- Maven + Java 21 LTS 目标版本工程可编译。
 - JavaFX 桌面窗口可启动。
 - SQLite JDBC 可执行最小查询。
 - MySQL JDBC 驱动可加载。
@@ -46,7 +46,18 @@ SqlTeacherFxApp
 → Label
 ```
 
-## 4. 阶段 0 结论
+## 4. Java 版本决策
+
+项目统一使用 Java 21 LTS 作为编译目标和团队基准版本。
+
+原因：
+
+- Java 21 是长期支持版本，更适合课程项目、团队协作和后续打包交付。
+- JavaFX、JDBC、jpackage 等生态对 Java 21 支持稳定。
+- 开发者本机可以使用 JDK 21 或更高版本，但 Maven 必须以 `--release 21` 编译。
+- 若使用 JDK 25 本地构建，产物仍应保持 Java 21 目标兼容。
+
+## 5. 阶段 0 结论
 
 本阶段只证明技术可用，不代表最终架构冻结。阶段 1 需要继续细化：
 

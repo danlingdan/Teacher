@@ -12,8 +12,9 @@
 | T0-02 | SQLite JDBC | 单元测试 | 内存库建表、插入、查询成功 |
 | T0-03 | MySQL JDBC | 单元测试 | 驱动类可加载 |
 | T0-04 | Ollama 健康检查 | 单元测试 | 服务不可用时返回 WARNING，不抛出异常 |
-| T0-05 | JavaFX 主窗口 | 手动运行 `mvn javafx:run` | 出现 SQLTeacher 窗口 |
-| T0-06 | jpackage 可用性 | 手动运行 `jpackage --version` | 输出版本号 |
+| T0-05 | JavaFX 环境探测 | 单元测试 + CLI 验证 | JavaFX 类可加载；无图形界面时返回 WARNING |
+| T0-06 | JavaFX 主窗口 | 手动运行 `mvn javafx:run` | 图形环境可用时出现 SQLTeacher 窗口 |
+| T0-07 | jpackage 可用性 | 手动运行 `jpackage --version` | 输出版本号 |
 
 ## 3. 暂不测试范围
 
@@ -29,4 +30,5 @@
 - SQLite 和 MySQL 驱动验证测试通过。
 - Ollama 不可用时不会导致程序崩溃。
 - JavaFX 入口类可以编译。
+- JavaFX 环境探测可报告当前机器是否适合启动桌面窗口。
 - jpackage 初始脚本已提供。
