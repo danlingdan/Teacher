@@ -14,6 +14,11 @@
 6. [测试、打包与验收](guide/06-testing-packaging-acceptance.md)
 7. [交付物与风险管理](guide/07-delivery-and-risk-management.md)
 
+## 阶段记录
+
+- [阶段 0 技术验证报告](stage0/stage0-report.md)
+- [阶段 1 验证报告](stage1/stage1-report.md)
+
 ## 项目目标
 
 SQLTeacher 是面向数据库课程教学、实验练习和课后辅导的 Java 桌面软件。首版目标是在 16 周内完成一个可演示、可安装、可测试的 MVP，并为后续服务器版扩展保留接口。
