@@ -13,7 +13,7 @@
 5. [SQL 与 AI 安全规范](guide/05-sql-and-ai-safety.md)
 6. [测试、打包与验收](guide/06-testing-packaging-acceptance.md)
 7. [交付物与风险管理](guide/07-delivery-and-risk-management.md)
-8. [2026-07-28 初步版交付计划](plans/2026-07-28-initial-delivery-plan.md)
+8. [2026-07-10 至 2026-07-30 隔离式初步版交付计划](plans/2026-07-30-isolated-delivery-plan.md)
 
 ## 阶段记录
 
