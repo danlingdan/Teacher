@@ -13,6 +13,9 @@ The detailed team plan and engineering conventions are maintained in:
 
 - `docs/SQLTeacher_5人团队开发计划与规范.md`
 - `docs/guide/`
+- `docs/plans/2026-07-30-isolated-delivery-plan.md`
+- `docs/stage0/`
+- `docs/stage1/`
 
 When this file and the project documentation conflict, follow this order:
 
@@ -29,19 +32,48 @@ same task.
 
 - Build tool: Maven.
 - Current build file: `pom.xml`.
-- Current Java compiler level is defined in `pom.xml`.
+- Project compile target: Java 21 LTS. Developers may use JDK 21 or newer locally, but Maven must compile with `--release 21`.
+- JavaFX version is managed in `pom.xml`.
+- Dependency injection uses Spring Context, not a web container.
+- Logging uses SLF4J + Logback.
+- Runtime local data is written under `app-data/`, which must not be committed.
+- Local Ollama is expected at `http://localhost:11434` for AI-related verification.
 - Source layout currently follows standard Maven directories under `src/main` and `src/test`.
 - Project documentation currently describes the planned SQLTeacher product and team workflow.
+
+## Current Delivery Priority
+
+The active short-term delivery plan is:
+
+- `docs/plans/2026-07-30-isolated-delivery-plan.md`
+
+For work before the initial demo, prioritize the isolated P0 flow in that plan over broader long-term goals:
+
+```text
+SQLite demo database
+-> SQL execution
+-> SQL risk detection
+-> JavaFX SQL practice page
+-> Ollama NL2SQL draft
+-> AI output safety check
+-> execution event recording
+-> app-image verification
+```
+
+Do not expand into MySQL full integration, knowledge retrieval, dashboards, or installer polish unless the task explicitly asks for it or all P0 demo work is already complete.
 
 ## General Rules
 
 - Read the relevant existing files before editing.
 - Keep changes scoped to the user's request.
 - Preserve existing user changes and untracked files unless explicitly asked to modify them.
+- Respect the isolated ownership boundaries in `docs/plans/2026-07-30-isolated-delivery-plan.md`.
+- Avoid modifying another member's primary area unless the requested task requires cross-module integration.
 - Prefer small, reviewable commits or patches.
 - Do not introduce unrelated formatting churn.
 - Do not add large dependencies unless the task clearly requires them.
 - Do not commit secrets, local credentials, database passwords, tokens, model API keys, or IDE-specific private state.
+- Do not commit generated runtime data, especially `app-data/`, `target/`, local logs, local databases, or IDE workspace state.
 - Use UTF-8 for all text files.
 - For Java code, use 4 spaces for indentation.
 - Prefer clear English names in code. Do not use pinyin identifiers.
@@ -55,6 +87,17 @@ For this Maven project, prefer:
 mvn test
 ```
 
+Useful local verification commands:
+
+```powershell
+mvn -q exec:java "-Dexec.mainClass=com.sqlteacher.TechnologyVerificationApp"
+mvn -q exec:java "-Dexec.mainClass=com.sqlteacher.StageOneVerificationApp"
+mvn javafx:run
+.\packaging\package-stage0.ps1
+```
+
+Use `mvn javafx:run` only when a desktop graphics environment is available. For headless or CI-like environments, use the CLI verification apps instead.
+
 If tests are not present or cannot run, report that clearly and include the command attempted
 and the reason it failed.
 
@@ -63,7 +106,7 @@ artifacts or examples.
 
 ## Java Conventions
 
-- Follow the Java version configured in `pom.xml`.
+- Keep Java source compatible with Java 21.
 - If changing the Java version, update `pom.xml` and relevant docs together.
 - Use standard Maven source folders:
   - `src/main/java`
@@ -83,7 +126,7 @@ artifacts or examples.
 
 ## Architecture Boundaries
 
-The planned architecture separates the system into these responsibilities:
+The architecture separates the system into these responsibilities:
 
 - Domain: entities, value objects, enums, domain rules.
 - Application: use-case orchestration and service interfaces.
@@ -97,6 +140,22 @@ Keep business logic out of JavaFX controllers. Controllers should call applicati
 Keep infrastructure details out of domain code. JDBC, Ollama, file systems, and UI classes
 must not leak into domain models.
 
+Current package boundaries:
+
+- `com.sqlteacher.application`: service contracts and use-case DTOs.
+- `com.sqlteacher.domain`: domain exceptions and future domain model.
+- `com.sqlteacher.infrastructure`: SQLite, Ollama, Spring wiring, configuration, environment checks.
+- `com.sqlteacher.desktop`: JavaFX entry point and desktop UI.
+
+When adding behavior, prefer this direction of dependency:
+
+```text
+desktop -> application -> domain
+infrastructure -> application/domain
+```
+
+Do not make `application` depend on `desktop` or concrete JDBC/Ollama implementations.
+
 ## SQL Safety Rules
 
 This project teaches and executes SQL, so safety rules are mandatory.
@@ -109,6 +168,8 @@ This project teaches and executes SQL, so safety rules are mandatory.
 - Multi-statement execution must be blocked unless explicitly designed and reviewed.
 - High-risk SQL such as `UPDATE`, `DELETE`, `ALTER`, and `DROP` requires explicit user confirmation.
 - Forbidden statements such as `DROP DATABASE`, `GRANT`, and `REVOKE` should be blocked by default.
+- For the initial demo, multi-statement SQL must be blocked by default.
+- AI-generated SQL must be shown as a draft or preview before execution.
 - Do not log database passwords or sensitive connection details.
 
 Recommended AI-to-SQL flow:
@@ -137,6 +198,8 @@ When modifying AI-related code:
 - Add or update regression samples when behavior changes.
 - Provide a deterministic fallback for model unavailability, malformed output, or timeout.
 - Course documents and retrieved context must not override system safety rules.
+- The current local Ollama model may be small. Keep prompts short, deterministic, and oriented around simple SQLite `SELECT` generation until the P0 flow is stable.
+- AI features must degrade cleanly when Ollama is unavailable or no model is installed.
 
 ## JavaFX Rules
 
@@ -148,6 +211,8 @@ When modifying desktop UI code:
 - Risky SQL operations require clear confirmation dialogs.
 - Error messages should be understandable for students, not raw stack traces.
 - Keep UI usable on lower-resolution screens.
+- If a page is still a placeholder, keep it honest and minimal; do not add fake functionality that looks implemented.
+- UI may use mock data only when clearly named or isolated in tests/prototypes.
 
 ## Tests
 
@@ -165,6 +230,16 @@ Add focused tests for behavior changes. Prioritize tests for:
 
 Do not remove or weaken tests just to make a build pass.
 
+For P0 delivery work, add or update tests for:
+
+- SQLite initialization.
+- SQL execution result mapping.
+- SQL risk classification.
+- AI output parsing and fallback.
+- Event recording.
+
+Prefer service-level tests over fragile JavaFX UI automation unless the task specifically requires UI automation.
+
 ## Documentation
 
 Update documentation when changing:
@@ -179,11 +254,15 @@ Update documentation when changing:
 
 Keep documentation concise and accurate. Avoid promises that are not implemented.
 
+When completing stage work, record results under `docs/stageN/` or the active plan document. Include commands run, pass/fail status, environment notes, and known limitations.
+
 ## Git Hygiene
 
 - Check worktree state before editing when practical.
 - Do not revert changes you did not make unless explicitly instructed.
 - Keep commits focused.
+- Commit documentation updates with the code changes that make them true.
+- Before committing, check `git status --short` and ensure ignored runtime files are not staged.
 - Use commit messages in this style when committing:
 
 ```text
