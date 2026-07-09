@@ -6,6 +6,10 @@ public record SqlExecutionRequest(
     String connectionId,
     String sql,
     int maxRows,
-    Duration timeout
+    Duration timeout,
+    boolean riskConfirmed
 ) {
+    public SqlExecutionRequest(String connectionId, String sql, int maxRows, Duration timeout) {
+        this(connectionId, sql, maxRows, timeout, false);
+    }
 }
