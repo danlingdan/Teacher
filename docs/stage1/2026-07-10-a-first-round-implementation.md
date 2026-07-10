@@ -10,6 +10,7 @@
 - 将配置与 AI 可用状态 DTO 迁入 application 层，application 不再依赖 infrastructure 类型。
 - 增加 `ApplicationExceptionMapper`、`ApplicationError` 和默认映射实现。
 - 已知业务异常保留错误码和安全提示；非法请求和未知异常统一转换为可展示错误，堆栈只进入日志。
+- 配置解析或配置 DTO 校验失败统一包装为 `CONFIG_INVALID`，原始异常保留为 cause。
 - 真实 Spring 配置提供统一异常映射 Bean。
 - 增加独立的 UI mock 配置，可提供 SQL 执行、风险分析、元数据、NL2SQL 和 AI 状态服务。
 - 保持现有 Logback 控制台及滚动文件日志配置，异常映射使用 SLF4J 记录异常对象。
@@ -52,7 +53,7 @@ UI 捕获服务异常后调用 `ApplicationExceptionMapper.map(Throwable)`，只
 mvn test
 ```
 
-结果：通过。测试数 18，失败 0，错误 0，跳过 0；编译目标为 Java 21。
+结果：通过。测试数 21，失败 0，错误 0，跳过 0；编译目标为 Java 21。
 
 阶段 1 CLI 验证通过 Spring、SQLite 应用库和演示库检查；本机 Ollama 当前不可连接，按设计返回 `WARNING`，应用未崩溃。
 

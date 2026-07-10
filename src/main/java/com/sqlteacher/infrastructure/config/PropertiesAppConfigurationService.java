@@ -19,7 +19,11 @@ public final class PropertiesAppConfigurationService implements AppConfiguration
     private final SqlTeacherConfiguration properties;
 
     public PropertiesAppConfigurationService() {
-        this.properties = load();
+        this(loadProperties());
+    }
+
+    PropertiesAppConfigurationService(Properties raw) {
+        this.properties = parse(raw);
     }
 
     @Override
@@ -27,7 +31,7 @@ public final class PropertiesAppConfigurationService implements AppConfiguration
         return properties;
     }
 
-    private static SqlTeacherConfiguration load() {
+    private static Properties loadProperties() {
         Properties raw = new Properties();
         try (InputStream input = PropertiesAppConfigurationService.class.getResourceAsStream(CONFIG_RESOURCE)) {
             if (input == null) {
@@ -37,22 +41,33 @@ public final class PropertiesAppConfigurationService implements AppConfiguration
         } catch (IOException ex) {
             throw new SqlTeacherException("CONFIG_LOAD_FAILED", "Failed to load application.properties", ex);
         }
+        return raw;
+    }
 
-        Path dataDirectory = Path.of(raw.getProperty("sqlteacher.data.dir", "app-data"));
-        DatabaseConfiguration database = new DatabaseConfiguration(
-            Path.of(raw.getProperty("sqlteacher.database.app.path", "app-data/app.db")),
-            Path.of(raw.getProperty("sqlteacher.database.demo.path", "app-data/demo.db"))
-        );
-        AiConfiguration ai = new AiConfiguration(
-            URI.create(raw.getProperty("sqlteacher.ai.ollama.base-url", "http://localhost:11434")),
-            Duration.ofMillis(Long.parseLong(raw.getProperty("sqlteacher.ai.ollama.health-timeout-ms", "2000")))
-        );
+    private static SqlTeacherConfiguration parse(Properties raw) {
+        try {
+            Path dataDirectory = Path.of(raw.getProperty("sqlteacher.data.dir", "app-data"));
+            DatabaseConfiguration database = new DatabaseConfiguration(
+                Path.of(raw.getProperty("sqlteacher.database.app.path", "app-data/app.db")),
+                Path.of(raw.getProperty("sqlteacher.database.demo.path", "app-data/demo.db"))
+            );
+            AiConfiguration ai = new AiConfiguration(
+                URI.create(raw.getProperty("sqlteacher.ai.ollama.base-url", "http://localhost:11434")),
+                Duration.ofMillis(Long.parseLong(raw.getProperty("sqlteacher.ai.ollama.health-timeout-ms", "2000")))
+            );
 
-        return new SqlTeacherConfiguration(
-            raw.getProperty("sqlteacher.app.name", "SQLTeacher"),
-            dataDirectory,
-            database,
-            ai
-        );
+            return new SqlTeacherConfiguration(
+                raw.getProperty("sqlteacher.app.name", "SQLTeacher"),
+                dataDirectory,
+                database,
+                ai
+            );
+        } catch (IllegalArgumentException ex) {
+            throw new SqlTeacherException(
+                "CONFIG_INVALID",
+                "Invalid value in application.properties",
+                ex
+            );
+        }
     }
 }
