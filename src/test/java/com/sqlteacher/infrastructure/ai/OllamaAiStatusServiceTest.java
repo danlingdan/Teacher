@@ -1,8 +1,8 @@
 package com.sqlteacher.infrastructure.ai;
 
 import com.sqlteacher.application.ai.AiStatus;
-import com.sqlteacher.infrastructure.config.AiModelProperties;
-import com.sqlteacher.infrastructure.environment.VerificationStatus;
+import com.sqlteacher.application.ai.AiAvailability;
+import com.sqlteacher.application.config.AiConfiguration;
 import org.junit.jupiter.api.Test;
 
 import java.net.URI;
@@ -15,12 +15,12 @@ class OllamaAiStatusServiceTest {
     @Test
     void shouldReturnWarningWhenOllamaEndpointIsUnavailable() {
         OllamaAiStatusService service = new OllamaAiStatusService(
-            new AiModelProperties(URI.create("http://127.0.0.1:9"), Duration.ofMillis(200))
+            new AiConfiguration(URI.create("http://127.0.0.1:9"), Duration.ofMillis(200))
         );
 
         AiStatus status = service.checkStatus();
 
-        assertEquals(VerificationStatus.WARNING, status.status());
+        assertEquals(AiAvailability.UNAVAILABLE, status.status());
         assertFalse(status.available());
     }
 }

@@ -1,9 +1,9 @@
 package com.sqlteacher.infrastructure.database;
 
 import com.sqlteacher.application.database.DatabaseInitializationResult;
-import com.sqlteacher.infrastructure.config.AiModelProperties;
-import com.sqlteacher.infrastructure.config.DatabaseProperties;
-import com.sqlteacher.infrastructure.config.SqlTeacherProperties;
+import com.sqlteacher.application.config.AiConfiguration;
+import com.sqlteacher.application.config.DatabaseConfiguration;
+import com.sqlteacher.application.config.SqlTeacherConfiguration;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -27,11 +27,11 @@ class SqliteAppDatabaseInitializerTest {
     void shouldInitializeAppAndDemoDatabases() throws Exception {
         Path appDb = tempDir.resolve("app.db");
         Path demoDb = tempDir.resolve("demo.db");
-        SqlTeacherProperties properties = new SqlTeacherProperties(
+        SqlTeacherConfiguration properties = new SqlTeacherConfiguration(
             "SQLTeacher",
             tempDir,
-            new DatabaseProperties(appDb, demoDb),
-            new AiModelProperties(URI.create("http://localhost:11434"), Duration.ofSeconds(1))
+            new DatabaseConfiguration(appDb, demoDb),
+            new AiConfiguration(URI.create("http://localhost:11434"), Duration.ofSeconds(1))
         );
 
         DatabaseInitializationResult result = new SqliteAppDatabaseInitializer(properties).initialize();
