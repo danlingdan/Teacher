@@ -4,7 +4,7 @@
 
 本记录冻结初步演示版的 Application Service、公共 DTO 和模块交换字段。冻结基线以本文件所在提交为准。实现类、FXML、CSS、Prompt 文本、数据库适配器内部结构和测试夹具不属于公共接口。
 
-当前 `AiStatus` 和 `AppConfigurationService` 仍引用 infrastructure 类型，这是 Stage 1 基线遗留的依赖方向问题。为避免在冻结日同时破坏已有实现，本次保留其签名；A 分支需在首次联调窗口前提供 application 自有 DTO，并按接口变更流程迁移。
+`AiStatus` 和 `AppConfigurationService` 在冻结基线中曾引用 infrastructure 类型。A 的第一轮实现已将它们迁移为 application 自有的 `AiAvailability`、`SqlTeacherConfiguration`、`DatabaseConfiguration` 和 `AiConfiguration`，消除了 application 对 infrastructure 的反向依赖。
 
 冻结接口：
 
@@ -62,6 +62,15 @@
 - 变更申请必须记录影响成员、文件、迁移方式和测试方式。
 - 非窗口期只接受编译修复、字段命名错误或 P0 严重阻塞。
 - 公共接口变更由 A 审核；SQL 安全变更还需 B 审核。
+
+## A 第一轮迁移记录
+
+- 日期：2026-07-10。
+- 影响成员：B、C、D、E。
+- 接口变化：`AppConfigurationService.current()` 返回值由 infrastructure 配置类型迁移为 `SqlTeacherConfiguration`；`AiStatus.status()` 改用 `AiAvailability`。
+- 迁移方式：调用方只需替换类型导入；字段访问器保持 `appName()`、`database()`、`ai()`、`status()` 等原有命名。
+- UI mock：D 可单独使用 `MockApplicationServiceConfig` 获取 SQL 执行、风险、元数据、NL2SQL、AI 状态及异常映射服务。
+- 验证方式：`mvn test`，并运行 `StageOneVerificationApp` 检查真实配置装配。
 
 ## 分支基线
 

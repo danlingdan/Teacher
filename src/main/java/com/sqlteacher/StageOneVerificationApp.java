@@ -24,7 +24,7 @@ public final class StageOneVerificationApp {
             System.out.println("[PASS] SQLite demo database - " + databaseResult.demoDatabasePath());
             System.out.printf(
                 "[%s] Ollama status - %s%n",
-                aiStatus.status(),
+                aiStatus.available() ? "PASS" : "WARNING",
                 aiStatus.message()
             );
         }

@@ -2,8 +2,8 @@ package com.sqlteacher.infrastructure.database;
 
 import com.sqlteacher.application.database.DatabaseInitializationResult;
 import com.sqlteacher.application.database.DatabaseInitializationService;
+import com.sqlteacher.application.config.SqlTeacherConfiguration;
 import com.sqlteacher.domain.SqlTeacherException;
-import com.sqlteacher.infrastructure.config.SqlTeacherProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -18,9 +18,9 @@ import java.sql.Statement;
 public final class SqliteAppDatabaseInitializer implements DatabaseInitializationService {
     private static final Logger log = LoggerFactory.getLogger(SqliteAppDatabaseInitializer.class);
 
-    private final SqlTeacherProperties properties;
+    private final SqlTeacherConfiguration properties;
 
-    public SqliteAppDatabaseInitializer(SqlTeacherProperties properties) {
+    public SqliteAppDatabaseInitializer(SqlTeacherConfiguration properties) {
         this.properties = properties;
     }
 

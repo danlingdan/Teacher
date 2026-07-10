@@ -3,9 +3,9 @@ package com.sqlteacher.infrastructure.ai;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sqlteacher.application.ai.AiStatus;
+import com.sqlteacher.application.ai.AiAvailability;
 import com.sqlteacher.application.ai.AiStatusService;
-import com.sqlteacher.infrastructure.config.AiModelProperties;
-import com.sqlteacher.infrastructure.environment.VerificationStatus;
+import com.sqlteacher.application.config.AiConfiguration;
 
 import java.io.IOException;
 import java.net.http.HttpClient;
@@ -13,11 +13,11 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 
 public final class OllamaAiStatusService implements AiStatusService {
-    private final AiModelProperties properties;
+    private final AiConfiguration properties;
     private final HttpClient httpClient;
     private final ObjectMapper objectMapper;
 
-    public OllamaAiStatusService(AiModelProperties properties) {
+    public OllamaAiStatusService(AiConfiguration properties) {
         this.properties = properties;
         this.httpClient = HttpClient.newBuilder()
             .connectTimeout(properties.healthTimeout())
@@ -36,7 +36,7 @@ public final class OllamaAiStatusService implements AiStatusService {
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() != 200) {
                 return new AiStatus(
-                    VerificationStatus.WARNING,
+                    AiAvailability.UNAVAILABLE,
                     "ollama",
                     properties.ollamaBaseUrl().toString(),
                     0,
@@ -47,7 +47,7 @@ public final class OllamaAiStatusService implements AiStatusService {
             JsonNode root = objectMapper.readTree(response.body());
             int modelCount = root.path("models").isArray() ? root.path("models").size() : 0;
             return new AiStatus(
-                VerificationStatus.PASS,
+                AiAvailability.AVAILABLE,
                 "ollama",
                 properties.ollamaBaseUrl().toString(),
                 modelCount,
@@ -63,7 +63,7 @@ public final class OllamaAiStatusService implements AiStatusService {
 
     private AiStatus unavailable(Exception ex) {
         return new AiStatus(
-            VerificationStatus.WARNING,
+            AiAvailability.UNAVAILABLE,
             "ollama",
             properties.ollamaBaseUrl().toString(),
             0,
