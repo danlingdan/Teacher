@@ -11,6 +11,8 @@
 - 增加 `application.properties`，集中管理应用名、数据目录、SQLite 路径和 Ollama 地址。
 - 增加 Logback 配置，日志默认输出到控制台和 `app-data/logs/sqlteacher.log`。
 - 增加 `SqlTeacherException` 作为基础业务异常。
+- 增加统一异常映射契约，将已知、输入和未知异常转换为 UI 可展示的 `ApplicationError`。
+- 配置与 AI 状态 DTO 已归入 application 层，不再反向依赖 infrastructure。
 - 增加应用服务接口：
   - `AppConfigurationService`
   - `DatabaseInitializationService`
@@ -22,6 +24,7 @@
   - `app-data/demo.db`
   - `student` 演示表和基础样例数据。
 - 增加 Ollama 状态检查服务。
+- 增加独立 UI mock 服务配置，页面可在不依赖 SQLite/Ollama 的情况下调用 application 接口。
 - JavaFX 主窗口接入 Spring 容器，并展示 SQLite 和 Ollama 状态。
 - 增加 `StageOneVerificationApp`，用于不打开 JavaFX 窗口的阶段 1 验证。
 
@@ -126,5 +129,5 @@ app-data/
 
 - JavaFX 仍是基础骨架，没有完整页面导航。
 - 设置页按钮只是占位，阶段 2 前后再补真实设置页面。
-- SQL 执行服务和 NL2SQL 服务目前只有接口，没有业务实现。
+- SQL 执行服务和 NL2SQL 服务目前只有 UI mock，真实业务实现仍待 B/C 完成。
 - Ollama 已可访问，但当前没有安装模型；后续阶段需要补充模型配置和提示词管理。
