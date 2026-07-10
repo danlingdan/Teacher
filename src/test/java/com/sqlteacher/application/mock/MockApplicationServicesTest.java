@@ -45,6 +45,18 @@ class MockApplicationServicesTest {
     }
 
     @Test
+    void shouldRejectBlankSqlAsInvalidRequest() {
+        MockSqlExecutionService service = new MockSqlExecutionService(riskService);
+
+        assertThrows(IllegalArgumentException.class, () -> service.execute(
+            new SqlExecutionRequest("demo", " ", 100, Duration.ofSeconds(2))
+        ));
+        assertThrows(IllegalArgumentException.class, () -> service.execute(
+            new SqlExecutionRequest("demo", null, 100, Duration.ofSeconds(2))
+        ));
+    }
+
+    @Test
     void shouldReturnNl2SqlDraftWithoutExecutingIt() {
         var plan = new MockNl2SqlService().generate(new Nl2SqlRequest("List students", "demo"));
 

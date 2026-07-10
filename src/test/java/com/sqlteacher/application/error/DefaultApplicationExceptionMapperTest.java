@@ -33,6 +33,15 @@ class DefaultApplicationExceptionMapperTest {
     }
 
     @Test
+    void shouldMapInvalidInputAsValidationError() {
+        ApplicationError error = mapper.map(new IllegalArgumentException("sql must not be blank"));
+
+        assertEquals("INVALID_REQUEST", error.code());
+        assertEquals(ApplicationErrorType.VALIDATION, error.type());
+        assertFalse(error.retryable());
+    }
+
+    @Test
     void shouldProvideSafeFallbackForIncompleteApplicationException() {
         ApplicationError error = mapper.map(new SqlTeacherException(null, null));
 

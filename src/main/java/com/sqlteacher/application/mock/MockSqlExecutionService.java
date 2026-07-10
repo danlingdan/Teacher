@@ -49,6 +49,9 @@ public final class MockSqlExecutionService implements SqlExecutionService {
         if (request.connectionId() == null || request.connectionId().isBlank()) {
             throw new IllegalArgumentException("connectionId must not be blank");
         }
+        if (request.sql() == null || request.sql().isBlank()) {
+            throw new IllegalArgumentException("sql must not be blank");
+        }
         if (request.maxRows() <= 0) {
             throw new IllegalArgumentException("maxRows must be positive");
         }
