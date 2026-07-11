@@ -2,7 +2,6 @@ package com.sqlteacher.infrastructure.ai;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.sqlteacher.application.ai.AiAvailability;
 import com.sqlteacher.application.ai.AiCompletionRequest;
 import com.sqlteacher.application.ai.AiCompletionResult;
 import com.sqlteacher.application.ai.AiModelProvider;
@@ -31,7 +30,7 @@ public final class OllamaAiModelProvider implements AiModelProvider {
 
     @Override
     public AiCompletionResult complete(AiCompletionRequest request) {
-        if (!isServiceAvailable()) {
+        if (!aiStatusService.checkStatus().available()) {
             return AiCompletionResult.failure("Ollama service is unavailable, please check local model status", request.model());
         }
 
@@ -69,10 +68,6 @@ public final class OllamaAiModelProvider implements AiModelProvider {
             Thread.currentThread().interrupt();
             return AiCompletionResult.failure("Request interrupted", request.model());
         }
-    }
-
-    private boolean isServiceAvailable() {
-        return aiStatusService.checkStatus().available();
     }
 
     private record GenerateRequest(String model, String prompt, boolean stream, int num_predict) {
