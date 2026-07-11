@@ -39,8 +39,8 @@ public class SqlTeacherApplicationConfig {
     }
 
     @Bean
-    public AiModelProvider aiModelProvider(SqlTeacherConfiguration properties) {
-        return new OllamaAiModelProvider(properties.ai());
+    public AiModelProvider aiModelProvider(SqlTeacherConfiguration properties, AiStatusService aiStatusService) {
+        return new OllamaAiModelProvider(properties.ai(), aiStatusService);
     }
 
     @Bean

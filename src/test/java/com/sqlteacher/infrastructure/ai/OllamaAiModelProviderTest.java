@@ -1,7 +1,10 @@
 package com.sqlteacher.infrastructure.ai;
 
+import com.sqlteacher.application.ai.AiAvailability;
 import com.sqlteacher.application.ai.AiCompletionRequest;
 import com.sqlteacher.application.ai.AiCompletionResult;
+import com.sqlteacher.application.ai.AiStatus;
+import com.sqlteacher.application.ai.AiStatusService;
 import com.sqlteacher.application.config.AiConfiguration;
 import org.junit.jupiter.api.Test;
 
@@ -20,7 +23,8 @@ class OllamaAiModelProviderTest {
             Duration.ofMillis(100),
             "test-model"
         );
-        OllamaAiModelProvider provider = new OllamaAiModelProvider(config);
+        AiStatusService mockStatusService = () -> new AiStatus(AiAvailability.UNAVAILABLE, "ollama", "http://127.0.0.1:9", 0, "unavailable");
+        OllamaAiModelProvider provider = new OllamaAiModelProvider(config, mockStatusService);
 
         AiCompletionResult result = provider.complete(new AiCompletionRequest(
             "test-model",
@@ -39,7 +43,8 @@ class OllamaAiModelProviderTest {
             Duration.ofMillis(10),
             "test-model"
         );
-        OllamaAiModelProvider provider = new OllamaAiModelProvider(config);
+        AiStatusService mockStatusService = () -> new AiStatus(AiAvailability.AVAILABLE, "ollama", "http://localhost:11434", 1, "available");
+        OllamaAiModelProvider provider = new OllamaAiModelProvider(config, mockStatusService);
 
         AiCompletionResult result = provider.complete(new AiCompletionRequest(
             "test-model",
@@ -58,7 +63,8 @@ class OllamaAiModelProviderTest {
             Duration.ofMillis(100),
             "test-model"
         );
-        OllamaAiModelProvider provider = new OllamaAiModelProvider(config);
+        AiStatusService mockStatusService = () -> new AiStatus(AiAvailability.AVAILABLE, "ollama", "http://localhost:11434", 1, "available");
+        OllamaAiModelProvider provider = new OllamaAiModelProvider(config, mockStatusService);
 
         try {
             provider.complete(new AiCompletionRequest(
@@ -79,7 +85,8 @@ class OllamaAiModelProviderTest {
             Duration.ofMillis(100),
             "test-model"
         );
-        OllamaAiModelProvider provider = new OllamaAiModelProvider(config);
+        AiStatusService mockStatusService = () -> new AiStatus(AiAvailability.AVAILABLE, "ollama", "http://localhost:11434", 1, "available");
+        OllamaAiModelProvider provider = new OllamaAiModelProvider(config, mockStatusService);
 
         try {
             provider.complete(new AiCompletionRequest(

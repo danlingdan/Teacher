@@ -2,25 +2,27 @@ package com.sqlteacher.infrastructure.ai;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.sqlteacher.application.ai.AiAvailability;
 import com.sqlteacher.application.ai.AiCompletionRequest;
 import com.sqlteacher.application.ai.AiCompletionResult;
 import com.sqlteacher.application.ai.AiModelProvider;
+import com.sqlteacher.application.ai.AiStatusService;
 import com.sqlteacher.application.config.AiConfiguration;
 
 import java.io.IOException;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 public final class OllamaAiModelProvider implements AiModelProvider {
     private final AiConfiguration properties;
+    private final AiStatusService aiStatusService;
     private final HttpClient httpClient;
     private final ObjectMapper objectMapper;
-    private final AtomicBoolean serviceAvailable = new AtomicBoolean(true);
 
-    public OllamaAiModelProvider(AiConfiguration properties) {
+    public OllamaAiModelProvider(AiConfiguration properties, AiStatusService aiStatusService) {
         this.properties = properties;
+        this.aiStatusService = aiStatusService;
         this.httpClient = HttpClient.newBuilder()
             .connectTimeout(properties.healthTimeout())
             .build();
@@ -29,7 +31,7 @@ public final class OllamaAiModelProvider implements AiModelProvider {
 
     @Override
     public AiCompletionResult complete(AiCompletionRequest request) {
-        if (!serviceAvailable.get()) {
+        if (!isServiceAvailable()) {
             return AiCompletionResult.failure("Ollama service is unavailable, please check local model status", request.model());
         }
 
@@ -50,7 +52,6 @@ public final class OllamaAiModelProvider implements AiModelProvider {
             HttpResponse<String> response = httpClient.send(httpRequest, HttpResponse.BodyHandlers.ofString());
 
             if (response.statusCode() != 200) {
-                serviceAvailable.set(false);
                 return AiCompletionResult.failure("Ollama returned HTTP " + response.statusCode(), request.model());
             }
 
@@ -61,15 +62,17 @@ public final class OllamaAiModelProvider implements AiModelProvider {
                 return AiCompletionResult.failure("Ollama returned empty response", request.model());
             }
 
-            serviceAvailable.set(true);
             return AiCompletionResult.success(content, request.model());
         } catch (IOException ex) {
-            serviceAvailable.set(false);
             return AiCompletionResult.failure("Ollama service unavailable: " + ex.getClass().getSimpleName(), request.model());
         } catch (InterruptedException ex) {
             Thread.currentThread().interrupt();
             return AiCompletionResult.failure("Request interrupted", request.model());
         }
+    }
+
+    private boolean isServiceAvailable() {
+        return aiStatusService.checkStatus().available();
     }
 
     private record GenerateRequest(String model, String prompt, boolean stream, int num_predict) {
