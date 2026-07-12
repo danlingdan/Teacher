@@ -75,21 +75,21 @@ public final class Nl2SqlServiceImpl implements Nl2SqlService {
     }
 
     private String buildPrompt(String naturalLanguage) {
-        return """
-            You are a SQL teacher assistant. Convert the following natural language query into a structured JSON response.
-            
-            Database: SQLite
-            Available tables: student (id, name, score, class_id), class (id, name, teacher)
-            
-            Natural language: %s
-            
-            Return ONLY a valid JSON object with these fields:
-            - sqlDraft: the generated SQL statement
-            - intent: QUERY, INSERT, UPDATE, DELETE, or CREATE
-            - explanation: brief explanation of what the SQL does
-            
-            Example output:
-            {"sqlDraft": "SELECT name, score FROM student WHERE score >= 60", "intent": "QUERY", "explanation": "查询成绩大于等于60的学生姓名和分数"}
-            """.formatted(naturalLanguage);
+        StringBuilder sb = new StringBuilder();
+        sb.append("You are a SQL teacher assistant. Convert the following natural language query into a structured JSON response.\n");
+        sb.append("\n");
+        sb.append("Database: SQLite\n");
+        sb.append("Available tables: student (id, name, score, class_id), class (id, name, teacher)\n");
+        sb.append("\n");
+        sb.append("Natural language: ").append(naturalLanguage).append("\n");
+        sb.append("\n");
+        sb.append("Return ONLY a valid JSON object with these fields:\n");
+        sb.append("- sqlDraft: the generated SQL statement\n");
+        sb.append("- intent: QUERY, INSERT, UPDATE, DELETE, or CREATE\n");
+        sb.append("- explanation: brief explanation of what the SQL does\n");
+        sb.append("\n");
+        sb.append("Example output:\n");
+        sb.append("{\"sqlDraft\": \"SELECT name, score FROM student WHERE score >= 60\", \"intent\": \"QUERY\", \"explanation\": \"查询成绩大于等于60的学生姓名和分数\"}");
+        return sb.toString();
     }
 }
