@@ -1,8 +1,6 @@
 package com.sqlteacher.infrastructure.database;
 
 import com.sqlteacher.application.config.DatabaseConfiguration;
-import com.sqlteacher.application.config.SqlTeacherConfiguration;
-
 
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -18,7 +16,6 @@ public final class JdbcConnectionFactory {
 
     /**
      * 根据connectionId打开数据库连接
-     *
      * 当前支持：
      * app  -> app.db
      * demo -> demo.db
