@@ -6,10 +6,12 @@
 > 约束回顾：
 > - ViewModel 生产代码位于 `src/main/java/com/sqlteacher/desktop/viewmodel/`。
 > - ViewModel 统一使用 Java 21 `record` + 紧凑构造器，集合字段默认 `List.of()`，禁止 `null`。
-> - ViewModel 不直接引入 infrastructure 枚举；状态统一转为 `UiStatusLevel`。
+> - ViewModel 不直接引入 infrastructure 枚举 ；状态统一转为 `UiStatusLevel`。
 > - `connectionId` 统一使用全局常量 `DesktopConnections.DEMO`（固定值 `"demo"`）。
 > - ViewModel 只保留 UI 展示必需字段，不持有后端原始 DTO / 数据库实体。
-> - Mock 服务与契约单元测试位于 `src/test/java/com/sqlteacher/desktop/mock/`。
+> - Mock 契约单元测试位于 `src/test/java/com/sqlteacher/desktop/mock/`；其中离线程序运行期需要注入的
+>   `SqlExecutionMockService` 与共享枚举 `MockScenario` 已下沉到 `src/main/java/com/sqlteacher/desktop/mock/`
+>   （同包名、非模块化构建下 split package 合法），其余 Mock 与契约测试仍在 test 源集。
 
 ## 0. 公共约定
 

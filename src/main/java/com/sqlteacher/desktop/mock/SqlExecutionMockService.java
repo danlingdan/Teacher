@@ -20,6 +20,11 @@ import java.util.Map;
  *   <li>{@link MockScenario#ERROR} - a failed statement ({@code success = false}) with a
  *       readable error message.</li>
  * </ul>
+ *
+ * <p>Lives in the {@code src/main} source set so the offline desktop launcher can inject it into
+ * {@code SqlPracticeController} via constructor injection ({@code FXMLLoader.setControllerFactory}).
+ * The desktop contract test in {@code src/test} keeps referencing this class from the same package
+ * through the classpath (the build is non-modular, so a split package is legal).
  */
 public final class SqlExecutionMockService implements SqlExecutionService {
 
