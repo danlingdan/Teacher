@@ -1,0 +1,25 @@
+# 第一轮已知限制
+
+记录日期：2026-07-13。
+
+## P0 联调缺口
+
+- JavaFX SQL 练习页仍注入 `SqlExecutionMockService`，尚未连接真实 `JdbcSqlExecutionService`。
+- JavaFX 启动器尚未管理真实 Spring Context 和 SQLite 初始化生命周期。
+- 表结构浏览页面尚未实现，真实 `DatabaseMetadataService` 仅完成基础设施能力。
+- AI 助手页面尚未实现；NL2SQL 当前只有服务和测试入口。
+- AI 草案尚未在应用编排层自动进入风险分析，当前不得从 AI 结果直接执行 SQL。
+- SQL、AI 和风险拦截事件尚未写入 `app.db`。
+
+## 测试与模型限制
+
+- 第一轮 SQL 风险分析按首关键字和分号进行基础判断，不是完整 SQL 解析器。
+- 第一轮 Prompt 使用固定 demo 表结构，`connectionId` 尚未用于动态选择元数据。
+- Ollama 可用性和生成质量取决于本地模型；没有模型或服务不可用时只能验证降级行为。
+- JavaFX 控制器未使用 UI 自动化测试，主要通过服务、契约测试和人工启动验证。
+
+## 打包限制
+
+- `package-stage1.ps1` 生成 Windows app-image，不生成 MSI/EXE 安装器。
+- app-image 包含当前桌面 Mock 演示入口；真实数据库 UI 联调完成后需要重新打包验证。
+- 尚未配置正式应用图标、签名、升级和卸载流程。

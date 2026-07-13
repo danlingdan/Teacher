@@ -1,0 +1,11 @@
+# id	sql	expectedLevel	executable	confirmationRequired	multiStatement
+select-basic	SELECT * FROM student	LOW	true	false	false
+select-trailing-semicolon	SELECT name FROM student;	LOW	true	false	false
+insert-data	INSERT INTO student (id, name, score) VALUES (9, 'Demo', 80)	MEDIUM	true	true	false
+update-data	UPDATE student SET score = 100 WHERE id = 1	MEDIUM	true	true	false
+delete-data	DELETE FROM student WHERE id = 1	MEDIUM	true	true	false
+create-table	CREATE TABLE sample (id INTEGER)	HIGH	false	true	false
+drop-table	DROP TABLE student	HIGH	false	true	false
+multiple-statements	SELECT * FROM student; DELETE FROM student	HIGH	false	true	true
+unsupported-grant	GRANT SELECT ON student TO demo	FORBIDDEN	false	false	false
+blank	<blank>	FORBIDDEN	false	false	false
