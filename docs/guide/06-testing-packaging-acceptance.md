@@ -171,10 +171,17 @@ Maven 测试：
 mvn test
 ```
 
-打包命令以后以实际脚本为准，建议放在：
+第一轮 JavaFX app-image 打包：
 
-```text
-packaging/
+```powershell
+.\packaging\package-stage1.ps1
 ```
 
-如果命令依赖本地环境，必须在文档中说明环境要求。
+预期产物：
+
+```text
+target/installer/SQLTeacherStage1/SQLTeacherStage1.exe
+```
+
+该命令要求 Windows、JDK 21 或更高版本，并要求 `jpackage` 在 `PATH` 中。
+当前只生成 app-image，不生成 MSI/EXE 安装器。
