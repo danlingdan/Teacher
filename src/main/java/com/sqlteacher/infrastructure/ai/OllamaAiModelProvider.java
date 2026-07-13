@@ -39,7 +39,8 @@ public final class OllamaAiModelProvider implements AiModelProvider {
                 request.model(),
                 request.prompt(),
                 false,
-                1
+                "json",
+                new GenerateOptions(2048)
             ));
 
             HttpRequest httpRequest = HttpRequest.newBuilder(properties.generateEndpoint())
@@ -70,6 +71,9 @@ public final class OllamaAiModelProvider implements AiModelProvider {
         }
     }
 
-    private record GenerateRequest(String model, String prompt, boolean stream, int num_predict) {
+    record GenerateRequest(String model, String prompt, boolean stream, String format, GenerateOptions options) {
+    }
+
+    record GenerateOptions(int num_predict) {
     }
 }

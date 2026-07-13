@@ -76,20 +76,27 @@ public final class Nl2SqlServiceImpl implements Nl2SqlService {
 
     private String buildPrompt(String naturalLanguage) {
         StringBuilder sb = new StringBuilder();
-        sb.append("You are a SQL teacher assistant. Convert the following natural language query into a structured JSON response.\n");
+        sb.append("You are a SQL teacher assistant. Convert the following natural language query into a valid SQLite SELECT statement.\n");
         sb.append("\n");
         sb.append("Database: SQLite\n");
         sb.append("Available tables: student (id, name, score, class_id), class (id, name, teacher)\n");
         sb.append("\n");
+        sb.append("IMPORTANT RULES:\n");
+        sb.append("- ONLY generate SELECT statements\n");
+        sb.append("- NO INSERT, UPDATE, DELETE, CREATE, DROP, ALTER, or any modifying statements\n");
+        sb.append("- NO multiple statements separated by semicolons\n");
+        sb.append("- Limit the result to 500 rows using LIMIT clause\n");
+        sb.append("- Return ONLY a valid JSON object\n");
+        sb.append("\n");
         sb.append("Natural language: ").append(naturalLanguage).append("\n");
         sb.append("\n");
         sb.append("Return ONLY a valid JSON object with these fields:\n");
-        sb.append("- sqlDraft: the generated SQL statement\n");
-        sb.append("- intent: QUERY, INSERT, UPDATE, DELETE, or CREATE\n");
+        sb.append("- sqlDraft: the generated SELECT SQL statement\n");
+        sb.append("- intent: must be \"QUERY\"\n");
         sb.append("- explanation: brief explanation of what the SQL does\n");
         sb.append("\n");
         sb.append("Example output:\n");
-        sb.append("{\"sqlDraft\": \"SELECT name, score FROM student WHERE score >= 60\", \"intent\": \"QUERY\", \"explanation\": \"查询成绩大于等于60的学生姓名和分数\"}");
+        sb.append("{\"sqlDraft\": \"SELECT name, score FROM student WHERE score >= 60 LIMIT 500\", \"intent\": \"QUERY\", \"explanation\": \"查询成绩大于等于60的学生姓名和分数\"}");
         return sb.toString();
     }
 }

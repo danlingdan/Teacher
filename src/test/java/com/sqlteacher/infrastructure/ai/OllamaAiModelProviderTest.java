@@ -1,5 +1,6 @@
 package com.sqlteacher.infrastructure.ai;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sqlteacher.application.ai.AiAvailability;
 import com.sqlteacher.application.ai.AiCompletionRequest;
 import com.sqlteacher.application.ai.AiCompletionResult;
@@ -13,6 +14,7 @@ import java.time.Duration;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class OllamaAiModelProviderTest {
     @Test
@@ -56,7 +58,7 @@ class OllamaAiModelProviderTest {
     }
 
     @Test
-    void shouldReturnFailureWhenModelIsBlank() {
+    void shouldThrowWhenModelIsBlank() {
         AiConfiguration config = new AiConfiguration(
             URI.create("http://localhost:11434"),
             Duration.ofMillis(100),
@@ -66,19 +68,18 @@ class OllamaAiModelProviderTest {
         AiStatusService mockStatusService = () -> new AiStatus(AiAvailability.AVAILABLE, "ollama", "http://localhost:11434", 1, "available");
         OllamaAiModelProvider provider = new OllamaAiModelProvider(config, mockStatusService);
 
-        try {
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, () -> {
             provider.complete(new AiCompletionRequest(
                 "",
                 "test prompt",
                 Duration.ofMillis(100)
             ));
-        } catch (IllegalArgumentException ex) {
-            assertTrue(ex.getMessage().contains("model"));
-        }
+        });
+        assertTrue(ex.getMessage().contains("model"));
     }
 
     @Test
-    void shouldReturnFailureWhenPromptIsBlank() {
+    void shouldThrowWhenPromptIsBlank() {
         AiConfiguration config = new AiConfiguration(
             URI.create("http://localhost:11434"),
             Duration.ofMillis(100),
@@ -88,14 +89,31 @@ class OllamaAiModelProviderTest {
         AiStatusService mockStatusService = () -> new AiStatus(AiAvailability.AVAILABLE, "ollama", "http://localhost:11434", 1, "available");
         OllamaAiModelProvider provider = new OllamaAiModelProvider(config, mockStatusService);
 
-        try {
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, () -> {
             provider.complete(new AiCompletionRequest(
                 "test-model",
                 "",
                 Duration.ofMillis(100)
             ));
-        } catch (IllegalArgumentException ex) {
-            assertTrue(ex.getMessage().contains("prompt"));
-        }
+        });
+        assertTrue(ex.getMessage().contains("prompt"));
+    }
+
+    @Test
+    void shouldIncludeFormatJsonAndOptionsInRequest() throws Exception {
+        ObjectMapper objectMapper = new ObjectMapper();
+        var request = new OllamaAiModelProvider.GenerateRequest(
+            "test-model",
+            "test prompt",
+            false,
+            "json",
+            new OllamaAiModelProvider.GenerateOptions(2048)
+        );
+        String json = objectMapper.writeValueAsString(request);
+
+        assertTrue(json.contains("\"format\":\"json\""), "Request should include format: json");
+        assertTrue(json.contains("\"options\":{"), "Request should include options object");
+        assertTrue(json.contains("\"num_predict\":2048"), "Request should include num_predict in options");
+        assertFalse(json.contains("\"num_predict\":1"), "num_predict should not be 1");
     }
 }

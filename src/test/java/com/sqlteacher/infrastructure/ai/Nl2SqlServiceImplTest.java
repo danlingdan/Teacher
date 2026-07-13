@@ -13,6 +13,7 @@ import java.time.Duration;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class Nl2SqlServiceImplTest {
     @Test
@@ -103,11 +104,10 @@ class Nl2SqlServiceImplTest {
 
         Nl2SqlServiceImpl service = new Nl2SqlServiceImpl(mockProvider, config);
 
-        try {
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, () -> {
             service.generate(new Nl2SqlRequest("", "demo"));
-        } catch (IllegalArgumentException ex) {
-            assertTrue(ex.getMessage().contains("naturalLanguage"));
-        }
+        });
+        assertTrue(ex.getMessage().contains("naturalLanguage"));
     }
 
     @Test
@@ -122,11 +122,10 @@ class Nl2SqlServiceImplTest {
 
         Nl2SqlServiceImpl service = new Nl2SqlServiceImpl(mockProvider, config);
 
-        try {
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, () -> {
             service.generate(new Nl2SqlRequest("查询所有学生", ""));
-        } catch (IllegalArgumentException ex) {
-            assertTrue(ex.getMessage().contains("connectionId"));
-        }
+        });
+        assertTrue(ex.getMessage().contains("connectionId"));
     }
 
     private static class MockProvider implements AiModelProvider {
