@@ -8,6 +8,7 @@ $projectRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $targetRoot = Join-Path $projectRoot "target"
 $inputDir = Join-Path $targetRoot "stage1-input"
 $dependencyDir = Join-Path $inputDir "lib"
+$javaFxModuleDir = Join-Path $inputDir "javafx-modules"
 $outputPath = if ([System.IO.Path]::IsPathRooted($OutputDir)) {
     [System.IO.Path]::GetFullPath($OutputDir)
 } else {
@@ -55,6 +56,10 @@ try {
         throw "Maven package failed with exit code $LASTEXITCODE."
     }
 
+    New-Item -ItemType Directory -Force -Path $javaFxModuleDir | Out-Null
+    Get-ChildItem -LiteralPath $dependencyDir -Filter "javafx-*-win.jar" |
+        Copy-Item -Destination $javaFxModuleDir -Force
+
     Copy-Item -LiteralPath "target\Teacher-1.0-SNAPSHOT.jar" `
         -Destination (Join-Path $inputDir "Teacher-1.0-SNAPSHOT.jar") `
         -Force
@@ -71,7 +76,7 @@ try {
         --main-jar Teacher-1.0-SNAPSHOT.jar `
         --main-class com.sqlteacher.desktop.SqlTeacherFxApp `
         --java-options "--enable-native-access=ALL-UNNAMED" `
-        --java-options '--module-path=$APPDIR\lib' `
+        --java-options '--module-path=$APPDIR\javafx-modules' `
         --java-options "--add-modules=javafx.controls,javafx.fxml" `
         --java-options "-Dfile.encoding=UTF-8" `
         --dest $outputPath

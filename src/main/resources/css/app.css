@@ -126,6 +126,11 @@
     -fx-padding: 22 24 26 24;
 }
 
+.sql-practice-scroll,
+.sql-practice-scroll > .viewport {
+    -fx-background-color: transparent;
+}
+
 /* 居中内容列：透明。maxWidth 由 FXML 约束（1040），窗口变宽时整体居中、宽度固定。 */
 .page-content {
     -fx-background-color: transparent;
@@ -482,4 +487,15 @@
     -fx-padding: 10 14 10 14;
     -fx-font-size: 13px;
     -fx-wrap-text: true;
+}
+
+.sql-result-hint {
+    -fx-text-fill: #a9b8d8;
+    -fx-background-color: rgba(75, 105, 165, 0.14);
+    -fx-background-radius: 10;
+    -fx-border-color: rgba(100, 132, 196, 0.35);
+    -fx-border-width: 1;
+    -fx-border-radius: 10;
+    -fx-padding: 8 12 8 12;
+    -fx-font-size: 12px;
 }

@@ -1,15 +1,15 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
 <!--
-  SQL 练习子页面（离线 Mock 开发阶段 · 深色主题 · 居中内容 + 标题区 + 三张卡片）。
+  SQL 练习子页面（真实 SQLite 联调阶段 · 深色主题 · 居中内容 + 标题区 + 三张卡片）。
 
   嵌入方式（沿用任务九，不变）：
     - 本页面不是独立窗口，而是被 MainWindow.fxml 的 pageContainer（StackPane）内嵌加载。
     - 因 SqlPracticeController 使用构造注入（无无参构造），MainWindowController 通过
-      FXMLLoader.setControllerFactory(...) 提供已注入 SqlExecutionMockService 的实例。
+      FXMLLoader.setControllerFactory(...) 提供已注入 SqlExecutionService 的实例。
 
   布局（任务十）：
-    - 根 VBox（sql-practice-page）alignment=TOP_CENTER，上下留出充足页面边距；
+    - 根 ScrollPane 负责低分辨率下的纵向滚动，内部 VBox（sql-practice-page）顶部居中；
     - 内层 VBox（page-content）设 maxWidth 约束，窗口变宽时内容整体居中、宽度固定；
       内部自上而下：标题区 → 示例 SQL 卡片 → 编写 SQL 卡片 → 查询结果卡片。
     - 标题区（title-area）：小图标徽标 + 主标题「SQL 练习」+ 弱化副标题，整体居中。
@@ -27,6 +27,7 @@
 
 <?import javafx.scene.control.Button?>
 <?import javafx.scene.control.Label?>
+<?import javafx.scene.control.ScrollPane?>
 <?import javafx.scene.control.TableView?>
 <?import javafx.scene.control.TextArea?>
 <?import javafx.scene.layout.FlowPane?>
@@ -35,11 +36,15 @@
 <?import javafx.scene.layout.StackPane?>
 <?import javafx.scene.layout.VBox?>
 
-<VBox xmlns="http://javafx.com/javafx"
-      xmlns:fx="http://javafx.com/fxml"
-      fx:controller="com.sqlteacher.desktop.controller.SqlPracticeController"
-      styleClass="sql-practice-page"
-      alignment="TOP_CENTER">
+<ScrollPane xmlns="http://javafx.com/javafx"
+            xmlns:fx="http://javafx.com/fxml"
+            fx:controller="com.sqlteacher.desktop.controller.SqlPracticeController"
+            styleClass="sql-practice-scroll"
+            fitToWidth="true"
+            hbarPolicy="NEVER"
+            vbarPolicy="AS_NEEDED">
+    <content>
+        <VBox styleClass="sql-practice-page" alignment="TOP_CENTER">
 
     <!-- 居中内容列：固定最大宽度，窗口变宽时保持居中；三张卡片纵向排布。 -->
     <VBox styleClass="page-content" spacing="16.0" maxWidth="1040.0" VBox.vgrow="ALWAYS">
@@ -51,7 +56,7 @@
                     <Region styleClass="title-badge"/>
                     <Label styleClass="page-title" text="SQL 练习"/>
                     <Label styleClass="page-subtitle"
-                           text="输入SQL语句，借助离线Mock查看查询效果"/>
+                           text="输入 SQL 语句，在 SQLite 演示库中查看真实查询结果"/>
                 </children>
             </VBox>
 
@@ -68,16 +73,16 @@
                         <children>
                             <Button styleClass="example-chip"
                                     onAction="#onFillExampleSql"
-                                    text="SELECT id, name, grade, class FROM student ORDER BY grade DESC;"/>
+                                    text="SELECT id, name, score FROM student ORDER BY score DESC;"/>
                             <Button styleClass="example-chip"
                                     onAction="#onFillExampleSql"
-                                    text="SELECT * FROM student WHERE grade > 90;"/>
+                                    text="SELECT * FROM student WHERE score > 90;"/>
                             <Button styleClass="example-chip"
                                     onAction="#onFillExampleSql"
-                                    text="SELECT name,AVG(grade) FROM student GROUP BY class;"/>
+                                    text="SELECT AVG(score) AS average_score FROM student;"/>
                             <Button styleClass="example-chip"
                                     onAction="#onFillExampleSql"
-                                    text="SELECT * FROM student WHERE grade > 999;"/>
+                                    text="SELECT * FROM student WHERE score > 999;"/>
                         </children>
                     </FlowPane>
                 </children>
@@ -94,7 +99,7 @@
                     </HBox>
                     <TextArea fx:id="sqlInputArea"
                               styleClass="sql-editor"
-                              promptText="例如：SELECT id, name, grade FROM student ORDER BY grade DESC;"
+                              promptText="例如：SELECT id, name, score FROM student ORDER BY score DESC;"
                               wrapText="true"
                               prefRowCount="6"/>
                     <HBox styleClass="sql-action-row" alignment="CENTER_RIGHT">
@@ -118,7 +123,11 @@
                         </children>
                     </HBox>
                     <!-- 结果区：NORMAL 显示表格；EMPTY/初始显示「暂无查询结果」（居中，二者互斥）。 -->
-                    <StackPane fx:id="resultPane" styleClass="result-pane" VBox.vgrow="ALWAYS">
+                    <StackPane fx:id="resultPane"
+                               styleClass="result-pane"
+                               prefHeight="180.0"
+                               minHeight="140.0"
+                               VBox.vgrow="ALWAYS">
                         <children>
                             <TableView fx:id="resultTable" styleClass="result-table"/>
                             <Label fx:id="emptyPlaceholder"
@@ -126,6 +135,11 @@
                                    text="暂无查询结果"/>
                         </children>
                     </StackPane>
+                    <Label fx:id="resultStatusLabel"
+                           styleClass="sql-result-hint"
+                           maxWidth="Infinity"
+                           visible="false"
+                           managed="false"/>
                     <!-- 底部错误提示：默认隐藏（visible/managed=false），仅 ERROR 场景由 Controller
                          填充报错文案后显示；wrapText + maxWidth 保证长文案自动换行、背景铺满卡片宽度。 -->
                     <Label fx:id="errorLabel"
@@ -138,5 +152,7 @@
             </VBox>
 
         </children>
-    </VBox>
-</VBox>
+            </VBox>
+        </VBox>
+    </content>
+</ScrollPane>

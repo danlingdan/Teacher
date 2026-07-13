@@ -1,14 +1,15 @@
 package com.sqlteacher.desktop;
 
+import com.sqlteacher.application.database.DatabaseInitializationService;
 import com.sqlteacher.application.execution.SqlExecutionService;
 import com.sqlteacher.desktop.controller.MainWindowController;
-import com.sqlteacher.desktop.mock.MockScenario;
-import com.sqlteacher.desktop.mock.SqlExecutionMockService;
+import com.sqlteacher.infrastructure.spring.SqlTeacherApplicationConfig;
 import javafx.application.Application;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.stage.Stage;
+import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 
 import java.io.IOException;
 import java.net.URL;
@@ -20,11 +21,9 @@ import java.net.URL;
  * {@code /fxml/MainWindow.fxml} 一个顶层窗口，右侧内容区由 {@link MainWindowController} 负责
  * 内嵌 {@code SqlPractice.fxml}，SQL 练习页不再作为独立窗口弹出。
  *
- * <p><b>离线 Mock 注入</b>：按团队边界约束，桌面模块全程离线开发，服务注入只允许 Mock 实现。
- * 这里构造一个 {@link SqlExecutionMockService}（默认 {@link MockScenario#NORMAL} 场景），
- * 并通过 {@link FXMLLoader#setControllerFactory} 以<strong>构造注入</strong>方式交给
- * {@link MainWindowController}，再由后者向下传递给 {@code SqlPracticeController}。全程不引入
- * Spring 容器、真实数据库或 AI 等后端实现类。
+ * <p>应用在 JavaFX {@link #init()} 生命周期中启动 Spring Context 并初始化 SQLite 数据库。
+ * {@link #start(Stage)} 只负责创建界面，并把 Spring 提供的真实 {@link SqlExecutionService}
+ * 构造注入到控制器；{@link #stop()} 负责关闭 Spring Context。
  */
 public final class SqlTeacherFxApp extends Application {
 
@@ -34,10 +33,31 @@ public final class SqlTeacherFxApp extends Application {
     private static final double DEFAULT_WIDTH = 1180.0;
     private static final double DEFAULT_HEIGHT = 720.0;
 
+    private AnnotationConfigApplicationContext applicationContext;
+    private SqlExecutionService sqlExecutionService;
+
+    /**
+     * JavaFX 在非 Application Thread 上调用本方法，数据库初始化不会阻塞界面线程。
+     */
+    @Override
+    public void init() {
+        AnnotationConfigApplicationContext context =
+            new AnnotationConfigApplicationContext(SqlTeacherApplicationConfig.class);
+        try {
+            context.getBean(DatabaseInitializationService.class).initialize();
+            sqlExecutionService = context.getBean(SqlExecutionService.class);
+            applicationContext = context;
+        } catch (RuntimeException error) {
+            context.close();
+            throw error;
+        }
+    }
+
     @Override
     public void start(Stage stage) throws IOException {
-        // 离线 Mock：SQL 执行服务的运行期实现，向下贯穿注入到 SqlPracticeController。
-        SqlExecutionService sqlExecutionService = new SqlExecutionMockService(MockScenario.NORMAL);
+        if (sqlExecutionService == null) {
+            throw new IllegalStateException("SQL service is unavailable because application initialization did not complete");
+        }
 
         URL fxml = SqlTeacherFxApp.class.getResource(MAIN_WINDOW_FXML);
         if (fxml == null) {
@@ -60,6 +80,15 @@ public final class SqlTeacherFxApp extends Application {
         stage.setMinWidth(960.0);
         stage.setMinHeight(600.0);
         stage.show();
+    }
+
+    @Override
+    public void stop() {
+        if (applicationContext != null) {
+            applicationContext.close();
+            applicationContext = null;
+        }
+        sqlExecutionService = null;
     }
 
     public static void main(String[] args) {

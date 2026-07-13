@@ -16,8 +16,8 @@ import java.util.List;
  * <strong>内嵌</strong>进右侧 {@code pageContainer} 插槽（不再作为独立窗口弹出）。
  *
  * <p><b>依赖注入</b>：本控制器使用<strong>构造注入</strong>，由 {@code SqlTeacherFxApp} 通过
- * {@link FXMLLoader#setControllerFactory} 传入 {@link SqlExecutionService}（运行期实现为
- * {@code SqlExecutionMockService}）。加载 {@code SqlPractice.fxml} 时，再以同样的方式把该服务
+ * {@link FXMLLoader#setControllerFactory} 传入 {@link SqlExecutionService}（运行期实现由
+ * Spring Context 提供）。加载 {@code SqlPractice.fxml} 时，再以同样的方式把该服务
  * 构造注入到 {@code SqlPracticeController}，形成 {@code MainWindow -> SqlPractice} 的贯穿注入。
  *
  * <p><b>路由策略</b>：SQL 练习页在首次导航时懒加载一次并缓存复用（保留输入与结果状态，
@@ -31,7 +31,7 @@ public final class MainWindowController {
     /** SQL 练习子页面 FXML 的类路径位置。 */
     private static final String SQL_PRACTICE_FXML = "/fxml/SqlPractice.fxml";
 
-    /** SQL 执行服务（应用层接口）；运行期实现为 SqlExecutionMockService，向下注入到子页面控制器。 */
+    /** SQL 执行服务（应用层接口）；运行期实现由 Spring 提供，向下注入到子页面控制器。 */
     private final SqlExecutionService sqlExecutionService;
 
     /** SQL 练习导航按钮（左侧导航栏，当前唯一可跳转入口）。 */

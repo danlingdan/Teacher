@@ -23,6 +23,7 @@ public final class JdbcConnectionFactory {
     public Connection open(String connectionId) throws SQLException {
 
         Objects.requireNonNull(connectionId);
+        SqliteDriver.ensureLoaded();
 
         String url = switch (connectionId.toLowerCase()) {
 

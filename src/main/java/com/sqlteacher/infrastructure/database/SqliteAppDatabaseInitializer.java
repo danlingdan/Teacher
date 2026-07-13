@@ -49,6 +49,7 @@ public final class SqliteAppDatabaseInitializer implements DatabaseInitializatio
     }
 
     private static void initializeAppDatabase(Path databasePath) throws SQLException {
+        SqliteDriver.ensureLoaded();
         try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + databasePath);
              Statement statement = connection.createStatement()) {
             statement.executeUpdate("""
@@ -63,6 +64,7 @@ public final class SqliteAppDatabaseInitializer implements DatabaseInitializatio
     }
 
     private static void initializeDemoDatabase(Path databasePath) throws SQLException {
+        SqliteDriver.ensureLoaded();
         try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + databasePath);
              Statement statement = connection.createStatement()) {
             statement.executeUpdate("""

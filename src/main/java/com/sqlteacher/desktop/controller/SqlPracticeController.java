@@ -25,16 +25,13 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
- * SQL 练习子页面控制器（离线 Mock 开发阶段 · 第 4 步：输入 → 执行 → 三态渲染 + 底部错误提示区）。
+ * SQL 练习子页面控制器：输入 → 后台执行 → 结果、空态或错误状态渲染。
  *
  * <p><b>依赖注入</b>：本控制器使用<strong>构造注入</strong>，依赖类型为应用层接口
- * {@link SqlExecutionService}。运行期注入的实现固定为桌面测试目录中的
- * {@code com.sqlteacher.desktop.mock.SqlExecutionMockService}（该 Mock 实现了本接口）。
- * 之所以按接口类型注入而非直接写 Mock 具体类型：Mock 位于 {@code src/test} 源集，
- * 主源码（{@code src/main}）在编译期不可见测试类，直接引用会导致编译失败；按接口注入
- * 既满足"构造注入 + 运行期只用 Mock 实现"，也符合 {@code desktop -> application} 的依赖方向。
+ * {@link SqlExecutionService}。运行期由桌面启动器从 Spring Context 获取真实实现并注入，
+ * 控制器不依赖具体 JDBC 类型。
  *
- * <p><b>三套渲染分支</b>（点击执行后按输入与 Mock 返回状态自动切换，全链路闭环）：
+ * <p><b>三套渲染分支</b>（点击执行后按服务返回状态自动切换）：
  * <ul>
  *   <li>NORMAL：动态依据结果列生成 {@link TableColumn} 并填充数据行，展开表格、隐藏占位与错误提示；</li>
  *   <li>EMPTY：清空表格，居中展示「暂无查询结果」占位，隐藏错误提示；</li>
@@ -80,7 +77,7 @@ public final class SqlPracticeController {
     /** 执行中占位文案（[改动点 · P1 线程] 后台执行期间展示 loading）。 */
     private static final String LOADING_MESSAGE = "正在执行查询…";
 
-    /** SQL 执行服务（应用层接口）；运行期实现为 SqlExecutionMockService。 */
+    /** SQL 执行服务（应用层接口）；运行期实现由 Spring Context 提供。 */
     private final SqlExecutionService sqlExecutionService;
 
     /**
@@ -120,8 +117,12 @@ public final class SqlPracticeController {
     @FXML
     private Label errorLabel;
 
+    /** 成功结果摘要；用于显示行数、耗时和截断提示。 */
+    @FXML
+    private Label resultStatusLabel;
+
     /**
-     * 构造注入 SQL 执行服务（运行期传入 {@code SqlExecutionMockService}）。
+     * 构造注入 SQL 执行服务。
      *
      * @param sqlExecutionService 应用层 SQL 执行服务接口，不可为 {@code null}
      */
@@ -216,8 +217,7 @@ public final class SqlPracticeController {
 
     /**
      * 执行结果分发：按 success / rowCount 切换 NORMAL / EMPTY / ERROR 三套渲染分支。
-     * {@code SqlExecutionMockService} 的 ERROR 场景以 {@code success = false} 内联表达失败，
-     * 在此转为底部错误提示展示。
+     * 服务以 {@code success = false} 内联表达的失败在此转为底部错误提示展示。
      */
     private void renderExecution(SqlExecutionViewModel viewModel) {
         if (!viewModel.success()) {
@@ -228,18 +228,22 @@ public final class SqlPracticeController {
             showEmptyState();
             return;
         }
-        showResultRows(viewModel.columns(), viewModel.rows());
+        showResultRows(viewModel);
     }
 
     /**
      * NORMAL 渲染：依据列名动态重建表格列并填充结果行，展开表格、隐藏占位与错误提示。
      */
-    private void showResultRows(List<String> columns, List<SqlResultRowViewModel> rows) {
-        rebuildColumns(columns);
-        resultTable.setItems(FXCollections.observableArrayList(rows));
+    private void showResultRows(SqlExecutionViewModel viewModel) {
+        rebuildColumns(viewModel.columns());
+        resultTable.setItems(FXCollections.observableArrayList(viewModel.rows()));
         setNodeVisible(resultTable, true);
         setNodeVisible(emptyPlaceholder, false);
         setNodeVisible(errorLabel, false);
+        resultStatusLabel.setText(viewModel.truncated()
+            ? "已显示前 " + viewModel.rowCount() + " 行，结果已按上限截断"
+            : "共 " + viewModel.rowCount() + " 行 · " + viewModel.executionMillis() + " ms");
+        setNodeVisible(resultStatusLabel, true);
     }
 
     /**
@@ -252,6 +256,7 @@ public final class SqlPracticeController {
         emptyPlaceholder.setText(EMPTY_PLACEHOLDER_MESSAGE);
         setNodeVisible(emptyPlaceholder, true);
         setNodeVisible(errorLabel, false);
+        setNodeVisible(resultStatusLabel, false);
     }
 
     /**
@@ -264,6 +269,7 @@ public final class SqlPracticeController {
         emptyPlaceholder.setText(LOADING_MESSAGE);
         setNodeVisible(emptyPlaceholder, true);
         setNodeVisible(errorLabel, false);
+        setNodeVisible(resultStatusLabel, false);
     }
 
     /**
@@ -285,6 +291,7 @@ public final class SqlPracticeController {
         setNodeVisible(emptyPlaceholder, false);
         errorLabel.setText(readableError(message));
         setNodeVisible(errorLabel, true);
+        setNodeVisible(resultStatusLabel, false);
     }
 
     /** 清空表格的列与数据行（切换到 EMPTY / ERROR 前调用）。 */
