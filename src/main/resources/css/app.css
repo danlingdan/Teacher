@@ -1,0 +1,485 @@
+/* =====================================================================
+ * SQLTeacher 桌面端全局样式表（深色精致主题 · 课堂演示版 · JavaFX 21 原生适配）
+ * 作用域：JavaFX 桌面模块（com.sqlteacher.desktop）
+ *
+ * 兼容性说明（重要）：
+ *   本文件仅使用 JavaFX 21 能真实生效的原生 CSS 特性。
+ *   - 不使用网页专属的 text-shadow / box-shadow / transition / filter 发光：
+ *     CSS transition 是 JavaFX 23+ 才支持的特性，21 上完全不生效，故一律舍弃，
+ *     hover / 选中态改为原生即时切换。
+ *   - 阴影统一使用 JavaFX 原生的 -fx-effect: dropshadow(...) 实现（弱参数、柔和）。
+ *   - 渐变统一使用原生 linear-gradient，边框使用基础 -fx-border-*。
+ *
+ * 配色目标（对标参考截图深色精致设计）：
+ *   最外层窗口深邃暗色 #141c30；顶部横向导航略深 #0f1627；深色半透明卡片 #1b253d；
+ *   输入框 #212c44；主操作按钮蓝紫横向渐变；标题淡紫蓝、副标题弱化；错误浅红条。
+ *   整体冷色调、低刺激，适配 1366x768 及更高分辨率课堂投屏。
+ * 约束：仅修改本文件；样式类名 / 结构与 FXML / Controller 完全保持一致。
+ * ===================================================================== */
+
+/* ===== 主窗口根节点 =====
+ * 全局字体（微软雅黑）与正文常规字号 14px 在此下沉继承；最外层深邃暗色统一底色。 */
+.main-window {
+    -fx-font-family: "Microsoft YaHei", "微软雅黑", "Segoe UI", sans-serif;
+    -fx-font-size: 14px;
+    -fx-background-color: #141c30;
+}
+
+/* =====================================================================
+ * 顶部横向全局导航栏（MainWindow.fxml 的 top-nav）
+ * 底色略深于页面背景、14px 大圆角、四周浮起（margin 由 FXML 提供）；柔和投影。
+ * ===================================================================== */
+.top-nav {
+    -fx-background-color: #0f1627;
+    -fx-background-radius: 14;
+    -fx-border-color: rgba(120, 145, 200, 0.14);
+    -fx-border-width: 1;
+    -fx-border-radius: 14;
+    -fx-padding: 10 18 10 18;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.32), 14, 0.0, 0, 4);
+}
+
+/* 品牌 Logo 小方块：纯 CSS 蓝紫渐变装饰（无图片文件），26x26、8px 圆角。 */
+.brand-logo {
+    -fx-min-width: 26;
+    -fx-pref-width: 26;
+    -fx-max-width: 26;
+    -fx-min-height: 26;
+    -fx-pref-height: 26;
+    -fx-max-height: 26;
+    -fx-background-color: linear-gradient(to bottom right, #5b6ef5, #8259f0);
+    -fx-background-radius: 8;
+}
+
+/* 品牌文字「SQL Teacher」：柔和浅白蓝 #e8ecf8、16px 加粗。 */
+.brand-title {
+    -fx-font-size: 16px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #e8ecf8;
+}
+
+/* ===== 顶部导航按钮：基础态 =====
+ * 透明底、浅灰白字 #b8c2d9、10px 圆角；预置 1px 透明边框保证 hover 加边不跳动。 */
+.nav-button {
+    -fx-background-color: transparent;
+    -fx-text-fill: #b8c2d9;
+    -fx-font-size: 14px;
+    -fx-background-radius: 10;
+    -fx-border-radius: 10;
+    -fx-border-color: transparent;
+    -fx-border-width: 1;
+    -fx-padding: 8 18 8 18;
+    -fx-cursor: hand;
+}
+
+/* 导航按钮：悬浮态 —— 极淡白色半透明填充，复刻参考页导航透明度质感（JavaFX21 无过渡，即时切换）。 */
+.nav-button:hover {
+    -fx-background-color: rgba(255, 255, 255, 0.06);
+    -fx-text-fill: #e6ecf8;
+}
+
+/* 导航按钮：选中态 —— 蓝紫横向渐变实底 + 纯白字（与 Controller 追加的 selected 样式类联动）。 */
+.nav-button.selected {
+    -fx-background-color: linear-gradient(to right, #4b62f0, #7a5cf0);
+    -fx-border-color: transparent;
+    -fx-text-fill: #ffffff;
+    -fx-font-weight: bold;
+}
+
+.nav-button.selected:hover {
+    -fx-background-color: linear-gradient(to right, #5670f5, #8666f5);
+}
+
+/* 导航按钮：去除默认焦点描边，保持扁平质感。 */
+.nav-button:focused {
+    -fx-focus-color: transparent;
+    -fx-faint-focus-color: transparent;
+}
+
+/* 右侧「设置」占位按钮：低调描边胶囊，禁用态由 JavaFX 自动降透明度呈现"预留"感。 */
+.nav-settings {
+    -fx-background-color: transparent;
+    -fx-text-fill: #7f8bab;
+    -fx-font-size: 14px;
+    -fx-background-radius: 10;
+    -fx-border-radius: 10;
+    -fx-border-color: rgba(120, 145, 200, 0.28);
+    -fx-border-width: 1;
+    -fx-padding: 8 16 8 16;
+}
+
+/* ===== 页面容器（承载被内嵌的 SqlPractice.fxml） =====
+ * 透明底，间距由内部页面自身控制；顶部导航与内容之间的呼吸感由页面 padding 提供。 */
+.page-container {
+    -fx-background-color: transparent;
+    -fx-padding: 0;
+}
+
+/* =====================================================================
+ * SQL 练习页（SqlPractice.fxml）—— 居中内容 + 标题区 + 三张深色卡片
+ * 全部使用 JavaFX 21 原生属性：linear-gradient / 基础 border / 柔和 dropshadow。
+ * ===================================================================== */
+
+/* 页面根：透明、顶部居中，上下留出充足页面边距，横向自适应（内容宽度由 page-content 约束）。 */
+.sql-practice-page {
+    -fx-background-color: transparent;
+    -fx-padding: 22 24 26 24;
+}
+
+/* 居中内容列：透明。maxWidth 由 FXML 约束（1040），窗口变宽时整体居中、宽度固定。 */
+.page-content {
+    -fx-background-color: transparent;
+}
+
+/* ===== 页面标题区 ===== */
+
+/* 标题上方简约小图标徽标：纯 CSS 蓝紫渐变小方块（无图片），30x30、10px 圆角。 */
+.title-badge {
+    -fx-min-width: 30;
+    -fx-pref-width: 30;
+    -fx-max-width: 30;
+    -fx-min-height: 30;
+    -fx-pref-height: 30;
+    -fx-max-height: 30;
+    -fx-background-color: linear-gradient(to bottom right, #5b6ef5, #8259f0);
+    -fx-background-radius: 10;
+}
+
+/* 主标题「SQL 练习」：淡紫蓝 #b7c3ff、26px 加粗、居中。 */
+.page-title {
+    -fx-font-size: 26px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #b7c3ff;
+    -fx-alignment: CENTER;
+    -fx-text-alignment: center;
+}
+
+/* 副标题：调低亮度弱化（#8a95b5）、小号、居中。 */
+.page-subtitle {
+    -fx-font-size: 13px;
+    -fx-text-fill: #8a95b5;
+    -fx-alignment: CENTER;
+    -fx-text-alignment: center;
+}
+
+/* ===== 统一卡片容器 panel-card =====
+ * 深色半透明底 #1b253d（双层近似渐变制造柔和层次）+ 微亮细边 + 14px 圆角 + 柔和投影 + 均匀内边距。 */
+.panel-card {
+    -fx-background-color:
+        linear-gradient(to bottom, rgba(41, 55, 92, 0.35) 0%, rgba(41, 55, 92, 0.0) 40%),
+        #1b253d;
+    -fx-background-radius: 14;
+    -fx-border-color: rgba(120, 145, 200, 0.16);
+    -fx-border-width: 1;
+    -fx-border-radius: 14;
+    -fx-padding: 18 20 18 20;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.34), 18, 0.0, 0, 6);
+}
+
+/* 卡片标题行：图标竖条 + 标题文字水平排布。 */
+.card-title-row {
+    -fx-padding: 0 0 2 0;
+}
+
+/* 卡片前置小装饰：4px 宽竖向蓝紫渐变条，18px 高、2px 圆角。 */
+.card-accent {
+    -fx-min-width: 4;
+    -fx-pref-width: 4;
+    -fx-max-width: 4;
+    -fx-min-height: 18;
+    -fx-pref-height: 18;
+    -fx-max-height: 18;
+    -fx-background-color: linear-gradient(to bottom, #5b6ef5, #8259f0);
+    -fx-background-radius: 2;
+}
+
+/* 卡片小标题文字：柔和浅蓝白 #cfd8ee、15px 加粗。 */
+.card-title {
+    -fx-font-size: 15px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #cfd8ee;
+}
+
+/* ===== 第一层卡片：示例 SQL 标签流 ===== */
+
+/* 标签流容器：透明，间距由 FXML hgap/vgap 提供，宽度不足自动换行。 */
+.example-flow {
+    -fx-background-color: transparent;
+}
+
+/* 示例 SQL 标签（可点击）：深底 #223052 + 浅灰白字 + 低饱和蓝细边 + 10px 圆角 + 等宽字体。 */
+.example-chip {
+    -fx-font-family: "Consolas", "Cascadia Mono", "Microsoft YaHei", monospace;
+    -fx-font-size: 12.5px;
+    -fx-text-fill: #c3cee6;
+    -fx-background-color: #223052;
+    -fx-background-radius: 10;
+    -fx-border-color: rgba(120, 145, 200, 0.30);
+    -fx-border-width: 1;
+    -fx-border-radius: 10;
+    -fx-padding: 8 14 8 14;
+    -fx-cursor: hand;
+}
+
+/* 标签悬浮态：提亮底色 + 提亮描边（复刻标签 hover 亮度过渡，JavaFX21 即时切换）。 */
+.example-chip:hover {
+    -fx-background-color: #2c3d66;
+    -fx-text-fill: #e6ecf8;
+    -fx-border-color: rgba(120, 145, 200, 0.55);
+}
+
+.example-chip:pressed {
+    -fx-background-color: #34477a;
+}
+
+.example-chip:focused {
+    -fx-focus-color: transparent;
+    -fx-faint-focus-color: transparent;
+}
+
+/* =====================================================================
+ * 第二层卡片：SQL 输入与执行
+ * ===================================================================== */
+
+/* SQL 多行输入编辑器：深色底 #212c44 + 浅色文字 + 低饱和蓝边 + 12px 圆角。
+ * 正文使用等宽字体便于 SQL 对齐；占位示例文字柔和（#6b7996）。 */
+.sql-editor {
+    -fx-font-family: "Consolas", "Cascadia Mono", "Microsoft YaHei", monospace;
+    -fx-font-size: 13px;
+    -fx-text-fill: #e6ecf7;
+    -fx-prompt-text-fill: #6b7996;
+    -fx-background-color: #212c44;
+    -fx-background-radius: 12;
+    -fx-border-color: #3a4d78;
+    -fx-border-width: 1;
+    -fx-border-radius: 12;
+}
+
+/* TextArea 实际文本区：与外层同深色底、12px 内边距，圆角对齐。 */
+.sql-editor .content {
+    -fx-background-color: #212c44;
+    -fx-background-radius: 12;
+    -fx-padding: 10 12 10 12;
+}
+
+/* 聚焦态：边框切换为提亮科技蓝 #6b8cff（仅描边加深，不加发光）。 */
+.sql-editor:focused {
+    -fx-border-color: #6b8cff;
+}
+
+/* 输入框滚动条：暗色调细滚动条、透明轨道，并折叠原生上下箭头按钮。 */
+.sql-editor .scroll-bar:vertical,
+.sql-editor .scroll-bar:horizontal {
+    -fx-background-color: transparent;
+    -fx-pref-width: 10;
+    -fx-pref-height: 10;
+    -fx-padding: 2;
+}
+
+.sql-editor .scroll-bar .track {
+    -fx-background-color: transparent;
+    -fx-border-color: transparent;
+}
+
+.sql-editor .scroll-bar .thumb {
+    -fx-background-color: #3a4a6e;
+    -fx-background-radius: 6;
+    -fx-background-insets: 1;
+}
+
+.sql-editor .scroll-bar .thumb:hover {
+    -fx-background-color: #4d5f8a;
+}
+
+.sql-editor .scroll-bar .increment-button,
+.sql-editor .scroll-bar .decrement-button {
+    -fx-background-color: transparent;
+    -fx-padding: 0;
+}
+
+.sql-editor .scroll-bar .increment-arrow,
+.sql-editor .scroll-bar .decrement-arrow {
+    -fx-background-color: transparent;
+    -fx-padding: 0;
+}
+
+/* 执行按钮所在行：右对齐，与输入框留出少量顶部间距（由卡片 spacing 提供）。 */
+.sql-action-row {
+    -fx-padding: 2 0 0 0;
+}
+
+/* 执行 SQL 主操作按钮：蓝紫横向渐变 + 纯白字 + 12px 大圆角 + 舒适宽度。
+ * 归零 insets 取消原生按钮灰色立体质感，呈现扁平渐变胶囊。 */
+.sql-execute-button {
+    -fx-background-color: linear-gradient(to right, #4b62f0, #8259f0);
+    -fx-background-insets: 0;
+    -fx-background-radius: 12;
+    -fx-text-fill: #ffffff;
+    -fx-font-size: 14px;
+    -fx-font-weight: bold;
+    -fx-min-width: 128;
+    -fx-pref-width: 128;
+    -fx-padding: 11 22 11 22;
+    -fx-cursor: hand;
+}
+
+/* 悬浮态：加深渐变饱和度。 */
+.sql-execute-button:hover {
+    -fx-background-color: linear-gradient(to right, #3f54e6, #7247e6);
+}
+
+/* 按下态：再加深一档，交互反馈更明确。 */
+.sql-execute-button:pressed {
+    -fx-background-color: linear-gradient(to right, #3547cc, #6339cc);
+}
+
+/* 去除默认焦点描边，保持扁平顺滑观感。 */
+.sql-execute-button:focused {
+    -fx-focus-color: transparent;
+    -fx-faint-focus-color: transparent;
+}
+
+/* =====================================================================
+ * 第三层卡片：结果表格区域（SqlPractice.fxml 的 resultPane / resultTable）
+ * ===================================================================== */
+
+/* 结果堆叠容器：略深内嵌底 #172035 + 微亮细边 + 12px 圆角，
+ * 在卡片内勾勒出一块结果面板；居中承载表格与空态占位 Label（二者互斥显示）。 */
+.result-pane {
+    -fx-background-color: #172035;
+    -fx-background-radius: 12;
+    -fx-border-color: rgba(120, 145, 200, 0.14);
+    -fx-border-width: 1;
+    -fx-border-radius: 12;
+}
+
+/* 表格本体：透明底（底色、圆角由 .result-pane 提供）；
+ * -fx-control-inner-background / -alt 提供奇偶行交替深色底。 */
+.result-table {
+    -fx-background-color: transparent;
+    -fx-border-width: 0;
+    -fx-padding: 0;
+    -fx-font-size: 13px;
+    -fx-control-inner-background: #1b253d;
+    -fx-control-inner-background-alt: #212d49;
+    -fx-table-cell-border-color: transparent;
+}
+
+/* 去除聚焦描边，保持扁平。 */
+.result-table:focused {
+    -fx-focus-color: transparent;
+    -fx-faint-focus-color: transparent;
+}
+
+/* 表头背景条：透明并保留顶部圆角，避免与面板割裂。 */
+.result-table .column-header-background {
+    -fx-background-color: transparent;
+    -fx-background-radius: 12 12 0 0;
+}
+
+/* 表头右侧留白填充块与右上角块：透明，消除原生灰块。 */
+.result-table .column-header-background .filler,
+.result-table .corner {
+    -fx-background-color: transparent;
+}
+
+/* 表头单元：偏亮蓝调底 #26355a + 右侧 / 底部 1px 细分隔线。 */
+.result-table .column-header {
+    -fx-background-color: #26355a;
+    -fx-border-color: transparent rgba(120, 145, 200, 0.20) rgba(120, 145, 200, 0.28) transparent;
+    -fx-border-width: 0 1 1 0;
+}
+
+/* 表头文字：浅蓝白 #cdd8f2、加粗、左对齐、上下左右留白。 */
+.result-table .column-header .label {
+    -fx-text-fill: #cdd8f2;
+    -fx-font-weight: bold;
+    -fx-alignment: CENTER_LEFT;
+    -fx-padding: 8 14 8 14;
+}
+
+/* 数据行：底色由 -fx-control-inner-background(-alt) 提供深浅交替；
+ * 行底部 1px 极淡分隔线，配合单元格留白避免拥挤。 */
+.result-table .table-row-cell {
+    -fx-border-color: transparent transparent rgba(120, 145, 200, 0.10) transparent;
+    -fx-border-width: 0 0 1 0;
+}
+
+/* 选中行：偏亮深蓝高亮。 */
+.result-table .table-row-cell:selected {
+    -fx-background-color: #33477a;
+}
+
+/* 单元格文字：浅蓝灰 #d5dce9、左对齐、四周舒适留白。 */
+.result-table .table-cell {
+    -fx-text-fill: #d5dce9;
+    -fx-alignment: CENTER_LEFT;
+    -fx-padding: 8 14 8 14;
+}
+
+/* 选中行单元格文字提亮，保证深色高亮下清晰。 */
+.result-table .table-row-cell:selected .table-cell {
+    -fx-text-fill: #ffffff;
+}
+
+/* 空结果占位提示（EMPTY 场景）：柔和中性灰蓝 #8a95b5、文本居中，
+ * 由 StackPane 居中承载，仅 EMPTY / 初始态可见，NORMAL 时被隐藏。 */
+.table-empty-hint {
+    -fx-text-fill: #8a95b5;
+    -fx-font-size: 13px;
+    -fx-alignment: CENTER;
+    -fx-text-alignment: center;
+}
+
+/* 结果表格滚动条：与输入框一致的暗色细滚动条、透明轨道、折叠箭头。 */
+.result-table .scroll-bar:vertical,
+.result-table .scroll-bar:horizontal {
+    -fx-background-color: transparent;
+    -fx-pref-width: 10;
+    -fx-pref-height: 10;
+    -fx-padding: 2;
+}
+
+.result-table .scroll-bar .track {
+    -fx-background-color: transparent;
+    -fx-border-color: transparent;
+}
+
+.result-table .scroll-bar .thumb {
+    -fx-background-color: #3a4a6e;
+    -fx-background-radius: 6;
+    -fx-background-insets: 1;
+}
+
+.result-table .scroll-bar .thumb:hover {
+    -fx-background-color: #4d5f8a;
+}
+
+.result-table .scroll-bar .increment-button,
+.result-table .scroll-bar .decrement-button {
+    -fx-background-color: transparent;
+    -fx-padding: 0;
+}
+
+.result-table .scroll-bar .increment-arrow,
+.result-table .scroll-bar .decrement-arrow {
+    -fx-background-color: transparent;
+    -fx-padding: 0;
+}
+
+/* =====================================================================
+ * 底部错误提示区（SqlPractice.fxml 的 errorLabel）
+ * 位于结果卡片内、表格下方；仅 ERROR 场景由 Controller 显示（默认 visible/managed=false）。
+ * 暗色卡片内嵌浅红条：柔和浅红文字 + 半透明红底 + 同系红细边，适配深色基调。
+ * ===================================================================== */
+.sql-error-hint {
+    -fx-text-fill: #ff9b9b;
+    -fx-background-color: rgba(214, 59, 59, 0.14);
+    -fx-background-radius: 10;
+    -fx-border-color: rgba(214, 59, 59, 0.40);
+    -fx-border-width: 1;
+    -fx-border-radius: 10;
+    -fx-padding: 10 14 10 14;
+    -fx-font-size: 13px;
+    -fx-wrap-text: true;
+}

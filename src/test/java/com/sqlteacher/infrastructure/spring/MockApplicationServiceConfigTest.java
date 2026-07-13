@@ -18,11 +18,7 @@ class MockApplicationServiceConfigTest {
     @Test
     void shouldExposeUiCallableMockBeans() {
         try (AnnotationConfigApplicationContext context =
-                 new AnnotationConfigApplicationContext()) {
-            context.getEnvironment().setActiveProfiles("mock");
-            context.register(MockApplicationServiceConfig.class);
-            context.refresh();
-
+                 new AnnotationConfigApplicationContext(MockApplicationServiceConfig.class)) {
             SqlExecutionService executionService = context.getBean(SqlExecutionService.class);
 
             assertEquals(2, executionService.execute(new SqlExecutionRequest(

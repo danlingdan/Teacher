@@ -84,7 +84,7 @@ public final class JdbcSqlExecutionService implements SqlExecutionService {
                     (int) request.timeout().toSeconds()
             );
 
-            statement.setMaxRows(request.maxRows());
+            statement.setMaxRows(queryProbeLimit(request.maxRows()));
 
             boolean hasResult =
                     statement.execute(request.sql());
@@ -126,6 +126,10 @@ public final class JdbcSqlExecutionService implements SqlExecutionService {
 
         }
 
+    }
+
+    private static int queryProbeLimit(int maxRows) {
+        return maxRows == Integer.MAX_VALUE ? Integer.MAX_VALUE : maxRows + 1;
     }
 
     private static void validate(SqlExecutionRequest request) {

@@ -1,18 +1,22 @@
 package com.sqlteacher.infrastructure.spring;
 
+import com.sqlteacher.application.ai.AiModelProvider;
 import com.sqlteacher.application.ai.AiStatusService;
 import com.sqlteacher.application.config.AppConfigurationService;
-import com.sqlteacher.application.database.DatabaseInitializationService;
 import com.sqlteacher.application.config.SqlTeacherConfiguration;
+import com.sqlteacher.application.database.DatabaseInitializationService;
 import com.sqlteacher.application.error.ApplicationExceptionMapper;
 import com.sqlteacher.application.error.DefaultApplicationExceptionMapper;
+import com.sqlteacher.application.nl2sql.Nl2SqlService;
+import com.sqlteacher.infrastructure.ai.Nl2SqlServiceImpl;
+import com.sqlteacher.infrastructure.ai.OllamaAiModelProvider;
 import com.sqlteacher.infrastructure.ai.OllamaAiStatusService;
 import com.sqlteacher.infrastructure.config.PropertiesAppConfigurationService;
+import com.sqlteacher.infrastructure.database.DatabaseServiceConfig;
 import com.sqlteacher.infrastructure.database.SqliteAppDatabaseInitializer;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
-import com.sqlteacher.infrastructure.database.DatabaseServiceConfig;
 
 @Configuration
 @Import(DatabaseServiceConfig.class)
@@ -35,6 +39,16 @@ public class SqlTeacherApplicationConfig {
     @Bean
     public AiStatusService aiStatusService(SqlTeacherConfiguration properties) {
         return new OllamaAiStatusService(properties.ai());
+    }
+
+    @Bean
+    public AiModelProvider aiModelProvider(SqlTeacherConfiguration properties, AiStatusService aiStatusService) {
+        return new OllamaAiModelProvider(properties.ai(), aiStatusService);
+    }
+
+    @Bean
+    public Nl2SqlService nl2SqlService(AiModelProvider aiModelProvider, SqlTeacherConfiguration properties) {
+        return new Nl2SqlServiceImpl(aiModelProvider, properties.ai());
     }
 
     @Bean

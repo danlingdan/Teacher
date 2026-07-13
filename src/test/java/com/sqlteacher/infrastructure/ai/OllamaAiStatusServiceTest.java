@@ -15,7 +15,7 @@ class OllamaAiStatusServiceTest {
     @Test
     void shouldReturnWarningWhenOllamaEndpointIsUnavailable() {
         OllamaAiStatusService service = new OllamaAiStatusService(
-            new AiConfiguration(URI.create("http://127.0.0.1:9"), Duration.ofMillis(200))
+            new AiConfiguration(URI.create("http://127.0.0.1:9"), Duration.ofMillis(200), Duration.ofMillis(30000), "test-model")
         );
 
         AiStatus status = service.checkStatus();
