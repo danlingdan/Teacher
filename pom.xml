@@ -14,7 +14,7 @@
         <maven.compiler.target>21</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <junit.version>5.13.4</junit.version>
-        <javafx.version>21.0.8</javafx.version>
+        <javafx.version>21.0.11</javafx.version>
         <sqlite-jdbc.version>3.50.3.0</sqlite-jdbc.version>
         <mysql-connector-j.version>9.4.0</mysql-connector-j.version>
         <jackson.version>2.19.2</jackson.version>
@@ -27,6 +27,11 @@
         <dependency>
             <groupId>org.openjfx</groupId>
             <artifactId>javafx-controls</artifactId>
+            <version>${javafx.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.openjfx</groupId>
+            <artifactId>javafx-fxml</artifactId>
             <version>${javafx.version}</version>
         </dependency>
         <dependency>

@@ -1,0 +1,142 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!--
+  SQL 练习子页面（离线 Mock 开发阶段 · 深色主题 · 居中内容 + 标题区 + 三张卡片）。
+
+  嵌入方式（沿用任务九，不变）：
+    - 本页面不是独立窗口，而是被 MainWindow.fxml 的 pageContainer（StackPane）内嵌加载。
+    - 因 SqlPracticeController 使用构造注入（无无参构造），MainWindowController 通过
+      FXMLLoader.setControllerFactory(...) 提供已注入 SqlExecutionMockService 的实例。
+
+  布局（任务十）：
+    - 根 VBox（sql-practice-page）alignment=TOP_CENTER，上下留出充足页面边距；
+    - 内层 VBox（page-content）设 maxWidth 约束，窗口变宽时内容整体居中、宽度固定；
+      内部自上而下：标题区 → 示例 SQL 卡片 → 编写 SQL 卡片 → 查询结果卡片。
+    - 标题区（title-area）：小图标徽标 + 主标题「SQL 练习」+ 弱化副标题，整体居中。
+    - 第一层卡片「示例 SQL」（panel-card）：4 个可点击标签（example-chip），点击自动把该
+      SQL 填充到下方输入框（onAction=#onFillExampleSql，仅填充不执行）。
+    - 第二层卡片「编写 SQL 语句」（panel-card）：多行输入 TextArea + 右下「执行 SQL」按钮。
+    - 第三层卡片「查询结果」（panel-card）：StackPane 叠放结果表格与空态占位（互斥显示），
+      其下为底部错误提示条（默认隐藏，仅 ERROR 场景由 Controller 显示）。
+
+  约束（硬性）：
+    - 全部业务 fx:id 保持不变：sqlInputArea / executeSqlButton / resultPane / resultTable /
+      emptyPlaceholder / errorLabel；不破坏 SqlPracticeController 的三态渲染与异常捕获逻辑。
+    - 样式全部引用全局 css/app.css 中的样式类，无内联 style，无独立 css 文件。
+-->
+
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.TableView?>
+<?import javafx.scene.control.TextArea?>
+<?import javafx.scene.layout.FlowPane?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.Region?>
+<?import javafx.scene.layout.StackPane?>
+<?import javafx.scene.layout.VBox?>
+
+<VBox xmlns="http://javafx.com/javafx"
+      xmlns:fx="http://javafx.com/fxml"
+      fx:controller="com.sqlteacher.desktop.controller.SqlPracticeController"
+      styleClass="sql-practice-page"
+      alignment="TOP_CENTER">
+
+    <!-- 居中内容列：固定最大宽度，窗口变宽时保持居中；三张卡片纵向排布。 -->
+    <VBox styleClass="page-content" spacing="16.0" maxWidth="1040.0" VBox.vgrow="ALWAYS">
+        <children>
+
+            <!-- 标题区：小图标徽标 + 主标题 + 弱化副标题，整体居中。 -->
+            <VBox styleClass="title-area" alignment="CENTER" spacing="6.0">
+                <children>
+                    <Region styleClass="title-badge"/>
+                    <Label styleClass="page-title" text="SQL 练习"/>
+                    <Label styleClass="page-subtitle"
+                           text="输入SQL语句，借助离线Mock查看查询效果"/>
+                </children>
+            </VBox>
+
+            <!-- 第一层卡片：示例 SQL 区块。4 个标签点击后填充到下方输入框。 -->
+            <VBox styleClass="panel-card" spacing="12.0">
+                <children>
+                    <HBox styleClass="card-title-row" alignment="CENTER_LEFT" spacing="10.0">
+                        <children>
+                            <Region styleClass="card-accent"/>
+                            <Label styleClass="card-title" text="示例 SQL"/>
+                        </children>
+                    </HBox>
+                    <FlowPane styleClass="example-flow" hgap="12.0" vgap="12.0">
+                        <children>
+                            <Button styleClass="example-chip"
+                                    onAction="#onFillExampleSql"
+                                    text="SELECT id, name, grade, class FROM student ORDER BY grade DESC;"/>
+                            <Button styleClass="example-chip"
+                                    onAction="#onFillExampleSql"
+                                    text="SELECT * FROM student WHERE grade > 90;"/>
+                            <Button styleClass="example-chip"
+                                    onAction="#onFillExampleSql"
+                                    text="SELECT name,AVG(grade) FROM student GROUP BY class;"/>
+                            <Button styleClass="example-chip"
+                                    onAction="#onFillExampleSql"
+                                    text="SELECT * FROM student WHERE grade > 999;"/>
+                        </children>
+                    </FlowPane>
+                </children>
+            </VBox>
+
+            <!-- 第二层卡片：编写 SQL 语句。多行输入 + 右下执行按钮。 -->
+            <VBox styleClass="panel-card" spacing="12.0">
+                <children>
+                    <HBox styleClass="card-title-row" alignment="CENTER_LEFT" spacing="10.0">
+                        <children>
+                            <Region styleClass="card-accent"/>
+                            <Label styleClass="card-title" text="编写 SQL 语句"/>
+                        </children>
+                    </HBox>
+                    <TextArea fx:id="sqlInputArea"
+                              styleClass="sql-editor"
+                              promptText="例如：SELECT id, name, grade FROM student ORDER BY grade DESC;"
+                              wrapText="true"
+                              prefRowCount="6"/>
+                    <HBox styleClass="sql-action-row" alignment="CENTER_RIGHT">
+                        <children>
+                            <Button fx:id="executeSqlButton"
+                                    styleClass="sql-execute-button"
+                                    text="执行 SQL"
+                                    onAction="#onExecuteSql"/>
+                        </children>
+                    </HBox>
+                </children>
+            </VBox>
+
+            <!-- 第三层卡片：查询结果。StackPane 叠放表格与空态占位；下方为错误提示条。 -->
+            <VBox styleClass="panel-card" spacing="12.0" VBox.vgrow="ALWAYS">
+                <children>
+                    <HBox styleClass="card-title-row" alignment="CENTER_LEFT" spacing="10.0">
+                        <children>
+                            <Region styleClass="card-accent"/>
+                            <Label styleClass="card-title" text="查询结果"/>
+                        </children>
+                    </HBox>
+                    <!-- 结果区：NORMAL 显示表格；EMPTY/初始显示「暂无查询结果」（居中，二者互斥）。 -->
+                    <StackPane fx:id="resultPane" styleClass="result-pane" VBox.vgrow="ALWAYS">
+                        <children>
+                            <TableView fx:id="resultTable" styleClass="result-table"/>
+                            <Label fx:id="emptyPlaceholder"
+                                   styleClass="table-empty-hint"
+                                   text="暂无查询结果"/>
+                        </children>
+                    </StackPane>
+                    <!-- 底部错误提示：默认隐藏（visible/managed=false），仅 ERROR 场景由 Controller
+                         填充报错文案后显示；wrapText + maxWidth 保证长文案自动换行、背景铺满卡片宽度。 -->
+                    <Label fx:id="errorLabel"
+                           styleClass="sql-error-hint"
+                           wrapText="true"
+                           maxWidth="Infinity"
+                           visible="false"
+                           managed="false"/>
+                </children>
+            </VBox>
+
+        </children>
+    </VBox>
+</VBox>

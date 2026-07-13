@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!--
+  主窗口布局（离线 Mock 开发阶段 · 深色主题 · 顶部横向全局导航）。
+
+  布局改造（任务十）：
+    - 舍弃原左侧窄侧边栏，改为顶部横向全局导航栏（top-nav），复刻参考截图顶部导航形态。
+    - 根节点 BorderPane：<top> 放横向导航栏，<center> 放页面容器 pageContainer 插槽。
+    - 顶部导航栏（HBox）自左至右：品牌 Logo 小方块（brand-logo）+ 品牌文字「SQL Teacher」，
+      横向排布导航菜单（当前仅「SQL 练习」，选中态高亮紫蓝），中部弹性留白（spacer）把
+      右侧「设置」占位按钮推到最右（后续配置入口，暂禁用占位）。
+    - <center> StackPane（pageContainer）承载被内嵌的 SqlPractice.fxml；导航点击切换其内容，
+      SQL 练习页始终作为主窗口内的内嵌区域呈现，绝不独立弹窗。
+
+  注入 / 路由（沿用任务九，不变）：
+    - fx:controller 绑定 MainWindowController；由 SqlTeacherFxApp 通过 setControllerFactory
+      构造注入离线 Mock 的 SqlExecutionService，再向下注入 SqlPracticeController。
+    - 保留业务 fx:id：sqlPracticeNavButton（导航按钮）、pageContainer（页面插槽）；
+      导航 onAction 仍为 #onNavigateSqlPractice，Controller 逻辑无需改动。
+
+  约束：
+    - 样式全部引用全局 css/app.css 中的样式类，无内联 style，无独立 css 文件。
+-->
+
+<?import java.net.URL?>
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.layout.BorderPane?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.Region?>
+<?import javafx.scene.layout.StackPane?>
+
+<BorderPane xmlns="http://javafx.com/javafx"
+            xmlns:fx="http://javafx.com/fxml"
+            fx:controller="com.sqlteacher.desktop.controller.MainWindowController"
+            styleClass="main-window"
+            prefWidth="1200.0" prefHeight="760.0">
+
+    <!-- 顶部：横向全局导航栏。BorderPane.margin 让导航条四周浮起，圆角得以显现。 -->
+    <top>
+        <HBox styleClass="top-nav" alignment="CENTER_LEFT" spacing="10.0">
+            <BorderPane.margin>
+                <Insets top="16.0" right="18.0" bottom="6.0" left="18.0"/>
+            </BorderPane.margin>
+            <children>
+                <!-- 品牌 Logo 小方块（纯 CSS 渐变装饰） + 品牌文字 -->
+                <Region styleClass="brand-logo"/>
+                <Label styleClass="brand-title" text="SQL Teacher"/>
+
+                <!-- 品牌与菜单之间的小间隔 -->
+                <Region minWidth="18.0"/>
+
+                <!-- 导航菜单：当前唯一可跳转入口「SQL 练习」，选中态由 Controller 追加 selected 高亮 -->
+                <Button fx:id="sqlPracticeNavButton"
+                        styleClass="nav-button"
+                        text="SQL 练习"
+                        onAction="#onNavigateSqlPractice"/>
+
+                <!-- 弹性留白：把右侧「设置」占位按钮推到最右端 -->
+                <Region HBox.hgrow="ALWAYS"/>
+
+                <!-- 右侧预留：后续配置入口占位（暂禁用，仅占位不可点） -->
+                <Button styleClass="nav-settings" text="设置" disable="true"/>
+            </children>
+        </HBox>
+    </top>
+
+    <!-- 中部：页面容器，导航切换时替换其中的内容节点（内嵌 SqlPractice.fxml） -->
+    <center>
+        <StackPane fx:id="pageContainer" styleClass="page-container"/>
+    </center>
+
+    <!-- 全局样式表（相对 fxml 目录定位到 css/app.css） -->
+    <stylesheets>
+        <URL value="@../css/app.css"/>
+    </stylesheets>
+</BorderPane>
