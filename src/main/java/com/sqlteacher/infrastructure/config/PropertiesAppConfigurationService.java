@@ -53,7 +53,9 @@ public final class PropertiesAppConfigurationService implements AppConfiguration
             );
             AiConfiguration ai = new AiConfiguration(
                 URI.create(raw.getProperty("sqlteacher.ai.ollama.base-url", "http://localhost:11434")),
-                Duration.ofMillis(Long.parseLong(raw.getProperty("sqlteacher.ai.ollama.health-timeout-ms", "2000")))
+                Duration.ofMillis(Long.parseLong(raw.getProperty("sqlteacher.ai.ollama.health-timeout-ms", "2000"))),
+                Duration.ofMillis(Long.parseLong(raw.getProperty("sqlteacher.ai.ollama.generate-timeout-ms", "30000"))),
+                raw.getProperty("sqlteacher.ai.ollama.default-model", "qwen3.5:0.8b")
             );
 
             return new SqlTeacherConfiguration(
