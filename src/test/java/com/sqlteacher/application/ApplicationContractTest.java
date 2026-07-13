@@ -55,4 +55,26 @@ class ApplicationContractTest {
             () -> event.attributes().put("sql", "DROP DATABASE demo")
         );
     }
+
+    @Test
+    void shouldValidateRequiredLearningEventFields() {
+        assertThrows(
+            NullPointerException.class,
+            () -> new LearningEvent(null, Instant.EPOCH, "demo", true, Map.of())
+        );
+        assertThrows(
+            IllegalArgumentException.class,
+            () -> new LearningEvent(LearningEventType.SQL_EXECUTION, Instant.EPOCH, " ", true, Map.of())
+        );
+        assertThrows(
+            NullPointerException.class,
+            () -> new LearningEvent(
+                LearningEventType.SQL_EXECUTION,
+                Instant.EPOCH,
+                "demo",
+                true,
+                null
+            )
+        );
+    }
 }

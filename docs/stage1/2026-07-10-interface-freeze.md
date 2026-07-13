@@ -14,6 +14,10 @@
 - AI 草案：`Nl2SqlService`
 - 事件记录：`LearningEventRecorder`
 
+A 第二轮新增 `LearningEventService` 作为调用方使用的语义化入口；既有
+`LearningEventRecorder` 保持为存储端口。详细事件字段、隐私边界和迁移方式见
+`docs/stage1/2026-07-13-a-second-round-contracts.md`。
+
 ## 模块契约确认
 
 ### B：数据库与 SQL 安全
