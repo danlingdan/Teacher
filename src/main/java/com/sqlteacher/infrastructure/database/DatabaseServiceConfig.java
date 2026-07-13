@@ -6,6 +6,7 @@ import com.sqlteacher.application.risk.SqlRiskAnalysisService;
 import com.sqlteacher.application.config.SqlTeacherConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Profile;
 
 @Configuration
 public class DatabaseServiceConfig {
@@ -21,11 +22,13 @@ public class DatabaseServiceConfig {
     }
 
     @Bean
+    @Profile("!mock")
     public SqlRiskAnalysisService sqlRiskAnalysisService() {
         return new DefaultSqlRiskAnalysisService();
     }
 
     @Bean
+    @Profile("!mock")
     public SqlExecutionService sqlExecutionService(
             JdbcConnectionFactory connectionFactory,
             SqlResultMapper resultMapper,
@@ -34,6 +37,7 @@ public class DatabaseServiceConfig {
     }
 
     @Bean
+    @Profile("!mock")
     public DatabaseMetadataService databaseMetadataService(JdbcConnectionFactory connectionFactory) {
         return new JdbcDatabaseMetadataService(connectionFactory);
     }

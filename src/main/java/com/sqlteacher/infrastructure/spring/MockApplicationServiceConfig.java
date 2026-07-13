@@ -14,20 +14,24 @@ import com.sqlteacher.application.nl2sql.Nl2SqlService;
 import com.sqlteacher.application.risk.SqlRiskAnalysisService;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Profile;
 
 @Configuration
 public class MockApplicationServiceConfig {
     @Bean
+    @Profile("mock")
     public SqlRiskAnalysisService sqlRiskAnalysisService() {
         return new MockSqlRiskAnalysisService();
     }
 
     @Bean
+    @Profile("mock")
     public SqlExecutionService sqlExecutionService(SqlRiskAnalysisService sqlRiskAnalysisService) {
         return new MockSqlExecutionService(sqlRiskAnalysisService);
     }
 
     @Bean
+    @Profile("mock")
     public DatabaseMetadataService databaseMetadataService() {
         return new MockDatabaseMetadataService();
     }

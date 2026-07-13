@@ -11,8 +11,11 @@ import com.sqlteacher.infrastructure.config.PropertiesAppConfigurationService;
 import com.sqlteacher.infrastructure.database.SqliteAppDatabaseInitializer;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Import;
+import com.sqlteacher.infrastructure.database.DatabaseServiceConfig;
 
 @Configuration
+@Import(DatabaseServiceConfig.class)
 public class SqlTeacherApplicationConfig {
     @Bean
     public AppConfigurationService appConfigurationService() {
