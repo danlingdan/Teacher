@@ -5,9 +5,9 @@ import com.sqlteacher.application.ai.AiStatus;
 /**
  * ViewModel for the Ollama / AI status area shown on the home page and AI assistant page.
  *
- * <p>The backend {@link AiStatus} exposes the infrastructure enum {@code VerificationStatus}.
+ * <p>The backend {@link AiStatus} exposes the application enum {@code AiAvailability}.
  * This ViewModel converts it into a {@link UiStatusLevel} via {@link UiStatusLevel#fromStatusName(String)},
- * passing only the enum name so the infrastructure enum type is never imported here.
+ * passing only the enum name so the application enum type is never imported here.
  */
 public record AiStatusViewModel(
     UiStatusLevel statusLevel,

@@ -1,20 +1,21 @@
 package com.sqlteacher.desktop.mock;
 
+import com.sqlteacher.application.ai.AiAvailability;
 import com.sqlteacher.application.ai.AiStatus;
 import com.sqlteacher.application.ai.AiStatusService;
-import com.sqlteacher.infrastructure.environment.VerificationStatus;
 
 /**
  * Mock implementation of {@link AiStatusService} for offline desktop development.
  *
- * <p>Behaviour mirrors {@code OllamaAiStatusService}: a reachable service reports {@code PASS}
- * and an unreachable service reports {@code WARNING} (this app treats a missing model runtime
- * as a warning, never a hard crash).
+ * <p><b>[改动点 · P1 契约兼容]</b> {@link AiStatus} 的状态字段已从 infrastructure 的
+ * {@code VerificationStatus} 迁移到应用层枚举 {@link AiAvailability}（AVAILABLE / UNAVAILABLE）。
+ * 本 Mock 全部传参改用 {@link AiAvailability}：可达服务报告 {@link AiAvailability#AVAILABLE}，
+ * 不可达服务报告 {@link AiAvailability#UNAVAILABLE}（本应用把缺失模型运行时视为警告而非崩溃）。
  *
  * <ul>
- *   <li>{@link MockScenario#NORMAL} - {@code PASS}, two models installed.</li>
- *   <li>{@link MockScenario#EMPTY} - {@code PASS}, reachable but zero models installed.</li>
- *   <li>{@link MockScenario#ERROR} - {@code WARNING}, service unreachable.</li>
+ *   <li>{@link MockScenario#NORMAL} - {@code AVAILABLE}, two models installed.</li>
+ *   <li>{@link MockScenario#EMPTY} - {@code AVAILABLE}, reachable but zero models installed.</li>
+ *   <li>{@link MockScenario#ERROR} - {@code UNAVAILABLE}, service unreachable.</li>
  * </ul>
  */
 public final class AiStatusMockService implements AiStatusService {
@@ -50,14 +51,14 @@ public final class AiStatusMockService implements AiStatusService {
     }
 
     public AiStatus normal() {
-        return new AiStatus(VerificationStatus.PASS, PROVIDER, ENDPOINT, 2, "Ollama service reachable, models=2");
+        return new AiStatus(AiAvailability.AVAILABLE, PROVIDER, ENDPOINT, 2, "Ollama service reachable, models=2");
     }
 
     public AiStatus emptyModels() {
-        return new AiStatus(VerificationStatus.PASS, PROVIDER, ENDPOINT, 0, "Ollama service reachable, models=0");
+        return new AiStatus(AiAvailability.AVAILABLE, PROVIDER, ENDPOINT, 0, "Ollama service reachable, models=0");
     }
 
     public AiStatus unavailable() {
-        return new AiStatus(VerificationStatus.WARNING, PROVIDER, ENDPOINT, 0, "Ollama service unavailable: ConnectException");
+        return new AiStatus(AiAvailability.UNAVAILABLE, PROVIDER, ENDPOINT, 0, "Ollama service unavailable: ConnectException");
     }
 }

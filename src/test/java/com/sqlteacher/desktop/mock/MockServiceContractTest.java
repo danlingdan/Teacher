@@ -1,11 +1,16 @@
 package com.sqlteacher.desktop.mock;
 
+import com.sqlteacher.application.ai.AiAvailability;
 import com.sqlteacher.application.ai.AiStatus;
+import com.sqlteacher.application.config.SqlTeacherConfiguration;
 import com.sqlteacher.application.database.DatabaseInitializationResult;
 import com.sqlteacher.application.execution.SqlExecutionRequest;
 import com.sqlteacher.application.execution.SqlExecutionResult;
 import com.sqlteacher.application.nl2sql.Nl2SqlPlan;
 import com.sqlteacher.application.nl2sql.Nl2SqlRequest;
+import com.sqlteacher.application.risk.SqlRiskAnalysis;
+import com.sqlteacher.application.risk.SqlRiskAnalysisService;
+import com.sqlteacher.application.risk.SqlRiskLevel;
 import com.sqlteacher.desktop.viewmodel.AiAssistantViewModel;
 import com.sqlteacher.desktop.viewmodel.AiStatusViewModel;
 import com.sqlteacher.desktop.viewmodel.DatabaseStatusViewModel;
@@ -14,10 +19,9 @@ import com.sqlteacher.desktop.viewmodel.HomeStatusViewModel;
 import com.sqlteacher.desktop.viewmodel.SqlExecutionViewModel;
 import com.sqlteacher.desktop.viewmodel.SqlResultRowViewModel;
 import com.sqlteacher.desktop.viewmodel.UiStatusLevel;
-import com.sqlteacher.infrastructure.config.SqlTeacherProperties;
-import com.sqlteacher.infrastructure.environment.VerificationStatus;
 import org.junit.jupiter.api.Test;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
@@ -28,6 +32,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -97,7 +102,8 @@ class MockServiceContractTest {
     @Test
     void sqlExecutionErrorReturnsFailedResultMappedToErrorLevel() {
         SqlExecutionMockService mock = new SqlExecutionMockService(MockScenario.ERROR);
-        SqlExecutionRequest request = mock.demoRequest("SELCT * FROM student");
+        // 使用合法 SELECT，确保通过安全闸后走 ERROR 场景的失败 DTO（而非被风控拦截）。
+        SqlExecutionRequest request = mock.demoRequest("SELECT * FROM student");
 
         SqlExecutionResult result = mock.execute(request);
         SqlExecutionViewModel viewModel = SqlExecutionViewModel.from(request, result);
@@ -107,6 +113,77 @@ class MockServiceContractTest {
         assertEquals(UiStatusLevel.ERROR, viewModel.statusLevel());
         assertFalse(viewModel.success());
         assertEquals(0, viewModel.rowCount());
+    }
+
+    // ----- [P2.4] SqlExecutionMockService 前置安全校验（防止 Mock 绕过风控） -----
+
+    @Test
+    void sqlExecutionBlocksBlankSql() {
+        SqlExecutionMockService mock = new SqlExecutionMockService(MockScenario.NORMAL);
+
+        SqlExecutionResult result = mock.execute(mock.demoRequest("   "));
+
+        assertFalse(result.success());
+        assertFalse(result.message().isBlank());
+        assertTrue(result.rows().isEmpty());
+    }
+
+    @Test
+    void sqlExecutionBlocksMultiStatementSql() {
+        SqlExecutionMockService mock = new SqlExecutionMockService(MockScenario.NORMAL);
+
+        SqlExecutionResult result = mock.execute(mock.demoRequest("SELECT 1; SELECT 2"));
+
+        assertFalse(result.success());
+        assertFalse(result.message().isBlank());
+        assertTrue(result.rows().isEmpty());
+    }
+
+    @Test
+    void sqlExecutionBlocksHighRiskDropAndTruncate() {
+        SqlExecutionMockService mock = new SqlExecutionMockService(MockScenario.NORMAL);
+
+        SqlExecutionResult drop = mock.execute(mock.demoRequest("DROP TABLE student"));
+        SqlExecutionResult truncate = mock.execute(mock.demoRequest("TRUNCATE TABLE student"));
+
+        assertFalse(drop.success());
+        assertFalse(drop.message().isBlank());
+        assertFalse(truncate.success());
+        assertFalse(truncate.message().isBlank());
+    }
+
+    @Test
+    void sqlExecutionRequiresConfirmationForRiskyStatement() {
+        // 默认 MockSqlRiskAnalysisService 从不返回 confirmationRequired=true，
+        // 故注入自定义风险分析桩，模拟「可执行但需二次确认」的高危场景。
+        SqlRiskAnalysisService confirmationGate = sql -> new SqlRiskAnalysis(
+            SqlRiskLevel.HIGH, true, true, false, "UPDATE", List.of("UPDATE 需二次确认")
+        );
+        SqlExecutionMockService mock = new SqlExecutionMockService(MockScenario.NORMAL, confirmationGate);
+
+        // 未确认：拦截为失败。
+        SqlExecutionRequest unconfirmed =
+            new SqlExecutionRequest(DesktopConnections.DEMO, "UPDATE student SET grade = 100", 100, Duration.ofSeconds(5));
+        SqlExecutionResult blocked = mock.execute(unconfirmed);
+        assertFalse(blocked.success());
+        assertFalse(blocked.message().isBlank());
+
+        // 已确认（riskConfirmed=true）：放行，落到 NORMAL 场景成功返回。
+        SqlExecutionRequest confirmed =
+            new SqlExecutionRequest(DesktopConnections.DEMO, "UPDATE student SET grade = 100", 100, Duration.ofSeconds(5), true);
+        SqlExecutionResult allowed = mock.execute(confirmed);
+        assertTrue(allowed.success());
+        assertEquals(3, allowed.rows().size());
+    }
+
+    @Test
+    void sqlExecutionAllowsPlainSelectThroughSafetyGate() {
+        SqlExecutionMockService mock = new SqlExecutionMockService(MockScenario.NORMAL);
+
+        SqlExecutionResult result = mock.execute(mock.demoRequest("SELECT id, name, grade FROM student"));
+
+        assertTrue(result.success());
+        assertEquals(3, result.rows().size());
     }
 
     // ----- Nl2SqlService contract -----
@@ -167,26 +244,29 @@ class MockServiceContractTest {
         AiStatus empty = new AiStatusMockService(MockScenario.EMPTY).checkStatus();
         AiStatus error = new AiStatusMockService(MockScenario.ERROR).checkStatus();
 
-        assertEquals(VerificationStatus.PASS, normal.status());
+        assertEquals(AiAvailability.AVAILABLE, normal.status());
         assertEquals(2, normal.modelCount());
         assertTrue(AiStatusViewModel.from(normal).available());
         assertEquals(UiStatusLevel.SUCCESS, AiStatusViewModel.from(normal).statusLevel());
 
-        assertEquals(VerificationStatus.PASS, empty.status());
+        assertEquals(AiAvailability.AVAILABLE, empty.status());
         assertEquals(0, empty.modelCount());
         assertEquals(UiStatusLevel.SUCCESS, AiStatusViewModel.from(empty).statusLevel());
 
-        assertEquals(VerificationStatus.WARNING, error.status());
+        assertEquals(AiAvailability.UNAVAILABLE, error.status());
         assertFalse(AiStatusViewModel.from(error).available());
         assertEquals(UiStatusLevel.WARNING, AiStatusViewModel.from(error).statusLevel());
     }
 
     @Test
-    void aiStatusFailLevelMapsToError() {
-        AiStatus hardFailure = new AiStatus(VerificationStatus.FAIL, "ollama", "http://localhost:11434", 0, "fatal");
-        AiStatusViewModel viewModel = AiStatusViewModel.from(hardFailure);
+    void aiStatusUnavailableMapsToWarningNotUnknown() {
+        // [改动点 · P1 AI 枚举映射] AiAvailability 无 FAIL，UNAVAILABLE 应稳定映射为 WARNING，
+        // 且绝不落到 UNKNOWN（否则界面会显示「未知」状态）。
+        AiStatus unavailable = new AiStatus(AiAvailability.UNAVAILABLE, "ollama", "http://localhost:11434", 0, "unreachable");
+        AiStatusViewModel viewModel = AiStatusViewModel.from(unavailable);
 
-        assertEquals(UiStatusLevel.ERROR, viewModel.statusLevel());
+        assertEquals(UiStatusLevel.WARNING, viewModel.statusLevel());
+        assertNotEquals(UiStatusLevel.UNKNOWN, viewModel.statusLevel());
         assertFalse(viewModel.available());
     }
 
@@ -198,7 +278,7 @@ class MockServiceContractTest {
         DatabaseInitializationMockService databaseMock = new DatabaseInitializationMockService(MockScenario.NORMAL);
         AiStatusMockService aiMock = new AiStatusMockService(MockScenario.NORMAL);
 
-        SqlTeacherProperties properties = configMock.current();
+        SqlTeacherConfiguration properties = configMock.current();
         DatabaseInitializationResult databaseResult = databaseMock.initialize();
         AiStatus aiStatus = aiMock.checkStatus();
 
