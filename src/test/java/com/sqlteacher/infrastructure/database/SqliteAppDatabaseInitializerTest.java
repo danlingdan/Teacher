@@ -31,7 +31,7 @@ class SqliteAppDatabaseInitializerTest {
             "SQLTeacher",
             tempDir,
             new DatabaseConfiguration(appDb, demoDb),
-            new AiConfiguration(URI.create("http://localhost:11434"), Duration.ofSeconds(1))
+            new AiConfiguration(URI.create("http://localhost:11434"), Duration.ofSeconds(1), Duration.ofSeconds(30), "test-model")
         );
 
         DatabaseInitializationResult result = new SqliteAppDatabaseInitializer(properties).initialize();

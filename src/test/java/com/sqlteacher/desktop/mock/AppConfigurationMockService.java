@@ -36,6 +36,8 @@ public final class AppConfigurationMockService implements AppConfigurationServic
     private static final Path DEMO_DATABASE = Path.of("app-data", "demo.db");
     private static final URI OLLAMA_BASE_URL = URI.create("http://localhost:11434");
     private static final Duration HEALTH_TIMEOUT = Duration.ofMillis(2000);
+    private static final Duration GENERATE_TIMEOUT = Duration.ofSeconds(30);
+    private static final String DEFAULT_MODEL = "qwen3.5:0.8b";
 
     private MockScenario scenario;
 
@@ -81,7 +83,7 @@ public final class AppConfigurationMockService implements AppConfigurationServic
             appName,
             DATA_DIRECTORY,
             new DatabaseConfiguration(APP_DATABASE, DEMO_DATABASE),
-            new AiConfiguration(OLLAMA_BASE_URL, HEALTH_TIMEOUT)
+            new AiConfiguration(OLLAMA_BASE_URL, HEALTH_TIMEOUT, GENERATE_TIMEOUT, DEFAULT_MODEL)
         );
     }
 }
