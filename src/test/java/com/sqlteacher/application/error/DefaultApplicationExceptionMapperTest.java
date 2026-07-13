@@ -18,8 +18,8 @@ class DefaultApplicationExceptionMapperTest {
 
         assertEquals("SQLITE_INIT_FAILED", error.code());
         assertEquals(ApplicationErrorType.APPLICATION, error.type());
-        assertEquals("The demo database could not be prepared.", error.userMessage());
-        assertFalse(error.retryable());
+        assertEquals("演示数据库初始化失败，请检查数据目录是否可写。", error.userMessage());
+        assertTrue(error.retryable());
     }
 
     @Test
@@ -46,6 +46,17 @@ class DefaultApplicationExceptionMapperTest {
         ApplicationError error = mapper.map(new SqlTeacherException(null, null));
 
         assertEquals("APPLICATION_ERROR", error.code());
-        assertEquals("The operation could not be completed.", error.userMessage());
+        assertEquals("操作未能完成，请重试或联系教师。", error.userMessage());
+    }
+
+    @Test
+    void shouldHideDatabaseDetailsBehindKnownSafeMessage() {
+        ApplicationError error = mapper.map(
+            new SqlTeacherException("SQL_EXECUTION_FAILED", "near secret_table: syntax error")
+        );
+
+        assertEquals("SQL 执行失败，请检查语法、表名和字段名后重试。", error.userMessage());
+        assertFalse(error.userMessage().contains("secret_table"));
+        assertTrue(error.retryable());
     }
 }
