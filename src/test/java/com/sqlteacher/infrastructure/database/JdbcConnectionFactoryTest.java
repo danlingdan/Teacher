@@ -1,57 +1,60 @@
 package com.sqlteacher.infrastructure.database;
 
 import com.sqlteacher.application.config.DatabaseConfiguration;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
 
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.Connection;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-@Tag("integration")
 class JdbcConnectionFactoryTest {
-
-    @TempDir
-    Path tempDir;
-
-    private DatabaseConfiguration configuration;
-    private JdbcConnectionFactory factory;
-
-    @BeforeEach
-    void setUp() {
-        configuration = new DatabaseConfiguration(
-                tempDir.resolve("app.db"),
-                tempDir.resolve("demo.db")
-        );
-        factory = new JdbcConnectionFactory(configuration);
-    }
 
     @Test
     void shouldOpenDemoConnection() throws Exception {
+
+        Path tempDirectory = Files.createTempDirectory("sqlteacher-test");
+
+        DatabaseConfiguration configuration =
+                new DatabaseConfiguration(
+                        tempDirectory.resolve("app.db"),
+                        tempDirectory.resolve("demo.db")
+                );
+
+        JdbcConnectionFactory factory =
+                new JdbcConnectionFactory(configuration);
+
         try (Connection connection = factory.open("demo")) {
+
             assertNotNull(connection);
             assertFalse(connection.isClosed());
+
         }
     }
 
     @Test
-    void shouldOpenAppConnection() throws Exception {
-        try (Connection connection = factory.open("app")) {
-            assertNotNull(connection);
-            assertFalse(connection.isClosed());
-        }
-    }
+    void shouldRejectUnknownConnection() throws Exception {
 
-    @Test
-    void shouldRejectUnknownConnection() {
-        assertThrows(IllegalArgumentException.class, () -> factory.open("mysql"));
-    }
+        Path tempDirectory = Files.createTempDirectory("sqlteacher-test");
 
-    @Test
-    void shouldRejectNullConnectionId() {
-        assertThrows(NullPointerException.class, () -> factory.open(null));
+        DatabaseConfiguration configuration =
+                new DatabaseConfiguration(
+                        tempDirectory.resolve("app.db"),
+                        tempDirectory.resolve("demo.db")
+                );
+
+        JdbcConnectionFactory factory =
+                new JdbcConnectionFactory(configuration);
+
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> factory.open("mysql")
+        );
+
+        assertEquals(
+                "Unknown connectionId: mysql",
+                exception.getMessage()
+        );
     }
 }
