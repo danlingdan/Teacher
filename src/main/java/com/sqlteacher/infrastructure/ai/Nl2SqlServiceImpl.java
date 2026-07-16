@@ -5,23 +5,38 @@ import com.sqlteacher.application.ai.AiCompletionRequest;
 import com.sqlteacher.application.ai.AiCompletionResult;
 import com.sqlteacher.application.ai.AiModelProvider;
 import com.sqlteacher.application.config.AiConfiguration;
+import com.sqlteacher.application.event.LearningEventService;
+import com.sqlteacher.application.metadata.DatabaseColumn;
+import com.sqlteacher.application.metadata.DatabaseMetadataService;
+import com.sqlteacher.application.metadata.DatabaseTable;
 import com.sqlteacher.application.nl2sql.Nl2SqlPlan;
 import com.sqlteacher.application.nl2sql.Nl2SqlRequest;
 import com.sqlteacher.application.nl2sql.Nl2SqlService;
 import com.sqlteacher.infrastructure.ai.dto.OllamaNl2SqlResponse;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
+import java.util.List;
 import java.util.Objects;
+import java.util.regex.Pattern;
 
 public final class Nl2SqlServiceImpl implements Nl2SqlService {
-    private static final String PROMPT_VERSION = "v1";
+    private static final Logger log = LoggerFactory.getLogger(Nl2SqlServiceImpl.class);
+    private static final String PROMPT_VERSION = "v2";
+    private static final Pattern SELECT_PATTERN = Pattern.compile("^\\s*SELECT\\s", Pattern.CASE_INSENSITIVE);
+    private static final Pattern MULTI_STATEMENT_PATTERN = Pattern.compile(";\\s*[^\\s]");
 
     private final AiModelProvider aiModelProvider;
     private final AiConfiguration aiConfiguration;
+    private final DatabaseMetadataService databaseMetadataService;
+    private final LearningEventService learningEventService;
     private final ObjectMapper objectMapper;
 
-    public Nl2SqlServiceImpl(AiModelProvider aiModelProvider, AiConfiguration aiConfiguration) {
+    public Nl2SqlServiceImpl(AiModelProvider aiModelProvider, AiConfiguration aiConfiguration, DatabaseMetadataService databaseMetadataService, LearningEventService learningEventService) {
         this.aiModelProvider = aiModelProvider;
         this.aiConfiguration = aiConfiguration;
+        this.databaseMetadataService = databaseMetadataService;
+        this.learningEventService = learningEventService;
         this.objectMapper = new ObjectMapper();
     }
 
@@ -35,7 +50,7 @@ public final class Nl2SqlServiceImpl implements Nl2SqlService {
             throw new IllegalArgumentException("connectionId must not be blank");
         }
 
-        String prompt = buildPrompt(request.naturalLanguage());
+        String prompt = buildPrompt(request.naturalLanguage(), request.connectionId());
         AiCompletionRequest aiRequest = new AiCompletionRequest(
             aiConfiguration.defaultModel(),
             prompt,
@@ -45,6 +60,7 @@ public final class Nl2SqlServiceImpl implements Nl2SqlService {
         AiCompletionResult aiResult = aiModelProvider.complete(aiRequest);
 
         if (!aiResult.success()) {
+            recordAiGeneration(request.connectionId(), false, aiResult.model(), aiResult.errorMessage());
             return new Nl2SqlPlan(
                 "",
                 "",
@@ -56,6 +72,21 @@ public final class Nl2SqlServiceImpl implements Nl2SqlService {
 
         try {
             OllamaNl2SqlResponse response = objectMapper.readValue(aiResult.content(), OllamaNl2SqlResponse.class);
+
+            String validationError = validateAiResponse(response);
+            if (validationError != null) {
+                log.warn("AI response validation failed: {}", validationError);
+                recordAiGeneration(request.connectionId(), false, aiResult.model(), "VALIDATION_FAILED");
+                return new Nl2SqlPlan(
+                    "",
+                    "",
+                    validationError,
+                    aiResult.model(),
+                    PROMPT_VERSION
+                );
+            }
+
+            recordAiGeneration(request.connectionId(), true, aiResult.model(), null);
             return new Nl2SqlPlan(
                 response.sqlDraft(),
                 response.intent(),
@@ -64,6 +95,8 @@ public final class Nl2SqlServiceImpl implements Nl2SqlService {
                 PROMPT_VERSION
             );
         } catch (Exception ex) {
+            log.warn("Failed to parse AI response", ex);
+            recordAiGeneration(request.connectionId(), false, aiResult.model(), "PARSE_ERROR");
             return new Nl2SqlPlan(
                 "",
                 "",
@@ -74,12 +107,47 @@ public final class Nl2SqlServiceImpl implements Nl2SqlService {
         }
     }
 
-    private String buildPrompt(String naturalLanguage) {
+    private void recordAiGeneration(String connectionId, boolean successful, String model, String errorCode) {
+        try {
+            learningEventService.recordAiGeneration(connectionId, successful, model, PROMPT_VERSION, errorCode);
+        } catch (Exception ex) {
+            log.warn("Failed to record AI generation event", ex);
+        }
+    }
+
+    private String validateAiResponse(OllamaNl2SqlResponse response) {
+        if (response.sqlDraft() == null || response.sqlDraft().isBlank()) {
+            return "AI generated empty SQL draft";
+        }
+
+        String sql = response.sqlDraft().trim();
+
+        if (!SELECT_PATTERN.matcher(sql).find()) {
+            return "AI generated non-SELECT statement: " + sql.substring(0, Math.min(50, sql.length())) + "...";
+        }
+
+        if (MULTI_STATEMENT_PATTERN.matcher(sql).find()) {
+            return "AI generated multiple statements";
+        }
+
+        if (!"QUERY".equalsIgnoreCase(response.intent())) {
+            return "AI generated invalid intent: " + response.intent();
+        }
+
+        if (response.explanation() == null || response.explanation().isBlank()) {
+            return "AI generated empty explanation";
+        }
+
+        return null;
+    }
+
+    private String buildPrompt(String naturalLanguage, String connectionId) {
         StringBuilder sb = new StringBuilder();
         sb.append("You are a SQL teacher assistant. Convert the following natural language query into a valid SQLite SELECT statement.\n");
         sb.append("\n");
         sb.append("Database: SQLite\n");
-        sb.append("Available tables: student (id, name, score, class_id), class (id, name, teacher)\n");
+        sb.append("Available tables:\n");
+        sb.append(buildTableSchema(connectionId));
         sb.append("\n");
         sb.append("IMPORTANT RULES:\n");
         sb.append("- ONLY generate SELECT statements\n");
@@ -98,5 +166,31 @@ public final class Nl2SqlServiceImpl implements Nl2SqlService {
         sb.append("Example output:\n");
         sb.append("{\"sqlDraft\": \"SELECT name, score FROM student WHERE score >= 60 LIMIT 500\", \"intent\": \"QUERY\", \"explanation\": \"查询成绩大于等于60的学生姓名和分数\"}");
         return sb.toString();
+    }
+
+    private String buildTableSchema(String connectionId) {
+        try {
+            List<DatabaseTable> tables = databaseMetadataService.listTables(connectionId);
+            if (tables == null || tables.isEmpty()) {
+                return getDefaultTableSchema();
+            }
+            StringBuilder sb = new StringBuilder();
+            for (DatabaseTable table : tables) {
+                sb.append("  - ").append(table.name());
+                sb.append(" (");
+                List<String> columnNames = table.columns().stream()
+                    .map(DatabaseColumn::name)
+                    .toList();
+                sb.append(String.join(", ", columnNames));
+                sb.append(")\n");
+            }
+            return sb.toString().trim();
+        } catch (Exception ex) {
+            return getDefaultTableSchema();
+        }
+    }
+
+    private String getDefaultTableSchema() {
+        return "  - student (id, name, score, class_id)\n  - class (id, name, teacher)";
     }
 }

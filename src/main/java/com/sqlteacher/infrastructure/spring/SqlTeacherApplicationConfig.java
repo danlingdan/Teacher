@@ -7,6 +7,10 @@ import com.sqlteacher.application.config.SqlTeacherConfiguration;
 import com.sqlteacher.application.database.DatabaseInitializationService;
 import com.sqlteacher.application.error.ApplicationExceptionMapper;
 import com.sqlteacher.application.error.DefaultApplicationExceptionMapper;
+import com.sqlteacher.application.event.DefaultLearningEventService;
+import com.sqlteacher.application.event.LearningEventRecorder;
+import com.sqlteacher.application.event.LearningEventService;
+import com.sqlteacher.application.metadata.DatabaseMetadataService;
 import com.sqlteacher.application.nl2sql.Nl2SqlService;
 import com.sqlteacher.infrastructure.ai.Nl2SqlServiceImpl;
 import com.sqlteacher.infrastructure.ai.OllamaAiModelProvider;
@@ -47,8 +51,18 @@ public class SqlTeacherApplicationConfig {
     }
 
     @Bean
-    public Nl2SqlService nl2SqlService(AiModelProvider aiModelProvider, SqlTeacherConfiguration properties) {
-        return new Nl2SqlServiceImpl(aiModelProvider, properties.ai());
+    public Nl2SqlService nl2SqlService(AiModelProvider aiModelProvider, SqlTeacherConfiguration properties, DatabaseMetadataService databaseMetadataService, LearningEventService learningEventService) {
+        return new Nl2SqlServiceImpl(aiModelProvider, properties.ai(), databaseMetadataService, learningEventService);
+    }
+
+    @Bean
+    public LearningEventRecorder learningEventRecorder() {
+        return event -> {};
+    }
+
+    @Bean
+    public LearningEventService learningEventService(LearningEventRecorder recorder) {
+        return new DefaultLearningEventService(recorder);
     }
 
     @Bean
