@@ -32,6 +32,15 @@ public final class DefaultSqlRiskAnalysisService implements SqlRiskAnalysisServi
             );
         }
 
+        // Explicitly block DROP DATABASE as it's extremely dangerous
+        if (normalized.toUpperCase().contains("DROP DATABASE")) {
+            return forbidden(
+                    "DROP",
+                    false,
+                    "DROP DATABASE is not allowed."
+            );
+        }
+
         return switch (statementType) {
 
             case "SELECT" -> new SqlRiskAnalysis(
@@ -89,7 +98,6 @@ public final class DefaultSqlRiskAnalysisService implements SqlRiskAnalysisServi
     }
 
     private boolean hasMultipleStatements(String sql) {
-
         String value = sql;
 
         if (value.endsWith(";")) {

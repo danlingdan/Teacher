@@ -3,6 +3,7 @@ package com.sqlteacher.infrastructure.database;
 import com.sqlteacher.application.execution.SqlExecutionRequest;
 import com.sqlteacher.application.execution.SqlExecutionResult;
 import com.sqlteacher.application.execution.SqlExecutionService;
+import com.sqlteacher.application.event.LearningEventService;
 import com.sqlteacher.application.risk.SqlRiskAnalysis;
 import com.sqlteacher.application.risk.SqlRiskAnalysisService;
 import com.sqlteacher.domain.SqlTeacherException;
@@ -21,16 +22,19 @@ public final class JdbcSqlExecutionService implements SqlExecutionService {
     private final JdbcConnectionFactory connectionFactory;
     private final SqlResultMapper resultMapper;
     private final SqlRiskAnalysisService riskAnalysisService;
+    private final LearningEventService eventService;
     private static final Logger log = LoggerFactory.getLogger(JdbcSqlExecutionService.class);
 
     public JdbcSqlExecutionService(
             JdbcConnectionFactory connectionFactory,
             SqlResultMapper resultMapper,
-            SqlRiskAnalysisService riskAnalysisService
+            SqlRiskAnalysisService riskAnalysisService,
+            LearningEventService eventService
     ) {
         this.connectionFactory = Objects.requireNonNull(connectionFactory);
         this.resultMapper = Objects.requireNonNull(resultMapper);
         this.riskAnalysisService = Objects.requireNonNull(riskAnalysisService);
+        this.eventService = Objects.requireNonNull(eventService);
     }
 
     @Override
@@ -53,6 +57,14 @@ public final class JdbcSqlExecutionService implements SqlExecutionService {
         );
 
         if (!risk.executable()) {
+            // Record risk blocked event
+            eventService.recordSqlRiskBlocked(
+                    request.connectionId(),
+                    risk.statementType(),
+                    risk.level(),
+                    risk.multiStatement()
+            );
+            
             throw new SqlTeacherException(
                     "SQL_BLOCKED",
                     risk.reasons().isEmpty()
@@ -62,6 +74,13 @@ public final class JdbcSqlExecutionService implements SqlExecutionService {
         }
 
         if (risk.confirmationRequired() && !request.riskConfirmed()) {
+            eventService.recordSqlRiskBlocked(
+                    request.connectionId(),
+                    risk.statementType(),
+                    risk.level(),
+                    risk.multiStatement()
+            );
+
             throw new SqlTeacherException(
                     "SQL_CONFIRMATION_REQUIRED",
                     "This SQL requires user confirmation before execution."
@@ -96,21 +115,45 @@ public final class JdbcSqlExecutionService implements SqlExecutionService {
 
                 try (ResultSet resultSet = statement.getResultSet()) {
                     log.debug("Query execution completed in {} ms", duration.toMillis());
-                    return resultMapper.mapQueryResult(
+                    SqlExecutionResult result = resultMapper.mapQueryResult(
                             resultSet,
                             duration,
                             request.maxRows()
                     );
+                    
+                    // Record successful SQL execution event
+                    eventService.recordSqlExecution(
+                            request.connectionId(),
+                            true,
+                            risk.statementType(),
+                            duration,
+                            result.rows().size(),
+                            null
+                    );
+                    
+                    return result;
 
                 }
 
             }
 
             log.debug("Update execution completed in {} ms, affectedRows={}", duration.toMillis(), statement.getUpdateCount());
-            return resultMapper.mapUpdateResult(
+            SqlExecutionResult result = resultMapper.mapUpdateResult(
                     statement.getUpdateCount(),
                     duration
             );
+            
+            // Record successful SQL execution event for updates
+            eventService.recordSqlExecution(
+                    request.connectionId(),
+                    true,
+                    risk.statementType(),
+                    duration,
+                    result.affectedRows(),
+                    null
+            );
+            
+            return result;
 
         } catch (SQLException exception) {
             log.error("SQL execution failed on connection '{}': {}",
@@ -118,6 +161,18 @@ public final class JdbcSqlExecutionService implements SqlExecutionService {
                     exception.getMessage(),
                     exception
             );
+            
+            // Record failed SQL execution event
+            Duration duration = Duration.between(start, Instant.now());
+            eventService.recordSqlExecution(
+                    request.connectionId(),
+                    false,
+                    risk.statementType(),
+                    duration,
+                    0,
+                    exception.getMessage()
+            );
+            
             throw new SqlTeacherException(
                     "SQL_EXECUTION_FAILED",
                     exception.getMessage(),
