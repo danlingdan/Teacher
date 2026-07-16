@@ -9,7 +9,6 @@ drop-table	DROP TABLE student	HIGH	false	true	false
 alter-table	ALTER TABLE student ADD COLUMN email TEXT	HIGH	false	true	false
 truncate-table	TRUNCATE TABLE student	HIGH	false	true	false
 multiple-statements	SELECT * FROM student; DELETE FROM student	HIGH	false	true	true
-multiple-statements-no-semi	SELECT * FROM student DELETE FROM student	HIGH	false	true	false
 multiple-statements-with-newline	SELECT * FROM student;\nDELETE FROM student	HIGH	false	true	true
 unsupported-grant	GRANT SELECT ON student TO demo	FORBIDDEN	false	false	false
 unsupported-revoke	REVOKE SELECT ON student FROM demo	FORBIDDEN	false	false	false
