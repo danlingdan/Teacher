@@ -2,6 +2,7 @@ package com.sqlteacher.desktop.controller;
 
 import com.sqlteacher.application.execution.SqlExecutionService;
 import com.sqlteacher.application.metadata.DatabaseMetadataService;
+import com.sqlteacher.application.risk.SqlRiskAnalysisService;
 import com.sqlteacher.desktop.GlobalLoading;
 import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
@@ -55,6 +56,8 @@ public final class MainWindowController {
     /** 表元数据服务（应用层接口）；运行期实现由 Spring 提供，向下注入到表结构页控制器。 */
     private final DatabaseMetadataService databaseMetadataService;
 
+    private final SqlRiskAnalysisService sqlRiskAnalysisService;
+
     /**
      * 表名选中回调：表结构页点击表名时触发，把 {@code "SELECT * FROM 表名"}
      * 填充到 SQL 练习页输入框（不自动跳转页面，避免打断右侧即时预览）。在构造器中初始化。
@@ -106,9 +109,11 @@ public final class MainWindowController {
      * @param databaseMetadataService 应用层表元数据服务接口，不可为 {@code null}
      */
     public MainWindowController(SqlExecutionService sqlExecutionService,
-                                DatabaseMetadataService databaseMetadataService) {
+                                DatabaseMetadataService databaseMetadataService,
+                                SqlRiskAnalysisService sqlRiskAnalysisService) {
         this.sqlExecutionService = sqlExecutionService;
         this.databaseMetadataService = databaseMetadataService;
+        this.sqlRiskAnalysisService = sqlRiskAnalysisService;
         this.fillSqlCallback = sql -> {
             // 确保 SQL 练习页已加载并捕获控制器引用，仅填充 SQL 不跳转页面。
             sqlPracticePage();
@@ -216,7 +221,10 @@ public final class MainWindowController {
         FXMLLoader loader = new FXMLLoader(fxml);
         loader.setControllerFactory(type -> {
             if (type == SqlPracticeController.class) {
-                sqlPracticeController = new SqlPracticeController(sqlExecutionService);
+                sqlPracticeController = new SqlPracticeController(
+                    sqlExecutionService,
+                    sqlRiskAnalysisService
+                );
                 sqlPracticeController.setOnDdlSuccessCallback(this::refreshTableSchema);
                 return sqlPracticeController;
             }

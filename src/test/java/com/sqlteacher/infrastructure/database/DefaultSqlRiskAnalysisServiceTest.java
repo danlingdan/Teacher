@@ -41,9 +41,18 @@ class DefaultSqlRiskAnalysisServiceTest {
         SqlRiskAnalysis result =
                 service.analyze("DROP TABLE student");
 
-        assertFalse(result.executable());
+        assertTrue(result.executable());
         assertEquals(SqlRiskLevel.HIGH, result.level());
         assertTrue(result.confirmationRequired());
+    }
+
+    @Test
+    void shouldForbidDropDatabaseEvenWhenSchemaChangesAreConfirmable() {
+        SqlRiskAnalysis result = service.analyze("DROP DATABASE school");
+
+        assertFalse(result.executable());
+        assertEquals(SqlRiskLevel.FORBIDDEN, result.level());
+        assertFalse(result.confirmationRequired());
     }
 
     @Test

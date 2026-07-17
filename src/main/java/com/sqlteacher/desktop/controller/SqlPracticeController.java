@@ -3,6 +3,8 @@ package com.sqlteacher.desktop.controller;
 import com.sqlteacher.application.execution.SqlExecutionRequest;
 import com.sqlteacher.application.execution.SqlExecutionResult;
 import com.sqlteacher.application.execution.SqlExecutionService;
+import com.sqlteacher.application.risk.SqlRiskAnalysis;
+import com.sqlteacher.application.risk.SqlRiskAnalysisService;
 import com.sqlteacher.desktop.DesktopExecutors;
 import com.sqlteacher.desktop.GlobalLoading;
 import com.sqlteacher.desktop.SqlRiskConfirmDialogUtil;
@@ -82,6 +84,8 @@ public final class SqlPracticeController {
     /** SQL 执行服务（应用层接口）；运行期实现由 Spring Context 提供。 */
     private final SqlExecutionService sqlExecutionService;
 
+    private final SqlRiskAnalysisService sqlRiskAnalysisService;
+
     /** 多行 SQL 输入框，对应 FXML 中 fx:id="sqlInputArea"。 */
     @FXML
     private TextArea sqlInputArea;
@@ -121,8 +125,12 @@ public final class SqlPracticeController {
      *
      * @param sqlExecutionService 应用层 SQL 执行服务接口，不可为 {@code null}
      */
-    public SqlPracticeController(SqlExecutionService sqlExecutionService) {
+    public SqlPracticeController(
+        SqlExecutionService sqlExecutionService,
+        SqlRiskAnalysisService sqlRiskAnalysisService
+    ) {
         this.sqlExecutionService = sqlExecutionService;
+        this.sqlRiskAnalysisService = sqlRiskAnalysisService;
     }
 
     /**
@@ -177,27 +185,27 @@ public final class SqlPracticeController {
         }
 
         // ② 高危SQL风险检查：命中高危规则弹出二次确认弹窗。
-        String riskType = SqlRiskConfirmDialogUtil.checkRisk(sql);
-        if (riskType != null) {
-            SqlRiskConfirmDialogUtil.showRiskConfirmDialog(sql, () -> executeSqlInternal(sql));
+        SqlRiskAnalysis risk = sqlRiskAnalysisService.analyze(sql);
+        if (risk.confirmationRequired()) {
+            SqlRiskConfirmDialogUtil.showRiskConfirmDialog(sql, () -> executeSqlInternal(sql, true));
             return;
         }
 
         // ③ 低风险SQL直接执行。
-        executeSqlInternal(sql);
+        executeSqlInternal(sql, false);
     }
 
     /**
      * 内部执行SQL方法：进入执行中状态、创建后台任务、处理成功/失败回调。
      */
-    private void executeSqlInternal(String sql) {
+    private void executeSqlInternal(String sql, boolean riskConfirmed) {
         // ① 立即进入执行中：禁用按钮、展示 loading 占位，并唤起全局 Loading 遮罩。
         setExecuting(true);
         showLoadingState();
         GlobalLoading.show(LOADING_MESSAGE);
 
         SqlExecutionRequest request = new SqlExecutionRequest(
-            DesktopConnections.DEMO, sql, DEFAULT_MAX_ROWS, DEFAULT_TIMEOUT
+            DesktopConnections.DEMO, sql, DEFAULT_MAX_ROWS, DEFAULT_TIMEOUT, riskConfirmed
         );
 
         // ② 后台任务：call() 在子线程执行，仅做业务调用与 ViewModel 转换，不触碰任何 UI 控件。
