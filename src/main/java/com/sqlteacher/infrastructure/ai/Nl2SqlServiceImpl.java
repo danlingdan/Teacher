@@ -12,10 +12,7 @@ import com.sqlteacher.application.metadata.DatabaseTable;
 import com.sqlteacher.application.nl2sql.Nl2SqlPlan;
 import com.sqlteacher.application.nl2sql.Nl2SqlRequest;
 import com.sqlteacher.application.nl2sql.Nl2SqlService;
-import com.sqlteacher.application.risk.SqlRiskAnalysis;
-import com.sqlteacher.application.risk.SqlRiskAnalysisService;
 import com.sqlteacher.infrastructure.ai.dto.OllamaNl2SqlResponse;
-import com.sqlteacher.infrastructure.database.DefaultSqlRiskAnalysisService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -29,26 +26,18 @@ public final class Nl2SqlServiceImpl implements Nl2SqlService {
     private final AiConfiguration aiConfiguration;
     private final DatabaseMetadataService databaseMetadataService;
     private final LearningEventService learningEventService;
-    private final SqlRiskAnalysisService riskAnalysisService;
     private final ObjectMapper objectMapper;
-
-    public Nl2SqlServiceImpl(AiModelProvider aiModelProvider, AiConfiguration aiConfiguration, DatabaseMetadataService databaseMetadataService, LearningEventService learningEventService) {
-        this(aiModelProvider, aiConfiguration, databaseMetadataService, learningEventService,
-            new DefaultSqlRiskAnalysisService());
-    }
 
     public Nl2SqlServiceImpl(
         AiModelProvider aiModelProvider,
         AiConfiguration aiConfiguration,
         DatabaseMetadataService databaseMetadataService,
-        LearningEventService learningEventService,
-        SqlRiskAnalysisService riskAnalysisService
+        LearningEventService learningEventService
     ) {
         this.aiModelProvider = aiModelProvider;
         this.aiConfiguration = aiConfiguration;
         this.databaseMetadataService = databaseMetadataService;
         this.learningEventService = learningEventService;
-        this.riskAnalysisService = riskAnalysisService;
         this.objectMapper = new ObjectMapper();
     }
 
@@ -130,16 +119,6 @@ public final class Nl2SqlServiceImpl implements Nl2SqlService {
     private String validateAiResponse(OllamaNl2SqlResponse response) {
         if (response.sqlDraft() == null || response.sqlDraft().isBlank()) {
             return "AI generated empty SQL draft";
-        }
-
-        String sql = response.sqlDraft().trim();
-
-        SqlRiskAnalysis risk = riskAnalysisService.analyze(sql);
-        if (risk.multiStatement()) {
-            return "AI generated multiple statements";
-        }
-        if (!risk.executable() || !"SELECT".equals(risk.statementType())) {
-            return "AI generated non-SELECT or unsafe statement";
         }
 
         if (!"QUERY".equalsIgnoreCase(response.intent())) {

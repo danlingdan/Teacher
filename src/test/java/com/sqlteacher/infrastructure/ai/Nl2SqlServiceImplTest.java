@@ -143,7 +143,7 @@ class Nl2SqlServiceImplTest {
     }
 
     @Test
-    void shouldRejectNonSelectStatement() {
+    void shouldReturnStructurallyValidNonSelectDraftForApplicationSafetyAssessment() {
         AiModelProvider mockProvider = new MockProvider(AiCompletionResult.success(
             "{\"sqlDraft\": \"INSERT INTO student (name) VALUES ('test')\", \"intent\": \"QUERY\", \"explanation\": \"插入学生\"}",
             "test-model"
@@ -152,12 +152,11 @@ class Nl2SqlServiceImplTest {
         Nl2SqlServiceImpl service = new Nl2SqlServiceImpl(mockProvider, CONFIG, EMPTY_METADATA_SERVICE, NO_OP_EVENT_SERVICE);
         Nl2SqlPlan result = service.generate(new Nl2SqlRequest("插入学生", "demo"));
 
-        assertTrue(result.sqlDraft().isEmpty());
-        assertTrue(result.explanation().contains("non-SELECT"));
+        assertEquals("INSERT INTO student (name) VALUES ('test')", result.sqlDraft());
     }
 
     @Test
-    void shouldRejectMultiStatement() {
+    void shouldReturnStructurallyValidMultiStatementDraftForApplicationSafetyAssessment() {
         AiModelProvider mockProvider = new MockProvider(AiCompletionResult.success(
             "{\"sqlDraft\": \"SELECT * FROM student; DROP TABLE student\", \"intent\": \"QUERY\", \"explanation\": \"查询并删除\"}",
             "test-model"
@@ -166,8 +165,7 @@ class Nl2SqlServiceImplTest {
         Nl2SqlServiceImpl service = new Nl2SqlServiceImpl(mockProvider, CONFIG, EMPTY_METADATA_SERVICE, NO_OP_EVENT_SERVICE);
         Nl2SqlPlan result = service.generate(new Nl2SqlRequest("查询并删除", "demo"));
 
-        assertTrue(result.sqlDraft().isEmpty());
-        assertTrue(result.explanation().contains("multiple statements"));
+        assertEquals("SELECT * FROM student; DROP TABLE student", result.sqlDraft());
     }
 
     @Test
