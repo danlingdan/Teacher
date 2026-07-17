@@ -171,6 +171,19 @@ class Nl2SqlServiceImplTest {
     }
 
     @Test
+    void shouldAllowSemicolonInsideSelectStringLiteral() {
+        AiModelProvider mockProvider = new MockProvider(AiCompletionResult.success(
+            "{\"sqlDraft\": \"SELECT ';' AS marker\", \"intent\": \"QUERY\", \"explanation\": \"查询分号文本\"}",
+            "test-model"
+        ));
+
+        Nl2SqlServiceImpl service = new Nl2SqlServiceImpl(mockProvider, CONFIG, EMPTY_METADATA_SERVICE, NO_OP_EVENT_SERVICE);
+        Nl2SqlPlan result = service.generate(new Nl2SqlRequest("查询分号文本", "demo"));
+
+        assertEquals("SELECT ';' AS marker", result.sqlDraft());
+    }
+
+    @Test
     void shouldRejectInvalidIntent() {
         AiModelProvider mockProvider = new MockProvider(AiCompletionResult.success(
             "{\"sqlDraft\": \"SELECT * FROM student\", \"intent\": \"INSERT\", \"explanation\": \"查询学生\"}",

@@ -12,31 +12,43 @@ import com.sqlteacher.application.metadata.DatabaseTable;
 import com.sqlteacher.application.nl2sql.Nl2SqlPlan;
 import com.sqlteacher.application.nl2sql.Nl2SqlRequest;
 import com.sqlteacher.application.nl2sql.Nl2SqlService;
+import com.sqlteacher.application.risk.SqlRiskAnalysis;
+import com.sqlteacher.application.risk.SqlRiskAnalysisService;
 import com.sqlteacher.infrastructure.ai.dto.OllamaNl2SqlResponse;
+import com.sqlteacher.infrastructure.database.DefaultSqlRiskAnalysisService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.List;
 import java.util.Objects;
-import java.util.regex.Pattern;
 
 public final class Nl2SqlServiceImpl implements Nl2SqlService {
     private static final Logger log = LoggerFactory.getLogger(Nl2SqlServiceImpl.class);
     private static final String PROMPT_VERSION = "v2";
-    private static final Pattern SELECT_PATTERN = Pattern.compile("^\\s*SELECT\\s", Pattern.CASE_INSENSITIVE);
-    private static final Pattern MULTI_STATEMENT_PATTERN = Pattern.compile(";\\s*[^\\s]");
-
     private final AiModelProvider aiModelProvider;
     private final AiConfiguration aiConfiguration;
     private final DatabaseMetadataService databaseMetadataService;
     private final LearningEventService learningEventService;
+    private final SqlRiskAnalysisService riskAnalysisService;
     private final ObjectMapper objectMapper;
 
     public Nl2SqlServiceImpl(AiModelProvider aiModelProvider, AiConfiguration aiConfiguration, DatabaseMetadataService databaseMetadataService, LearningEventService learningEventService) {
+        this(aiModelProvider, aiConfiguration, databaseMetadataService, learningEventService,
+            new DefaultSqlRiskAnalysisService());
+    }
+
+    public Nl2SqlServiceImpl(
+        AiModelProvider aiModelProvider,
+        AiConfiguration aiConfiguration,
+        DatabaseMetadataService databaseMetadataService,
+        LearningEventService learningEventService,
+        SqlRiskAnalysisService riskAnalysisService
+    ) {
         this.aiModelProvider = aiModelProvider;
         this.aiConfiguration = aiConfiguration;
         this.databaseMetadataService = databaseMetadataService;
         this.learningEventService = learningEventService;
+        this.riskAnalysisService = riskAnalysisService;
         this.objectMapper = new ObjectMapper();
     }
 
@@ -60,7 +72,7 @@ public final class Nl2SqlServiceImpl implements Nl2SqlService {
         AiCompletionResult aiResult = aiModelProvider.complete(aiRequest);
 
         if (!aiResult.success()) {
-            recordAiGeneration(request.connectionId(), false, aiResult.model(), aiResult.errorMessage());
+            recordAiGeneration(request.connectionId(), false, aiResult.model(), "AI_PROVIDER_FAILED");
             return new Nl2SqlPlan(
                 "",
                 "",
@@ -122,12 +134,12 @@ public final class Nl2SqlServiceImpl implements Nl2SqlService {
 
         String sql = response.sqlDraft().trim();
 
-        if (!SELECT_PATTERN.matcher(sql).find()) {
-            return "AI generated non-SELECT statement: " + sql.substring(0, Math.min(50, sql.length())) + "...";
-        }
-
-        if (MULTI_STATEMENT_PATTERN.matcher(sql).find()) {
+        SqlRiskAnalysis risk = riskAnalysisService.analyze(sql);
+        if (risk.multiStatement()) {
             return "AI generated multiple statements";
+        }
+        if (!risk.executable() || !"SELECT".equals(risk.statementType())) {
+            return "AI generated non-SELECT or unsafe statement";
         }
 
         if (!"QUERY".equalsIgnoreCase(response.intent())) {

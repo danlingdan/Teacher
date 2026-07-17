@@ -12,10 +12,11 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.net.ConnectException;
-import java.net.SocketTimeoutException;
+import java.net.http.HttpConnectTimeoutException;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.net.http.HttpTimeoutException;
 
 public final class OllamaAiModelProvider implements AiModelProvider {
     private static final Logger log = LoggerFactory.getLogger(OllamaAiModelProvider.class);
@@ -69,10 +70,10 @@ public final class OllamaAiModelProvider implements AiModelProvider {
             }
 
             return AiCompletionResult.success(content, request.model());
-        } catch (ConnectException ex) {
+        } catch (ConnectException | HttpConnectTimeoutException ex) {
             log.warn("Ollama connection failed: {}", ex.getMessage());
             return AiCompletionResult.failure("Ollama service is not running. Please start Ollama and try again.", request.model());
-        } catch (SocketTimeoutException ex) {
+        } catch (HttpTimeoutException ex) {
             log.warn("Ollama request timed out");
             return AiCompletionResult.failure("AI request timed out. Please try a simpler query or increase timeout.", request.model());
         } catch (IOException ex) {
