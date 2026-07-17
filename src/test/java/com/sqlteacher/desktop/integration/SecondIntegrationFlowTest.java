@@ -13,6 +13,8 @@ import com.sqlteacher.application.execution.SqlExecutionService;
 import com.sqlteacher.application.metadata.DatabaseMetadataService;
 import com.sqlteacher.application.nl2sql.Nl2SqlPlan;
 import com.sqlteacher.application.nl2sql.Nl2SqlRequest;
+import com.sqlteacher.application.nl2sql.DefaultNl2SqlSafetyService;
+import com.sqlteacher.application.nl2sql.Nl2SqlSafetyResult;
 import com.sqlteacher.application.risk.SqlRiskAnalysisService;
 import com.sqlteacher.domain.SqlTeacherException;
 import com.sqlteacher.infrastructure.ai.Nl2SqlServiceImpl;
@@ -74,13 +76,37 @@ class SecondIntegrationFlowTest {
                 fixedProvider,
                 configuration.ai(),
                 metadataService,
-                eventService,
-                riskService
+                eventService
             );
 
-            Nl2SqlPlan plan = nl2SqlService.generate(new Nl2SqlRequest("查询学生成绩", "demo"));
+            Nl2SqlSafetyResult safetyResult = new DefaultNl2SqlSafetyService(
+                nl2SqlService,
+                riskService,
+                eventService
+            ).generateAndAssess(new Nl2SqlRequest("查询学生成绩", "demo"));
+            Nl2SqlPlan plan = safetyResult.plan();
             assertEquals("SELECT name, score FROM student ORDER BY id", plan.sqlDraft());
             assertEquals("QUERY", plan.intent());
+            assertTrue(safetyResult.accepted());
+
+            AiModelProvider unsafeProvider = request -> AiCompletionResult.success(
+                "{\"sqlDraft\":\"UPDATE student SET score = 0 WHERE id = 1\","
+                    + "\"intent\":\"QUERY\",\"explanation\":\"修改学生成绩\"}",
+                request.model()
+            );
+            Nl2SqlSafetyResult unsafeResult = new DefaultNl2SqlSafetyService(
+                new Nl2SqlServiceImpl(
+                    unsafeProvider,
+                    configuration.ai(),
+                    metadataService,
+                    eventService
+                ),
+                riskService,
+                eventService
+            ).generateAndAssess(new Nl2SqlRequest("把一号学生成绩改为零", "demo"));
+            assertFalse(unsafeResult.accepted());
+            assertEquals("UPDATE", unsafeResult.riskAnalysis().statementType());
+            assertTrue(unsafeResult.riskAnalysis().confirmationRequired());
 
             SqlExecutionResult rows = execute(
                 executionService,
@@ -90,9 +116,9 @@ class SecondIntegrationFlowTest {
             assertEquals(93, rows.rows().getFirst().get("score"));
 
             Map<String, Long> eventCounts = eventCounts(configuration.database().appDatabasePath());
-            assertTrue(eventCounts.getOrDefault("SQL_RISK_BLOCKED", 0L) >= 1);
+            assertTrue(eventCounts.getOrDefault("SQL_RISK_BLOCKED", 0L) >= 2);
             assertTrue(eventCounts.getOrDefault("SQL_EXECUTION", 0L) >= 2);
-            assertEquals(1, eventCounts.getOrDefault("AI_SQL_GENERATED", 0L));
+            assertEquals(2, eventCounts.getOrDefault("AI_SQL_GENERATED", 0L));
             assertFalse(eventCounts.containsKey("AI_GENERATION_FAILED"));
         }
     }
