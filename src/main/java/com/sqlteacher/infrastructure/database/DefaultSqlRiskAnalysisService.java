@@ -63,7 +63,7 @@ public final class DefaultSqlRiskAnalysisService implements SqlRiskAnalysisServi
 
             case "CREATE", "ALTER", "DROP", "TRUNCATE" -> new SqlRiskAnalysis(
                     SqlRiskLevel.HIGH,
-                    false,
+                    true,
                     true,
                     false,
                     statementType,

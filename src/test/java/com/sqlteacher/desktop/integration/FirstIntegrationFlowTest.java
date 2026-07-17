@@ -52,7 +52,7 @@ class FirstIntegrationFlowTest {
 
             assertErrorCode(service, "SELECT FROM student", "SQL_EXECUTION_FAILED");
             assertErrorCode(service, "SELECT * FROM student; SELECT 1", "SQL_BLOCKED");
-            assertErrorCode(service, "DROP TABLE student", "SQL_BLOCKED");
+            assertErrorCode(service, "DROP TABLE student", "SQL_CONFIRMATION_REQUIRED");
             assertErrorCode(
                 service,
                 "UPDATE student SET score = 0 WHERE id = 1",
@@ -65,6 +65,15 @@ class FirstIntegrationFlowTest {
                 100
             );
             assertEquals(92, unchanged.rows().getFirst().get("score"));
+
+            SqlExecutionResult created = service.execute(new SqlExecutionRequest(
+                "demo",
+                "CREATE TABLE practice_note (id INTEGER PRIMARY KEY)",
+                100,
+                Duration.ofSeconds(5),
+                true
+            ));
+            assertTrue(created.success());
 
             SqlExecutionResult truncated = execute(service, "SELECT * FROM student ORDER BY id", 1);
             assertEquals(1, truncated.rows().size());

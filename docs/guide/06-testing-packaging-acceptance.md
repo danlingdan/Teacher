@@ -183,5 +183,5 @@ mvn test
 target/installer/SQLTeacherStage1/SQLTeacherStage1.exe
 ```
 
-该命令要求 Windows、JDK 21 或更高版本，并要求 `jpackage` 在 `PATH` 中。
+该命令要求 Windows、JDK 25 或更高版本，并要求 `jpackage` 在 `PATH` 中。
 当前只生成 app-image，不生成 MSI/EXE 安装器。

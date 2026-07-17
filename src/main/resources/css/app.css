@@ -1,5 +1,5 @@
 /* =====================================================================
- * SQLTeacher 桌面端全局样式表（深色精致主题 · 课堂演示版 · JavaFX 21 原生适配）
+ * SQLTeacher 桌面端全局样式表（浅色清爽主题 · 课堂演示版 · JavaFX 21 原生适配）
  * 作用域：JavaFX 桌面模块（com.sqlteacher.desktop）
  *
  * 兼容性说明（重要）：
@@ -11,14 +11,21 @@
  *   - 渐变统一使用原生 linear-gradient，边框使用基础 -fx-border-*。
  *
  * 配色目标（对标参考截图深色精致设计）：
- *   最外层窗口深邃暗色 #141c30；顶部横向导航略深 #0f1627；深色半透明卡片 #1b253d；
- *   输入框 #212c44；主操作按钮蓝紫横向渐变；标题淡紫蓝、副标题弱化；错误浅红条。
- *   整体冷色调、低刺激，适配 1366x768 及更高分辨率课堂投屏。
+ *   最外层窗口与页面底层统一浅灰白底色 #f0f2f7；顶部横向导航保持深邃 #0f1627；
+ *   深色卡片面板 #1b253d 作为功能模块强调区保持不变；输入框 #212c44；
+ *   主操作按钮蓝紫横向渐变；页面标题深蓝、副标题弱化灰蓝；错误浅红条。
+ *   整体清爽明亮，适配 800×600 及以上分辨率课堂投屏。
  * 约束：仅修改本文件；样式类名 / 结构与 FXML / Controller 完全保持一致。
  * ===================================================================== */
 
+/* ===== .root 全局兜底 =====
+ * 为所有未显式设置背景的 Scene / 弹窗底层提供统一深色背景，杜绝透明空白。 */
+.root {
+    -fx-background-color: #141c30;
+}
+
 /* ===== 主窗口根节点 =====
- * 全局字体（微软雅黑）与正文常规字号 14px 在此下沉继承；最外层深邃暗色统一底色。 */
+ * 全局字体（微软雅黑）与正文常规字号 14px 在此下沉继承；最外层与页面底层统一深色底色。 */
 .main-window {
     -fx-font-family: "Microsoft YaHei", "微软雅黑", "Segoe UI", sans-serif;
     -fx-font-size: 14px;
@@ -59,9 +66,9 @@
 }
 
 /* ===== 顶部导航按钮：基础态 =====
- * 透明底、浅灰白字 #b8c2d9、10px 圆角；预置 1px 透明边框保证 hover 加边不跳动。 */
+ * 深色底与导航栏融合、浅灰白字 #b8c2d9、10px 圆角；预置 1px 透明边框保证 hover 加边不跳动。 */
 .nav-button {
-    -fx-background-color: transparent;
+    -fx-background-color: rgba(0, 0, 0, 0.20);
     -fx-text-fill: #b8c2d9;
     -fx-font-size: 14px;
     -fx-background-radius: 10;
@@ -72,9 +79,9 @@
     -fx-cursor: hand;
 }
 
-/* 导航按钮：悬浮态 —— 极淡白色半透明填充，复刻参考页导航透明度质感（JavaFX21 无过渡，即时切换）。 */
+/* 导航按钮：悬浮态 —— 淡白色半透明填充，复刻参考页导航透明度质感（JavaFX21 无过渡，即时切换）。 */
 .nav-button:hover {
-    -fx-background-color: rgba(255, 255, 255, 0.06);
+    -fx-background-color: rgba(255, 255, 255, 0.10);
     -fx-text-fill: #e6ecf8;
 }
 
@@ -120,15 +127,15 @@
  * 全部使用 JavaFX 21 原生属性：linear-gradient / 基础 border / 柔和 dropshadow。
  * ===================================================================== */
 
-/* 页面根：透明、顶部居中，上下留出充足页面边距，横向自适应（内容宽度由 page-content 约束）。 */
+/* 页面根：填充统一深色主题背景，顶部居中，上下留出充足页面边距，横向自适应（内容宽度由 page-content 约束）。 */
 .sql-practice-page {
-    -fx-background-color: transparent;
+    -fx-background-color: #141c30;
     -fx-padding: 22 24 26 24;
 }
 
 .sql-practice-scroll,
 .sql-practice-scroll > .viewport {
-    -fx-background-color: transparent;
+    -fx-background-color: #141c30;
 }
 
 /* 居中内容列：透明。maxWidth 由 FXML 约束（1040），窗口变宽时整体居中、宽度固定。 */
@@ -150,35 +157,35 @@
     -fx-background-radius: 10;
 }
 
-/* 主标题「SQL 练习」：淡紫蓝 #b7c3ff、26px 加粗、居中。 */
+/* 主标题「表结构」：主题紫色 #9f7aea、24px 加粗、居中。 */
 .page-title {
-    -fx-font-size: 26px;
+    -fx-font-size: 24px;
     -fx-font-weight: bold;
-    -fx-text-fill: #b7c3ff;
+    -fx-text-fill: #9f7aea;
     -fx-alignment: CENTER;
     -fx-text-alignment: center;
 }
 
-/* 副标题：调低亮度弱化（#8a95b5）、小号、居中。 */
+/* 副标题：浅灰色 #6b7280、13px、居中、弱化显示。 */
 .page-subtitle {
     -fx-font-size: 13px;
-    -fx-text-fill: #8a95b5;
+    -fx-text-fill: #6b7280;
     -fx-alignment: CENTER;
     -fx-text-alignment: center;
 }
 
 /* ===== 统一卡片容器 panel-card =====
- * 深色半透明底 #1b253d（双层近似渐变制造柔和层次）+ 微亮细边 + 14px 圆角 + 柔和投影 + 均匀内边距。 */
+ * 深色半透明底 #1b253d（双层近似渐变制造柔和层次）+ 半透浅紫色细边框 + 12px 圆角 + 微弱内阴影 + 均匀内边距。 */
 .panel-card {
     -fx-background-color:
-        linear-gradient(to bottom, rgba(41, 55, 92, 0.35) 0%, rgba(41, 55, 92, 0.0) 40%),
+        linear-gradient(to bottom, rgba(159, 122, 234, 0.06) 0%, rgba(41, 55, 92, 0.0) 40%),
         #1b253d;
-    -fx-background-radius: 14;
-    -fx-border-color: rgba(120, 145, 200, 0.16);
+    -fx-background-radius: 12;
+    -fx-border-color: rgba(159, 122, 234, 0.25);
     -fx-border-width: 1;
-    -fx-border-radius: 14;
+    -fx-border-radius: 12;
     -fx-padding: 18 20 18 20;
-    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.34), 18, 0.0, 0, 6);
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.25), 12, 0.0, 0, 4);
 }
 
 /* 卡片标题行：图标竖条 + 标题文字水平排布。 */
@@ -186,7 +193,7 @@
     -fx-padding: 0 0 2 0;
 }
 
-/* 卡片前置小装饰：4px 宽竖向蓝紫渐变条，18px 高、2px 圆角。 */
+/* 卡片前置小装饰：4px 宽竖向紫色渐变条，18px 高、2px 圆角。 */
 .card-accent {
     -fx-min-width: 4;
     -fx-pref-width: 4;
@@ -194,15 +201,15 @@
     -fx-min-height: 18;
     -fx-pref-height: 18;
     -fx-max-height: 18;
-    -fx-background-color: linear-gradient(to bottom, #5b6ef5, #8259f0);
+    -fx-background-color: linear-gradient(to bottom, #9f7aea, #6366f1);
     -fx-background-radius: 2;
 }
 
-/* 卡片小标题文字：柔和浅蓝白 #cfd8ee、15px 加粗。 */
+/* 卡片小标题文字：浅蓝白 #e0e7ff、15px 加粗。 */
 .card-title {
     -fx-font-size: 15px;
     -fx-font-weight: bold;
-    -fx-text-fill: #cfd8ee;
+    -fx-text-fill: #e0e7ff;
 }
 
 /* ===== 第一层卡片：示例 SQL 标签流 ===== */
@@ -376,31 +383,37 @@
     -fx-faint-focus-color: transparent;
 }
 
-/* 表头背景条：透明并保留顶部圆角，避免与面板割裂。 */
+/* 表头背景条：主题紫色底并保留顶部圆角，避免与面板割裂。 */
 .result-table .column-header-background {
-    -fx-background-color: transparent;
+    -fx-background-color: linear-gradient(to bottom, #8b5cf6, #7c3aed);
     -fx-background-radius: 12 12 0 0;
 }
 
-/* 表头右侧留白填充块与右上角块：透明，消除原生灰块。 */
+/* 表头右侧留白填充块与右上角块：紫色底，消除原生灰块。 */
 .result-table .column-header-background .filler,
 .result-table .corner {
-    -fx-background-color: transparent;
+    -fx-background-color: linear-gradient(to bottom, #8b5cf6, #7c3aed);
 }
 
-/* 表头单元：偏亮蓝调底 #26355a + 右侧 / 底部 1px 细分隔线。 */
+/* 表头单元：主题紫色底 + 右侧 / 底部 1px 细分隔线。 */
 .result-table .column-header {
-    -fx-background-color: #26355a;
-    -fx-border-color: transparent rgba(120, 145, 200, 0.20) rgba(120, 145, 200, 0.28) transparent;
+    -fx-background-color: transparent;
+    -fx-border-color: transparent rgba(255, 255, 255, 0.15) rgba(255, 255, 255, 0.20) transparent;
     -fx-border-width: 0 1 1 0;
 }
 
-/* 表头文字：浅蓝白 #cdd8f2、加粗、左对齐、上下左右留白。 */
+/* 表头文字：纯白、加粗、左对齐、上下左右留白。 */
 .result-table .column-header .label {
-    -fx-text-fill: #cdd8f2;
+    -fx-text-fill: #ffffff;
     -fx-font-weight: bold;
     -fx-alignment: CENTER_LEFT;
     -fx-padding: 8 14 8 14;
+}
+
+/* 表格列宽约束：最小宽度75px，最大宽度无限制，确保均匀分布。 */
+.result-table .table-column {
+    -fx-min-width: 75px;
+    -fx-max-width: 9999px;
 }
 
 /* 数据行：底色由 -fx-control-inner-background(-alt) 提供深浅交替；
@@ -427,11 +440,12 @@
     -fx-text-fill: #ffffff;
 }
 
-/* 空结果占位提示（EMPTY 场景）：柔和中性灰蓝 #8a95b5、文本居中，
+/* 空结果占位提示（EMPTY 场景）：低透明度浅灰 #6b7280、文本居中，弱化显示。
  * 由 StackPane 居中承载，仅 EMPTY / 初始态可见，NORMAL 时被隐藏。 */
 .table-empty-hint {
-    -fx-text-fill: #8a95b5;
+    -fx-text-fill: #6b7280;
     -fx-font-size: 13px;
+    -fx-opacity: 0.7;
     -fx-alignment: CENTER;
     -fx-text-alignment: center;
 }
@@ -490,12 +504,318 @@
 }
 
 .sql-result-hint {
-    -fx-text-fill: #a9b8d8;
-    -fx-background-color: rgba(75, 105, 165, 0.14);
+    -fx-text-fill: #9ca3af;
+    -fx-background-color: rgba(159, 122, 234, 0.08);
     -fx-background-radius: 10;
-    -fx-border-color: rgba(100, 132, 196, 0.35);
+    -fx-border-color: rgba(159, 122, 234, 0.20);
     -fx-border-width: 1;
     -fx-border-radius: 10;
-    -fx-padding: 8 12 8 12;
+    -fx-padding: 6 10 6 10;
     -fx-font-size: 12px;
 }
+
+/* =====================================================================
+ * 表结构浏览页（TableSchemaView.fxml）—— 深色主题树形控件 + 刷新按钮
+ * 复用已有样式类：page-content / title-area / title-badge / page-title /
+ * page-subtitle / panel-card / card-title-row / card-accent / card-title /
+ * result-pane / table-empty-hint / sql-error-hint。
+ * ===================================================================== */
+
+/* 页面根：填充统一深色主题背景，顶部居中，统一内边距20px。 */
+.table-schema-page {
+    -fx-background-color: #141c30;
+    -fx-padding: 20;
+}
+
+/* TreeView 本体：透明底（底色、圆角由 .result-pane 提供），浅色文字。 */
+.schema-tree {
+    -fx-background-color: transparent;
+    -fx-border-width: 0;
+    -fx-padding: 0;
+    -fx-font-size: 13px;
+}
+
+/* 去除聚焦描边，保持扁平。 */
+.schema-tree:focused {
+    -fx-focus-color: transparent;
+    -fx-faint-focus-color: transparent;
+}
+
+/* 树单元格：透明底、浅蓝灰文字、舒适留白。 */
+.schema-tree .tree-cell {
+    -fx-background-color: transparent;
+    -fx-text-fill: #d5dce9;
+    -fx-padding: 6 10 6 10;
+}
+
+/* 悬浮态：极淡白色半透明填充。 */
+.schema-tree .tree-cell:hover {
+    -fx-background-color: rgba(255, 255, 255, 0.04);
+}
+
+/* 选中态：淡紫色半透明背景 + 浅紫文字。 */
+.schema-tree .tree-cell:selected {
+    -fx-background-color: rgba(159, 122, 234, 0.25);
+    -fx-text-fill: #c4b5fd;
+}
+
+/* 展开 / 折叠箭头：弱化灰蓝，悬浮提亮。 */
+.schema-tree .tree-disclosure-node .arrow {
+    -fx-background-color: #8a95b5;
+}
+
+.schema-tree .tree-disclosure-node:hover .arrow {
+    -fx-background-color: #c3cee6;
+}
+
+/* TreeView 滚动条：与结果表格一致的暗色细滚动条、透明轨道、折叠箭头。 */
+.schema-tree .scroll-bar:vertical,
+.schema-tree .scroll-bar:horizontal {
+    -fx-background-color: transparent;
+    -fx-pref-width: 10;
+    -fx-pref-height: 10;
+    -fx-padding: 2;
+}
+
+.schema-tree .scroll-bar .track {
+    -fx-background-color: transparent;
+    -fx-border-color: transparent;
+}
+
+.schema-tree .scroll-bar .thumb {
+    -fx-background-color: #3a4a6e;
+    -fx-background-radius: 6;
+    -fx-background-insets: 1;
+}
+
+.schema-tree .scroll-bar .thumb:hover {
+    -fx-background-color: #4d5f8a;
+}
+
+.schema-tree .scroll-bar .increment-button,
+.schema-tree .scroll-bar .decrement-button {
+    -fx-background-color: transparent;
+    -fx-padding: 0;
+}
+
+.schema-tree .scroll-bar .increment-arrow,
+.schema-tree .scroll-bar .decrement-arrow {
+    -fx-background-color: transparent;
+    -fx-padding: 0;
+}
+
+/* 刷新按钮：轻量化设计，小号描边胶囊。 */
+.refresh-button {
+    -fx-background-color: transparent;
+    -fx-text-fill: #9ca3af;
+    -fx-font-size: 12px;
+    -fx-background-radius: 8;
+    -fx-border-color: rgba(159, 122, 234, 0.30);
+    -fx-border-width: 1;
+    -fx-border-radius: 8;
+    -fx-padding: 4 10 4 10;
+    -fx-min-width: 56;
+    -fx-cursor: hand;
+}
+
+/* 悬浮态：淡紫色半透明填充。 */
+.refresh-button:hover {
+    -fx-background-color: rgba(159, 122, 234, 0.15);
+    -fx-text-fill: #c4b5fd;
+    -fx-border-color: rgba(159, 122, 234, 0.50);
+}
+
+/* 按下态：加深填充。 */
+.refresh-button:pressed {
+    -fx-background-color: rgba(159, 122, 234, 0.25);
+}
+
+/* 去除焦点描边。 */
+.refresh-button:focused {
+    -fx-focus-color: transparent;
+    -fx-faint-focus-color: transparent;
+}
+
+/* 禁用态：降低透明度表示加载中。 */
+.refresh-button:disabled {
+    -fx-opacity: 0.5;
+}
+
+/* =====================================================================
+ * 全局 Loading 遮罩（MainWindow.fxml 的 loadingOverlay）
+ * 覆盖整个主窗口内容区，半透明深色底 + 居中加载动画 + 提示文字。
+ * ===================================================================== */
+
+/* 遮罩层：全屏半透明深色，拦截底层所有鼠标事件。 */
+.loading-overlay {
+    -fx-background-color: rgba(10, 14, 26, 0.72);
+    -fx-alignment: CENTER;
+}
+
+/* 加载指示器：使用 JavaFX 原生 ProgressIndicator，统一尺寸与颜色。 */
+.loading-spinner {
+    -fx-pref-width: 48;
+    -fx-pref-height: 48;
+    -fx-max-width: 48;
+    -fx-max-height: 48;
+}
+
+/* 重写 ProgressIndicator 默认颜色为蓝紫色调。 */
+.loading-spinner .progress {
+    -fx-stroke: linear-gradient(to right, #5b6ef5, #8259f0);
+}
+
+/* 提示文字：浅蓝白、居中。 */
+.loading-text {
+    -fx-text-fill: #cdd8f2;
+    -fx-font-size: 14px;
+    -fx-alignment: CENTER;
+    -fx-text-alignment: center;
+}
+
+/* =====================================================================
+ * 高危SQL确认弹窗（sql-risk-confirm-dialog.fxml）
+ * ===================================================================== */
+
+/* 弹窗根节点：深色主题背景、圆角12px、轻微阴影。 */
+.risk-dialog {
+    -fx-background-color: #141c30;
+    -fx-background-radius: 12;
+    -fx-border-color: rgba(159, 122, 234, 0.30);
+    -fx-border-width: 1;
+    -fx-border-radius: 12;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.35), 16, 0.0, 0, 6);
+}
+
+/* 弹窗标题：20px 加粗红色，醒目提示。 */
+.risk-dialog-title {
+    -fx-font-size: 20px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #ef4444;
+    -fx-alignment: CENTER_LEFT;
+}
+
+/* 风险类型标签：14px 浅红文字。 */
+.risk-dialog-type {
+    -fx-font-size: 14px;
+    -fx-text-fill: #fca5a5;
+    -fx-alignment: CENTER_LEFT;
+}
+
+/* 涉及数据表标签：14px 浅灰文字。 */
+.risk-dialog-tables {
+    -fx-font-size: 14px;
+    -fx-text-fill: #9ca3af;
+    -fx-alignment: CENTER_LEFT;
+}
+
+/* 弹窗内容区：透明背景、适当内边距。 */
+.risk-dialog-content {
+    -fx-background-color: transparent;
+    -fx-padding: 8;
+}
+
+/* 高危SQL预览区域：深色底、红色醒目文字、等宽字体。 */
+.risk-dialog-sql {
+    -fx-font-family: "Consolas", "Cascadia Mono", "Microsoft YaHei", monospace;
+    -fx-font-size: 13px;
+    -fx-text-fill: #ef4444;
+    -fx-background-color: #1b253d;
+    -fx-background-radius: 10;
+    -fx-border-color: rgba(239, 68, 68, 0.30);
+    -fx-border-width: 1;
+    -fx-border-radius: 10;
+    -fx-padding: 12;
+    -fx-min-height: 120;
+}
+
+.risk-dialog-sql .content {
+    -fx-background-color: #1b253d;
+    -fx-background-radius: 10;
+}
+
+/* 弹窗按钮区：透明背景。 */
+.risk-dialog-actions {
+    -fx-background-color: transparent;
+}
+
+/* 取消按钮：描边风格、浅灰文字。 */
+.risk-dialog-cancel {
+    -fx-background-color: transparent;
+    -fx-text-fill: #9ca3af;
+    -fx-font-size: 14px;
+    -fx-font-weight: bold;
+    -fx-background-radius: 10;
+    -fx-border-color: rgba(156, 163, 175, 0.40);
+    -fx-border-width: 1;
+    -fx-border-radius: 10;
+    -fx-padding: 10 24 10 24;
+    -fx-min-width: 100;
+    -fx-cursor: hand;
+}
+
+.risk-dialog-cancel:hover {
+    -fx-background-color: rgba(255, 255, 255, 0.08);
+    -fx-text-fill: #e5e7eb;
+    -fx-border-color: rgba(156, 163, 175, 0.60);
+}
+
+.risk-dialog-cancel:pressed {
+    -fx-background-color: rgba(255, 255, 255, 0.12);
+}
+
+.risk-dialog-cancel:focused {
+    -fx-focus-color: transparent;
+    -fx-faint-focus-color: transparent;
+}
+
+/* 确认执行按钮：红色渐变背景、白色文字。 */
+.risk-dialog-confirm {
+    -fx-background-color: linear-gradient(to right, #ef4444, #dc2626);
+    -fx-background-insets: 0;
+    -fx-background-radius: 10;
+    -fx-text-fill: #ffffff;
+    -fx-font-size: 14px;
+    -fx-font-weight: bold;
+    -fx-padding: 10 24 10 24;
+    -fx-min-width: 100;
+    -fx-cursor: hand;
+}
+
+.risk-dialog-confirm:hover {
+    -fx-background-color: linear-gradient(to right, #f87171, #ef4444);
+}
+
+.risk-dialog-confirm:pressed {
+    -fx-background-color: linear-gradient(to right, #dc2626, #b91c1c);
+}
+
+.risk-dialog-confirm:focused {
+    -fx-focus-color: transparent;
+    -fx-faint-focus-color: transparent;
+}
+/* 弹窗滚动面板去除默认白色底层 */
+.risk-dialog .scroll-pane {
+    -fx-background-color: transparent;
+    -fx-background-insets: 0;
+    -fx-padding: 0;
+}
+.risk-dialog .scroll-pane .viewport {
+    -fx-background-color: transparent;
+}
+.risk-dialog .scroll-pane .corner {
+    -fx-background-color: transparent;
+}
+/* 美化垂直滚动条适配深色 */
+.risk-dialog .scroll-pane .scroll-bar:vertical .track {
+    -fx-background-color: transparent;
+}
+.risk-dialog .scroll-pane .scroll-bar:vertical .thumb {
+    -fx-background-color: rgba(255,255,255,0.2);
+    -fx-background-radius: 4;
+}
+.result-table .table-column {
+    -fx-min-width: 75px;
+    -fx-max-width: 9999px;
+}
+
