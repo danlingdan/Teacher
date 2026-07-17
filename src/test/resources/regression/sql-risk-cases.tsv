@@ -6,6 +6,16 @@ update-data	UPDATE student SET score = 100 WHERE id = 1	MEDIUM	true	true	false
 delete-data	DELETE FROM student WHERE id = 1	MEDIUM	true	true	false
 create-table	CREATE TABLE sample (id INTEGER)	HIGH	false	true	false
 drop-table	DROP TABLE student	HIGH	false	true	false
+alter-table	ALTER TABLE student ADD COLUMN email TEXT	HIGH	false	true	false
+truncate-table	TRUNCATE TABLE student	HIGH	false	true	false
 multiple-statements	SELECT * FROM student; DELETE FROM student	HIGH	false	true	true
+multiple-statements-with-newline	SELECT * FROM student;\nDELETE FROM student	HIGH	false	true	true
 unsupported-grant	GRANT SELECT ON student TO demo	FORBIDDEN	false	false	false
+unsupported-revoke	REVOKE SELECT ON student FROM demo	FORBIDDEN	false	false	false
+drop-database	DROP DATABASE demo	FORBIDDEN	false	false	false
+case-variation-drop	drop table student	HIGH	false	true	false
+case-variation-select	select * from student	LOW	true	false	false
+whitespace-variation	SELECT  *  FROM  student	LOW	true	false	false
+sql-injection-attempt	SELECT * FROM student WHERE id = 1; DROP TABLE student--	HIGH	false	true	true
+comment-hiding	SELECT * FROM student /* comment */; DELETE FROM student	HIGH	false	true	true
 blank	<blank>	FORBIDDEN	false	false	false

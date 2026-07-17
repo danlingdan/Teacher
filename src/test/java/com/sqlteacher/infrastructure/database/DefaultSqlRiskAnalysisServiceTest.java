@@ -57,6 +57,19 @@ class DefaultSqlRiskAnalysisServiceTest {
     }
 
     @Test
+    void shouldNotTreatKeywordsOrSemicolonsInsideStringsAsMultipleStatements() {
+        SqlRiskAnalysis keywordResult = service.analyze("SELECT 'please DELETE everything'");
+        SqlRiskAnalysis semicolonResult = service.analyze("SELECT ';' AS marker");
+        SqlRiskAnalysis dropDatabaseTextResult = service.analyze("SELECT 'DROP DATABASE' AS lesson");
+
+        assertTrue(keywordResult.executable());
+        assertFalse(keywordResult.multiStatement());
+        assertTrue(semicolonResult.executable());
+        assertFalse(semicolonResult.multiStatement());
+        assertTrue(dropDatabaseTextResult.executable());
+    }
+
+    @Test
     void shouldRejectBlankSql() {
 
         SqlRiskAnalysis result =

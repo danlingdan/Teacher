@@ -32,6 +32,15 @@ public final class DefaultSqlRiskAnalysisService implements SqlRiskAnalysisServi
             );
         }
 
+        if (statementType.equals("DROP")
+                && normalized.toUpperCase(Locale.ROOT).matches("DROP\\s+DATABASE\\b.*")) {
+            return forbidden(
+                    "DROP",
+                    false,
+                    "DROP DATABASE is not allowed."
+            );
+        }
+
         return switch (statementType) {
 
             case "SELECT" -> new SqlRiskAnalysis(
@@ -89,14 +98,67 @@ public final class DefaultSqlRiskAnalysisService implements SqlRiskAnalysisServi
     }
 
     private boolean hasMultipleStatements(String sql) {
+        boolean singleQuoted = false;
+        boolean doubleQuoted = false;
+        boolean lineComment = false;
+        boolean blockComment = false;
 
-        String value = sql;
+        for (int index = 0; index < sql.length(); index++) {
+            char current = sql.charAt(index);
+            char next = index + 1 < sql.length() ? sql.charAt(index + 1) : '\0';
 
-        if (value.endsWith(";")) {
-            value = value.substring(0, value.length() - 1);
+            if (lineComment) {
+                lineComment = current != '\n' && current != '\r';
+                continue;
+            }
+            if (blockComment) {
+                if (current == '*' && next == '/') {
+                    blockComment = false;
+                    index++;
+                }
+                continue;
+            }
+            if (!singleQuoted && !doubleQuoted && current == '-' && next == '-') {
+                lineComment = true;
+                index++;
+                continue;
+            }
+            if (!singleQuoted && !doubleQuoted && current == '/' && next == '*') {
+                blockComment = true;
+                index++;
+                continue;
+            }
+            if (!doubleQuoted && current == '\'') {
+                if (singleQuoted && next == '\'') {
+                    index++;
+                } else {
+                    singleQuoted = !singleQuoted;
+                }
+                continue;
+            }
+            if (!singleQuoted && current == '"') {
+                if (doubleQuoted && next == '"') {
+                    index++;
+                } else {
+                    doubleQuoted = !doubleQuoted;
+                }
+                continue;
+            }
+            if (!singleQuoted && !doubleQuoted && current == ';'
+                    && hasStatementContent(sql, index + 1)) {
+                return true;
+            }
         }
+        return false;
+    }
 
-        return value.contains(";");
+    private boolean hasStatementContent(String sql, int start) {
+        String remainder = sql.substring(start)
+                .replaceAll("(?s)/\\*.*?\\*/", "")
+                .replaceAll("--[^\\r\\n]*", "")
+                .replace(";", "")
+                .strip();
+        return !remainder.isEmpty();
     }
 
     private String firstKeyword(String sql) {

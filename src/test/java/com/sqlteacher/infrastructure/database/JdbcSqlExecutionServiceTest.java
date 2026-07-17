@@ -1,6 +1,8 @@
 package com.sqlteacher.infrastructure.database;
 
 import com.sqlteacher.application.config.DatabaseConfiguration;
+import com.sqlteacher.application.event.DefaultLearningEventService;
+import com.sqlteacher.application.event.LearningEventRecorder;
 import com.sqlteacher.application.execution.SqlExecutionRequest;
 import com.sqlteacher.application.execution.SqlExecutionResult;
 import com.sqlteacher.domain.SqlTeacherException;
@@ -9,6 +11,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Path;
 import java.sql.Connection;
+import java.sql.DriverManager;
 import java.sql.Statement;
 import java.time.Duration;
 
@@ -60,10 +63,14 @@ class JdbcSqlExecutionServiceTest {
     }
 
     private static JdbcSqlExecutionService createService(JdbcConnectionFactory connectionFactory) {
+        LearningEventRecorder recorder = new JdbcLearningEventRecorder(connectionFactory);
+        DefaultLearningEventService eventService = new DefaultLearningEventService(recorder);
+        
         return new JdbcSqlExecutionService(
             connectionFactory,
             new SqlResultMapper(),
-            new DefaultSqlRiskAnalysisService()
+            new DefaultSqlRiskAnalysisService(),
+            eventService
         );
     }
 
@@ -73,6 +80,23 @@ class JdbcSqlExecutionServiceTest {
             tempDirectory.resolve("demo.db")
         );
         JdbcConnectionFactory connectionFactory = new JdbcConnectionFactory(configuration);
+
+        // Initialize app database with learning_events table
+        SqliteDriver.ensureLoaded();
+        try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + tempDirectory.resolve("app.db"));
+             Statement statement = connection.createStatement()) {
+            statement.executeUpdate("""
+                create table if not exists learning_events (
+                    id integer primary key autoincrement,
+                    event_type text not null,
+                    occurred_at text not null,
+                    connection_id text not null,
+                    successful integer not null,
+                    attributes text,
+                    created_at text not null default current_timestamp
+                )
+                """);
+        }
 
         try (Connection connection = connectionFactory.open("demo");
              Statement statement = connection.createStatement()) {
@@ -87,7 +111,9 @@ class JdbcSqlExecutionServiceTest {
                 INSERT INTO student (id, name, score) VALUES
                     (1, 'Alice', 92),
                     (2, 'Bob', 85),
-                    (3, 'Cathy', 78)
+                    (3, 'Cathy', 78),
+                    (4, 'David', 88),
+                    (5, 'Eve', 95)
                 """);
         }
 
