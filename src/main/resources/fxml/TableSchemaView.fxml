@@ -1,0 +1,207 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!--
+  表结构浏览子页面（浅色主题 · 左右分栏 · 点击表即时预览数据 · 兼容 800×600）。
+
+  嵌入方式：
+    - 本页面不是独立窗口，而是被 MainWindow.fxml 的 pageContainer（StackPane）内嵌加载。
+    - 因 TableSchemaController 使用构造注入（无无参构造），MainWindowController 通过
+      FXMLLoader.setControllerFactory(...) 提供已注入 DatabaseMetadataService、
+      SqlExecutionService 与回调的实例。
+
+  布局约束：
+    - 根 ScrollPane 负责低分辨率下的纵向滚动；fitToWidth=true 保证内容宽度贴合视口。
+    - StackPane 作为 ScrollPane 内容：默认拉伸子节点，同时允许子节点设置 maxWidth 后居中。
+    - 内层 VBox（page-content）maxWidth="1040"，窗口变宽时整体居中；maxHeight="Infinity" 使
+      其在 StackPane 中纵向填满视口，消除底部大面积留白。
+    - 主分栏 HBox 横向排布左右两个深色卡片：左侧树形、右侧数据预览。
+    - 左侧面板固定最小宽度 220，优先宽度 260；右侧面板 HBox.hgrow="ALWAYS" 自适应剩余宽度。
+    - 两侧卡片内部均 VBox.vgrow="ALWAYS" 纵向填满，TreeView / PreviewTable 锚定或约束填充。
+    - 所有最小尺寸适配 800×600：卡片 minHeight="180"、内容区 minHeight="120"。
+
+  业务 fx:id：
+    - 左侧：schemaTree / emptyPlaceholder / errorLabel / refreshButton
+    - 右侧：previewTable / previewPlaceholder / previewErrorLabel / previewStatusLabel / previewTitleLabel
+
+  样式：
+    - 全部引用全局 css/app.css 中的样式类，无内联 style，无独立 css 文件。
+    - 页面根节点显式应用 table-schema-page 样式类，确保统一浅色背景兜底。
+-->
+
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.ScrollPane?>
+<?import javafx.scene.control.TableView?>
+<?import javafx.scene.control.TreeView?>
+<?import javafx.scene.layout.AnchorPane?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.Region?>
+<?import javafx.scene.layout.StackPane?>
+<?import javafx.scene.layout.VBox?>
+
+<ScrollPane xmlns="http://javafx.com/javafx"
+            xmlns:fx="http://javafx.com/fxml"
+            fx:controller="com.sqlteacher.desktop.controller.TableSchemaController"
+            styleClass="sql-practice-scroll"
+            fitToWidth="true"
+            hbarPolicy="NEVER"
+            vbarPolicy="AS_NEEDED">
+    <content>
+        <StackPane styleClass="table-schema-page" alignment="TOP_CENTER">
+            <children>
+                <!-- 内容列：纵向填满视口，横向跟随窗口拉伸。 -->
+                <VBox styleClass="page-content"
+                      spacing="12.0"
+                      maxHeight="Infinity"
+                      VBox.vgrow="ALWAYS">
+                    <children>
+
+                        <!-- 标题区：小图标徽标 + 主标题 + 弱化副标题，整体居中。 -->
+                        <VBox styleClass="title-area" alignment="CENTER" spacing="6.0">
+                            <children>
+                                <Region styleClass="title-badge"/>
+                                <Label styleClass="page-title" text="表结构"/>
+                                <Label styleClass="page-subtitle"
+                                       text="浏览 demo 数据库的表与字段，点击数据表即可在右侧预览数据"/>
+                            </children>
+                        </VBox>
+
+                        <!-- 主分栏：左侧树形 + 右侧数据预览。 -->
+                        <HBox spacing="14.0" VBox.vgrow="ALWAYS" HBox.hgrow="ALWAYS">
+                            <children>
+
+                                <!-- 左侧：数据库表结构树形。 -->
+                                <VBox styleClass="panel-card"
+                                      spacing="10.0"
+                                      minWidth="220.0"
+                                      prefWidth="260.0"
+                                      minHeight="180.0"
+                                      HBox.hgrow="NEVER"
+                                      VBox.vgrow="ALWAYS">
+                                    <children>
+                                        <HBox styleClass="card-title-row"
+                                              alignment="CENTER_LEFT"
+                                              spacing="10.0"
+                                              HBox.hgrow="ALWAYS">
+                                            <children>
+                                                <Region styleClass="card-accent"/>
+                                                <Label styleClass="card-title" text="数据库表结构"/>
+                                                <Region HBox.hgrow="ALWAYS"/>
+                                                <Button fx:id="refreshButton"
+                                                        styleClass="refresh-button"
+                                                        text="刷新"
+                                                        onAction="#onRefreshSchema"/>
+                                            </children>
+                                        </HBox>
+
+                                        <!-- 树形区：NORMAL 显示 TreeView；EMPTY/LOADING 显示占位。 -->
+                                        <StackPane styleClass="result-pane"
+                                                   minHeight="120.0"
+                                                   VBox.vgrow="ALWAYS">
+                                            <children>
+                                                <AnchorPane>
+                                                    <children>
+                                                        <TreeView fx:id="schemaTree"
+                                                                  styleClass="schema-tree"
+                                                                  minWidth="180.0"
+                                                                  minHeight="120.0"
+                                                                  AnchorPane.topAnchor="0.0"
+                                                                  AnchorPane.rightAnchor="0.0"
+                                                                  AnchorPane.bottomAnchor="0.0"
+                                                                  AnchorPane.leftAnchor="0.0"/>
+                                                    </children>
+                                                </AnchorPane>
+                                                <Label fx:id="emptyPlaceholder"
+                                                       styleClass="table-empty-hint"
+                                                       text="正在加载表结构…"
+                                                       visible="true"
+                                                       managed="true"/>
+                                            </children>
+                                        </StackPane>
+
+                                        <!-- 底部错误提示：默认隐藏。 -->
+                                        <Label fx:id="errorLabel"
+                                               styleClass="sql-error-hint"
+                                               wrapText="true"
+                                               maxWidth="Infinity"
+                                               visible="false"
+                                               managed="false"/>
+                                    </children>
+                                </VBox>
+
+                                <!-- 右侧：数据预览面板。 -->
+                                <VBox styleClass="panel-card"
+                                      spacing="10.0"
+                                      minWidth="280.0"
+                                      minHeight="180.0"
+                                      HBox.hgrow="ALWAYS"
+                                      VBox.vgrow="ALWAYS">
+                                    <children>
+                                        <HBox styleClass="card-title-row"
+                                              alignment="CENTER_LEFT"
+                                              spacing="10.0"
+                                              HBox.hgrow="ALWAYS">
+                                            <children>
+                                                <Region styleClass="card-accent"/>
+                                                <Label styleClass="card-title" text="数据预览"/>
+                                                <Label fx:id="previewTitleLabel"
+                                                       styleClass="card-title"
+                                                       text=""/>
+                                                <Region HBox.hgrow="ALWAYS"/>
+                                            </children>
+                                        </HBox>
+
+                                        <!-- 预览表格区：NORMAL 显示 TableView；EMPTY/LOADING 显示占位。 -->
+                                        <StackPane styleClass="result-pane"
+                                                   minHeight="120.0"
+                                                   VBox.vgrow="ALWAYS">
+                                            <children>
+                                                <AnchorPane>
+                                                    <children>
+                                                        <TableView fx:id="previewTable"
+                                                                   styleClass="result-table"
+                                                                   minWidth="200.0"
+                                                                   minHeight="120.0"
+                                                                   AnchorPane.topAnchor="0.0"
+                                                                   AnchorPane.rightAnchor="0.0"
+                                                                   AnchorPane.bottomAnchor="0.0"
+                                                                   AnchorPane.leftAnchor="0.0">
+                                                            <HBox.hgrow>ALWAYS</HBox.hgrow>
+                                                            <VBox.vgrow>ALWAYS</VBox.vgrow>
+                                                        </TableView>
+                                                    </children>
+                                                </AnchorPane>
+                                                <Label fx:id="previewPlaceholder"
+                                                       styleClass="table-empty-hint"
+                                                       text="点击左侧数据表预览数据"
+                                                       visible="true"
+                                                       managed="true"/>
+                                            </children>
+                                        </StackPane>
+
+                                        <!-- 预览状态：行数、耗时等。 -->
+                                        <Label fx:id="previewStatusLabel"
+                                               styleClass="sql-result-hint"
+                                               maxWidth="Infinity"
+                                               visible="false"
+                                               managed="false"/>
+
+                                        <!-- 预览错误提示：默认隐藏。 -->
+                                        <Label fx:id="previewErrorLabel"
+                                               styleClass="sql-error-hint"
+                                               wrapText="true"
+                                               maxWidth="Infinity"
+                                               visible="false"
+                                               managed="false"/>
+                                    </children>
+                                </VBox>
+
+                            </children>
+                        </HBox>
+
+                    </children>
+                </VBox>
+            </children>
+        </StackPane>
+    </content>
+</ScrollPane>
