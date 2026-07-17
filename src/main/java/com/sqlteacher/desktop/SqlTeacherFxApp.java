@@ -2,6 +2,7 @@ package com.sqlteacher.desktop;
 
 import com.sqlteacher.application.database.DatabaseInitializationService;
 import com.sqlteacher.application.execution.SqlExecutionService;
+import com.sqlteacher.application.metadata.DatabaseMetadataService;
 import com.sqlteacher.desktop.controller.MainWindowController;
 import com.sqlteacher.infrastructure.spring.SqlTeacherApplicationConfig;
 import javafx.application.Application;
@@ -19,11 +20,11 @@ import java.net.URL;
  *
  * <p>本类是整个桌面程序<strong>唯一</strong>的顶层窗口入口：{@link #start(Stage)} 仅加载
  * {@code /fxml/MainWindow.fxml} 一个顶层窗口，右侧内容区由 {@link MainWindowController} 负责
- * 内嵌 {@code SqlPractice.fxml}，SQL 练习页不再作为独立窗口弹出。
+ * 内嵌各子页面（SQL 练习、表结构浏览等）。
  *
  * <p>应用在 JavaFX {@link #init()} 生命周期中启动 Spring Context 并初始化 SQLite 数据库。
- * {@link #start(Stage)} 只负责创建界面，并把 Spring 提供的真实 {@link SqlExecutionService}
- * 构造注入到控制器；{@link #stop()} 负责关闭 Spring Context。
+ * {@link #start(Stage)} 只负责创建界面，并把 Spring 提供的 {@link SqlExecutionService} 与
+ * {@link DatabaseMetadataService} 构造注入到控制器；{@link #stop()} 负责关闭 Spring Context。
  */
 public final class SqlTeacherFxApp extends Application {
 
@@ -35,6 +36,7 @@ public final class SqlTeacherFxApp extends Application {
 
     private AnnotationConfigApplicationContext applicationContext;
     private SqlExecutionService sqlExecutionService;
+    private DatabaseMetadataService databaseMetadataService;
 
     /**
      * JavaFX 在非 Application Thread 上调用本方法，数据库初始化不会阻塞界面线程。
@@ -46,6 +48,7 @@ public final class SqlTeacherFxApp extends Application {
         try {
             context.getBean(DatabaseInitializationService.class).initialize();
             sqlExecutionService = context.getBean(SqlExecutionService.class);
+            databaseMetadataService = context.getBean(DatabaseMetadataService.class);
             applicationContext = context;
         } catch (RuntimeException error) {
             context.close();
@@ -55,8 +58,8 @@ public final class SqlTeacherFxApp extends Application {
 
     @Override
     public void start(Stage stage) throws IOException {
-        if (sqlExecutionService == null) {
-            throw new IllegalStateException("SQL service is unavailable because application initialization did not complete");
+        if (sqlExecutionService == null || databaseMetadataService == null) {
+            throw new IllegalStateException("Services are unavailable because application initialization did not complete");
         }
 
         URL fxml = SqlTeacherFxApp.class.getResource(MAIN_WINDOW_FXML);
@@ -68,7 +71,7 @@ public final class SqlTeacherFxApp extends Application {
         // MainWindow.fxml 的控制器改为构造注入（无无参构造），故必须提供 controllerFactory。
         loader.setControllerFactory(type -> {
             if (type == MainWindowController.class) {
-                return new MainWindowController(sqlExecutionService);
+                return new MainWindowController(sqlExecutionService, databaseMetadataService);
             }
             throw new IllegalStateException("Unexpected controller type for MainWindow.fxml: " + type);
         });
@@ -76,7 +79,15 @@ public final class SqlTeacherFxApp extends Application {
         Parent root = loader.load();
 
         stage.setTitle("SQLTeacher");
-        stage.setScene(new Scene(root, DEFAULT_WIDTH, DEFAULT_HEIGHT));
+        Scene scene = new Scene(root, DEFAULT_WIDTH, DEFAULT_HEIGHT);
+        // 以绝对类路径加载 CSS，确保无论 FXML 相对路径如何解析，主题样式都能生效。
+        URL css = SqlTeacherFxApp.class.getResource("/css/app.css");
+        if (css != null) {
+            scene.getStylesheets().add(css.toExternalForm());
+        }
+        // 设置 Scene 填充色，与 CSS 主题底色一致，作为兜底防止出现白色背景。
+        scene.setFill(javafx.scene.paint.Color.web("#141c30"));
+        stage.setScene(scene);
         stage.setMinWidth(960.0);
         stage.setMinHeight(600.0);
         stage.show();
@@ -89,6 +100,7 @@ public final class SqlTeacherFxApp extends Application {
             applicationContext = null;
         }
         sqlExecutionService = null;
+        databaseMetadataService = null;
     }
 
     public static void main(String[] args) {

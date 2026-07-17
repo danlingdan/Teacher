@@ -1,0 +1,111 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!--
+  高危SQL二次确认弹窗（深色主题 · 模态阻断 · 自适应尺寸）。
+
+  使用方式：
+    - 通过 SqlRiskConfirmDialogUtil.showRiskConfirmDialog() 静态方法调用，
+      无需手动实例化控制器。
+    - 弹窗自动获取主窗口作为 owner，实现模态阻断。
+
+  布局约束：
+    - 最小宽度600px，最小高度320px，适配800×600低分辨率窗口。
+    - 内容区可滚动，防止长SQL溢出。
+    - 底部按钮固定在底部，左右分布。
+
+  业务 fx:id：
+    - riskTitleLabel：风险标题
+    - riskTypeLabel：风险类型
+    - affectedTablesLabel：涉及数据表
+    - sqlPreviewArea：高危SQL预览（只读）
+    - cancelButton：取消按钮
+    - confirmButton：确认执行按钮
+
+  样式：
+    - 全部引用全局 css/app.css 中的样式类。
+-->
+
+<?import java.net.URL?>
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.ScrollPane?>
+<?import javafx.scene.control.TextArea?>
+<?import javafx.scene.layout.BorderPane?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.Region?>
+<?import javafx.scene.layout.VBox?>
+
+<BorderPane xmlns="http://javafx.com/javafx"
+            xmlns:fx="http://javafx.com/fxml"
+            fx:controller="com.sqlteacher.desktop.controller.SqlRiskConfirmDialogController"
+            styleClass="risk-dialog"
+            style="-fx-background-color: #191b28;"
+            minWidth="600.0"
+            minHeight="320.0"
+            prefWidth="680.0"
+            prefHeight="400.0">
+
+    <stylesheets>
+        <URL value="@../css/app.css"/>
+    </stylesheets>
+
+    <top>
+        <VBox styleClass="panel-card"
+              spacing="10.0"
+              BorderPane.alignment="CENTER">
+            <children>
+                <Label fx:id="riskTitleLabel"
+                       styleClass="risk-dialog-title"
+                       text="⚠️ 高危SQL操作确认"/>
+                <Label fx:id="riskTypeLabel"
+                       styleClass="risk-dialog-type"
+                       text="风险类型："/>
+                <Label fx:id="affectedTablesLabel"
+                       styleClass="risk-dialog-tables"
+                       text="涉及数据表："/>
+            </children>
+        </VBox>
+    </top>
+
+    <center>
+        <ScrollPane fitToWidth="true"
+                    hbarPolicy="NEVER"
+                    vbarPolicy="AS_NEEDED"
+                    style="-fx-background-color: transparent; -fx-background-insets: 0; -fx-padding: 0;">
+            <content>
+                <VBox styleClass="risk-dialog-content"
+                      spacing="8.0"
+                      style="-fx-background-color: transparent;">
+                    <children>
+                        <Label styleClass="card-title" text="待执行SQL："/>
+                        <TextArea fx:id="sqlPreviewArea"
+                                  styleClass="risk-dialog-sql"
+                                  editable="false"
+                                  wrapText="true"/>
+                    </children>
+                </VBox>
+            </content>
+        </ScrollPane>
+    </center>
+
+
+    <bottom>
+        <HBox styleClass="risk-dialog-actions"
+              alignment="CENTER_RIGHT"
+              spacing="12.0"
+              style="-fx-padding: 10 16 16 16; -fx-background-color: transparent;"
+              BorderPane.alignment="CENTER_RIGHT">
+            <children>
+                <Button fx:id="cancelButton"
+                        styleClass="risk-dialog-cancel"
+                        text="取消"
+                        onAction="#onCancel"/>
+                <Button fx:id="confirmButton"
+                        styleClass="risk-dialog-confirm"
+                        text="确认执行"
+                        onAction="#onConfirm"/>
+            </children>
+        </HBox>
+    </bottom>
+
+</BorderPane>

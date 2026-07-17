@@ -6,6 +6,8 @@ import com.sqlteacher.application.config.SqlTeacherConfiguration;
 import com.sqlteacher.application.database.DatabaseInitializationResult;
 import com.sqlteacher.application.execution.SqlExecutionRequest;
 import com.sqlteacher.application.execution.SqlExecutionResult;
+import com.sqlteacher.application.metadata.DatabaseColumn;
+import com.sqlteacher.application.metadata.DatabaseTable;
 import com.sqlteacher.application.nl2sql.Nl2SqlPlan;
 import com.sqlteacher.application.nl2sql.Nl2SqlRequest;
 import com.sqlteacher.application.risk.SqlRiskAnalysis;
@@ -13,11 +15,13 @@ import com.sqlteacher.application.risk.SqlRiskAnalysisService;
 import com.sqlteacher.application.risk.SqlRiskLevel;
 import com.sqlteacher.desktop.viewmodel.AiAssistantViewModel;
 import com.sqlteacher.desktop.viewmodel.AiStatusViewModel;
+import com.sqlteacher.desktop.viewmodel.ColumnMetaViewModel;
 import com.sqlteacher.desktop.viewmodel.DatabaseStatusViewModel;
 import com.sqlteacher.desktop.viewmodel.DesktopConnections;
 import com.sqlteacher.desktop.viewmodel.HomeStatusViewModel;
 import com.sqlteacher.desktop.viewmodel.SqlExecutionViewModel;
 import com.sqlteacher.desktop.viewmodel.SqlResultRowViewModel;
+import com.sqlteacher.desktop.viewmodel.TableMetaViewModel;
 import com.sqlteacher.desktop.viewmodel.UiStatusLevel;
 import org.junit.jupiter.api.Test;
 
@@ -364,5 +368,73 @@ class MockServiceContractTest {
             ExecutionException thrown = assertThrows(ExecutionException.class, future::get);
             assertInstanceOf(MockBackendException.class, thrown.getCause());
         }
+    }
+
+    // ----- TableMetaViewModel / ColumnMetaViewModel contract -----
+
+    @Test
+    void columnMetaViewModelMapsFromDatabaseColumn() {
+        DatabaseColumn column = new DatabaseColumn("id", "INTEGER", false, true);
+        ColumnMetaViewModel vm = ColumnMetaViewModel.from(column);
+        assertEquals("id", vm.name());
+        assertEquals("INTEGER", vm.typeName());
+        assertFalse(vm.nullable());
+        assertTrue(vm.primaryKey());
+    }
+
+    @Test
+    void tableMetaViewModelMapsFromDatabaseTable() {
+        DatabaseTable table = new DatabaseTable("student", List.of(
+            new DatabaseColumn("id", "INTEGER", false, true),
+            new DatabaseColumn("name", "TEXT", false, false)
+        ));
+        TableMetaViewModel vm = TableMetaViewModel.from(table);
+        assertEquals("student", vm.name());
+        assertEquals(2, vm.columns().size());
+        assertEquals("id", vm.columns().get(0).name());
+        assertTrue(vm.columns().get(0).primaryKey());
+        assertEquals("name", vm.columns().get(1).name());
+        assertFalse(vm.columns().get(1).primaryKey());
+    }
+
+    @Test
+    void tableMetaViewModelDefaultsToEmptyColumns() {
+        TableMetaViewModel vm = new TableMetaViewModel("empty", null);
+        assertEquals("empty", vm.name());
+        assertTrue(vm.columns().isEmpty());
+    }
+
+    // ----- DatabaseMetadataMockService contract -----
+
+    @Test
+    void databaseMetadataNormalReturnsTablesWithColumns() {
+        DatabaseMetadataMockService mock = new DatabaseMetadataMockService(MockScenario.NORMAL);
+        List<DatabaseTable> tables = mock.listTables(DesktopConnections.DEMO);
+        assertEquals(2, tables.size());
+        assertEquals("student", tables.get(0).name());
+        assertEquals(3, tables.get(0).columns().size());
+        assertEquals("id", tables.get(0).columns().get(0).name());
+        assertTrue(tables.get(0).columns().get(0).primaryKey());
+        assertEquals("course", tables.get(1).name());
+    }
+
+    @Test
+    void databaseMetadataEmptyReturnsEmptyList() {
+        DatabaseMetadataMockService mock = new DatabaseMetadataMockService(MockScenario.EMPTY);
+        List<DatabaseTable> tables = mock.listTables(DesktopConnections.DEMO);
+        assertTrue(tables.isEmpty());
+    }
+
+    @Test
+    void databaseMetadataErrorThrowsMockBackendException() {
+        DatabaseMetadataMockService mock = new DatabaseMetadataMockService(MockScenario.ERROR);
+        assertThrows(MockBackendException.class, () -> mock.listTables(DesktopConnections.DEMO));
+    }
+
+    @Test
+    void databaseMetadataRejectsBlankConnectionId() {
+        DatabaseMetadataMockService mock = new DatabaseMetadataMockService(MockScenario.NORMAL);
+        assertThrows(IllegalArgumentException.class, () -> mock.listTables(""));
+        assertThrows(IllegalArgumentException.class, () -> mock.listTables(null));
     }
 }

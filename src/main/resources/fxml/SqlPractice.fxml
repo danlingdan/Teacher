@@ -102,8 +102,12 @@
                               promptText="例如：SELECT id, name, score FROM student ORDER BY score DESC;"
                               wrapText="true"
                               prefRowCount="6"/>
-                    <HBox styleClass="sql-action-row" alignment="CENTER_RIGHT">
+                    <HBox styleClass="sql-action-row" alignment="CENTER_RIGHT" spacing="12.0">
                         <children>
+                            <Button fx:id="clearSqlBtn"
+                                    styleClass="sql-execute-button"
+                                    text="清空"
+                                    onAction="#onClearSql"/>
                             <Button fx:id="executeSqlButton"
                                     styleClass="sql-execute-button"
                                     text="执行 SQL"
