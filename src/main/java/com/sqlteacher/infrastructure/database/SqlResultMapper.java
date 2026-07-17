@@ -33,6 +33,11 @@ public final class SqlResultMapper {
 
         while (resultSet.next()) {
 
+            if (rows.size() >= maxRows) {
+                truncated = true;
+                break;
+            }
+
             Map<String, Object> row = new LinkedHashMap<>();
 
             for (int i = 1; i <= columnCount; i++) {
@@ -43,12 +48,6 @@ public final class SqlResultMapper {
             }
 
             rows.add(row);
-        }
-
-        truncated = rows.size() > maxRows;
-
-        if (truncated) {
-            rows.removeLast();
         }
 
         return new SqlExecutionResult(

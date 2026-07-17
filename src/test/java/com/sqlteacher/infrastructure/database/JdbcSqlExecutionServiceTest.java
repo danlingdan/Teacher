@@ -111,7 +111,9 @@ class JdbcSqlExecutionServiceTest {
                 INSERT INTO student (id, name, score) VALUES
                     (1, 'Alice', 92),
                     (2, 'Bob', 85),
-                    (3, 'Cathy', 78)
+                    (3, 'Cathy', 78),
+                    (4, 'David', 88),
+                    (5, 'Eve', 95)
                 """);
         }
 

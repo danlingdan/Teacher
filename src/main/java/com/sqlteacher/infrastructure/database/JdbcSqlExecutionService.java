@@ -170,7 +170,7 @@ public final class JdbcSqlExecutionService implements SqlExecutionService {
                     risk.statementType(),
                     duration,
                     0,
-                    exception.getMessage()
+                    "SQL_EXECUTION_FAILED"
             );
             
             throw new SqlTeacherException(

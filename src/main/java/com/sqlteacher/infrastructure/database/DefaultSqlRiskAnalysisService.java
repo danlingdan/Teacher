@@ -32,8 +32,8 @@ public final class DefaultSqlRiskAnalysisService implements SqlRiskAnalysisServi
             );
         }
 
-        // Explicitly block DROP DATABASE as it's extremely dangerous
-        if (normalized.toUpperCase().contains("DROP DATABASE")) {
+        if (statementType.equals("DROP")
+                && normalized.toUpperCase(Locale.ROOT).matches("DROP\\s+DATABASE\\b.*")) {
             return forbidden(
                     "DROP",
                     false,
@@ -98,74 +98,67 @@ public final class DefaultSqlRiskAnalysisService implements SqlRiskAnalysisServi
     }
 
     private boolean hasMultipleStatements(String sql) {
-        // First check for semicolons (original logic)
-        String value = sql;
-        if (value.endsWith(";")) {
-            value = value.substring(0, value.length() - 1);
-        }
-        if (value.contains(";")) {
-            return true;
-        }
+        boolean singleQuoted = false;
+        boolean doubleQuoted = false;
+        boolean lineComment = false;
+        boolean blockComment = false;
 
-        // Enhanced detection: check for multiple SQL keywords without semicolons
-        String normalized = sql.toUpperCase(Locale.ROOT).strip();
-        
-        // Get the first keyword (length determined by firstKeyword logic)
-        int firstKeywordEnd = 0;
-        while (firstKeywordEnd < normalized.length() && Character.isLetter(normalized.charAt(firstKeywordEnd))) {
-            firstKeywordEnd++;
-        }
-        
-        if (firstKeywordEnd == 0) {
-            return false;
-        }
-        
-        // Skip whitespace after first keyword
-        int searchStart = firstKeywordEnd;
-        while (searchStart < normalized.length() && Character.isWhitespace(normalized.charAt(searchStart))) {
-            searchStart++;
-        }
-        
-        if (searchStart >= normalized.length()) {
-            return false;
-        }
-        
-        // Look for additional SQL keywords in the remaining text
-        String remainingText = normalized.substring(searchStart);
-        
-        // List of SQL keywords that could indicate a new statement
-        String[] sqlKeywords = {"INSERT", "UPDATE", "DELETE", "CREATE", "ALTER", "DROP", "TRUNCATE", "GRANT", "REVOKE"};
-        
-        for (String keyword : sqlKeywords) {
-            // Check if the keyword appears as a word boundary (not part of another word)
-            if (containsWordBoundary(remainingText, keyword)) {
+        for (int index = 0; index < sql.length(); index++) {
+            char current = sql.charAt(index);
+            char next = index + 1 < sql.length() ? sql.charAt(index + 1) : '\0';
+
+            if (lineComment) {
+                lineComment = current != '\n' && current != '\r';
+                continue;
+            }
+            if (blockComment) {
+                if (current == '*' && next == '/') {
+                    blockComment = false;
+                    index++;
+                }
+                continue;
+            }
+            if (!singleQuoted && !doubleQuoted && current == '-' && next == '-') {
+                lineComment = true;
+                index++;
+                continue;
+            }
+            if (!singleQuoted && !doubleQuoted && current == '/' && next == '*') {
+                blockComment = true;
+                index++;
+                continue;
+            }
+            if (!doubleQuoted && current == '\'') {
+                if (singleQuoted && next == '\'') {
+                    index++;
+                } else {
+                    singleQuoted = !singleQuoted;
+                }
+                continue;
+            }
+            if (!singleQuoted && current == '"') {
+                if (doubleQuoted && next == '"') {
+                    index++;
+                } else {
+                    doubleQuoted = !doubleQuoted;
+                }
+                continue;
+            }
+            if (!singleQuoted && !doubleQuoted && current == ';'
+                    && hasStatementContent(sql, index + 1)) {
                 return true;
             }
         }
-        
         return false;
     }
-    
-    private boolean containsWordBoundary(String text, String word) {
-        int index = 0;
-        while (index < text.length()) {
-            int found = text.indexOf(word, index);
-            if (found == -1) {
-                return false;
-            }
-            
-            // Check if it's a word boundary (preceded by whitespace or start, followed by whitespace or end)
-            boolean precededByBoundary = (found == 0) || Character.isWhitespace(text.charAt(found - 1));
-            boolean followedByBoundary = (found + word.length() >= text.length()) || 
-                                       Character.isWhitespace(text.charAt(found + word.length()));
-            
-            if (precededByBoundary && followedByBoundary) {
-                return true;
-            }
-            
-            index = found + 1;
-        }
-        return false;
+
+    private boolean hasStatementContent(String sql, int start) {
+        String remainder = sql.substring(start)
+                .replaceAll("(?s)/\\*.*?\\*/", "")
+                .replaceAll("--[^\\r\\n]*", "")
+                .replace(";", "")
+                .strip();
+        return !remainder.isEmpty();
     }
 
     private String firstKeyword(String sql) {
