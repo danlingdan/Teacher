@@ -16,7 +16,7 @@ public final class DefaultSqlRiskAnalysisService implements SqlRiskAnalysisServi
             return forbidden("UNKNOWN", false, "SQL must not be blank");
         }
 
-        String normalized = sql.strip();
+        String normalized = normalizeForAiPatterns(sql.strip());
 
         boolean multiStatement = hasMultipleStatements(normalized);
         String statementType = firstKeyword(normalized);
@@ -174,5 +174,21 @@ public final class DefaultSqlRiskAnalysisService implements SqlRiskAnalysisServi
         }
 
         return sql.substring(0, index).toUpperCase(Locale.ROOT);
+    }
+
+    /**
+     * Normalizes SQL to handle AI-generated patterns that might bypass detection.
+     * Removes common AI-generated comments and normalizes whitespace while preserving
+     * the semantic structure needed for risk analysis.
+     */
+    private String normalizeForAiPatterns(String sql) {
+        // Remove AI-generated comments that might hide malicious SQL
+        String normalized = sql.replaceAll("(?i)/\\*\\s*AI\\s*generated\\s*\\*/", "");
+        normalized = normalized.replaceAll("(?i)/\\*\\s*generated\\s+by\\s+AI\\s*\\*/", "");
+        
+        // Normalize whitespace but preserve structure for statement detection
+        normalized = normalized.replaceAll("\\s+", " ");
+        
+        return normalized.strip();
     }
 }
