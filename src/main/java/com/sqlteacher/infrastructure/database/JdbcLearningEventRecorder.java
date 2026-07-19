@@ -58,7 +58,7 @@ public final class JdbcLearningEventRecorder implements LearningEventRecorder {
              PreparedStatement statement = connection.prepareStatement(sql)) {
             
             statement.setString(1, event.type().name());
-            statement.setTimestamp(2, Timestamp.from(event.occurredAt()));
+            statement.setString(2, Timestamp.from(event.occurredAt()).toString());
             statement.setString(3, event.connectionId());
             statement.setBoolean(4, event.successful());
             statement.setString(5, serializeAttributes(event.attributes()));

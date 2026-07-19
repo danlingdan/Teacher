@@ -143,6 +143,14 @@ public final class JdbcLearningEventQueryService implements LearningEventQuerySe
     private List<QueriedLearningEvent> executeQuery(String sql, StatementPreparer preparer) {
         try (Connection connection = connectionFactory.open("app");
              PreparedStatement statement = connection.prepareStatement(sql)) {
+            try (Statement s = connection.createStatement();
+                 ResultSet rs = s.executeQuery(
+                         "select occurred_at from learning_events")) {
+
+                while (rs.next()) {
+                    System.out.println(rs.getString(1));
+                }
+            }
 
             preparer.prepare(statement);
 
@@ -164,13 +172,22 @@ public final class JdbcLearningEventQueryService implements LearningEventQuerySe
         }
     }
 
-    private void setTimestampParameters(PreparedStatement statement, int startIndex, Instant start, Instant end) throws SQLException {
+    private void setTimestampParameters(
+            PreparedStatement statement,
+            int startIndex,
+            Instant start,
+            Instant end) throws SQLException {
+
         int index = startIndex;
+
         if (start != null) {
-            statement.setTimestamp(index++, Timestamp.from(start));
+            statement.setString(index++,
+                    Timestamp.from(start).toString());
         }
+
         if (end != null) {
-            statement.setTimestamp(index, Timestamp.from(end));
+            statement.setString(index,
+                    Timestamp.from(end).toString());
         }
     }
 

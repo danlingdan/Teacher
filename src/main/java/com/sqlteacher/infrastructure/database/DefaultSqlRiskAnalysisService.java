@@ -7,6 +7,7 @@ import com.sqlteacher.application.risk.SqlRiskLevel;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.regex.Pattern;
 
 public final class DefaultSqlRiskAnalysisService implements SqlRiskAnalysisService {
     @Override
@@ -29,6 +30,17 @@ public final class DefaultSqlRiskAnalysisService implements SqlRiskAnalysisServi
                     true,
                     statementType,
                     List.of("Multiple SQL statements are not allowed.")
+            );
+        }
+
+        if (containsAiSeparatedStatement(normalized)) {
+            return new SqlRiskAnalysis(
+                    SqlRiskLevel.HIGH,
+                    false,
+                    true,
+                    true,
+                    "MULTI_STATEMENT",
+                    List.of("Multiple SQL statements detected. Execute only one statement at a time.")
             );
         }
 
@@ -95,6 +107,14 @@ public final class DefaultSqlRiskAnalysisService implements SqlRiskAnalysisServi
                 statementType,
                 reasons
         );
+    }
+
+    private static final Pattern AI_MULTI_STATEMENT = Pattern.compile(
+            "(?is)\\R\\s*\\R\\s*(SELECT|INSERT|UPDATE|DELETE|DROP|ALTER|CREATE|TRUNCATE)\\b"
+    );
+
+    private boolean containsAiSeparatedStatement(String sql) {
+        return AI_MULTI_STATEMENT.matcher(sql).find();
     }
 
     private boolean hasMultipleStatements(String sql) {
@@ -182,13 +202,17 @@ public final class DefaultSqlRiskAnalysisService implements SqlRiskAnalysisServi
      * the semantic structure needed for risk analysis.
      */
     private String normalizeForAiPatterns(String sql) {
-        // Remove AI-generated comments that might hide malicious SQL
-        String normalized = sql.replaceAll("(?i)/\\*\\s*AI\\s*generated\\s*\\*/", "");
-        normalized = normalized.replaceAll("(?i)/\\*\\s*generated\\s+by\\s+AI\\s*\\*/", "");
-        
-        // Normalize whitespace but preserve structure for statement detection
-        normalized = normalized.replaceAll("\\s+", " ");
-        
+
+        String normalized = sql;
+
+        normalized = normalized.replaceAll(
+                "(?i)/\\*\\s*AI\\s*generated\\s*\\*/",
+                "");
+
+        normalized = normalized.replaceAll(
+                "(?i)/\\*\\s*generated\\s+by\\s+AI\\s*\\*/",
+                "");
+
         return normalized.strip();
     }
 }
