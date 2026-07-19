@@ -1,0 +1,22 @@
+[
+  {"naturalLanguage": "查询所有学生", "expectedKeywords": ["SELECT", "student"], "connectionId": "demo"},
+  {"naturalLanguage": "查询学生姓名和分数", "expectedKeywords": ["SELECT", "name", "score", "student"], "connectionId": "demo"},
+  {"naturalLanguage": "查询成绩大于60的学生", "expectedKeywords": ["SELECT", "student", "WHERE", "score", ">", "60"], "connectionId": "demo"},
+  {"naturalLanguage": "查询成绩在60到80之间的学生", "expectedKeywords": ["SELECT", "student", "WHERE", "BETWEEN"], "connectionId": "demo"},
+  {"naturalLanguage": "查询学生总数", "expectedKeywords": ["SELECT", "COUNT", "student"], "connectionId": "demo"},
+  {"naturalLanguage": "查询平均分", "expectedKeywords": ["SELECT", "AVG", "score", "student"], "connectionId": "demo"},
+  {"naturalLanguage": "查询最高分", "expectedKeywords": ["SELECT", "MAX", "score", "student"], "connectionId": "demo"},
+  {"naturalLanguage": "查询最低分", "expectedKeywords": ["SELECT", "MIN", "score", "student"], "connectionId": "demo"},
+  {"naturalLanguage": "按分数降序排列学生", "expectedKeywords": ["SELECT", "student", "ORDER BY", "score", "DESC"], "connectionId": "demo"},
+  {"naturalLanguage": "查询前10名学生", "expectedKeywords": ["SELECT", "student", "LIMIT", "10"], "connectionId": "demo"},
+  {"naturalLanguage": "查询姓李的学生", "expectedKeywords": ["SELECT", "student", "WHERE", "LIKE"], "connectionId": "demo"},
+  {"naturalLanguage": "查询班级信息", "expectedKeywords": ["SELECT", "class"], "connectionId": "demo"},
+  {"naturalLanguage": "查询学生所属班级", "expectedKeywords": ["SELECT", "student", "class", "JOIN"], "connectionId": "demo"},
+  {"naturalLanguage": "查询某个班级的学生", "expectedKeywords": ["SELECT", "student", "WHERE", "class_id"], "connectionId": "demo"},
+  {"naturalLanguage": "查询王老师的班级", "expectedKeywords": ["SELECT", "class", "WHERE", "teacher"], "connectionId": "demo"},
+  {"naturalLanguage": "统计每个班级的学生人数", "expectedKeywords": ["SELECT", "class_id", "COUNT", "GROUP BY"], "connectionId": "demo"},
+  {"naturalLanguage": "查询不及格的学生", "expectedKeywords": ["SELECT", "student", "WHERE", "score", "<", "60"], "connectionId": "demo"},
+  {"naturalLanguage": "查询学号为1的学生", "expectedKeywords": ["SELECT", "student", "WHERE", "id", "=", "1"], "connectionId": "demo"},
+  {"naturalLanguage": "查询学生姓名不重复", "expectedKeywords": ["SELECT", "DISTINCT", "name", "student"], "connectionId": "demo"},
+  {"naturalLanguage": "查询学生姓名和班级名称", "expectedKeywords": ["SELECT", "student", "class", "JOIN", "ON", "class_id"], "connectionId": "demo"}
+]

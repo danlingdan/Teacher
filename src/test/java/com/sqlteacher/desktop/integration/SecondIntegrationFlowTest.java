@@ -67,11 +67,24 @@ class SecondIntegrationFlowTest {
             );
             assertEquals(1, update.affectedRows());
 
-            AiModelProvider fixedProvider = request -> AiCompletionResult.success(
-                "{\"sqlDraft\":\"SELECT name, score FROM student ORDER BY id\","
-                    + "\"intent\":\"QUERY\",\"explanation\":\"查询学生成绩\"}",
-                request.model()
-            );
+            AiModelProvider fixedProvider = new AiModelProvider() {
+                @Override
+                public AiCompletionResult complete(com.sqlteacher.application.ai.AiCompletionRequest request) {
+                    return AiCompletionResult.success(
+                        "{\"sqlDraft\":\"SELECT name, score FROM student ORDER BY id\","
+                            + "\"intent\":\"QUERY\",\"explanation\":\"查询学生成绩\"}",
+                        request.model()
+                    );
+                }
+
+                @Override
+                public AiCompletionResult explainError(com.sqlteacher.application.ai.AiCompletionRequest request) {
+                    return AiCompletionResult.success(
+                        "{\"errorCause\":\"test\",\"correctionSuggestion\":\"test\",\"correctedSql\":\"SELECT * FROM student LIMIT 500\"}",
+                        request.model()
+                    );
+                }
+            };
             Nl2SqlServiceImpl nl2SqlService = new Nl2SqlServiceImpl(
                 fixedProvider,
                 configuration.ai(),
@@ -89,11 +102,24 @@ class SecondIntegrationFlowTest {
             assertEquals("QUERY", plan.intent());
             assertTrue(safetyResult.accepted());
 
-            AiModelProvider unsafeProvider = request -> AiCompletionResult.success(
-                "{\"sqlDraft\":\"UPDATE student SET score = 0 WHERE id = 1\","
-                    + "\"intent\":\"QUERY\",\"explanation\":\"修改学生成绩\"}",
-                request.model()
-            );
+            AiModelProvider unsafeProvider = new AiModelProvider() {
+                @Override
+                public AiCompletionResult complete(com.sqlteacher.application.ai.AiCompletionRequest request) {
+                    return AiCompletionResult.success(
+                        "{\"sqlDraft\":\"UPDATE student SET score = 0 WHERE id = 1\","
+                            + "\"intent\":\"QUERY\",\"explanation\":\"修改学生成绩\"}",
+                        request.model()
+                    );
+                }
+
+                @Override
+                public AiCompletionResult explainError(com.sqlteacher.application.ai.AiCompletionRequest request) {
+                    return AiCompletionResult.success(
+                        "{\"errorCause\":\"test\",\"correctionSuggestion\":\"test\",\"correctedSql\":\"UPDATE student SET score = 0 WHERE id = 1\"}",
+                        request.model()
+                    );
+                }
+            };
             Nl2SqlSafetyResult unsafeResult = new DefaultNl2SqlSafetyService(
                 new Nl2SqlServiceImpl(
                     unsafeProvider,

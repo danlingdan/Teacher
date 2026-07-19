@@ -45,7 +45,7 @@ class Nl2SqlServiceImplTest {
         assertEquals("QUERY", result.intent());
         assertEquals("查询所有学生", result.explanation());
         assertEquals("test-model", result.model());
-        assertEquals("v2", result.promptVersion());
+        assertEquals("v3", result.promptVersion());
     }
 
     @Test
@@ -232,6 +232,11 @@ class Nl2SqlServiceImplTest {
 
         @Override
         public AiCompletionResult complete(AiCompletionRequest request) {
+            return result;
+        }
+
+        @Override
+        public AiCompletionResult explainError(AiCompletionRequest request) {
             return result;
         }
     }

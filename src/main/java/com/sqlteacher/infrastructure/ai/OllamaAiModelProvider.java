@@ -37,6 +37,15 @@ public final class OllamaAiModelProvider implements AiModelProvider {
 
     @Override
     public AiCompletionResult complete(AiCompletionRequest request) {
+        return callOllama(request);
+    }
+
+    @Override
+    public AiCompletionResult explainError(AiCompletionRequest request) {
+        return callOllama(request);
+    }
+
+    private AiCompletionResult callOllama(AiCompletionRequest request) {
         if (!aiStatusService.checkStatus().available()) {
             return AiCompletionResult.failure("Ollama service is unavailable, please check local model status", request.model());
         }

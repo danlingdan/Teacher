@@ -12,7 +12,9 @@ import com.sqlteacher.application.metadata.DatabaseTable;
 import com.sqlteacher.application.nl2sql.Nl2SqlPlan;
 import com.sqlteacher.application.nl2sql.Nl2SqlRequest;
 import com.sqlteacher.application.nl2sql.Nl2SqlService;
+import com.sqlteacher.application.nl2sql.SqlErrorExplanation;
 import com.sqlteacher.infrastructure.ai.dto.OllamaNl2SqlResponse;
+import com.sqlteacher.infrastructure.ai.dto.OllamaSqlErrorResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -21,7 +23,7 @@ import java.util.Objects;
 
 public final class Nl2SqlServiceImpl implements Nl2SqlService {
     private static final Logger log = LoggerFactory.getLogger(Nl2SqlServiceImpl.class);
-    private static final String PROMPT_VERSION = "v2";
+    private static final String PROMPT_VERSION = "v3";
     private final AiModelProvider aiModelProvider;
     private final AiConfiguration aiConfiguration;
     private final DatabaseMetadataService databaseMetadataService;
@@ -152,10 +154,15 @@ public final class Nl2SqlServiceImpl implements Nl2SqlService {
         sb.append("Return ONLY a valid JSON object with these fields:\n");
         sb.append("- sqlDraft: the generated SELECT SQL statement\n");
         sb.append("- intent: must be \"QUERY\"\n");
-        sb.append("- explanation: brief explanation of what the SQL does\n");
+        sb.append("- explanation: detailed teaching explanation including:\n");
+        sb.append("  1. What the query does (purpose)\n");
+        sb.append("  2. Which tables are involved\n");
+        sb.append("  3. What conditions are used and why\n");
+        sb.append("  4. What columns are selected\n");
+        sb.append("  5. Expected result format\n");
         sb.append("\n");
         sb.append("Example output:\n");
-        sb.append("{\"sqlDraft\": \"SELECT name, score FROM student WHERE score >= 60 LIMIT 500\", \"intent\": \"QUERY\", \"explanation\": \"查询成绩大于等于60的学生姓名和分数\"}");
+        sb.append("{\"sqlDraft\": \"SELECT name, score FROM student WHERE score >= 60 LIMIT 500\", \"intent\": \"QUERY\", \"explanation\": \"该查询从student表中选取成绩大于等于60的学生记录，返回姓名和分数两列，限制最多500条结果。WHERE子句用于过滤符合条件的行。\"}");
         return sb.toString();
     }
 
@@ -183,5 +190,71 @@ public final class Nl2SqlServiceImpl implements Nl2SqlService {
 
     private String getDefaultTableSchema() {
         return "  - student (id, name, score, class_id)\n  - class (id, name, teacher)";
+    }
+
+    @Override
+    public SqlErrorExplanation explainSqlError(String connectionId, String sql, String errorMessage) {
+        Objects.requireNonNull(connectionId, "connectionId must not be null");
+        Objects.requireNonNull(sql, "sql must not be null");
+        Objects.requireNonNull(errorMessage, "errorMessage must not be null");
+        if (connectionId.isBlank()) {
+            throw new IllegalArgumentException("connectionId must not be blank");
+        }
+        if (sql.isBlank()) {
+            throw new IllegalArgumentException("sql must not be blank");
+        }
+        if (errorMessage.isBlank()) {
+            throw new IllegalArgumentException("errorMessage must not be blank");
+        }
+
+        String prompt = buildErrorExplanationPrompt(sql, errorMessage, connectionId);
+        AiCompletionRequest aiRequest = new AiCompletionRequest(
+            aiConfiguration.defaultModel(),
+            prompt,
+            aiConfiguration.generateTimeout()
+        );
+
+        AiCompletionResult aiResult = aiModelProvider.explainError(aiRequest);
+
+        if (!aiResult.success()) {
+            return SqlErrorExplanation.failure(aiResult.errorMessage(), aiResult.model());
+        }
+
+        try {
+            OllamaSqlErrorResponse response = objectMapper.readValue(aiResult.content(), OllamaSqlErrorResponse.class);
+            return SqlErrorExplanation.success(
+                response.errorCause(),
+                response.correctionSuggestion(),
+                response.correctedSql(),
+                aiResult.model()
+            );
+        } catch (Exception ex) {
+            log.warn("Failed to parse AI error explanation response", ex);
+            return SqlErrorExplanation.failure("Failed to parse AI error explanation: " + ex.getClass().getSimpleName(), aiResult.model());
+        }
+    }
+
+    private String buildErrorExplanationPrompt(String sql, String errorMessage, String connectionId) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("You are a SQL teacher assistant. Explain the following SQL error and provide a corrected SQL statement.\n");
+        sb.append("\n");
+        sb.append("Database: SQLite\n");
+        sb.append("Available tables:\n");
+        sb.append(buildTableSchema(connectionId));
+        sb.append("\n");
+        sb.append("SQL statement that caused the error:\n");
+        sb.append(sql).append("\n");
+        sb.append("\n");
+        sb.append("Error message:\n");
+        sb.append(errorMessage).append("\n");
+        sb.append("\n");
+        sb.append("Return ONLY a valid JSON object with these fields:\n");
+        sb.append("- errorCause: explanation of what caused the error\n");
+        sb.append("- correctionSuggestion: suggestion for fixing the error\n");
+        sb.append("- correctedSql: the corrected SQL statement\n");
+        sb.append("\n");
+        sb.append("Example output:\n");
+        sb.append("{\"errorCause\": \"Unknown column 'nam' in 'field list'\", \"correctionSuggestion\": \"The column 'nam' does not exist. Did you mean 'name'?\", \"correctedSql\": \"SELECT name FROM student LIMIT 500\"}");
+        return sb.toString();
     }
 }
