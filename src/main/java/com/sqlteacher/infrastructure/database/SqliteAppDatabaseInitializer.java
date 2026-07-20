@@ -60,6 +60,17 @@ public final class SqliteAppDatabaseInitializer implements DatabaseInitializatio
                     created_at text not null default current_timestamp
                 )
                 """);
+            statement.executeUpdate("""
+                create table if not exists learning_events (
+                    id integer primary key autoincrement,
+                    event_type text not null,
+                    occurred_at text not null,
+                    connection_id text not null,
+                    successful integer not null,
+                    attributes text,
+                    created_at text not null default current_timestamp
+                )
+                """);
         }
     }
 

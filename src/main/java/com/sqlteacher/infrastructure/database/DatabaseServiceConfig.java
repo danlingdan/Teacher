@@ -1,5 +1,8 @@
 package com.sqlteacher.infrastructure.database;
 
+import com.sqlteacher.application.event.DefaultLearningEventService;
+import com.sqlteacher.application.event.LearningEventRecorder;
+import com.sqlteacher.application.event.LearningEventService;
 import com.sqlteacher.application.execution.SqlExecutionService;
 import com.sqlteacher.application.metadata.DatabaseMetadataService;
 import com.sqlteacher.application.risk.SqlRiskAnalysisService;
@@ -29,12 +32,23 @@ public class DatabaseServiceConfig {
     public SqlExecutionService sqlExecutionService(
             JdbcConnectionFactory connectionFactory,
             SqlResultMapper resultMapper,
-            SqlRiskAnalysisService riskAnalysisService) {
-        return new JdbcSqlExecutionService(connectionFactory, resultMapper, riskAnalysisService);
+            SqlRiskAnalysisService riskAnalysisService,
+            LearningEventService learningEventService) {
+        return new JdbcSqlExecutionService(connectionFactory, resultMapper, riskAnalysisService, learningEventService);
     }
 
     @Bean
     public DatabaseMetadataService databaseMetadataService(JdbcConnectionFactory connectionFactory) {
         return new JdbcDatabaseMetadataService(connectionFactory);
+    }
+
+    @Bean
+    public LearningEventRecorder learningEventRecorder(JdbcConnectionFactory connectionFactory) {
+        return new JdbcLearningEventRecorder(connectionFactory);
+    }
+
+    @Bean
+    public LearningEventService learningEventService(LearningEventRecorder learningEventRecorder) {
+        return new DefaultLearningEventService(learningEventRecorder);
     }
 }

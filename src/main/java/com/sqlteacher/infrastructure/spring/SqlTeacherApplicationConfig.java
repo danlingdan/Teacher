@@ -7,7 +7,12 @@ import com.sqlteacher.application.config.SqlTeacherConfiguration;
 import com.sqlteacher.application.database.DatabaseInitializationService;
 import com.sqlteacher.application.error.ApplicationExceptionMapper;
 import com.sqlteacher.application.error.DefaultApplicationExceptionMapper;
+import com.sqlteacher.application.event.LearningEventService;
+import com.sqlteacher.application.metadata.DatabaseMetadataService;
+import com.sqlteacher.application.nl2sql.DefaultNl2SqlSafetyService;
 import com.sqlteacher.application.nl2sql.Nl2SqlService;
+import com.sqlteacher.application.nl2sql.Nl2SqlSafetyService;
+import com.sqlteacher.application.risk.SqlRiskAnalysisService;
 import com.sqlteacher.infrastructure.ai.Nl2SqlServiceImpl;
 import com.sqlteacher.infrastructure.ai.OllamaAiModelProvider;
 import com.sqlteacher.infrastructure.ai.OllamaAiStatusService;
@@ -47,8 +52,31 @@ public class SqlTeacherApplicationConfig {
     }
 
     @Bean
-    public Nl2SqlService nl2SqlService(AiModelProvider aiModelProvider, SqlTeacherConfiguration properties) {
-        return new Nl2SqlServiceImpl(aiModelProvider, properties.ai());
+    public Nl2SqlService nl2SqlService(
+        AiModelProvider aiModelProvider,
+        SqlTeacherConfiguration properties,
+        DatabaseMetadataService databaseMetadataService,
+        LearningEventService learningEventService
+    ) {
+        return new Nl2SqlServiceImpl(
+            aiModelProvider,
+            properties.ai(),
+            databaseMetadataService,
+            learningEventService
+        );
+    }
+
+    @Bean
+    public Nl2SqlSafetyService nl2SqlSafetyService(
+        Nl2SqlService nl2SqlService,
+        SqlRiskAnalysisService riskAnalysisService,
+        LearningEventService learningEventService
+    ) {
+        return new DefaultNl2SqlSafetyService(
+            nl2SqlService,
+            riskAnalysisService,
+            learningEventService
+        );
     }
 
     @Bean

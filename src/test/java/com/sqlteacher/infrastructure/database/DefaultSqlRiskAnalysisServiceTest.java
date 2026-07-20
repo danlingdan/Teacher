@@ -41,9 +41,18 @@ class DefaultSqlRiskAnalysisServiceTest {
         SqlRiskAnalysis result =
                 service.analyze("DROP TABLE student");
 
-        assertFalse(result.executable());
+        assertTrue(result.executable());
         assertEquals(SqlRiskLevel.HIGH, result.level());
         assertTrue(result.confirmationRequired());
+    }
+
+    @Test
+    void shouldForbidDropDatabaseEvenWhenSchemaChangesAreConfirmable() {
+        SqlRiskAnalysis result = service.analyze("DROP DATABASE school");
+
+        assertFalse(result.executable());
+        assertEquals(SqlRiskLevel.FORBIDDEN, result.level());
+        assertFalse(result.confirmationRequired());
     }
 
     @Test
@@ -54,6 +63,19 @@ class DefaultSqlRiskAnalysisServiceTest {
 
         assertFalse(result.executable());
         assertTrue(result.multiStatement());
+    }
+
+    @Test
+    void shouldNotTreatKeywordsOrSemicolonsInsideStringsAsMultipleStatements() {
+        SqlRiskAnalysis keywordResult = service.analyze("SELECT 'please DELETE everything'");
+        SqlRiskAnalysis semicolonResult = service.analyze("SELECT ';' AS marker");
+        SqlRiskAnalysis dropDatabaseTextResult = service.analyze("SELECT 'DROP DATABASE' AS lesson");
+
+        assertTrue(keywordResult.executable());
+        assertFalse(keywordResult.multiStatement());
+        assertTrue(semicolonResult.executable());
+        assertFalse(semicolonResult.multiStatement());
+        assertTrue(dropDatabaseTextResult.executable());
     }
 
     @Test

@@ -39,6 +39,7 @@ public final class SqlRiskConfirmDialogUtil {
     private static final Pattern ALTER_PATTERN = Pattern.compile("\\bALTER\\b", Pattern.CASE_INSENSITIVE);
     private static final Pattern RENAME_PATTERN = Pattern.compile("\\bRENAME\\b", Pattern.CASE_INSENSITIVE);
     private static final Pattern DELETE_PATTERN = Pattern.compile("\\bDELETE\\b", Pattern.CASE_INSENSITIVE);
+    private static final Pattern INSERT_PATTERN = Pattern.compile("\\bINSERT\\b", Pattern.CASE_INSENSITIVE);
     private static final Pattern UPDATE_PATTERN = Pattern.compile("\\bUPDATE\\b", Pattern.CASE_INSENSITIVE);
     private static final Pattern WHERE_PATTERN = Pattern.compile("\\bWHERE\\b", Pattern.CASE_INSENSITIVE);
     private static final Pattern SEMICOLON_PATTERN = Pattern.compile(";\\s*$", Pattern.MULTILINE);
@@ -91,12 +92,16 @@ public final class SqlRiskConfirmDialogUtil {
             return "数据库结构变更";
         }
 
-        if (DELETE_PATTERN.matcher(cleaned).find() && !WHERE_PATTERN.matcher(cleaned).find()) {
-            return "删除数据（无WHERE条件）";
+        if (INSERT_PATTERN.matcher(cleaned).find()) {
+            return "写入数据";
         }
 
-        if (UPDATE_PATTERN.matcher(cleaned).find() && !WHERE_PATTERN.matcher(cleaned).find()) {
-            return "全表更新（无WHERE条件）";
+        if (DELETE_PATTERN.matcher(cleaned).find()) {
+            return WHERE_PATTERN.matcher(cleaned).find() ? "删除数据" : "删除数据（无WHERE条件）";
+        }
+
+        if (UPDATE_PATTERN.matcher(cleaned).find()) {
+            return WHERE_PATTERN.matcher(cleaned).find() ? "更新数据" : "全表更新（无WHERE条件）";
         }
 
         if (hasMultipleStatements(cleaned)) {
@@ -241,6 +246,9 @@ public final class SqlRiskConfirmDialogUtil {
 
                 SqlRiskConfirmDialogController controller = loader.getController();
                 String riskType = checkRisk(sql);
+                if (riskType == null) {
+                    riskType = "需要确认的高风险操作";
+                }
                 String affectedTables = extractTables(sql);
                 controller.setContent(sql, riskType, affectedTables, onConfirm);
 

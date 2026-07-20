@@ -5,6 +5,7 @@ import com.sqlteacher.application.execution.SqlExecutionRequest;
 import com.sqlteacher.application.execution.SqlExecutionService;
 import com.sqlteacher.application.metadata.DatabaseMetadataService;
 import com.sqlteacher.application.nl2sql.Nl2SqlService;
+import com.sqlteacher.application.nl2sql.Nl2SqlSafetyService;
 import com.sqlteacher.application.risk.SqlRiskAnalysisService;
 import org.junit.jupiter.api.Test;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
@@ -27,6 +28,7 @@ class MockApplicationServiceConfigTest {
             assertEquals(1, context.getBean(DatabaseMetadataService.class).listTables("demo").size());
             assertNotNull(context.getBean(SqlRiskAnalysisService.class));
             assertNotNull(context.getBean(Nl2SqlService.class));
+            assertNotNull(context.getBean(Nl2SqlSafetyService.class));
             assertNotNull(context.getBean(ApplicationExceptionMapper.class));
         }
     }

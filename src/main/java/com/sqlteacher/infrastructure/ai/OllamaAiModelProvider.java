@@ -7,13 +7,20 @@ import com.sqlteacher.application.ai.AiCompletionResult;
 import com.sqlteacher.application.ai.AiModelProvider;
 import com.sqlteacher.application.ai.AiStatusService;
 import com.sqlteacher.application.config.AiConfiguration;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.net.ConnectException;
+import java.net.http.HttpConnectTimeoutException;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.net.http.HttpTimeoutException;
 
 public final class OllamaAiModelProvider implements AiModelProvider {
+    private static final Logger log = LoggerFactory.getLogger(OllamaAiModelProvider.class);
+
     private final AiConfiguration properties;
     private final AiStatusService aiStatusService;
     private final HttpClient httpClient;
@@ -63,11 +70,19 @@ public final class OllamaAiModelProvider implements AiModelProvider {
             }
 
             return AiCompletionResult.success(content, request.model());
+        } catch (ConnectException | HttpConnectTimeoutException ex) {
+            log.warn("Ollama connection failed: {}", ex.getMessage());
+            return AiCompletionResult.failure("Ollama service is not running. Please start Ollama and try again.", request.model());
+        } catch (HttpTimeoutException ex) {
+            log.warn("Ollama request timed out");
+            return AiCompletionResult.failure("AI request timed out. Please try a simpler query or increase timeout.", request.model());
         } catch (IOException ex) {
-            return AiCompletionResult.failure("Ollama service unavailable: " + ex.getClass().getSimpleName(), request.model());
+            log.warn("Ollama IO error: {}", ex.getClass().getSimpleName(), ex);
+            return AiCompletionResult.failure("AI service communication error: " + ex.getClass().getSimpleName(), request.model());
         } catch (InterruptedException ex) {
             Thread.currentThread().interrupt();
-            return AiCompletionResult.failure("Request interrupted", request.model());
+            log.warn("Ollama request interrupted");
+            return AiCompletionResult.failure("AI request was interrupted", request.model());
         }
     }
 

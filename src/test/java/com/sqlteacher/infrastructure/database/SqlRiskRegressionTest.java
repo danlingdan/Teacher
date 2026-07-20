@@ -59,7 +59,7 @@ class SqlRiskRegressionTest {
             throw new IllegalArgumentException("Expected 6 tab-separated fields: " + line);
         }
 
-        String sql = fields[1].equals("<blank>") ? " " : fields[1];
+        String sql = fields[1].equals("<blank>") ? " " : unescapeSql(fields[1]);
         return new RiskCase(
             fields[0],
             sql,
@@ -68,6 +68,11 @@ class SqlRiskRegressionTest {
             Boolean.parseBoolean(fields[4]),
             Boolean.parseBoolean(fields[5])
         );
+    }
+
+    private static String unescapeSql(String sql) {
+        // Handle backslash-n for newline
+        return sql.replace("\\n", "\n");
     }
 
     private record RiskCase(
