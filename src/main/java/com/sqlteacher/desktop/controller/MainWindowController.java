@@ -286,7 +286,7 @@ public final class MainWindowController {
         FXMLLoader loader = new FXMLLoader(fxml);
         loader.setControllerFactory(type -> {
             if (type == SqlPracticeController.class) {
-                sqlPracticeController = new SqlPracticeController(sqlExecutionService);
+                sqlPracticeController = new SqlPracticeController(sqlExecutionService, sqlRiskAnalysisService);
                 sqlPracticeController.setOnDdlSuccessCallback(this::refreshTableSchema);
                 return sqlPracticeController;
             }
