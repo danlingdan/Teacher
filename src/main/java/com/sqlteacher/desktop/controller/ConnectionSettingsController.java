@@ -6,6 +6,7 @@ import com.sqlteacher.application.connection.DatabaseConnectionTarget;
 import com.sqlteacher.application.connection.DatabaseConnectionTestResult;
 import com.sqlteacher.application.connection.DatabaseConnectionTestService;
 import com.sqlteacher.application.connection.DatabaseDialect;
+import com.sqlteacher.application.connection.DatabaseCredentialSession;
 import com.sqlteacher.application.connection.ServerConnectionTarget;
 import com.sqlteacher.application.connection.SqliteConnectionTarget;
 import com.sqlteacher.application.error.ApplicationExceptionMapper;
@@ -36,6 +37,7 @@ public final class ConnectionSettingsController {
     private final ConnectionManagementService managementService;
     private final DatabaseConnectionTestService testService;
     private final ApplicationExceptionMapper exceptionMapper;
+    private final DatabaseCredentialSession credentialSession;
 
     @FXML private ListView<DatabaseConnectionProfile> profileList;
     @FXML private Label currentLabel;
@@ -59,11 +61,13 @@ public final class ConnectionSettingsController {
     public ConnectionSettingsController(
         ConnectionManagementService managementService,
         DatabaseConnectionTestService testService,
-        ApplicationExceptionMapper exceptionMapper
+        ApplicationExceptionMapper exceptionMapper,
+        DatabaseCredentialSession credentialSession
     ) {
         this.managementService = Objects.requireNonNull(managementService);
         this.testService = Objects.requireNonNull(testService);
         this.exceptionMapper = Objects.requireNonNull(exceptionMapper);
+        this.credentialSession = Objects.requireNonNull(credentialSession);
     }
 
     @FXML
@@ -104,6 +108,7 @@ public final class ConnectionSettingsController {
             showStatus(error.getMessage(), true);
             return;
         }
+        credentialSession.forget(profile.id());
         runAsync("正在保存连接…", () -> managementService.saveProfile(profile), saved -> {
             showStatus("连接配置已保存。", false);
             refreshProfiles(saved.id());
@@ -123,7 +128,16 @@ public final class ConnectionSettingsController {
         passwordField.clear();
         runAsync("正在测试数据库连接…", () -> {
             try {
-                return testService.testConnection(profile, password);
+                DatabaseConnectionTestResult result = testService.testConnection(profile, password);
+                boolean savedServerProfile = result.successful()
+                    && profile.target() instanceof ServerConnectionTarget
+                    && managementService.findProfile(profile.id()).filter(profile::equals).isPresent();
+                if (savedServerProfile) {
+                    credentialSession.remember(profile.id(), password);
+                } else {
+                    credentialSession.forget(profile.id());
+                }
+                return result;
             } finally {
                 Arrays.fill(password, '\0');
             }
@@ -161,6 +175,7 @@ public final class ConnectionSettingsController {
             return;
         }
         runAsync("正在删除连接…", () -> {
+            credentialSession.forget(selected.id());
             managementService.removeProfile(selected.id());
             return null;
         }, ignored -> {

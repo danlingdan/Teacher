@@ -19,19 +19,19 @@ import java.time.Instant;
 import java.util.Objects;
 
 public final class JdbcSqlExecutionService implements SqlExecutionService {
-    private final JdbcConnectionFactory connectionFactory;
+    private final JdbcConnectionProvider connectionProvider;
     private final SqlResultMapper resultMapper;
     private final SqlRiskAnalysisService riskAnalysisService;
     private final LearningEventService eventService;
     private static final Logger log = LoggerFactory.getLogger(JdbcSqlExecutionService.class);
 
     public JdbcSqlExecutionService(
-            JdbcConnectionFactory connectionFactory,
+            JdbcConnectionProvider connectionProvider,
             SqlResultMapper resultMapper,
             SqlRiskAnalysisService riskAnalysisService,
             LearningEventService eventService
     ) {
-        this.connectionFactory = Objects.requireNonNull(connectionFactory);
+        this.connectionProvider = Objects.requireNonNull(connectionProvider);
         this.resultMapper = Objects.requireNonNull(resultMapper);
         this.riskAnalysisService = Objects.requireNonNull(riskAnalysisService);
         this.eventService = Objects.requireNonNull(eventService);
@@ -73,6 +73,19 @@ public final class JdbcSqlExecutionService implements SqlExecutionService {
             );
         }
 
+        if (connectionProvider.isReadOnly(request.connectionId()) && !"SELECT".equals(risk.statementType())) {
+            eventService.recordSqlRiskBlocked(
+                request.connectionId(),
+                risk.statementType(),
+                risk.level(),
+                risk.multiStatement()
+            );
+            throw new SqlTeacherException(
+                "SQL_READ_ONLY_CONNECTION",
+                "当前数据库连接为只读模式，只允许执行 SELECT 查询。"
+            );
+        }
+
         if (risk.confirmationRequired() && !request.riskConfirmed()) {
             eventService.recordSqlRiskBlocked(
                     request.connectionId(),
@@ -93,7 +106,7 @@ public final class JdbcSqlExecutionService implements SqlExecutionService {
 
         try (
                 Connection connection =
-                        connectionFactory.open(request.connectionId());
+                        connectionProvider.open(request.connectionId(), request.timeout());
 
                 Statement statement =
                         connection.createStatement()

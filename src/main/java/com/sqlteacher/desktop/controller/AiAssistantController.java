@@ -2,6 +2,7 @@ package com.sqlteacher.desktop.controller;
 
 import com.sqlteacher.application.ai.AiModelSelection;
 import com.sqlteacher.application.ai.AiModelSelectionService;
+import com.sqlteacher.application.connection.ConnectionManagementService;
 import com.sqlteacher.application.nl2sql.Nl2SqlPlan;
 import com.sqlteacher.application.nl2sql.Nl2SqlRequest;
 import com.sqlteacher.application.nl2sql.Nl2SqlSafetyResult;
@@ -52,6 +53,7 @@ public final class AiAssistantController {
     private final Consumer<String> fillSqlCallback;
     private final Runnable switchPageCallback;
     private final SqlRiskAnalysisService sqlRiskAnalysisService;
+    private final ConnectionManagementService connectionManagementService;
     private Nl2SqlSafetyResult currentResult;
     private boolean applyingModelSelection;
     private boolean modelOperationInProgress;
@@ -94,6 +96,7 @@ public final class AiAssistantController {
         Nl2SqlSafetyService nl2SqlSafetyService,
         AiModelSelectionService aiModelSelectionService,
         SqlRiskAnalysisService sqlRiskAnalysisService,
+        ConnectionManagementService connectionManagementService,
         Consumer<String> fillSqlCallback,
         Runnable switchPageCallback
     ) {
@@ -108,6 +111,10 @@ public final class AiAssistantController {
         this.sqlRiskAnalysisService = Objects.requireNonNull(
             sqlRiskAnalysisService,
             "sqlRiskAnalysisService must not be null"
+        );
+        this.connectionManagementService = Objects.requireNonNull(
+            connectionManagementService,
+            "connectionManagementService must not be null"
         );
         this.fillSqlCallback = Objects.requireNonNull(fillSqlCallback, "fillSqlCallback must not be null");
         this.switchPageCallback = Objects.requireNonNull(switchPageCallback, "switchPageCallback must not be null");
@@ -171,7 +178,10 @@ public final class AiAssistantController {
             Task<Nl2SqlSafetyResult> task = new Task<>() {
                 @Override
                 protected Nl2SqlSafetyResult call() {
-                    Nl2SqlRequest request = new Nl2SqlRequest(question, DesktopConnections.DEMO);
+                    Nl2SqlRequest request = new Nl2SqlRequest(
+                        question,
+                        DesktopConnections.currentId(connectionManagementService)
+                    );
                     return nl2SqlSafetyService.generateAndAssess(request);
                 }
             };

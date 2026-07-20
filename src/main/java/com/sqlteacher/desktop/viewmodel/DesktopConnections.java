@@ -1,5 +1,10 @@
 package com.sqlteacher.desktop.viewmodel;
 
+import com.sqlteacher.application.connection.ConnectionManagementService;
+import com.sqlteacher.domain.SqlTeacherException;
+
+import java.util.Objects;
+
 /**
  * Single source of truth for the desktop demo connection identifier.
  *
@@ -10,6 +15,17 @@ public final class DesktopConnections {
 
     /** Fixed connection id used by the initial single-database demo. */
     public static final String DEMO = "demo";
+
+    public static String currentId(ConnectionManagementService connectionManagementService) {
+        Objects.requireNonNull(connectionManagementService, "connectionManagementService must not be null");
+        return connectionManagementService.currentProfile()
+            .filter(profile -> profile.enabled())
+            .map(profile -> profile.id())
+            .orElseThrow(() -> new SqlTeacherException(
+                "DATABASE_CONNECTION_NOT_FOUND",
+                "找不到可用的当前数据库连接，请在设置页重新选择。"
+            ));
+    }
 
     private DesktopConnections() {
     }

@@ -4,6 +4,7 @@ import com.sqlteacher.application.execution.SqlExecutionService;
 import com.sqlteacher.application.ai.AiModelSelectionService;
 import com.sqlteacher.application.connection.ConnectionManagementService;
 import com.sqlteacher.application.connection.DatabaseConnectionTestService;
+import com.sqlteacher.application.connection.DatabaseCredentialSession;
 import com.sqlteacher.application.error.ApplicationExceptionMapper;
 import com.sqlteacher.application.metadata.DatabaseMetadataService;
 import com.sqlteacher.application.nl2sql.Nl2SqlSafetyService;
@@ -81,6 +82,7 @@ public final class MainWindowController {
     private final ConnectionManagementService connectionManagementService;
     private final DatabaseConnectionTestService databaseConnectionTestService;
     private final ApplicationExceptionMapper applicationExceptionMapper;
+    private final DatabaseCredentialSession databaseCredentialSession;
 
     /**
      * 表名选中回调：表结构页点击表名时触发，把 {@code "SELECT * FROM 表名"}
@@ -158,7 +160,8 @@ public final class MainWindowController {
                                 SqlRiskAnalysisService sqlRiskAnalysisService,
                                 ConnectionManagementService connectionManagementService,
                                 DatabaseConnectionTestService databaseConnectionTestService,
-                                ApplicationExceptionMapper applicationExceptionMapper) {
+                                ApplicationExceptionMapper applicationExceptionMapper,
+                                DatabaseCredentialSession databaseCredentialSession) {
         this.sqlExecutionService = Objects.requireNonNull(sqlExecutionService, "sqlExecutionService must not be null");
         this.databaseMetadataService = Objects.requireNonNull(databaseMetadataService, "databaseMetadataService must not be null");
         this.nl2SqlSafetyService = Objects.requireNonNull(nl2SqlSafetyService, "nl2SqlSafetyService must not be null");
@@ -170,6 +173,7 @@ public final class MainWindowController {
         this.connectionManagementService = Objects.requireNonNull(connectionManagementService);
         this.databaseConnectionTestService = Objects.requireNonNull(databaseConnectionTestService);
         this.applicationExceptionMapper = Objects.requireNonNull(applicationExceptionMapper);
+        this.databaseCredentialSession = Objects.requireNonNull(databaseCredentialSession);
         this.fillSqlCallback = sql -> {
             // 确保 SQL 练习页已加载并捕获控制器引用，仅填充 SQL 不跳转页面。
             sqlPracticePage();
@@ -322,7 +326,11 @@ public final class MainWindowController {
         FXMLLoader loader = new FXMLLoader(fxml);
         loader.setControllerFactory(type -> {
             if (type == SqlPracticeController.class) {
-                sqlPracticeController = new SqlPracticeController(sqlExecutionService, sqlRiskAnalysisService);
+                sqlPracticeController = new SqlPracticeController(
+                    sqlExecutionService,
+                    sqlRiskAnalysisService,
+                    connectionManagementService
+                );
                 sqlPracticeController.setOnDdlSuccessCallback(this::refreshTableSchema);
                 return sqlPracticeController;
             }
@@ -350,7 +358,12 @@ public final class MainWindowController {
         FXMLLoader loader = new FXMLLoader(fxml);
         loader.setControllerFactory(type -> {
             if (type == TableSchemaController.class) {
-                tableSchemaController = new TableSchemaController(databaseMetadataService, sqlExecutionService, fillSqlCallback);
+                tableSchemaController = new TableSchemaController(
+                    databaseMetadataService,
+                    sqlExecutionService,
+                    connectionManagementService,
+                    fillSqlCallback
+                );
                 return tableSchemaController;
             }
             throw new IllegalStateException("Unexpected controller type for TableSchemaView.fxml: " + type);
@@ -377,6 +390,7 @@ public final class MainWindowController {
                     nl2SqlSafetyService,
                     aiModelSelectionService,
                     sqlRiskAnalysisService,
+                    connectionManagementService,
                     fillSqlCallback,
                     this::onNavigateSqlPractice
                 );
@@ -419,7 +433,8 @@ public final class MainWindowController {
                     return new ConnectionSettingsController(
                         connectionManagementService,
                         databaseConnectionTestService,
-                        applicationExceptionMapper
+                        applicationExceptionMapper,
+                        databaseCredentialSession
                     );
                 }
                 throw new IllegalStateException("Unexpected controller type for settings: " + type);

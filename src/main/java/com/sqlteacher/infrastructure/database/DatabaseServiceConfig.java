@@ -2,6 +2,7 @@ package com.sqlteacher.infrastructure.database;
 
 import com.sqlteacher.application.connection.ConnectionManagementService;
 import com.sqlteacher.application.connection.DatabaseConnectionTestService;
+import com.sqlteacher.application.connection.DatabaseCredentialSession;
 import com.sqlteacher.application.event.DefaultLearningEventService;
 import com.sqlteacher.application.event.LearningEventQueryService;
 import com.sqlteacher.application.event.LearningEventRecorder;
@@ -46,18 +47,35 @@ public class DatabaseServiceConfig {
         return new JdbcDatabaseConnectionTestService(connectionFactory, Duration.ofSeconds(5));
     }
 
-    @Bean
-    public SqlExecutionService sqlExecutionService(
-            JdbcConnectionFactory connectionFactory,
-            SqlResultMapper resultMapper,
-            SqlRiskAnalysisService riskAnalysisService,
-            LearningEventService learningEventService) {
-        return new JdbcSqlExecutionService(connectionFactory, resultMapper, riskAnalysisService, learningEventService);
+    @Bean(destroyMethod = "close")
+    public DatabaseCredentialSession databaseCredentialSession() {
+        return new InMemoryDatabaseCredentialSession();
     }
 
     @Bean
-    public DatabaseMetadataService databaseMetadataService(JdbcConnectionFactory connectionFactory) {
-        return new JdbcDatabaseMetadataService(connectionFactory);
+    public JdbcConnectionProvider jdbcConnectionProvider(
+            JdbcConnectionFactory connectionFactory,
+            ConnectionManagementService connectionManagementService,
+            DatabaseCredentialSession credentialSession) {
+        return new ProfileAwareJdbcConnectionProvider(
+            connectionFactory,
+            connectionManagementService,
+            credentialSession
+        );
+    }
+
+    @Bean
+    public SqlExecutionService sqlExecutionService(
+            JdbcConnectionProvider connectionProvider,
+            SqlResultMapper resultMapper,
+            SqlRiskAnalysisService riskAnalysisService,
+            LearningEventService learningEventService) {
+        return new JdbcSqlExecutionService(connectionProvider, resultMapper, riskAnalysisService, learningEventService);
+    }
+
+    @Bean
+    public DatabaseMetadataService databaseMetadataService(JdbcConnectionProvider connectionProvider) {
+        return new JdbcDatabaseMetadataService(connectionProvider);
     }
 
     @Bean

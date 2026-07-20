@@ -7,6 +7,8 @@ import com.sqlteacher.application.ai.AiModelProvider;
 import com.sqlteacher.application.ai.AiModelSelection;
 import com.sqlteacher.application.ai.AiModelSelectionService;
 import com.sqlteacher.application.config.AiConfiguration;
+import com.sqlteacher.application.connection.ConnectionManagementService;
+import com.sqlteacher.application.connection.DatabaseDialect;
 import com.sqlteacher.application.event.LearningEventService;
 import com.sqlteacher.application.metadata.DatabaseColumn;
 import com.sqlteacher.application.metadata.DatabaseMetadataService;
@@ -17,6 +19,7 @@ import com.sqlteacher.application.nl2sql.Nl2SqlService;
 import com.sqlteacher.application.nl2sql.SqlErrorExplanation;
 import com.sqlteacher.infrastructure.ai.dto.OllamaNl2SqlResponse;
 import com.sqlteacher.infrastructure.ai.dto.OllamaSqlErrorResponse;
+import com.sqlteacher.domain.SqlTeacherException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -32,6 +35,7 @@ public final class Nl2SqlServiceImpl implements Nl2SqlService {
     private final DatabaseMetadataService databaseMetadataService;
     private final LearningEventService learningEventService;
     private final ObjectMapper objectMapper;
+    private final ConnectionManagementService connectionManagementService;
 
     public Nl2SqlServiceImpl(
         AiModelProvider aiModelProvider,
@@ -44,7 +48,8 @@ public final class Nl2SqlServiceImpl implements Nl2SqlService {
             aiConfiguration,
             AiModelSelectionService.fixed(aiConfiguration.defaultModel()),
             databaseMetadataService,
-            learningEventService
+            learningEventService,
+            null
         );
     }
 
@@ -54,6 +59,24 @@ public final class Nl2SqlServiceImpl implements Nl2SqlService {
         AiModelSelectionService modelSelectionService,
         DatabaseMetadataService databaseMetadataService,
         LearningEventService learningEventService
+    ) {
+        this(
+            aiModelProvider,
+            aiConfiguration,
+            modelSelectionService,
+            databaseMetadataService,
+            learningEventService,
+            null
+        );
+    }
+
+    public Nl2SqlServiceImpl(
+        AiModelProvider aiModelProvider,
+        AiConfiguration aiConfiguration,
+        AiModelSelectionService modelSelectionService,
+        DatabaseMetadataService databaseMetadataService,
+        LearningEventService learningEventService,
+        ConnectionManagementService connectionManagementService
     ) {
         this.aiModelProvider = Objects.requireNonNull(aiModelProvider, "aiModelProvider must not be null");
         this.aiConfiguration = Objects.requireNonNull(aiConfiguration, "aiConfiguration must not be null");
@@ -69,6 +92,7 @@ public final class Nl2SqlServiceImpl implements Nl2SqlService {
             learningEventService,
             "learningEventService must not be null"
         );
+        this.connectionManagementService = connectionManagementService;
         this.objectMapper = new ObjectMapper();
     }
 
@@ -82,7 +106,19 @@ public final class Nl2SqlServiceImpl implements Nl2SqlService {
             throw new IllegalArgumentException("connectionId must not be blank");
         }
 
-        String prompt = buildPrompt(request.naturalLanguage(), request.connectionId());
+        String prompt;
+        try {
+            prompt = buildPrompt(request.naturalLanguage(), request.connectionId());
+        } catch (SqlTeacherException error) {
+            recordAiGeneration(request.connectionId(), false, aiConfiguration.defaultModel(), error.errorCode());
+            return new Nl2SqlPlan(
+                "",
+                "",
+                error.getMessage(),
+                aiConfiguration.defaultModel(),
+                PROMPT_VERSION
+            );
+        }
         String selectedModel = resolveSelectedModel();
         if (selectedModel.isEmpty()) {
             return unavailableModelPlan(request.connectionId());
@@ -169,9 +205,11 @@ public final class Nl2SqlServiceImpl implements Nl2SqlService {
 
     private String buildPrompt(String naturalLanguage, String connectionId) {
         StringBuilder sb = new StringBuilder();
-        sb.append("You are a SQL teacher assistant. Convert the following natural language query into a valid SQLite SELECT statement.\n");
+        String databaseName = databaseDialect(connectionId).name();
+        sb.append("You are a SQL teacher assistant. Convert the following natural language query into a valid ")
+            .append(databaseName).append(" SELECT statement.\n");
         sb.append("\n");
-        sb.append("Database: SQLite\n");
+        sb.append("Database: ").append(databaseName).append("\n");
         sb.append("Available tables:\n");
         sb.append(buildTableSchema(connectionId));
         sb.append("\n");
@@ -217,9 +255,23 @@ public final class Nl2SqlServiceImpl implements Nl2SqlService {
                 sb.append(")\n");
             }
             return sb.toString().trim();
+        } catch (SqlTeacherException error) {
+            throw error;
         } catch (Exception ex) {
             return getDefaultTableSchema();
         }
+    }
+
+    private DatabaseDialect databaseDialect(String connectionId) {
+        if (connectionManagementService == null) {
+            return DatabaseDialect.SQLITE;
+        }
+        return connectionManagementService.findProfile(connectionId)
+            .map(profile -> profile.dialect())
+            .orElseThrow(() -> new SqlTeacherException(
+                "DATABASE_CONNECTION_NOT_FOUND",
+                "找不到所选数据库连接，请在设置页重新选择。"
+            ));
     }
 
     private String getDefaultTableSchema() {
@@ -323,7 +375,7 @@ public final class Nl2SqlServiceImpl implements Nl2SqlService {
         StringBuilder sb = new StringBuilder();
         sb.append("You are a SQL teacher assistant. Explain the following SQL error and provide a corrected SQL statement.\n");
         sb.append("\n");
-        sb.append("Database: SQLite\n");
+        sb.append("Database: ").append(databaseDialect(connectionId).name()).append("\n");
         sb.append("Available tables:\n");
         sb.append(buildTableSchema(connectionId));
         sb.append("\n");

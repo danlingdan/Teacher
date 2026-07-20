@@ -15,8 +15,13 @@ public final class DefaultApplicationExceptionMapper implements ApplicationExcep
         Map.entry("CONFIG_INVALID", presentation("应用配置无效，请联系教师检查配置。", false)),
         Map.entry("SQLITE_INIT_FAILED", presentation("演示数据库初始化失败，请检查数据目录是否可写。", true)),
         Map.entry("CONNECTION_PROFILE_FAILED", presentation("数据库连接配置读取或保存失败，请重试。", true)),
+        Map.entry("DATABASE_CONNECTION_NOT_FOUND", presentation("找不到所选数据库连接，请在设置页重新选择。", false)),
+        Map.entry("DATABASE_CONNECTION_DISABLED", presentation("所选数据库连接已禁用，请在设置页启用或切换连接。", false)),
+        Map.entry("DATABASE_CREDENTIALS_REQUIRED", presentation("服务器连接缺少临时凭据，请先在设置页测试连接。", false)),
+        Map.entry("EXTERNAL_CONNECTION_READ_ONLY_REQUIRED", presentation("外部数据库连接必须启用只读模式。", false)),
         Map.entry("DATABASE_METADATA_FAILED", presentation("表结构读取失败，请检查数据库连接后重试。", true)),
         Map.entry("SQL_BLOCKED", presentation("SQL 被安全规则拦截，请检查是否包含危险操作或多条语句。", false)),
+        Map.entry("SQL_READ_ONLY_CONNECTION", presentation("当前数据库连接为只读模式，只允许执行 SELECT 查询。", false)),
         Map.entry("MOCK_SQL_BLOCKED", presentation("SQL 被安全规则拦截，请检查是否包含危险操作或多条语句。", false)),
         Map.entry("SQL_CONFIRMATION_REQUIRED", presentation("该 SQL 可能修改数据，确认风险后才能执行。", false)),
         Map.entry("SQL_EXECUTION_FAILED", presentation("SQL 执行失败，请检查语法、表名和字段名后重试。", true))

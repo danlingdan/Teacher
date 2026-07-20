@@ -1,5 +1,6 @@
 package com.sqlteacher.desktop.controller;
 
+import com.sqlteacher.application.connection.ConnectionManagementService;
 import com.sqlteacher.application.execution.SqlExecutionRequest;
 import com.sqlteacher.application.execution.SqlExecutionResult;
 import com.sqlteacher.application.execution.SqlExecutionService;
@@ -44,7 +45,7 @@ import java.util.function.Consumer;
  *
  * <p><b>树形结构</b>：
  * <ul>
- *   <li>数据库根节点：{@code 🗄 demo 数据库}；</li>
+ *   <li>数据库根节点：当前选中的数据库连接；</li>
  *   <li>表节点：{@code 📊 表名}；</li>
  *   <li>字段节点：{@code 📋 字段名 · 类型 [PK] [NOT NULL]}，主键字段使用 🔑 图标。</li>
  * </ul>
@@ -57,8 +58,8 @@ import java.util.function.Consumer;
  */
 public final class TableSchemaController {
 
-    /** 树根标签：展示 demo 数据库的层级根节点。 */
-    private static final String ROOT_LABEL = "demo 数据库";
+    /** 树根标签：展示当前数据库的层级根节点。 */
+    private static final String ROOT_LABEL = "当前数据库";
 
     /** 懒加载占位子节点文案。 */
     private static final String LOADING_CHILD_LABEL = "加载中…";
@@ -98,6 +99,7 @@ public final class TableSchemaController {
 
     /** 应用层 SQL 执行服务接口。 */
     private final SqlExecutionService sqlExecutionService;
+    private final ConnectionManagementService connectionManagementService;
 
     /** 表名选中回调：把 {@code "SELECT * FROM 表名"} 传回主窗口控制器联动 SQL 练习页。 */
     private final Consumer<String> onTableSelected;
@@ -153,9 +155,11 @@ public final class TableSchemaController {
      */
     public TableSchemaController(DatabaseMetadataService metadataService,
                                  SqlExecutionService sqlExecutionService,
+                                 ConnectionManagementService connectionManagementService,
                                  Consumer<String> onTableSelected) {
         this.metadataService = metadataService;
         this.sqlExecutionService = sqlExecutionService;
+        this.connectionManagementService = connectionManagementService;
         this.onTableSelected = onTableSelected;
     }
 
@@ -240,7 +244,8 @@ public final class TableSchemaController {
         Task<List<TableMetaViewModel>> loadTask = new Task<>() {
             @Override
             protected List<TableMetaViewModel> call() {
-                return metadataService.listTables(DesktopConnections.DEMO).stream()
+                String connectionId = DesktopConnections.currentId(connectionManagementService);
+                return metadataService.listTables(connectionId).stream()
                     .map(TableMetaViewModel::from)
                     .toList();
             }
@@ -281,13 +286,15 @@ public final class TableSchemaController {
         showPreviewLoadingState(tableName);
         GlobalLoading.show(PREVIEW_LOADING_MESSAGE);
 
-        SqlExecutionRequest request = new SqlExecutionRequest(
-            DesktopConnections.DEMO, sql, PREVIEW_MAX_ROWS, PREVIEW_TIMEOUT
-        );
-
         Task<SqlExecutionViewModel> previewTask = new Task<>() {
             @Override
             protected SqlExecutionViewModel call() {
+                SqlExecutionRequest request = new SqlExecutionRequest(
+                    DesktopConnections.currentId(connectionManagementService),
+                    sql,
+                    PREVIEW_MAX_ROWS,
+                    PREVIEW_TIMEOUT
+                );
                 SqlExecutionResult result = sqlExecutionService.execute(request);
                 return SqlExecutionViewModel.from(request, result);
             }

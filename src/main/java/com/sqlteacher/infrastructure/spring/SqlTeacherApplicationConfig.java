@@ -5,6 +5,7 @@ import com.sqlteacher.application.ai.AiModelSelectionService;
 import com.sqlteacher.application.ai.AiStatusService;
 import com.sqlteacher.application.config.AppConfigurationService;
 import com.sqlteacher.application.config.SqlTeacherConfiguration;
+import com.sqlteacher.application.connection.ConnectionManagementService;
 import com.sqlteacher.application.database.DatabaseInitializationService;
 import com.sqlteacher.application.error.ApplicationExceptionMapper;
 import com.sqlteacher.application.error.DefaultApplicationExceptionMapper;
@@ -67,14 +68,16 @@ public class SqlTeacherApplicationConfig {
         SqlTeacherConfiguration properties,
         AiModelSelectionService modelSelectionService,
         DatabaseMetadataService databaseMetadataService,
-        LearningEventService learningEventService
+        LearningEventService learningEventService,
+        ConnectionManagementService connectionManagementService
     ) {
         return new Nl2SqlServiceImpl(
             aiModelProvider,
             properties.ai(),
             modelSelectionService,
             databaseMetadataService,
-            learningEventService
+            learningEventService,
+            connectionManagementService
         );
     }
 

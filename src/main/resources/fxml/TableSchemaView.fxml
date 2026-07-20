@@ -62,7 +62,7 @@
                                 <Region styleClass="title-badge"/>
                                 <Label styleClass="page-title" text="表结构"/>
                                 <Label styleClass="page-subtitle"
-                                       text="浏览 demo 数据库的表与字段，点击数据表即可在右侧预览数据"/>
+                                       text="浏览当前数据库的表与字段，点击数据表即可在右侧预览数据"/>
                             </children>
                         </VBox>
 

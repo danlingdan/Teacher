@@ -11,6 +11,7 @@ import java.sql.Connection;
 import java.sql.DatabaseMetaData;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -19,11 +20,13 @@ import java.util.Set;
 
 public final class JdbcDatabaseMetadataService implements DatabaseMetadataService{
     private static final Logger log = LoggerFactory.getLogger(JdbcDatabaseMetadataService.class);
+    private static final String[] TABLE_TYPES = {"TABLE", "VIEW", "SYSTEM TABLE", "SYSTEM VIEW"};
 
-    private final JdbcConnectionFactory connectionFactory;
+    private static final Duration METADATA_TIMEOUT = Duration.ofSeconds(5);
+    private final JdbcConnectionProvider connectionProvider;
 
-    public JdbcDatabaseMetadataService(JdbcConnectionFactory connectionFactory) {
-        this.connectionFactory = Objects.requireNonNull(connectionFactory);
+    public JdbcDatabaseMetadataService(JdbcConnectionProvider connectionProvider) {
+        this.connectionProvider = Objects.requireNonNull(connectionProvider);
     }
 
     @Override
@@ -35,19 +38,23 @@ public final class JdbcDatabaseMetadataService implements DatabaseMetadataServic
 
         log.debug("Loading database metadata for connection: {}", connectionId);
 
-        try (Connection connection = connectionFactory.open(connectionId)) {
+        try (Connection connection = connectionProvider.open(connectionId, METADATA_TIMEOUT)) {
 
             DatabaseMetaData metaData = connection.getMetaData();
             List<DatabaseTable> tables = new ArrayList<>();
+            String currentCatalog = blankToNull(connection.getCatalog());
+            String currentSchema = blankToNull(connection.getSchema());
 
-            try (ResultSet tableResult = metaData.getTables(null, null, "%", new String[]{"TABLE"})) {
+            try (ResultSet tableResult = metaData.getTables(currentCatalog, currentSchema, "%", TABLE_TYPES)) {
 
                 while (tableResult.next()) {
 
                     String tableName = tableResult.getString("TABLE_NAME");
+                    String catalog = tableResult.getString("TABLE_CAT");
+                    String schema = tableResult.getString("TABLE_SCHEM");
 
                     List<DatabaseColumn> columns =
-                            loadColumns(metaData, tableName);
+                            loadColumns(metaData, catalog, schema, tableName);
 
                     tables.add(new DatabaseTable(tableName, columns));
                 }
@@ -67,15 +74,17 @@ public final class JdbcDatabaseMetadataService implements DatabaseMetadataServic
 
     private List<DatabaseColumn> loadColumns(
             DatabaseMetaData metaData,
+            String catalog,
+            String schema,
             String tableName
     ) throws SQLException {
 
-        Set<String> primaryKeys = loadPrimaryKeys(metaData, tableName);
+        Set<String> primaryKeys = loadPrimaryKeys(metaData, catalog, schema, tableName);
 
         List<DatabaseColumn> columns = new ArrayList<>();
 
         try (ResultSet columnResult =
-                     metaData.getColumns(null, null, tableName, "%")) {
+                     metaData.getColumns(catalog, schema, tableName, "%")) {
 
             while (columnResult.next()) {
 
@@ -106,13 +115,15 @@ public final class JdbcDatabaseMetadataService implements DatabaseMetadataServic
 
     private Set<String> loadPrimaryKeys(
             DatabaseMetaData metaData,
+            String catalog,
+            String schema,
             String tableName
     ) throws SQLException {
 
         Set<String> primaryKeys = new HashSet<>();
 
         try (ResultSet rs =
-                     metaData.getPrimaryKeys(null, null, tableName)) {
+                     metaData.getPrimaryKeys(catalog, schema, tableName)) {
 
             while (rs.next()) {
                 primaryKeys.add(rs.getString("COLUMN_NAME"));
@@ -120,5 +131,9 @@ public final class JdbcDatabaseMetadataService implements DatabaseMetadataServic
         }
 
         return primaryKeys;
+    }
+
+    private static String blankToNull(String value) {
+        return value == null || value.isBlank() ? null : value;
     }
 }

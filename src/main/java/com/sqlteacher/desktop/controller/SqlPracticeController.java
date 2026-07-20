@@ -1,5 +1,6 @@
 package com.sqlteacher.desktop.controller;
 
+import com.sqlteacher.application.connection.ConnectionManagementService;
 import com.sqlteacher.application.execution.SqlExecutionRequest;
 import com.sqlteacher.application.execution.SqlExecutionResult;
 import com.sqlteacher.application.execution.SqlExecutionService;
@@ -85,6 +86,7 @@ public final class SqlPracticeController {
     private final SqlExecutionService sqlExecutionService;
 
     private final SqlRiskAnalysisService sqlRiskAnalysisService;
+    private final ConnectionManagementService connectionManagementService;
 
     /** 多行 SQL 输入框，对应 FXML 中 fx:id="sqlInputArea"。 */
     @FXML
@@ -127,10 +129,12 @@ public final class SqlPracticeController {
      */
     public SqlPracticeController(
         SqlExecutionService sqlExecutionService,
-        SqlRiskAnalysisService sqlRiskAnalysisService
+        SqlRiskAnalysisService sqlRiskAnalysisService,
+        ConnectionManagementService connectionManagementService
     ) {
         this.sqlExecutionService = sqlExecutionService;
         this.sqlRiskAnalysisService = sqlRiskAnalysisService;
+        this.connectionManagementService = connectionManagementService;
     }
 
     /**
@@ -204,14 +208,17 @@ public final class SqlPracticeController {
         showLoadingState();
         GlobalLoading.show(LOADING_MESSAGE);
 
-        SqlExecutionRequest request = new SqlExecutionRequest(
-            DesktopConnections.DEMO, sql, DEFAULT_MAX_ROWS, DEFAULT_TIMEOUT, riskConfirmed
-        );
-
         // ② 后台任务：call() 在子线程执行，仅做业务调用与 ViewModel 转换，不触碰任何 UI 控件。
         Task<SqlExecutionViewModel> executionTask = new Task<>() {
             @Override
             protected SqlExecutionViewModel call() {
+                SqlExecutionRequest request = new SqlExecutionRequest(
+                    DesktopConnections.currentId(connectionManagementService),
+                    sql,
+                    DEFAULT_MAX_ROWS,
+                    DEFAULT_TIMEOUT,
+                    riskConfirmed
+                );
                 SqlExecutionResult result = sqlExecutionService.execute(request);
                 return SqlExecutionViewModel.from(request, result);
             }

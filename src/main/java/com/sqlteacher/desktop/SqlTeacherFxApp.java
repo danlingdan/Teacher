@@ -4,6 +4,7 @@ import com.sqlteacher.application.database.DatabaseInitializationService;
 import com.sqlteacher.application.ai.AiModelSelectionService;
 import com.sqlteacher.application.connection.ConnectionManagementService;
 import com.sqlteacher.application.connection.DatabaseConnectionTestService;
+import com.sqlteacher.application.connection.DatabaseCredentialSession;
 import com.sqlteacher.application.error.ApplicationExceptionMapper;
 import com.sqlteacher.application.execution.SqlExecutionService;
 import com.sqlteacher.application.metadata.DatabaseMetadataService;
@@ -49,6 +50,7 @@ public final class SqlTeacherFxApp extends Application {
     private ConnectionManagementService connectionManagementService;
     private DatabaseConnectionTestService databaseConnectionTestService;
     private ApplicationExceptionMapper applicationExceptionMapper;
+    private DatabaseCredentialSession databaseCredentialSession;
 
     /**
      * JavaFX 在非 Application Thread 上调用本方法，数据库初始化不会阻塞界面线程。
@@ -67,6 +69,7 @@ public final class SqlTeacherFxApp extends Application {
             connectionManagementService = context.getBean(ConnectionManagementService.class);
             databaseConnectionTestService = context.getBean(DatabaseConnectionTestService.class);
             applicationExceptionMapper = context.getBean(ApplicationExceptionMapper.class);
+            databaseCredentialSession = context.getBean(DatabaseCredentialSession.class);
             applicationContext = context;
         } catch (RuntimeException error) {
             context.close();
@@ -79,7 +82,8 @@ public final class SqlTeacherFxApp extends Application {
         if (sqlExecutionService == null || databaseMetadataService == null
             || nl2SqlSafetyService == null || aiModelSelectionService == null
             || sqlRiskAnalysisService == null || connectionManagementService == null
-            || databaseConnectionTestService == null || applicationExceptionMapper == null) {
+            || databaseConnectionTestService == null || applicationExceptionMapper == null
+            || databaseCredentialSession == null) {
             throw new IllegalStateException("Services are unavailable because application initialization did not complete");
         }
 
@@ -100,7 +104,8 @@ public final class SqlTeacherFxApp extends Application {
                     sqlRiskAnalysisService,
                     connectionManagementService,
                     databaseConnectionTestService,
-                    applicationExceptionMapper
+                    applicationExceptionMapper,
+                    databaseCredentialSession
                 );
             }
             throw new IllegalStateException("Unexpected controller type for MainWindow.fxml: " + type);
@@ -137,6 +142,7 @@ public final class SqlTeacherFxApp extends Application {
         connectionManagementService = null;
         databaseConnectionTestService = null;
         applicationExceptionMapper = null;
+        databaseCredentialSession = null;
     }
 
     public static void main(String[] args) {

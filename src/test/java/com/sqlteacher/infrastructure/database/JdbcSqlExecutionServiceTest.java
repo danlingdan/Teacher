@@ -67,7 +67,7 @@ class JdbcSqlExecutionServiceTest {
         DefaultLearningEventService eventService = new DefaultLearningEventService(recorder);
         
         return new JdbcSqlExecutionService(
-            connectionFactory,
+            (connectionId, timeout) -> connectionFactory.open(connectionId),
             new SqlResultMapper(),
             new DefaultSqlRiskAnalysisService(),
             eventService
