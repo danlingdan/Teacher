@@ -11,7 +11,6 @@ import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.Instant;
-import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -61,40 +60,10 @@ public final class JdbcLearningEventRecorder implements LearningEventRecorder {
             statement.setString(2, Timestamp.from(event.occurredAt()).toString());
             statement.setString(3, event.connectionId());
             statement.setBoolean(4, event.successful());
-            statement.setString(5, serializeAttributes(event.attributes()));
+            statement.setString(5, LearningEventAttributesCodec.serialize(event.attributes()));
             
             statement.executeUpdate();
         }
     }
     
-    private String serializeAttributes(Map<String, String> attributes) {
-        if (attributes.isEmpty()) {
-            return null;
-        }
-        
-        StringBuilder sb = new StringBuilder();
-        boolean first = true;
-        
-        for (Map.Entry<String, String> entry : attributes.entrySet()) {
-            if (!first) {
-                sb.append(",");
-            }
-            sb.append(escapeForCsv(entry.getKey()))
-              .append("=")
-              .append(escapeForCsv(entry.getValue()));
-            first = false;
-        }
-        
-        return sb.toString();
-    }
-    
-    private String escapeForCsv(String value) {
-        if (value == null) {
-            return "";
-        }
-        
-        // Escape backslashes and equals signs
-        return value.replace("\\", "\\\\")
-                    .replace("=", "\\=");
-    }
 }

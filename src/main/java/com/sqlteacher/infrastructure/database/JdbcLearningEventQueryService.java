@@ -8,7 +8,11 @@ import com.sqlteacher.domain.SqlTeacherException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.sql.*;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.*;
 
@@ -24,9 +28,9 @@ public final class JdbcLearningEventQueryService implements LearningEventQuerySe
     @Override
     public List<QueriedLearningEvent> queryEventsByType(LearningEventType type, Instant start, Instant end) {
         Objects.requireNonNull(type, "type must not be null");
+        validateTimeRange(start, end);
 
         String sql = buildQuerySql("event_type = ?", start, end);
-        System.out.println(sql);
         return executeQuery(sql, statement -> {
             statement.setString(1, type.name());
             setTimestampParameters(statement, 2, start, end);
@@ -36,9 +40,9 @@ public final class JdbcLearningEventQueryService implements LearningEventQuerySe
     @Override
     public List<QueriedLearningEvent> queryEventsByConnection(String connectionId, Instant start, Instant end) {
         if (connectionId == null || connectionId.isBlank()) {
-            throw new IllegalArgumentException(
-                    "connectionId must not be blank");
+            throw new IllegalArgumentException("connectionId must not be blank");
         }
+        validateTimeRange(start, end);
 
         String sql = buildQuerySql("connection_id = ?", start, end);
         return executeQuery(sql, statement -> {
@@ -49,6 +53,7 @@ public final class JdbcLearningEventQueryService implements LearningEventQuerySe
 
     @Override
     public EventStatistics getEventStatistics(Instant start, Instant end) {
+        validateTimeRange(start, end);
 
         StringBuilder sql = new StringBuilder("""
         SELECT
@@ -143,15 +148,6 @@ public final class JdbcLearningEventQueryService implements LearningEventQuerySe
     private List<QueriedLearningEvent> executeQuery(String sql, StatementPreparer preparer) {
         try (Connection connection = connectionFactory.open("app");
              PreparedStatement statement = connection.prepareStatement(sql)) {
-            try (Statement s = connection.createStatement();
-                 ResultSet rs = s.executeQuery(
-                         "select occurred_at from learning_events")) {
-
-                while (rs.next()) {
-                    System.out.println(rs.getString(1));
-                }
-            }
-
             preparer.prepare(statement);
 
             List<QueriedLearningEvent> events = new ArrayList<>();
@@ -161,7 +157,7 @@ public final class JdbcLearningEventQueryService implements LearningEventQuerySe
                 }
             }
 
-            return events;
+            return List.copyOf(events);
         } catch (SQLException e) {
             log.error("Failed to query learning events", e);
             throw new SqlTeacherException(
@@ -197,65 +193,16 @@ public final class JdbcLearningEventQueryService implements LearningEventQuerySe
         Instant occurredAt = resultSet.getTimestamp("occurred_at").toInstant();
         String connectionId = resultSet.getString("connection_id");
         boolean successful = resultSet.getBoolean("successful");
-        Map<String, String> attributes = parseAttributes(resultSet.getString("attributes"));
+        Map<String, String> attributes = LearningEventAttributesCodec.deserialize(resultSet.getString("attributes"));
         Instant createdAt = resultSet.getTimestamp("created_at").toInstant();
 
         return new QueriedLearningEvent(id, type, occurredAt, connectionId, successful, attributes, createdAt);
     }
 
-    private Map<String, String> parseAttributes(String attributes) {
-        if (attributes == null || attributes.isBlank()) {
-            return Map.of();
+    private void validateTimeRange(Instant start, Instant end) {
+        if (start != null && end != null && start.isAfter(end)) {
+            throw new IllegalArgumentException("start must not be after end");
         }
-
-        Map<String, String> result = new LinkedHashMap<>();
-        String[] pairs = attributes.split(",");
-
-        for (String pair : pairs) {
-            int pos = findSeparator(pair);
-            if (pos >= 0) {
-                String key = pair.substring(0, pos);
-                String value = pair.substring(pos + 1);
-                result.put(unescapeForCsv(key), unescapeForCsv(value));
-            }
-        }
-
-        return result;
-    }
-
-    private static int findSeparator(String text) {
-
-        boolean escaped = false;
-
-        for (int i = 0; i < text.length(); i++) {
-
-            char c = text.charAt(i);
-
-            if (escaped) {
-                escaped = false;
-                continue;
-            }
-
-            if (c == '\\') {
-                escaped = true;
-                continue;
-            }
-
-            if (c == '=') {
-                return i;
-            }
-        }
-
-        return -1;
-    }
-
-    private String unescapeForCsv(String value) {
-        if (value == null || value.isEmpty()) {
-            return value;
-        }
-
-        return value.replace("\\=", "=")
-                    .replace("\\\\", "\\");
     }
 
     @FunctionalInterface

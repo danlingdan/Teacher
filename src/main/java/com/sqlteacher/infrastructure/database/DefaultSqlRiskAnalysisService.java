@@ -17,7 +17,11 @@ public final class DefaultSqlRiskAnalysisService implements SqlRiskAnalysisServi
             return forbidden("UNKNOWN", false, "SQL must not be blank");
         }
 
-        String normalized = normalizeForAiPatterns(sql.strip());
+        String normalized = removeComments(sql).strip();
+
+        if (normalized.isBlank()) {
+            return forbidden("UNKNOWN", false, "SQL must contain a statement");
+        }
 
         boolean multiStatement = hasMultipleStatements(normalized);
         String statementType = firstKeyword(normalized);
@@ -196,23 +200,73 @@ public final class DefaultSqlRiskAnalysisService implements SqlRiskAnalysisServi
         return sql.substring(0, index).toUpperCase(Locale.ROOT);
     }
 
-    /**
-     * Normalizes SQL to handle AI-generated patterns that might bypass detection.
-     * Removes common AI-generated comments and normalizes whitespace while preserving
-     * the semantic structure needed for risk analysis.
-     */
-    private String normalizeForAiPatterns(String sql) {
+    private String removeComments(String sql) {
+        StringBuilder normalized = new StringBuilder(sql.length());
+        boolean singleQuoted = false;
+        boolean doubleQuoted = false;
+        boolean backtickQuoted = false;
+        boolean bracketQuoted = false;
 
-        String normalized = sql;
+        for (int index = 0; index < sql.length(); index++) {
+            char current = sql.charAt(index);
+            char next = index + 1 < sql.length() ? sql.charAt(index + 1) : '\0';
 
-        normalized = normalized.replaceAll(
-                "(?i)/\\*\\s*AI\\s*generated\\s*\\*/",
-                "");
+            if (!singleQuoted && !doubleQuoted && !backtickQuoted && !bracketQuoted
+                    && current == '-' && next == '-') {
+                normalized.append(' ');
+                index += 2;
+                while (index < sql.length() && sql.charAt(index) != '\n' && sql.charAt(index) != '\r') {
+                    index++;
+                }
+                if (index < sql.length()) {
+                    normalized.append(sql.charAt(index));
+                }
+                continue;
+            }
+            if (!singleQuoted && !doubleQuoted && !backtickQuoted && !bracketQuoted
+                    && current == '/' && next == '*') {
+                normalized.append(' ');
+                index += 2;
+                while (index < sql.length()) {
+                    char commentCurrent = sql.charAt(index);
+                    char commentNext = index + 1 < sql.length() ? sql.charAt(index + 1) : '\0';
+                    if (commentCurrent == '*' && commentNext == '/') {
+                        index++;
+                        break;
+                    }
+                    if (commentCurrent == '\n' || commentCurrent == '\r') {
+                        normalized.append(commentCurrent);
+                    }
+                    index++;
+                }
+                normalized.append(' ');
+                continue;
+            }
 
-        normalized = normalized.replaceAll(
-                "(?i)/\\*\\s*generated\\s+by\\s+AI\\s*\\*/",
-                "");
+            normalized.append(current);
 
-        return normalized.strip();
+            if (singleQuoted && current == '\'' && next == '\'') {
+                normalized.append(next);
+                index++;
+            } else if (doubleQuoted && current == '"' && next == '"') {
+                normalized.append(next);
+                index++;
+            } else if (backtickQuoted && current == '`' && next == '`') {
+                normalized.append(next);
+                index++;
+            } else if (!doubleQuoted && !backtickQuoted && !bracketQuoted && current == '\'') {
+                singleQuoted = !singleQuoted;
+            } else if (!singleQuoted && !backtickQuoted && !bracketQuoted && current == '"') {
+                doubleQuoted = !doubleQuoted;
+            } else if (!singleQuoted && !doubleQuoted && !bracketQuoted && current == '`') {
+                backtickQuoted = !backtickQuoted;
+            } else if (!singleQuoted && !doubleQuoted && !backtickQuoted && current == '[') {
+                bracketQuoted = true;
+            } else if (bracketQuoted && current == ']') {
+                bracketQuoted = false;
+            }
+        }
+
+        return normalized.toString();
     }
 }

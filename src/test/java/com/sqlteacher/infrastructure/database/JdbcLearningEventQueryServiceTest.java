@@ -20,6 +20,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class JdbcLearningEventQueryServiceTest {
@@ -273,7 +274,10 @@ class JdbcLearningEventQueryServiceTest {
             now,
             "demo",
             true,
-            Map.of("message", "test=with=special", "code", "error=code", "path", "C:\\path\\to\\file")
+            Map.of(
+                    "message", "test=with=special,including comma",
+                    "code", "error=code",
+                    "path", "C:\\path\\to\\file")
         ));
 
         // Query and verify attributes are parsed correctly
@@ -282,9 +286,30 @@ class JdbcLearningEventQueryServiceTest {
 
         assertEquals(1, events.size());
         Map<String, String> attributes = events.get(0).attributes();
-        assertEquals("test=with=special", attributes.get("message"));
+        assertEquals("test=with=special,including comma", attributes.get("message"));
         assertEquals("error=code", attributes.get("code"));
         assertEquals("C:\\path\\to\\file", attributes.get("path"));
+        assertThrows(UnsupportedOperationException.class, () -> attributes.put("new", "value"));
+    }
+
+    @Test
+    void shouldRejectInvertedTimeRange(@TempDir Path tempDirectory) throws Exception {
+        DatabaseConfiguration configuration = new DatabaseConfiguration(
+                tempDirectory.resolve("app.db"),
+                tempDirectory.resolve("demo.db")
+        );
+        JdbcConnectionFactory connectionFactory = new JdbcConnectionFactory(configuration);
+        initializeAppDatabase(tempDirectory.resolve("app.db"));
+        LearningEventQueryService queryService = new JdbcLearningEventQueryService(connectionFactory);
+        Instant start = Instant.parse("2026-07-20T02:00:00Z");
+        Instant end = Instant.parse("2026-07-20T01:00:00Z");
+
+        assertThrows(IllegalArgumentException.class, () ->
+                queryService.queryEventsByType(LearningEventType.SQL_EXECUTION, start, end));
+        assertThrows(IllegalArgumentException.class, () ->
+                queryService.queryEventsByConnection("demo", start, end));
+        assertThrows(IllegalArgumentException.class, () ->
+                queryService.getEventStatistics(start, end));
     }
 
     @Test

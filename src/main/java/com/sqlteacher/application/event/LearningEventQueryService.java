@@ -3,6 +3,7 @@ package com.sqlteacher.application.event;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * Query service for learning events to support analytics and debugging.
@@ -49,7 +50,15 @@ public interface LearningEventQueryService {
         boolean successful,
         Map<String, String> attributes,
         Instant createdAt
-    ) {}
+    ) {
+        public QueriedLearningEvent {
+            Objects.requireNonNull(type, "type must not be null");
+            Objects.requireNonNull(occurredAt, "occurredAt must not be null");
+            Objects.requireNonNull(connectionId, "connectionId must not be null");
+            attributes = Map.copyOf(Objects.requireNonNull(attributes, "attributes must not be null"));
+            Objects.requireNonNull(createdAt, "createdAt must not be null");
+        }
+    }
 
     /**
      * Statistics about learning events in a time range.
@@ -60,5 +69,11 @@ public interface LearningEventQueryService {
         long failedEvents,
         Map<LearningEventType, Long> eventsByType,
         Map<String, Long> eventsByConnection
-    ) {}
+    ) {
+        public EventStatistics {
+            eventsByType = Map.copyOf(Objects.requireNonNull(eventsByType, "eventsByType must not be null"));
+            eventsByConnection = Map.copyOf(
+                    Objects.requireNonNull(eventsByConnection, "eventsByConnection must not be null"));
+        }
+    }
 }
