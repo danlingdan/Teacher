@@ -59,4 +59,15 @@ class DefaultApplicationExceptionMapperTest {
         assertFalse(error.userMessage().contains("secret_table"));
         assertTrue(error.retryable());
     }
+
+    @Test
+    void shouldHideConnectionProfileStorageDetails() {
+        ApplicationError error = mapper.map(
+            new SqlTeacherException("CONNECTION_PROFILE_FAILED", "no such table: connection_profiles")
+        );
+
+        assertEquals("数据库连接配置读取或保存失败，请重试。", error.userMessage());
+        assertFalse(error.userMessage().contains("connection_profiles"));
+        assertTrue(error.retryable());
+    }
 }

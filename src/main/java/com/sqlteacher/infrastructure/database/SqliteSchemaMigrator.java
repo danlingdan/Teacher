@@ -36,6 +36,44 @@ final class SqliteSchemaMigrator {
                     )
                     """
             )
+        ),
+        new Migration(
+            2,
+            "Create database connection profile tables",
+            List.of(
+                """
+                    create table connection_profiles (
+                        id text primary key,
+                        display_name text not null,
+                        dialect text not null check (dialect in ('SQLITE', 'MYSQL', 'MARIADB')),
+                        sqlite_path text,
+                        host text,
+                        port integer,
+                        database_name text,
+                        username text,
+                        read_only integer not null check (read_only in (0, 1)),
+                        enabled integer not null check (enabled in (0, 1)),
+                        built_in integer not null check (built_in in (0, 1)),
+                        created_at text not null default current_timestamp,
+                        updated_at text not null default current_timestamp,
+                        check (
+                            (dialect = 'SQLITE' and sqlite_path is not null
+                                and host is null and port is null and database_name is null and username is null)
+                            or
+                            (dialect in ('MYSQL', 'MARIADB') and sqlite_path is null
+                                and host is not null and port between 1 and 65535
+                                and database_name is not null and username is not null)
+                        )
+                    )
+                    """,
+                """
+                    create table connection_selection (
+                        singleton_id integer primary key check (singleton_id = 1),
+                        connection_id text not null,
+                        updated_at text not null default current_timestamp
+                    )
+                    """
+            )
         )
     );
 

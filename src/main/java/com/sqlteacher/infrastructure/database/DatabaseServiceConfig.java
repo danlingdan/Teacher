@@ -1,5 +1,6 @@
 package com.sqlteacher.infrastructure.database;
 
+import com.sqlteacher.application.connection.ConnectionManagementService;
 import com.sqlteacher.application.event.DefaultLearningEventService;
 import com.sqlteacher.application.event.LearningEventQueryService;
 import com.sqlteacher.application.event.LearningEventRecorder;
@@ -27,6 +28,13 @@ public class DatabaseServiceConfig {
     @Bean
     public SqlRiskAnalysisService sqlRiskAnalysisService() {
         return new DefaultSqlRiskAnalysisService();
+    }
+
+    @Bean
+    public ConnectionManagementService connectionManagementService(
+            JdbcConnectionFactory connectionFactory,
+            SqlTeacherConfiguration configuration) {
+        return new JdbcConnectionManagementService(connectionFactory, configuration.database());
     }
 
     @Bean

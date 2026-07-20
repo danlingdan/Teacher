@@ -40,7 +40,7 @@ class SqliteAppDatabaseInitializerTest {
         assertTrue(result.demoDatabaseCreated());
         assertTrue(Files.exists(appDb));
         assertTrue(Files.exists(demoDb));
-        assertEquals(1, readSchemaVersion(appDb));
+        assertEquals(2, readSchemaVersion(appDb));
         assertEquals(2, countDemoStudents(demoDb));
     }
 

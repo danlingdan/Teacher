@@ -19,6 +19,7 @@ class ConnectionContractTest {
             " Demo database ",
             new SqliteConnectionTarget(Path.of("app-data", "..", "app-data", "demo.db")),
             false,
+            true,
             true
         );
         DatabaseConnectionProfile mysql = new DatabaseConnectionProfile(
@@ -26,7 +27,8 @@ class ConnectionContractTest {
             "Course database",
             new ServerConnectionTarget(DatabaseDialect.MYSQL, " localhost ", 3306, " course ", " teacher "),
             true,
-            true
+            true,
+            false
         );
 
         assertEquals("Demo database", sqlite.displayName());
@@ -45,7 +47,8 @@ class ConnectionContractTest {
                 "Demo",
                 new SqliteConnectionTarget(Path.of("demo.db")),
                 false,
-                true
+                true,
+                false
             )
         );
         assertThrows(

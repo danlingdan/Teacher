@@ -8,15 +8,16 @@ public record DatabaseConnectionProfile(
     String displayName,
     DatabaseConnectionTarget target,
     boolean readOnly,
-    boolean enabled
+    boolean enabled,
+    boolean builtIn
 ) {
-    private static final Pattern ID_PATTERN = Pattern.compile("[A-Za-z0-9][A-Za-z0-9._-]{0,63}");
+    private static final Pattern ID_PATTERN = Pattern.compile("[a-z0-9][a-z0-9._-]{0,63}");
 
     public DatabaseConnectionProfile {
         id = requireText(id, "id");
         if (!ID_PATTERN.matcher(id).matches()) {
             throw new IllegalArgumentException(
-                "id must contain 1-64 letters, digits, dots, underscores or hyphens"
+                "id must contain 1-64 lowercase letters, digits, dots, underscores or hyphens"
             );
         }
         displayName = requireText(displayName, "displayName");

@@ -30,8 +30,9 @@ DatabaseConnectionTestResult
 - SQLite 文件或服务器目标。
 - 只读标志。
 - 启用状态。
+- 是否为不可删除的内置连接。
 
-Profile ID 限制为 1-64 个字母、数字、点、下划线或连字符，继续兼容现有 `SqlExecutionRequest.connectionId` 的字符串边界。
+Profile ID 限制为 1-64 个小写字母、数字、点、下划线或连字符，继续兼容现有 `SqlExecutionRequest.connectionId` 的字符串边界，并避免大小写不同但含义相同的连接 ID。
 
 ## 3. 密码安全边界
 
