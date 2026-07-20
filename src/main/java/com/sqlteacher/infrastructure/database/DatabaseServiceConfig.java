@@ -1,6 +1,7 @@
 package com.sqlteacher.infrastructure.database;
 
 import com.sqlteacher.application.event.DefaultLearningEventService;
+import com.sqlteacher.application.event.LearningEventQueryService;
 import com.sqlteacher.application.event.LearningEventRecorder;
 import com.sqlteacher.application.event.LearningEventService;
 import com.sqlteacher.application.execution.SqlExecutionService;
@@ -50,5 +51,10 @@ public class DatabaseServiceConfig {
     @Bean
     public LearningEventService learningEventService(LearningEventRecorder learningEventRecorder) {
         return new DefaultLearningEventService(learningEventRecorder);
+    }
+
+    @Bean
+    public LearningEventQueryService learningEventQueryService(JdbcConnectionFactory connectionFactory) {
+        return new JdbcLearningEventQueryService(connectionFactory);
     }
 }
