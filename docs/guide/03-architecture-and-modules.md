@@ -178,10 +178,16 @@ public interface SqlRiskAnalyzer {
 | 配置对象 | `DatabaseConnectionConfig` |
 | AI 请求 | `Nl2SqlRequest` |
 | AI 响应 | `Nl2SqlPlan` |
+| SQL 错误解释 | `SqlErrorExplanation` |
 | 风险结果 | `SqlRiskAssessment` |
 | 元数据模型 | `DatabaseMetadata` |
 | 表模型 | `TableMetadata` |
 | 列模型 | `ColumnMetadata` |
+
+`Nl2SqlService.explainSqlError(...)` 返回的 `correctedSql` 与普通 NL2SQL 结果一样，
+只能作为未受信任的草案展示。任何执行入口都必须先经过 Java 侧 SQL 风险分析，
+不得由 AI Provider 或错误解释服务直接执行。未支持错误解释的实现使用接口默认降级结果，
+避免因新增能力破坏已有 mock 或第三方实现。
 
 ## 8. 数据目录建议
 
