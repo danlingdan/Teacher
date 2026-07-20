@@ -396,7 +396,8 @@ mvn javafx:run
 | 日期 | 里程碑/功能 | 状态 | 验证与记录 | 提交 |
 |---|---|---|---|---|
 | 2026-07-21 | Demo 基线冻结与最终验收 | 已完成 | 160 项测试通过；CLI 验证通过；app-image 生成和短时启动通过；详见 `docs/acceptance/2026-07-21-demo-baseline-acceptance.md` | `151e022` |
-| 2026-07-21 | `app.db` schema 版本与迁移机制 | 已完成 | 覆盖空库、`v0.1.0` 旧库、重复启动、失败回滚和未来版本拒绝；详见 `docs/stage2/2026-07-21-sqlite-schema-migrations.md` | 本次提交 |
-| 2026-07-21 | 连接管理领域模型与 application 契约 | 下一项 | 需冻结连接类型、非敏感配置、连接测试和当前连接选择边界 | - |
+| 2026-07-21 | `app.db` schema 版本与迁移机制 | 已完成 | 覆盖空库、`v0.1.0` 旧库、重复启动、失败回滚和未来版本拒绝；详见 `docs/stage2/2026-07-21-sqlite-schema-migrations.md` | `df1ecef` |
+| 2026-07-21 | 连接管理领域模型与 application 契约 | 已完成 | 冻结连接类型、非敏感 Profile、临时密码连接测试和当前连接选择边界；详见 `docs/stage2/2026-07-21-connection-management-contracts.md` | 本次提交 |
+| 2026-07-21 | SQLite 连接 Profile 持久化 | 下一项 | schema 升级到版本 2；内置连接、保存、列表、选择、禁用和删除回退有测试覆盖 | - |
 
 每完成一个功能，在本表追加一条记录并填写对应提交短哈希，确保计划、实现、验证和 Git 历史可以相互追溯。
