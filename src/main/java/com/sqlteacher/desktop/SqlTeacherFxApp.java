@@ -3,6 +3,8 @@ package com.sqlteacher.desktop;
 import com.sqlteacher.application.database.DatabaseInitializationService;
 import com.sqlteacher.application.execution.SqlExecutionService;
 import com.sqlteacher.application.metadata.DatabaseMetadataService;
+import com.sqlteacher.application.nl2sql.Nl2SqlService;
+import com.sqlteacher.application.risk.SqlRiskAnalysisService;
 import com.sqlteacher.desktop.controller.MainWindowController;
 import com.sqlteacher.infrastructure.spring.SqlTeacherApplicationConfig;
 import javafx.application.Application;
@@ -37,6 +39,8 @@ public final class SqlTeacherFxApp extends Application {
     private AnnotationConfigApplicationContext applicationContext;
     private SqlExecutionService sqlExecutionService;
     private DatabaseMetadataService databaseMetadataService;
+    private Nl2SqlService nl2SqlService;
+    private SqlRiskAnalysisService sqlRiskAnalysisService;
 
     /**
      * JavaFX 在非 Application Thread 上调用本方法，数据库初始化不会阻塞界面线程。
@@ -49,6 +53,8 @@ public final class SqlTeacherFxApp extends Application {
             context.getBean(DatabaseInitializationService.class).initialize();
             sqlExecutionService = context.getBean(SqlExecutionService.class);
             databaseMetadataService = context.getBean(DatabaseMetadataService.class);
+            nl2SqlService = context.getBean(Nl2SqlService.class);
+            sqlRiskAnalysisService = context.getBean(SqlRiskAnalysisService.class);
             applicationContext = context;
         } catch (RuntimeException error) {
             context.close();
@@ -71,7 +77,7 @@ public final class SqlTeacherFxApp extends Application {
         // MainWindow.fxml 的控制器改为构造注入（无无参构造），故必须提供 controllerFactory。
         loader.setControllerFactory(type -> {
             if (type == MainWindowController.class) {
-                return new MainWindowController(sqlExecutionService, databaseMetadataService);
+                return new MainWindowController(sqlExecutionService, databaseMetadataService, nl2SqlService, sqlRiskAnalysisService);
             }
             throw new IllegalStateException("Unexpected controller type for MainWindow.fxml: " + type);
         });

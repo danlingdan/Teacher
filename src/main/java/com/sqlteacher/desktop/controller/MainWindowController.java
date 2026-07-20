@@ -2,12 +2,15 @@ package com.sqlteacher.desktop.controller;
 
 import com.sqlteacher.application.execution.SqlExecutionService;
 import com.sqlteacher.application.metadata.DatabaseMetadataService;
+import com.sqlteacher.application.nl2sql.Nl2SqlService;
+import com.sqlteacher.application.risk.SqlRiskAnalysisService;
 import com.sqlteacher.desktop.GlobalLoading;
 import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.Node;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
+import javafx.scene.control.ToggleButton;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.StackPane;
 
@@ -43,17 +46,29 @@ public final class MainWindowController {
     /** 选中态样式类，与 css/app.css 中的 {@code .nav-button.selected} 对应。 */
     private static final String SELECTED_STYLE_CLASS = "selected";
 
+    /** 首页 FXML 的类路径位置。 */
+    private static final String HOME_FXML = "/fxml/home.fxml";
+
     /** SQL 练习子页面 FXML 的类路径位置。 */
     private static final String SQL_PRACTICE_FXML = "/fxml/SqlPractice.fxml";
 
     /** 表结构浏览子页面 FXML 的类路径位置。 */
     private static final String TABLE_SCHEMA_FXML = "/fxml/TableSchemaView.fxml";
 
+    /** AI 助手子页面 FXML 的类路径位置。 */
+    private static final String AI_ASSISTANT_FXML = "/fxml/ai-assistant.fxml";
+
     /** SQL 执行服务（应用层接口）；运行期实现由 Spring 提供，向下注入到 SQL 练习页控制器。 */
     private final SqlExecutionService sqlExecutionService;
 
     /** 表元数据服务（应用层接口）；运行期实现由 Spring 提供，向下注入到表结构页控制器。 */
     private final DatabaseMetadataService databaseMetadataService;
+
+    /** NL2SQL 服务（应用层接口）；运行期实现由 Spring 提供，向下注入到 AI 助手页控制器。 */
+    private final Nl2SqlService nl2SqlService;
+
+    /** SQL 风险分析服务（应用层接口）；运行期实现由 Spring 提供，向下注入到 AI 助手页控制器。 */
+    private final SqlRiskAnalysisService sqlRiskAnalysisService;
 
     /**
      * 表名选中回调：表结构页点击表名时触发，把 {@code "SELECT * FROM 表名"}
@@ -65,6 +80,10 @@ public final class MainWindowController {
     @FXML
     private BorderPane mainContainer;
 
+    /** 首页导航按钮（顶部导航栏）。 */
+    @FXML
+    private Button homeNavButton;
+
     /** SQL 练习导航按钮（顶部导航栏）。 */
     @FXML
     private Button sqlPracticeNavButton;
@@ -72,6 +91,10 @@ public final class MainWindowController {
     /** 表结构导航按钮（顶部导航栏）。 */
     @FXML
     private Button tableSchemaNavButton;
+
+    /** AI 助手导航按钮（顶部导航栏）。 */
+    @FXML
+    private Button aiAssistantNavButton;
 
     /** 右侧页面容器，导航切换时替换其中的内容节点。 */
     @FXML
@@ -99,16 +122,28 @@ public final class MainWindowController {
     /** 表结构页控制器引用，懒加载时捕获，供DDL执行后刷新表结构。 */
     private TableSchemaController tableSchemaController;
 
+    /** AI 助手页视图，懒加载一次后缓存复用。 */
+    private Node aiAssistantPage;
+
+    /** 首页视图，懒加载一次后缓存复用。 */
+    private Node homePage;
+
     /**
-     * 构造注入 SQL 执行服务与表元数据服务，并初始化表名选中回调。
+     * 构造注入 SQL 执行服务、表元数据服务、NL2SQL 服务与 SQL 风险分析服务，并初始化表名选中回调。
      *
-     * @param sqlExecutionService   应用层 SQL 执行服务接口，不可为 {@code null}
+     * @param sqlExecutionService     应用层 SQL 执行服务接口，不可为 {@code null}
      * @param databaseMetadataService 应用层表元数据服务接口，不可为 {@code null}
+     * @param nl2SqlService           应用层 NL2SQL 服务接口，不可为 {@code null}
+     * @param sqlRiskAnalysisService  应用层 SQL 风险分析服务接口，不可为 {@code null}
      */
     public MainWindowController(SqlExecutionService sqlExecutionService,
-                                DatabaseMetadataService databaseMetadataService) {
+                                DatabaseMetadataService databaseMetadataService,
+                                Nl2SqlService nl2SqlService,
+                                SqlRiskAnalysisService sqlRiskAnalysisService) {
         this.sqlExecutionService = sqlExecutionService;
         this.databaseMetadataService = databaseMetadataService;
+        this.nl2SqlService = nl2SqlService;
+        this.sqlRiskAnalysisService = sqlRiskAnalysisService;
         this.fillSqlCallback = sql -> {
             // 确保 SQL 练习页已加载并捕获控制器引用，仅填充 SQL 不跳转页面。
             sqlPracticePage();
@@ -120,12 +155,25 @@ public final class MainWindowController {
 
     /**
      * FXML 加载完成、控件注入后由 JavaFX 自动回调。
-     * 初始化全局 Loading 遮罩，并默认进入 SQL 练习页。
+     * 初始化全局 Loading 遮罩，并默认进入首页。
      */
     @FXML
     private void initialize() {
         GlobalLoading.initialize(loadingOverlay, loadingText);
-        onNavigateSqlPractice();
+        onNavigateHome();
+    }
+
+    /**
+     * 导航到首页：高亮首页按钮并将首页视图放入右侧容器。
+     */
+    @FXML
+    private void onNavigateHome() {
+        selectNav(homeNavButton);
+        try {
+            showPage(homePage());
+        } catch (RuntimeException error) {
+            throw new IllegalStateException("无法加载首页", error);
+        }
     }
 
     /**
@@ -158,10 +206,24 @@ public final class MainWindowController {
     }
 
     /**
+     * 导航到 AI 助手页：高亮当前按钮并将 AI 助手视图放入右侧容器。
+     * 若子页面加载失败，不切换页面，避免空白或崩溃。
+     */
+    @FXML
+    private void onNavigateAiAssistant() {
+        selectNav(aiAssistantNavButton);
+        try {
+            showPage(aiAssistantPage());
+        } catch (RuntimeException error) {
+            throw new IllegalStateException("无法加载 AI 助手页", error);
+        }
+    }
+
+    /**
      * 切换导航选中态：清除所有导航按钮的选中样式，仅对目标按钮追加选中样式。
      */
-    private void selectNav(Button target) {
-        for (Button navButton : navButtons()) {
+    private void selectNav(javafx.scene.control.ButtonBase target) {
+        for (javafx.scene.control.ButtonBase navButton : navButtons()) {
             navButton.getStyleClass().remove(SELECTED_STYLE_CLASS);
         }
         if (!target.getStyleClass().contains(SELECTED_STYLE_CLASS)) {
@@ -170,8 +232,8 @@ public final class MainWindowController {
     }
 
     /** 当前全部导航按钮集合，新增页面时在此登记。 */
-    private List<Button> navButtons() {
-        return List.of(sqlPracticeNavButton, tableSchemaNavButton);
+    private List<javafx.scene.control.ButtonBase> navButtons() {
+        return List.of(homeNavButton, aiAssistantNavButton, tableSchemaNavButton, sqlPracticeNavButton);
     }
 
     /**
@@ -197,6 +259,14 @@ public final class MainWindowController {
             tableSchemaPage = loadTableSchemaPage();
         }
         return tableSchemaPage;
+    }
+
+    /** 懒加载并缓存 AI 助手页视图，避免重复加载丢失界面状态。 */
+    private Node aiAssistantPage() {
+        if (aiAssistantPage == null) {
+            aiAssistantPage = loadAiAssistantPage();
+        }
+        return aiAssistantPage;
     }
 
     /**
@@ -257,6 +327,28 @@ public final class MainWindowController {
     }
 
     /**
+     * 加载 {@code ai-assistant.fxml} 并内嵌到右侧插槽。
+     */
+    private Node loadAiAssistantPage() {
+        URL fxml = MainWindowController.class.getResource(AI_ASSISTANT_FXML);
+        if (fxml == null) {
+            throw new IllegalStateException("Missing FXML resource on classpath: " + AI_ASSISTANT_FXML);
+        }
+        FXMLLoader loader = new FXMLLoader(fxml);
+        loader.setControllerFactory(type -> {
+            if (type == AiAssistantController.class) {
+                return new AiAssistantController(nl2SqlService, fillSqlCallback, this::onNavigateSqlPractice, sqlRiskAnalysisService);
+            }
+            throw new IllegalStateException("Unexpected controller type for ai-assistant.fxml: " + type);
+        });
+        try {
+            return loader.load();
+        } catch (IOException error) {
+            throw new IllegalStateException("Failed to load " + AI_ASSISTANT_FXML, error);
+        }
+    }
+
+    /**
      * 刷新表结构：确保表结构页已加载，然后调用控制器刷新方法。
      * 供SQL执行服务在DDL执行成功后调用。
      */
@@ -264,6 +356,40 @@ public final class MainWindowController {
         tableSchemaPage();
         if (tableSchemaController != null) {
             tableSchemaController.refreshTableSchema();
+        }
+    }
+
+    /** 懒加载并缓存首页视图，避免重复加载。 */
+    private Node homePage() {
+        if (homePage == null) {
+            homePage = loadHomePage();
+        }
+        return homePage;
+    }
+
+    /**
+     * 加载 {@code home.fxml} 并内嵌到右侧插槽。
+     */
+    private Node loadHomePage() {
+        URL fxml = MainWindowController.class.getResource(HOME_FXML);
+        if (fxml == null) {
+            throw new IllegalStateException("Missing FXML resource on classpath: " + HOME_FXML);
+        }
+        FXMLLoader loader = new FXMLLoader(fxml);
+        loader.setControllerFactory(type -> {
+            if (type == HomeController.class) {
+                HomeController controller = new HomeController();
+                controller.setOnNavigateAiAssistant(this::onNavigateAiAssistant);
+                controller.setOnNavigateSqlPractice(this::onNavigateSqlPractice);
+                controller.setOnNavigateTableSchema(this::onNavigateTableSchema);
+                return controller;
+            }
+            throw new IllegalStateException("Unexpected controller type for home.fxml: " + type);
+        });
+        try {
+            return loader.load();
+        } catch (IOException error) {
+            throw new IllegalStateException("Failed to load " + HOME_FXML, error);
         }
     }
 }

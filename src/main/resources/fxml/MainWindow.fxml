@@ -28,6 +28,7 @@
 <?import javafx.scene.control.Button?>
 <?import javafx.scene.control.Label?>
 <?import javafx.scene.control.ProgressIndicator?>
+<?import javafx.scene.control.ToggleButton?>
 <?import javafx.scene.layout.BorderPane?>
 <?import javafx.scene.layout.HBox?>
 <?import javafx.scene.layout.Region?>
@@ -63,22 +64,29 @@
                     <!-- 品牌与菜单之间的小间隔 -->
                     <Region minWidth="18.0"/>
 
-                    <!-- 导航菜单：当前可跳转入口「SQL 练习」「表结构」，选中态由 Controller 追加 selected 高亮 -->
+                    <!-- 导航菜单：选中态由 Controller 追加 selected 高亮 -->
+                    <Button fx:id="homeNavButton"
+                            styleClass="nav-button"
+                            text="首页"
+                            onAction="#onNavigateHome"/>
+
                     <Button fx:id="sqlPracticeNavButton"
                             styleClass="nav-button"
-                            text="SQL 练习"
+                            text="SQL练习"
                             onAction="#onNavigateSqlPractice"/>
+
+                    <Button fx:id="aiAssistantNavButton"
+                            styleClass="nav-button"
+                            text="AI助手"
+                            onAction="#onNavigateAiAssistant"/>
 
                     <Button fx:id="tableSchemaNavButton"
                             styleClass="nav-button"
                             text="表结构"
                             onAction="#onNavigateTableSchema"/>
 
-                    <!-- 弹性留白：把右侧「设置」占位按钮推到最右端 -->
+                    <!-- 弹性留白：把右侧按钮推到最右端 -->
                     <Region HBox.hgrow="ALWAYS"/>
-
-                    <!-- 右侧预留：后续配置入口占位（暂禁用，仅占位不可点） -->
-                    <Button styleClass="nav-settings" text="设置" disable="true"/>
                 </children>
             </HBox>
         </top>

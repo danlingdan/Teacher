@@ -68,7 +68,7 @@ public final class SqlPracticeController {
     private static final Duration DEFAULT_TIMEOUT = Duration.ofSeconds(5);
 
     /** 空白 / null SQL 的固定错误文案（分支①）。 */
-    private static final String BLANK_SQL_MESSAGE = "sql must not be blank";
+    private static final String BLANK_SQL_MESSAGE = "SQL 语句不能为空";
 
     /** 错误文案兜底：异常 message 为空时的默认展示文案。 */
     private static final String FALLBACK_ERROR_MESSAGE = "SQL 执行失败";

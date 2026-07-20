@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import java.net.URL?>
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.Region?>
+<?import javafx.scene.layout.VBox?>
+
+<VBox xmlns="http://javafx.com/javafx"
+      xmlns:fx="http://javafx.com/fxml"
+      fx:controller="com.sqlteacher.desktop.controller.HomeController"
+      styleClass="home-page"
+      alignment="TOP_CENTER"
+      spacing="24.0"
+      maxWidth="Infinity"
+      maxHeight="Infinity">
+
+    <stylesheets>
+        <URL value="@../css/app.css"/>
+    </stylesheets>
+
+    <VBox styleClass="intro-section"
+          alignment="CENTER"
+          spacing="12.0"
+          HBox.hgrow="ALWAYS"
+          VBox.vgrow="ALWAYS">
+        <VBox.margin>
+            <Insets top="32.0" right="32.0" bottom="16.0" left="32.0"/>
+        </VBox.margin>
+
+        <Label styleClass="intro-tag" text="AI + Database Education"/>
+
+        <Label styleClass="intro-title" text="SQL Teacher"/>
+
+        <Label styleClass="intro-description" text="一款面向数据库教学实训平台，核心提供三大功能：AI自然语言生成SQL、SQL语句在线执行练习、数据表结构可视化设计。内置SQL高危语句拦截校验，支持本地MySQL真实执行并返回可验证结果，一站式完成需求转SQL、建表设计、语句实操全流程学习。"/>
+
+        <Region styleClass="intro-divider"/>
+    </VBox>
+
+    <HBox styleClass="cards-container"
+          alignment="CENTER"
+          spacing="20.0"
+          HBox.hgrow="ALWAYS"
+          VBox.vgrow="ALWAYS">
+        <VBox.margin>
+            <Insets top="0.0" right="32.0" bottom="32.0" left="32.0"/>
+        </VBox.margin>
+
+        <VBox fx:id="sqlPracticeCard"
+              styleClass="home-card"
+              alignment="TOP_LEFT"
+              spacing="12.0"
+              onMouseClicked="#onSqlPracticeCardClick">
+            <VBox.margin>
+                <Insets top="0.0" right="0.0" bottom="0.0" left="0.0"/>
+            </VBox.margin>
+            <Label styleClass="card-icon" text="🔧"/>
+            <Label styleClass="card-title" text="SQL练习"/>
+            <Label styleClass="card-description" text="接收AI复制的SQL语句，执行查询并校验结果，高危语句执行前弹出二次风险确认弹窗"/>
+            <Region VBox.vgrow="ALWAYS"/>
+            <Label styleClass="card-arrow" text="→"/>
+        </VBox>
+
+        <VBox fx:id="aiAssistantCard"
+              styleClass="home-card"
+              alignment="TOP_LEFT"
+              spacing="12.0"
+              onMouseClicked="#onAiAssistantCardClick">
+            <VBox.margin>
+                <Insets top="0.0" right="0.0" bottom="0.0" left="0.0"/>
+            </VBox.margin>
+            <Label styleClass="card-icon" text="✨"/>
+            <Label styleClass="card-title" text="AI助手"/>
+            <Label styleClass="card-description" text="自然语言输入生成SQL草案，自动标记高危语句，支持一键复制跳转至SQL练习页，离线环境程序不崩溃"/>
+            <Region VBox.vgrow="ALWAYS"/>
+            <Label styleClass="card-arrow" text="→"/>
+        </VBox>
+
+        <VBox fx:id="tableSchemaCard"
+              styleClass="home-card"
+              alignment="TOP_LEFT"
+              spacing="12.0"
+              onMouseClicked="#onTableSchemaCardClick">
+            <VBox.margin>
+                <Insets top="0.0" right="0.0" bottom="0.0" left="0.0"/>
+            </VBox.margin>
+            <Label styleClass="card-icon" text="📊"/>
+            <Label styleClass="card-title" text="表结构设计"/>
+            <Label styleClass="card-description" text="可视化数据表树形展示，页面自适应拉伸布局，与AI助手、练习页视觉样式统一"/>
+            <Region VBox.vgrow="ALWAYS"/>
+            <Label styleClass="card-arrow" text="→"/>
+        </VBox>
+    </HBox>
+
+</VBox>
