@@ -49,29 +49,7 @@ public final class SqliteAppDatabaseInitializer implements DatabaseInitializatio
     }
 
     private static void initializeAppDatabase(Path databasePath) throws SQLException {
-        SqliteDriver.ensureLoaded();
-        try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + databasePath);
-             Statement statement = connection.createStatement()) {
-            statement.executeUpdate("""
-                create table if not exists app_event (
-                    id integer primary key autoincrement,
-                    event_type text not null,
-                    message text,
-                    created_at text not null default current_timestamp
-                )
-                """);
-            statement.executeUpdate("""
-                create table if not exists learning_events (
-                    id integer primary key autoincrement,
-                    event_type text not null,
-                    occurred_at text not null,
-                    connection_id text not null,
-                    successful integer not null,
-                    attributes text,
-                    created_at text not null default current_timestamp
-                )
-                """);
-        }
+        new SqliteSchemaMigrator().migrate(databasePath);
     }
 
     private static void initializeDemoDatabase(Path databasePath) throws SQLException {

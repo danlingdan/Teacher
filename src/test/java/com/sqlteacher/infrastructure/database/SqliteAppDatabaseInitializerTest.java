@@ -40,7 +40,17 @@ class SqliteAppDatabaseInitializerTest {
         assertTrue(result.demoDatabaseCreated());
         assertTrue(Files.exists(appDb));
         assertTrue(Files.exists(demoDb));
+        assertEquals(1, readSchemaVersion(appDb));
         assertEquals(2, countDemoStudents(demoDb));
+    }
+
+    private static int readSchemaVersion(Path appDb) throws Exception {
+        try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + appDb);
+             Statement statement = connection.createStatement();
+             ResultSet resultSet = statement.executeQuery("select max(version) from schema_version")) {
+            resultSet.next();
+            return resultSet.getInt(1);
+        }
     }
 
     private static int countDemoStudents(Path demoDb) throws Exception {
