@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+
+<BorderPane xmlns="http://javafx.com/javafx" xmlns:fx="http://javafx.com/fxml"
+            fx:controller="com.sqlteacher.desktop.controller.ConnectionSettingsController"
+            styleClass="connection-settings-page">
+    <top>
+        <VBox spacing="6.0" styleClass="title-area">
+            <padding><Insets top="20" right="24" bottom="14" left="24"/></padding>
+            <Label text="数据库连接设置" styleClass="page-title"/>
+            <Label text="管理非敏感连接配置；密码仅用于本次连接测试，不会保存。" styleClass="page-subtitle"/>
+        </VBox>
+    </top>
+    <center>
+        <SplitPane dividerPositions="0.34" styleClass="connection-split">
+            <VBox spacing="10" styleClass="panel-card">
+                <HBox spacing="8" alignment="CENTER_LEFT">
+                    <Label text="连接列表" styleClass="card-title"/>
+                    <Region HBox.hgrow="ALWAYS"/>
+                    <Button text="刷新" onAction="#onRefresh" styleClass="refresh-button"/>
+                    <Button text="新增" onAction="#onNew" styleClass="refresh-button"/>
+                </HBox>
+                <ListView fx:id="profileList" VBox.vgrow="ALWAYS" styleClass="connection-list"/>
+                <Label fx:id="currentLabel" text="当前连接：-" styleClass="model-status"/>
+            </VBox>
+            <ScrollPane fitToWidth="true" styleClass="connection-form-scroll">
+                <VBox spacing="12" styleClass="panel-card connection-form">
+                    <Label text="连接信息" styleClass="card-title"/>
+                    <GridPane hgap="12" vgap="10">
+                        <columnConstraints>
+                            <ColumnConstraints minWidth="92" halignment="RIGHT"/>
+                            <ColumnConstraints hgrow="ALWAYS" minWidth="220"/>
+                        </columnConstraints>
+                        <Label text="连接 ID" GridPane.rowIndex="0" styleClass="form-label"/>
+                        <TextField fx:id="idField" promptText="例如 course.mysql" GridPane.columnIndex="1" GridPane.rowIndex="0"/>
+                        <Label text="显示名称" GridPane.rowIndex="1" styleClass="form-label"/>
+                        <TextField fx:id="nameField" GridPane.columnIndex="1" GridPane.rowIndex="1"/>
+                        <Label text="数据库类型" GridPane.rowIndex="2" styleClass="form-label"/>
+                        <ComboBox fx:id="dialectBox" GridPane.columnIndex="1" GridPane.rowIndex="2" maxWidth="Infinity"/>
+                        <Label text="SQLite 路径" GridPane.rowIndex="3" styleClass="form-label"/>
+                        <TextField fx:id="pathField" GridPane.columnIndex="1" GridPane.rowIndex="3"/>
+                        <Label text="服务器地址" GridPane.rowIndex="4" styleClass="form-label"/>
+                        <TextField fx:id="hostField" GridPane.columnIndex="1" GridPane.rowIndex="4"/>
+                        <Label text="端口" GridPane.rowIndex="5" styleClass="form-label"/>
+                        <TextField fx:id="portField" GridPane.columnIndex="1" GridPane.rowIndex="5"/>
+                        <Label text="数据库名" GridPane.rowIndex="6" styleClass="form-label"/>
+                        <TextField fx:id="databaseField" GridPane.columnIndex="1" GridPane.rowIndex="6"/>
+                        <Label text="用户名" GridPane.rowIndex="7" styleClass="form-label"/>
+                        <TextField fx:id="usernameField" GridPane.columnIndex="1" GridPane.rowIndex="7"/>
+                        <Label text="临时密码" GridPane.rowIndex="8" styleClass="form-label"/>
+                        <PasswordField fx:id="passwordField" promptText="仅用于连接测试" GridPane.columnIndex="1" GridPane.rowIndex="8"/>
+                    </GridPane>
+                    <HBox spacing="18">
+                        <CheckBox fx:id="readOnlyCheck" text="只读连接" selected="true"/>
+                        <CheckBox fx:id="enabledCheck" text="启用" selected="true"/>
+                    </HBox>
+                    <Label fx:id="statusLabel" visible="false" managed="false" wrapText="true" styleClass="sql-result-hint"/>
+                    <HBox spacing="8" alignment="CENTER_RIGHT">
+                        <Button fx:id="deleteButton" text="删除" onAction="#onDelete" styleClass="danger-button"/>
+                        <Button fx:id="selectButton" text="设为当前" onAction="#onSelect" styleClass="refresh-button"/>
+                        <Button fx:id="testButton" text="测试连接" onAction="#onTest" styleClass="refresh-button"/>
+                        <Button fx:id="saveButton" text="保存" onAction="#onSave" styleClass="sql-execute-button"/>
+                    </HBox>
+                </VBox>
+            </ScrollPane>
+        </SplitPane>
+    </center>
+</BorderPane>

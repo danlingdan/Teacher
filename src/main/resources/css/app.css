@@ -1043,3 +1043,22 @@
     -fx-background-color: rgba(255,255,255,0.2);
     -fx-background-radius: 4;
 }
+
+/* 数据库连接设置页 */
+.connection-settings-page { -fx-background-color: #141c30; }
+.connection-split { -fx-background-color: transparent; -fx-padding: 0 20 20 20; }
+.connection-split > .split-pane-divider { -fx-background-color: transparent; -fx-padding: 0 5 0 5; }
+.connection-list { -fx-background-color: #172035; -fx-control-inner-background: #172035; }
+.connection-list .list-cell { -fx-background-color: transparent; -fx-text-fill: #d5dce9; -fx-padding: 10; }
+.connection-list .list-cell:selected { -fx-background-color: #33477a; -fx-text-fill: white; }
+.connection-form-scroll, .connection-form-scroll > .viewport { -fx-background-color: transparent; }
+.connection-form { -fx-padding: 18; }
+.connection-form .text-field, .connection-form .password-field, .connection-form .combo-box {
+    -fx-background-color: #172035; -fx-text-fill: #edf2ff;
+    -fx-border-color: rgba(120,145,200,0.25); -fx-border-radius: 8; -fx-background-radius: 8;
+}
+.connection-form .combo-box .list-cell { -fx-text-fill: #edf2ff; -fx-background-color: #172035; }
+.connection-form .check-box { -fx-text-fill: #c9d3ea; }
+.form-label { -fx-text-fill: #9ca3af; }
+.danger-button { -fx-background-color: rgba(239,68,68,0.15); -fx-text-fill: #fca5a5;
+    -fx-border-color: rgba(239,68,68,0.4); -fx-border-radius: 8; -fx-background-radius: 8; -fx-padding: 7 14; }

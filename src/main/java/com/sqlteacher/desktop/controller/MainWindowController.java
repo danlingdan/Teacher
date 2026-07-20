@@ -2,6 +2,9 @@ package com.sqlteacher.desktop.controller;
 
 import com.sqlteacher.application.execution.SqlExecutionService;
 import com.sqlteacher.application.ai.AiModelSelectionService;
+import com.sqlteacher.application.connection.ConnectionManagementService;
+import com.sqlteacher.application.connection.DatabaseConnectionTestService;
+import com.sqlteacher.application.error.ApplicationExceptionMapper;
 import com.sqlteacher.application.metadata.DatabaseMetadataService;
 import com.sqlteacher.application.nl2sql.Nl2SqlSafetyService;
 import com.sqlteacher.application.risk.SqlRiskAnalysisService;
@@ -59,6 +62,7 @@ public final class MainWindowController {
 
     /** AI 助手子页面 FXML 的类路径位置。 */
     private static final String AI_ASSISTANT_FXML = "/fxml/ai-assistant.fxml";
+    private static final String SETTINGS_FXML = "/fxml/connection-settings.fxml";
 
     /** SQL 执行服务（应用层接口）；运行期实现由 Spring 提供，向下注入到 SQL 练习页控制器。 */
     private final SqlExecutionService sqlExecutionService;
@@ -74,6 +78,9 @@ public final class MainWindowController {
 
     /** SQL 风险分析服务（应用层接口）；运行期实现由 Spring 提供，向下注入到 AI 助手页控制器。 */
     private final SqlRiskAnalysisService sqlRiskAnalysisService;
+    private final ConnectionManagementService connectionManagementService;
+    private final DatabaseConnectionTestService databaseConnectionTestService;
+    private final ApplicationExceptionMapper applicationExceptionMapper;
 
     /**
      * 表名选中回调：表结构页点击表名时触发，把 {@code "SELECT * FROM 表名"}
@@ -100,6 +107,8 @@ public final class MainWindowController {
     /** AI 助手导航按钮（顶部导航栏）。 */
     @FXML
     private Button aiAssistantNavButton;
+    @FXML
+    private Button settingsNavButton;
 
     /** 右侧页面容器，导航切换时替换其中的内容节点。 */
     @FXML
@@ -132,6 +141,7 @@ public final class MainWindowController {
 
     /** 首页视图，懒加载一次后缓存复用。 */
     private Node homePage;
+    private Node settingsPage;
 
     /**
      * 构造注入 SQL 执行服务、表元数据服务、NL2SQL 服务与 SQL 风险分析服务，并初始化表名选中回调。
@@ -145,7 +155,10 @@ public final class MainWindowController {
                                 DatabaseMetadataService databaseMetadataService,
                                 Nl2SqlSafetyService nl2SqlSafetyService,
                                 AiModelSelectionService aiModelSelectionService,
-                                SqlRiskAnalysisService sqlRiskAnalysisService) {
+                                SqlRiskAnalysisService sqlRiskAnalysisService,
+                                ConnectionManagementService connectionManagementService,
+                                DatabaseConnectionTestService databaseConnectionTestService,
+                                ApplicationExceptionMapper applicationExceptionMapper) {
         this.sqlExecutionService = Objects.requireNonNull(sqlExecutionService, "sqlExecutionService must not be null");
         this.databaseMetadataService = Objects.requireNonNull(databaseMetadataService, "databaseMetadataService must not be null");
         this.nl2SqlSafetyService = Objects.requireNonNull(nl2SqlSafetyService, "nl2SqlSafetyService must not be null");
@@ -154,6 +167,9 @@ public final class MainWindowController {
             "aiModelSelectionService must not be null"
         );
         this.sqlRiskAnalysisService = Objects.requireNonNull(sqlRiskAnalysisService, "sqlRiskAnalysisService must not be null");
+        this.connectionManagementService = Objects.requireNonNull(connectionManagementService);
+        this.databaseConnectionTestService = Objects.requireNonNull(databaseConnectionTestService);
+        this.applicationExceptionMapper = Objects.requireNonNull(applicationExceptionMapper);
         this.fillSqlCallback = sql -> {
             // 确保 SQL 练习页已加载并捕获控制器引用，仅填充 SQL 不跳转页面。
             sqlPracticePage();
@@ -229,6 +245,16 @@ public final class MainWindowController {
         }
     }
 
+    @FXML
+    private void onNavigateSettings() {
+        selectNav(settingsNavButton);
+        try {
+            showPage(settingsPage());
+        } catch (RuntimeException error) {
+            throw new IllegalStateException("无法加载数据库连接设置页", error);
+        }
+    }
+
     /**
      * 切换导航选中态：清除所有导航按钮的选中样式，仅对目标按钮追加选中样式。
      */
@@ -243,7 +269,7 @@ public final class MainWindowController {
 
     /** 当前全部导航按钮集合，新增页面时在此登记。 */
     private List<ButtonBase> navButtons() {
-        return List.of(homeNavButton, aiAssistantNavButton, tableSchemaNavButton, sqlPracticeNavButton);
+        return List.of(homeNavButton, aiAssistantNavButton, tableSchemaNavButton, sqlPracticeNavButton, settingsNavButton);
     }
 
     /**
@@ -381,6 +407,30 @@ public final class MainWindowController {
             homePage = loadHomePage();
         }
         return homePage;
+    }
+
+    private Node settingsPage() {
+        if (settingsPage == null) {
+            URL fxml = MainWindowController.class.getResource(SETTINGS_FXML);
+            if (fxml == null) throw new IllegalStateException("Missing FXML resource: " + SETTINGS_FXML);
+            FXMLLoader loader = new FXMLLoader(fxml);
+            loader.setControllerFactory(type -> {
+                if (type == ConnectionSettingsController.class) {
+                    return new ConnectionSettingsController(
+                        connectionManagementService,
+                        databaseConnectionTestService,
+                        applicationExceptionMapper
+                    );
+                }
+                throw new IllegalStateException("Unexpected controller type for settings: " + type);
+            });
+            try {
+                settingsPage = loader.load();
+            } catch (IOException error) {
+                throw new IllegalStateException("Failed to load " + SETTINGS_FXML, error);
+            }
+        }
+        return settingsPage;
     }
 
     /**

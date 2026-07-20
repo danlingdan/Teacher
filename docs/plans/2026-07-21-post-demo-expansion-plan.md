@@ -399,7 +399,8 @@ mvn javafx:run
 | 2026-07-21 | `app.db` schema 版本与迁移机制 | 已完成 | 覆盖空库、`v0.1.0` 旧库、重复启动、失败回滚和未来版本拒绝；详见 `docs/stage2/2026-07-21-sqlite-schema-migrations.md` | `df1ecef` |
 | 2026-07-21 | 连接管理领域模型与 application 契约 | 已完成 | 冻结连接类型、非敏感 Profile、临时密码连接测试和当前连接选择边界；详见 `docs/stage2/2026-07-21-connection-management-contracts.md` | `3df5673` |
 | 2026-07-21 | SQLite 连接 Profile 持久化 | 已完成 | schema 版本 2；覆盖内置连接、保存、列表、选择、禁用和删除回退；详见 `docs/stage2/2026-07-21-connection-profile-persistence.md` | `35fe4fa` |
-| 2026-07-21 | Profile 感知的 JDBC 连接与连接测试 | 已完成 | 相关增量测试通过；累计功能全量回归 180 项通过；详见 `docs/stage2/2026-07-21-profile-jdbc-connection-test.md` | 本次提交 |
-| 2026-07-21 | 设置与连接管理 JavaFX 页面 | 下一项 | 后台加载/测试、Profile 表单校验、当前连接选择、禁用与删除确认可人工走查 | - |
+| 2026-07-21 | Profile 感知的 JDBC 连接与连接测试 | 已完成 | 相关增量测试通过；累计功能全量回归 180 项通过；详见 `docs/stage2/2026-07-21-profile-jdbc-connection-test.md` | `5225287` |
+| 2026-07-21 | 设置与连接管理 JavaFX 页面 | 已完成 | 增量测试和真实 JavaFX 导航走查通过；后台加载/测试、表单校验、选择、禁用与删除确认已接入；详见 `docs/stage2/2026-07-21-connection-settings-page.md` | 本次提交 |
+| 2026-07-21 | 当前 Profile 接入 SQL 与元数据链路 | 下一项 | SQL 执行、风险、元数据和 NL2SQL 使用同一当前连接；外部库默认只读且密码缺失时安全拒绝 | - |
 
 每完成一个功能，在本表追加一条记录并填写对应提交短哈希，确保计划、实现、验证和 Git 历史可以相互追溯。

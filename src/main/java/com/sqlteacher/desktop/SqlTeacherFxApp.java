@@ -2,6 +2,9 @@ package com.sqlteacher.desktop;
 
 import com.sqlteacher.application.database.DatabaseInitializationService;
 import com.sqlteacher.application.ai.AiModelSelectionService;
+import com.sqlteacher.application.connection.ConnectionManagementService;
+import com.sqlteacher.application.connection.DatabaseConnectionTestService;
+import com.sqlteacher.application.error.ApplicationExceptionMapper;
 import com.sqlteacher.application.execution.SqlExecutionService;
 import com.sqlteacher.application.metadata.DatabaseMetadataService;
 import com.sqlteacher.application.nl2sql.Nl2SqlSafetyService;
@@ -43,6 +46,9 @@ public final class SqlTeacherFxApp extends Application {
     private Nl2SqlSafetyService nl2SqlSafetyService;
     private AiModelSelectionService aiModelSelectionService;
     private SqlRiskAnalysisService sqlRiskAnalysisService;
+    private ConnectionManagementService connectionManagementService;
+    private DatabaseConnectionTestService databaseConnectionTestService;
+    private ApplicationExceptionMapper applicationExceptionMapper;
 
     /**
      * JavaFX 在非 Application Thread 上调用本方法，数据库初始化不会阻塞界面线程。
@@ -58,6 +64,9 @@ public final class SqlTeacherFxApp extends Application {
             nl2SqlSafetyService = context.getBean(Nl2SqlSafetyService.class);
             aiModelSelectionService = context.getBean(AiModelSelectionService.class);
             sqlRiskAnalysisService = context.getBean(SqlRiskAnalysisService.class);
+            connectionManagementService = context.getBean(ConnectionManagementService.class);
+            databaseConnectionTestService = context.getBean(DatabaseConnectionTestService.class);
+            applicationExceptionMapper = context.getBean(ApplicationExceptionMapper.class);
             applicationContext = context;
         } catch (RuntimeException error) {
             context.close();
@@ -69,7 +78,8 @@ public final class SqlTeacherFxApp extends Application {
     public void start(Stage stage) throws IOException {
         if (sqlExecutionService == null || databaseMetadataService == null
             || nl2SqlSafetyService == null || aiModelSelectionService == null
-            || sqlRiskAnalysisService == null) {
+            || sqlRiskAnalysisService == null || connectionManagementService == null
+            || databaseConnectionTestService == null || applicationExceptionMapper == null) {
             throw new IllegalStateException("Services are unavailable because application initialization did not complete");
         }
 
@@ -87,7 +97,10 @@ public final class SqlTeacherFxApp extends Application {
                     databaseMetadataService,
                     nl2SqlSafetyService,
                     aiModelSelectionService,
-                    sqlRiskAnalysisService
+                    sqlRiskAnalysisService,
+                    connectionManagementService,
+                    databaseConnectionTestService,
+                    applicationExceptionMapper
                 );
             }
             throw new IllegalStateException("Unexpected controller type for MainWindow.fxml: " + type);
@@ -121,6 +134,9 @@ public final class SqlTeacherFxApp extends Application {
         nl2SqlSafetyService = null;
         aiModelSelectionService = null;
         sqlRiskAnalysisService = null;
+        connectionManagementService = null;
+        databaseConnectionTestService = null;
+        applicationExceptionMapper = null;
     }
 
     public static void main(String[] args) {

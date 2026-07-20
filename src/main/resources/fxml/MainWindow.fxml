@@ -84,6 +84,11 @@
                             text="表结构"
                             onAction="#onNavigateTableSchema"/>
 
+                    <Button fx:id="settingsNavButton"
+                            styleClass="nav-button"
+                            text="设置"
+                            onAction="#onNavigateSettings"/>
+
                     <!-- 弹性留白：把右侧按钮推到最右端 -->
                     <Region HBox.hgrow="ALWAYS"/>
                 </children>
