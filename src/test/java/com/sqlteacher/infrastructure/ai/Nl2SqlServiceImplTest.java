@@ -10,6 +10,7 @@ import com.sqlteacher.application.metadata.DatabaseMetadataService;
 import com.sqlteacher.application.metadata.DatabaseTable;
 import com.sqlteacher.application.nl2sql.Nl2SqlPlan;
 import com.sqlteacher.application.nl2sql.Nl2SqlRequest;
+import com.sqlteacher.application.nl2sql.SqlErrorExplanation;
 import org.junit.jupiter.api.Test;
 
 import java.net.URI;
@@ -45,7 +46,7 @@ class Nl2SqlServiceImplTest {
         assertEquals("QUERY", result.intent());
         assertEquals("查询所有学生", result.explanation());
         assertEquals("test-model", result.model());
-        assertEquals("v2", result.promptVersion());
+        assertEquals("v3", result.promptVersion());
     }
 
     @Test
@@ -223,6 +224,64 @@ class Nl2SqlServiceImplTest {
         assertTrue(result.explanation().contains("empty SQL draft"));
     }
 
+    @Test
+    void shouldReturnParsedSqlErrorExplanationWhenJsonIsValid() {
+        AiModelProvider mockProvider = new MockProvider(AiCompletionResult.success(
+            "{\"errorCause\":\"Unknown column nam\",\"correctionSuggestion\":\"Use name\","
+                + "\"correctedSql\":\"SELECT name FROM student LIMIT 500\"}",
+            "test-model"
+        ));
+
+        Nl2SqlServiceImpl service = new Nl2SqlServiceImpl(mockProvider, CONFIG, EMPTY_METADATA_SERVICE, NO_OP_EVENT_SERVICE);
+        SqlErrorExplanation result = service.explainSqlError("demo", "SELECT nam FROM student", "no such column: nam");
+
+        assertTrue(result.success());
+        assertEquals("Unknown column nam", result.errorCause());
+        assertEquals("Use name", result.correctionSuggestion());
+        assertEquals("SELECT name FROM student LIMIT 500", result.correctedSql());
+        assertEquals("test-model", result.model());
+    }
+
+    @Test
+    void shouldRejectIncompleteSqlErrorExplanation() {
+        AiModelProvider mockProvider = new MockProvider(AiCompletionResult.success(
+            "{\"errorCause\":\"Unknown column nam\",\"correctionSuggestion\":\"\",\"correctedSql\":\"\"}",
+            "test-model"
+        ));
+
+        Nl2SqlServiceImpl service = new Nl2SqlServiceImpl(mockProvider, CONFIG, EMPTY_METADATA_SERVICE, NO_OP_EVENT_SERVICE);
+        SqlErrorExplanation result = service.explainSqlError("demo", "SELECT nam FROM student", "no such column: nam");
+
+        assertTrue(!result.success());
+        assertTrue(result.errorCause().contains("empty correction suggestion"));
+        assertTrue(result.correctedSql().isEmpty());
+    }
+
+    @Test
+    void shouldReturnFailureWhenSqlErrorExplanationProviderFails() {
+        AiModelProvider mockProvider = new MockProvider(AiCompletionResult.failure(
+            "Ollama unavailable",
+            "test-model"
+        ));
+
+        Nl2SqlServiceImpl service = new Nl2SqlServiceImpl(mockProvider, CONFIG, EMPTY_METADATA_SERVICE, NO_OP_EVENT_SERVICE);
+        SqlErrorExplanation result = service.explainSqlError("demo", "SELECT nam FROM student", "no such column: nam");
+
+        assertTrue(!result.success());
+        assertEquals("Ollama unavailable", result.errorCause());
+    }
+
+    @Test
+    void shouldReturnFailureWhenSqlErrorExplanationJsonIsInvalid() {
+        AiModelProvider mockProvider = new MockProvider(AiCompletionResult.success("not valid json", "test-model"));
+
+        Nl2SqlServiceImpl service = new Nl2SqlServiceImpl(mockProvider, CONFIG, EMPTY_METADATA_SERVICE, NO_OP_EVENT_SERVICE);
+        SqlErrorExplanation result = service.explainSqlError("demo", "SELECT nam FROM student", "no such column: nam");
+
+        assertTrue(!result.success());
+        assertTrue(result.errorCause().contains("Failed to parse"));
+    }
+
     private static class MockProvider implements AiModelProvider {
         private final AiCompletionResult result;
 
@@ -234,6 +293,7 @@ class Nl2SqlServiceImplTest {
         public AiCompletionResult complete(AiCompletionRequest request) {
             return result;
         }
+
     }
 
     private static class NoOpLearningEventService implements LearningEventService {

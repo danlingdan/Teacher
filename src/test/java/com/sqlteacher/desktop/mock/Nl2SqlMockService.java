@@ -3,6 +3,7 @@ package com.sqlteacher.desktop.mock;
 import com.sqlteacher.application.nl2sql.Nl2SqlPlan;
 import com.sqlteacher.application.nl2sql.Nl2SqlRequest;
 import com.sqlteacher.application.nl2sql.Nl2SqlService;
+import com.sqlteacher.application.nl2sql.SqlErrorExplanation;
 import com.sqlteacher.desktop.viewmodel.DesktopConnections;
 
 /**
@@ -67,5 +68,15 @@ public final class Nl2SqlMockService implements Nl2SqlService {
     /** Builds a demo request bound to the shared {@code demo} connection id. */
     public Nl2SqlRequest demoRequest(String naturalLanguage) {
         return new Nl2SqlRequest(naturalLanguage, DesktopConnections.DEMO);
+    }
+
+    @Override
+    public SqlErrorExplanation explainSqlError(String connectionId, String sql, String errorMessage) {
+        return SqlErrorExplanation.success(
+            "Mock error cause: " + errorMessage,
+            "Mock suggestion: check your SQL syntax",
+            sql + " LIMIT 500",
+            "qwen2.5:0.5b"
+        );
     }
 }

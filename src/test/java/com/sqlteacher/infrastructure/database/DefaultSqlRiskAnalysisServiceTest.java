@@ -56,6 +56,30 @@ class DefaultSqlRiskAnalysisServiceTest {
     }
 
     @Test
+    void shouldForbidDropDatabaseHiddenByComments() {
+        SqlRiskAnalysis blockCommentResult = service.analyze(
+                "/* generated SQL */ DROP /* target kind */ DATABASE school");
+        SqlRiskAnalysis lineCommentResult = service.analyze(
+                "-- generated SQL\nDROP -- target kind\nDATABASE school");
+
+        assertEquals(SqlRiskLevel.FORBIDDEN, blockCommentResult.level());
+        assertFalse(blockCommentResult.executable());
+        assertEquals(SqlRiskLevel.FORBIDDEN, lineCommentResult.level());
+        assertFalse(lineCommentResult.executable());
+    }
+
+    @Test
+    void shouldIgnoreCommentsWithoutChangingQuotedText() {
+        SqlRiskAnalysis leadingCommentResult = service.analyze("/* lesson */ SELECT '/* not a comment */'");
+        SqlRiskAnalysis trailingSemicolonCommentResult = service.analyze("SELECT 1 /* ; DELETE FROM student */");
+
+        assertEquals(SqlRiskLevel.LOW, leadingCommentResult.level());
+        assertTrue(leadingCommentResult.executable());
+        assertFalse(trailingSemicolonCommentResult.multiStatement());
+        assertTrue(trailingSemicolonCommentResult.executable());
+    }
+
+    @Test
     void shouldBlockMultipleStatements() {
 
         SqlRiskAnalysis result =
