@@ -1,4 +1,4 @@
-﻿/* =====================================================================
+/* =====================================================================
  * SQLTeacher 桌面端全局样式表（浅色清爽主题 · 课堂演示版 · JavaFX 21 原生适配）
  * 作用域：JavaFX 桌面模块（com.sqlteacher.desktop）
  *
@@ -1000,62 +1000,3 @@
     -fx-background-color: rgba(255,255,255,0.2);
     -fx-background-radius: 4;
 }
-.result-table .table-column {
-    -fx-min-width: 75px;
-    -fx-max-width: 9999px;
-}
-
-/* =====================================================================
- * 首页（home.fxml）
- * ===================================================================== */
-
-.home-page {
-    -fx-background-color: #141c30;
-    -fx-padding: 0;
-}
-
-.intro-section {
-    -fx-background-color: transparent;
-    -fx-padding: 32 32 16 32;
-}
-
-.intro-tag {
-    -fx-text-fill: #8259f0;
-    -fx-font-size: 13px;
-    -fx-font-weight: bold;
-    -fx-alignment: CENTER;
-}
-
-.intro-title {
-    -fx-text-fill: #ffffff;
-    -fx-font-size: 36px;
-    -fx-font-weight: bold;
-    -fx-alignment: CENTER;
-}
-
-.intro-description {
-    -fx-text-fill: #9ca3af;
-    -fx-font-size: 14px;
-    -fx-alignment: CENTER;
-    -fx-text-alignment: center;
-    -fx-wrap-text: true;
-    -fx-max-width: 720;
-    -fx-line-spacing: 4;
-}
-
-.intro-summary {
-    -fx-text-fill: #6b7280;
-    -fx-font-size: 13px;
-    -fx-alignment: CENTER;
-    -fx-text-alignment: center;
-}
-
-.intro-divider {
-    -fx-pref-height: 1;
-    -fx-max-height: 1;
-    -fx-background-color: rgba(159, 122, 234, 0.20);
-    -fx-min-width: 400;
-    -fx-max-width: 400;
-}
-
-

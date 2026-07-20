@@ -2,21 +2,22 @@ package com.sqlteacher.desktop.controller;
 
 import com.sqlteacher.application.execution.SqlExecutionService;
 import com.sqlteacher.application.metadata.DatabaseMetadataService;
-import com.sqlteacher.application.nl2sql.Nl2SqlService;
+import com.sqlteacher.application.nl2sql.Nl2SqlSafetyService;
 import com.sqlteacher.application.risk.SqlRiskAnalysisService;
 import com.sqlteacher.desktop.GlobalLoading;
 import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.Node;
 import javafx.scene.control.Button;
+import javafx.scene.control.ButtonBase;
 import javafx.scene.control.Label;
-import javafx.scene.control.ToggleButton;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.StackPane;
 
 import java.io.IOException;
 import java.net.URL;
 import java.util.List;
+import java.util.Objects;
 import java.util.function.Consumer;
 
 /**
@@ -65,7 +66,7 @@ public final class MainWindowController {
     private final DatabaseMetadataService databaseMetadataService;
 
     /** NL2SQL 服务（应用层接口）；运行期实现由 Spring 提供，向下注入到 AI 助手页控制器。 */
-    private final Nl2SqlService nl2SqlService;
+    private final Nl2SqlSafetyService nl2SqlSafetyService;
 
     /** SQL 风险分析服务（应用层接口）；运行期实现由 Spring 提供，向下注入到 AI 助手页控制器。 */
     private final SqlRiskAnalysisService sqlRiskAnalysisService;
@@ -133,17 +134,17 @@ public final class MainWindowController {
      *
      * @param sqlExecutionService     应用层 SQL 执行服务接口，不可为 {@code null}
      * @param databaseMetadataService 应用层表元数据服务接口，不可为 {@code null}
-     * @param nl2SqlService           应用层 NL2SQL 服务接口，不可为 {@code null}
+     * @param nl2SqlSafetyService     应用层 NL2SQL 安全编排服务接口，不可为 {@code null}
      * @param sqlRiskAnalysisService  应用层 SQL 风险分析服务接口，不可为 {@code null}
      */
     public MainWindowController(SqlExecutionService sqlExecutionService,
                                 DatabaseMetadataService databaseMetadataService,
-                                Nl2SqlService nl2SqlService,
+                                Nl2SqlSafetyService nl2SqlSafetyService,
                                 SqlRiskAnalysisService sqlRiskAnalysisService) {
-        this.sqlExecutionService = sqlExecutionService;
-        this.databaseMetadataService = databaseMetadataService;
-        this.nl2SqlService = nl2SqlService;
-        this.sqlRiskAnalysisService = sqlRiskAnalysisService;
+        this.sqlExecutionService = Objects.requireNonNull(sqlExecutionService, "sqlExecutionService must not be null");
+        this.databaseMetadataService = Objects.requireNonNull(databaseMetadataService, "databaseMetadataService must not be null");
+        this.nl2SqlSafetyService = Objects.requireNonNull(nl2SqlSafetyService, "nl2SqlSafetyService must not be null");
+        this.sqlRiskAnalysisService = Objects.requireNonNull(sqlRiskAnalysisService, "sqlRiskAnalysisService must not be null");
         this.fillSqlCallback = sql -> {
             // 确保 SQL 练习页已加载并捕获控制器引用，仅填充 SQL 不跳转页面。
             sqlPracticePage();
@@ -222,8 +223,8 @@ public final class MainWindowController {
     /**
      * 切换导航选中态：清除所有导航按钮的选中样式，仅对目标按钮追加选中样式。
      */
-    private void selectNav(javafx.scene.control.ButtonBase target) {
-        for (javafx.scene.control.ButtonBase navButton : navButtons()) {
+    private void selectNav(ButtonBase target) {
+        for (ButtonBase navButton : navButtons()) {
             navButton.getStyleClass().remove(SELECTED_STYLE_CLASS);
         }
         if (!target.getStyleClass().contains(SELECTED_STYLE_CLASS)) {
@@ -232,7 +233,7 @@ public final class MainWindowController {
     }
 
     /** 当前全部导航按钮集合，新增页面时在此登记。 */
-    private List<javafx.scene.control.ButtonBase> navButtons() {
+    private List<ButtonBase> navButtons() {
         return List.of(homeNavButton, aiAssistantNavButton, tableSchemaNavButton, sqlPracticeNavButton);
     }
 
@@ -337,7 +338,12 @@ public final class MainWindowController {
         FXMLLoader loader = new FXMLLoader(fxml);
         loader.setControllerFactory(type -> {
             if (type == AiAssistantController.class) {
-                return new AiAssistantController(nl2SqlService, fillSqlCallback, this::onNavigateSqlPractice, sqlRiskAnalysisService);
+                return new AiAssistantController(
+                    nl2SqlSafetyService,
+                    sqlRiskAnalysisService,
+                    fillSqlCallback,
+                    this::onNavigateSqlPractice
+                );
             }
             throw new IllegalStateException("Unexpected controller type for ai-assistant.fxml: " + type);
         });

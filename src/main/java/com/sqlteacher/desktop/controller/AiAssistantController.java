@@ -2,12 +2,14 @@ package com.sqlteacher.desktop.controller;
 
 import com.sqlteacher.application.nl2sql.Nl2SqlPlan;
 import com.sqlteacher.application.nl2sql.Nl2SqlRequest;
-import com.sqlteacher.application.nl2sql.Nl2SqlService;
+import com.sqlteacher.application.nl2sql.Nl2SqlSafetyResult;
+import com.sqlteacher.application.nl2sql.Nl2SqlSafetyService;
 import com.sqlteacher.application.risk.SqlRiskAnalysis;
 import com.sqlteacher.application.risk.SqlRiskAnalysisService;
 import com.sqlteacher.application.risk.SqlRiskLevel;
+import com.sqlteacher.desktop.DesktopExecutors;
 import com.sqlteacher.desktop.GlobalLoading;
-import com.sqlteacher.desktop.SqlRiskConfirmDialogUtil;
+import com.sqlteacher.desktop.viewmodel.DesktopConnections;
 import javafx.application.Platform;
 import javafx.concurrent.Task;
 import javafx.fxml.FXML;
@@ -25,10 +27,10 @@ import java.util.function.Consumer;
 /**
  * AI 助手页面控制器：接收用户自然语言提问，调用应用层 NL2SQL 服务生成 SQL 查询语句并展示解释。
  *
- * <p><b>依赖注入</b>：通过构造函数注入 {@link Nl2SqlService} 和 {@link Consumer} 回调。
+ * <p><b>依赖注入</b>：通过构造函数注入 {@link Nl2SqlSafetyService} 和 {@link Consumer} 回调。
  *
- * <p><b>线程模型</b>：所有耗时操作通过 {@link Task} 提交到后台线程，成功 / 失败回调
- * 均通过 {@link Platform#runLater(Runnable)} 切回 FX 线程更新 UI。
+ * <p><b>线程模型</b>：所有耗时操作通过 {@link Task} 提交到桌面共享后台线程池，
+ * Task 的成功 / 失败事件在 FX 线程更新 UI。
  * 同时调用 {@link GlobalLoading} 显示 / 隐藏全局 Loading 遮罩。
  *
  * <p><b>离线降级</b>：当 NL2SQL 服务调用失败时，显示离线提示文案，禁用生成按钮。
@@ -42,10 +44,11 @@ public final class AiAssistantController {
     private static final String EMPTY_INPUT_MESSAGE = "请输入自然语言提问";
     private static final String ERROR_MESSAGE = "AI 生成失败，请稍后重试";
 
-    private final Nl2SqlService nl2SqlService;
+    private final Nl2SqlSafetyService nl2SqlSafetyService;
     private final Consumer<String> fillSqlCallback;
     private final Runnable switchPageCallback;
     private final SqlRiskAnalysisService sqlRiskAnalysisService;
+    private Nl2SqlSafetyResult currentResult;
 
     @FXML
     private TextArea questionInput;
@@ -71,12 +74,22 @@ public final class AiAssistantController {
     @FXML
     private Label offlineHint;
 
-    public AiAssistantController(Nl2SqlService nl2SqlService, Consumer<String> fillSqlCallback, Runnable switchPageCallback, SqlRiskAnalysisService sqlRiskAnalysisService) {
-        this.nl2SqlService = Objects.requireNonNull(nl2SqlService, "nl2SqlService must not be null");
+    public AiAssistantController(
+        Nl2SqlSafetyService nl2SqlSafetyService,
+        SqlRiskAnalysisService sqlRiskAnalysisService,
+        Consumer<String> fillSqlCallback,
+        Runnable switchPageCallback
+    ) {
+        this.nl2SqlSafetyService = Objects.requireNonNull(
+            nl2SqlSafetyService,
+            "nl2SqlSafetyService must not be null"
+        );
+        this.sqlRiskAnalysisService = Objects.requireNonNull(
+            sqlRiskAnalysisService,
+            "sqlRiskAnalysisService must not be null"
+        );
         this.fillSqlCallback = Objects.requireNonNull(fillSqlCallback, "fillSqlCallback must not be null");
         this.switchPageCallback = Objects.requireNonNull(switchPageCallback, "switchPageCallback must not be null");
-        this.sqlRiskAnalysisService = Objects.requireNonNull(sqlRiskAnalysisService, "sqlRiskAnalysisService must not be null");
-        log.info("AiAssistantController initialized, nl2SqlService={}", nl2SqlService.getClass().getSimpleName());
     }
 
     @FXML
@@ -109,55 +122,43 @@ public final class AiAssistantController {
             generateButton.setDisable(true);
             GlobalLoading.show(GENERATING_MESSAGE);
             hideOfflineHint();
-            log.info("Starting NL2SQL generation for question: {}", question);
+            log.info("Starting NL2SQL generation, questionLength={}", question.length());
 
-            Task<Nl2SqlPlan> task = new Task<>() {
+            Task<Nl2SqlSafetyResult> task = new Task<>() {
                 @Override
-                protected Nl2SqlPlan call() throws Exception {
-                    try {
-                        Nl2SqlRequest request = new Nl2SqlRequest(question, "demo");
-                        log.debug("Calling nl2SqlService.generate() with request: {}", request);
-                        Nl2SqlPlan result = nl2SqlService.generate(request);
-                        log.info("NL2SQL generation succeeded, sqlDraft length={}", result != null && result.sqlDraft() != null ? result.sqlDraft().length() : 0);
-                        return result;
-                    } catch (Exception e) {
-                        log.error("NL2SQL generation failed", e);
-                        throw e;
-                    }
+                protected Nl2SqlSafetyResult call() {
+                    Nl2SqlRequest request = new Nl2SqlRequest(question, DesktopConnections.DEMO);
+                    return nl2SqlSafetyService.generateAndAssess(request);
                 }
             };
 
-            task.setOnSucceeded(event -> Platform.runLater(() -> {
+            task.setOnSucceeded(event -> {
                 try {
-                    Nl2SqlPlan result = task.getValue();
-                    log.info("Task succeeded, displaying result");
+                    Nl2SqlSafetyResult result = task.getValue();
 
-                    if (result == null || isEmptyOrErrorResult(result)) {
-                        log.info("Result is empty or contains error, using mock data fallback");
-                        Nl2SqlPlan mockPlan = generateMockPlan(question);
-                        displayResult(mockPlan);
+                    if (result == null || !result.draftAvailable()) {
+                        log.info("AI draft unavailable, using clearly labelled mock fallback");
+                        displayResult(generateMockResult(question));
                         showOfflineHint();
                     } else {
                         displayResult(result);
                     }
                 } catch (Exception e) {
                     log.error("Failed to display result", e);
-                    Nl2SqlPlan mockPlan = generateMockPlan(question);
-                    displayResult(mockPlan);
+                    displayResult(generateMockResult(question));
                     showOfflineHint();
                 } finally {
                     generateButton.setDisable(false);
                     GlobalLoading.hide();
                 }
-            }));
+            });
 
-            task.setOnFailed(event -> Platform.runLater(() -> {
+            task.setOnFailed(event -> {
                 try {
                     Throwable exception = task.getException();
-                      log.error("Task failed with exception: {}", exception != null ? exception.getMessage() : "null");
+                    log.error("NL2SQL task failed", exception);
                     log.info("Using mock data fallback for offline mode");
-                    Nl2SqlPlan mockPlan = generateMockPlan(question);
-                    displayResult(mockPlan);
+                    displayResult(generateMockResult(question));
                     showOfflineHint();
                 } catch (Exception e) {
                     log.error("Failed to handle task failure", e);
@@ -166,9 +167,9 @@ public final class AiAssistantController {
                     generateButton.setDisable(false);
                     GlobalLoading.forceHide();
                 }
-            }));
+            });
 
-            new Thread(task).start();
+            DesktopExecutors.background().execute(task);
         } catch (Exception e) {
             log.error("Unexpected error in onGenerateSql", e);
             generateButton.setDisable(false);
@@ -183,8 +184,7 @@ public final class AiAssistantController {
         try {
             String sql = sqlPreviewArea != null ? sqlPreviewArea.getText() : null;
             if (sql != null && !sql.isBlank()) {
-                log.info("Copying SQL to practice page: {}", sql);
-                checkRiskAndCopy(sql);
+                copyAcceptedDraft(sql);
             } else {
                 log.warn("No SQL to copy, sqlPreviewArea is empty");
                 showAlert(Alert.AlertType.WARNING, "提示", "没有可复制的 SQL");
@@ -195,29 +195,26 @@ public final class AiAssistantController {
         }
     }
 
-    private void checkRiskAndCopy(String sql) {
-        try {
-            SqlRiskAnalysis analysis = sqlRiskAnalysisService.analyze(sql);
-            if (analysis != null && analysis.confirmationRequired()) {
-                log.info("High risk SQL detected, showing confirm dialog");
-                SqlRiskConfirmDialogUtil.showRiskConfirmDialog(sql, () -> {
-                    fillSqlCallback.accept(sql);
-                    switchPageCallback.run();
-                });
-            } else {
-                log.info("Normal SQL, direct copy");
-                fillSqlCallback.accept(sql);
-                switchPageCallback.run();
-            }
-        } catch (Exception e) {
-            log.error("Failed to check SQL risk, proceeding with direct copy", e);
-            fillSqlCallback.accept(sql);
-            switchPageCallback.run();
+    private void copyAcceptedDraft(String sql) {
+        if (!canCopyDraft(currentResult, sql)) {
+            showAlert(Alert.AlertType.WARNING, "安全检查未通过", "该 SQL 草案未通过只读安全检查，不能复制到练习页");
+            return;
         }
+        log.info("Copying accepted SQL draft to practice page, sqlLength={}", sql.length());
+        fillSqlCallback.accept(sql);
+        switchPageCallback.run();
     }
 
-    private void displayResult(Nl2SqlPlan plan) {
-        log.debug("displayResult() called, plan={}", plan);
+    static boolean canCopyDraft(Nl2SqlSafetyResult result, String displayedSql) {
+        return result != null
+            && result.accepted()
+            && displayedSql != null
+            && displayedSql.equals(result.plan().sqlDraft());
+    }
+
+    private void displayResult(Nl2SqlSafetyResult result) {
+        currentResult = result;
+        Nl2SqlPlan plan = result == null ? null : result.plan();
 
         if (plan == null) {
             log.warn("Plan is null, showing placeholders");
@@ -236,8 +233,8 @@ public final class AiAssistantController {
         if (hasSql) {
             sqlPreviewArea.setText(plan.sqlDraft());
             setPlaceholderVisible(sqlPlaceholder, false);
-            copyToPracticeButton.setDisable(false);
-            applyRiskHighlight(plan.sqlDraft());
+            copyToPracticeButton.setDisable(!result.accepted());
+            applyRiskHighlight(result.riskAnalysis());
             log.info("SQL draft displayed, length={}", plan.sqlDraft().length());
         } else {
             sqlPreviewArea.clear();
@@ -258,29 +255,29 @@ public final class AiAssistantController {
         }
     }
 
-    private void applyRiskHighlight(String sql) {
-        if (sql == null || sql.isBlank()) {
+    private void applyRiskHighlight(SqlRiskAnalysis analysis) {
+        if (analysis == null) {
             clearRiskHighlight();
             return;
         }
 
-        try {
-            SqlRiskAnalysis analysis = sqlRiskAnalysisService.analyze(sql);
-            if (analysis != null && analysis.level() != null && 
-                (analysis.level() == SqlRiskLevel.HIGH || analysis.level() == SqlRiskLevel.FORBIDDEN)) {
-                log.info("High risk SQL detected, applying highlight");
+        if (analysis.level() == SqlRiskLevel.HIGH || analysis.level() == SqlRiskLevel.FORBIDDEN
+            || !analysis.executable() || analysis.multiStatement()) {
+            if (!sqlPreviewArea.getStyleClass().contains("risk-highlight")) {
                 sqlPreviewArea.getStyleClass().add("risk-highlight");
-            } else {
-                clearRiskHighlight();
             }
-        } catch (Exception e) {
-            log.error("Failed to analyze SQL risk", e);
+        } else {
             clearRiskHighlight();
         }
     }
 
     private void clearRiskHighlight() {
         sqlPreviewArea.getStyleClass().remove("risk-highlight");
+    }
+
+    private Nl2SqlSafetyResult generateMockResult(String question) {
+        Nl2SqlPlan plan = generateMockPlan(question);
+        return new Nl2SqlSafetyResult(plan, sqlRiskAnalysisService.analyze(plan.sqlDraft()));
     }
 
     private Nl2SqlPlan generateMockPlan(String question) {
@@ -296,7 +293,7 @@ public final class AiAssistantController {
 
         String lowerQuestion = question.toLowerCase();
 
-        if (lowerQuestion.contains("清空") || lowerQuestion.contains("删除") || 
+        if (lowerQuestion.contains("清空") || lowerQuestion.contains("删除") ||
             lowerQuestion.contains("全部数据")) {
             return new Nl2SqlPlan(
                 "DELETE FROM student;",
@@ -307,7 +304,7 @@ public final class AiAssistantController {
             );
         }
 
-        if (lowerQuestion.contains("大于") || lowerQuestion.contains("小于") || 
+        if (lowerQuestion.contains("大于") || lowerQuestion.contains("小于") ||
             lowerQuestion.contains("分数") || lowerQuestion.contains("成绩")) {
             return new Nl2SqlPlan(
                 "SELECT name, score FROM student WHERE score > 90;",
@@ -372,41 +369,20 @@ public final class AiAssistantController {
         }
     }
 
-    private static boolean isEmptyOrErrorResult(Nl2SqlPlan plan) {
-        if (plan == null) {
-            return true;
-        }
-        String sql = plan.sqlDraft();
-        String explanation = plan.explanation();
-
-        boolean hasValidSql = sql != null && !sql.isBlank();
-        boolean hasValidExplanation = explanation != null && !explanation.isBlank();
-
-        if (!hasValidSql && !hasValidExplanation) {
-            return true;
-        }
-
-        if (explanation != null && (explanation.toLowerCase().contains("error")
-                || explanation.toLowerCase().contains("fail")
-                || explanation.toLowerCase().contains("unavailable")
-                || explanation.toLowerCase().contains("offline")
-                || explanation.contains("Ollama")
-                || explanation.contains("ollama"))) {
-            return true;
-        }
-
-        return false;
-    }
-
     private static void showAlert(Alert.AlertType type, String title, String message) {
         try {
-            Platform.runLater(() -> {
+            Runnable show = () -> {
                 Alert alert = new Alert(type);
                 alert.setTitle(title);
                 alert.setHeaderText(null);
                 alert.setContentText(message);
                 alert.showAndWait();
-            });
+            };
+            if (Platform.isFxApplicationThread()) {
+                show.run();
+            } else {
+                Platform.runLater(show);
+            }
         } catch (Exception e) {
             log.error("Failed to show alert", e);
         }

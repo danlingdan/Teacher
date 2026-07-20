@@ -1,21 +1,8 @@
 package com.sqlteacher.desktop.controller;
 
 import javafx.fxml.FXML;
-import javafx.scene.input.MouseEvent;
-import javafx.scene.layout.VBox;
-
-
 
 public final class HomeController {
-
-    @FXML
-    private VBox aiAssistantCard;
-
-    @FXML
-    private VBox sqlPracticeCard;
-
-    @FXML
-    private VBox tableSchemaCard;
 
     private Runnable onNavigateAiAssistant;
     private Runnable onNavigateSqlPractice;
@@ -34,25 +21,21 @@ public final class HomeController {
     }
 
     @FXML
-    private void initialize() {
-    }
-
-    @FXML
-    private void onAiAssistantCardClick(MouseEvent event) {
+    private void onAiAssistantCardClick() {
         if (onNavigateAiAssistant != null) {
             onNavigateAiAssistant.run();
         }
     }
 
     @FXML
-    private void onSqlPracticeCardClick(MouseEvent event) {
+    private void onSqlPracticeCardClick() {
         if (onNavigateSqlPractice != null) {
             onNavigateSqlPractice.run();
         }
     }
 
     @FXML
-    private void onTableSchemaCardClick(MouseEvent event) {
+    private void onTableSchemaCardClick() {
         if (onNavigateTableSchema != null) {
             onNavigateTableSchema.run();
         }

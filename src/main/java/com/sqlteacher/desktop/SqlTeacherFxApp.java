@@ -3,7 +3,7 @@ package com.sqlteacher.desktop;
 import com.sqlteacher.application.database.DatabaseInitializationService;
 import com.sqlteacher.application.execution.SqlExecutionService;
 import com.sqlteacher.application.metadata.DatabaseMetadataService;
-import com.sqlteacher.application.nl2sql.Nl2SqlService;
+import com.sqlteacher.application.nl2sql.Nl2SqlSafetyService;
 import com.sqlteacher.application.risk.SqlRiskAnalysisService;
 import com.sqlteacher.desktop.controller.MainWindowController;
 import com.sqlteacher.infrastructure.spring.SqlTeacherApplicationConfig;
@@ -39,7 +39,7 @@ public final class SqlTeacherFxApp extends Application {
     private AnnotationConfigApplicationContext applicationContext;
     private SqlExecutionService sqlExecutionService;
     private DatabaseMetadataService databaseMetadataService;
-    private Nl2SqlService nl2SqlService;
+    private Nl2SqlSafetyService nl2SqlSafetyService;
     private SqlRiskAnalysisService sqlRiskAnalysisService;
 
     /**
@@ -53,7 +53,7 @@ public final class SqlTeacherFxApp extends Application {
             context.getBean(DatabaseInitializationService.class).initialize();
             sqlExecutionService = context.getBean(SqlExecutionService.class);
             databaseMetadataService = context.getBean(DatabaseMetadataService.class);
-            nl2SqlService = context.getBean(Nl2SqlService.class);
+            nl2SqlSafetyService = context.getBean(Nl2SqlSafetyService.class);
             sqlRiskAnalysisService = context.getBean(SqlRiskAnalysisService.class);
             applicationContext = context;
         } catch (RuntimeException error) {
@@ -64,7 +64,8 @@ public final class SqlTeacherFxApp extends Application {
 
     @Override
     public void start(Stage stage) throws IOException {
-        if (sqlExecutionService == null || databaseMetadataService == null || nl2SqlService == null || sqlRiskAnalysisService == null) {
+        if (sqlExecutionService == null || databaseMetadataService == null
+            || nl2SqlSafetyService == null || sqlRiskAnalysisService == null) {
             throw new IllegalStateException("Services are unavailable because application initialization did not complete");
         }
 
@@ -80,7 +81,7 @@ public final class SqlTeacherFxApp extends Application {
                 return new MainWindowController(
                     sqlExecutionService,
                     databaseMetadataService,
-                    nl2SqlService,
+                    nl2SqlSafetyService,
                     sqlRiskAnalysisService
                 );
             }
@@ -112,6 +113,7 @@ public final class SqlTeacherFxApp extends Application {
         }
         sqlExecutionService = null;
         databaseMetadataService = null;
+        nl2SqlSafetyService = null;
         sqlRiskAnalysisService = null;
     }
 
