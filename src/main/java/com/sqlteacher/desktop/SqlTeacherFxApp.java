@@ -1,6 +1,7 @@
 package com.sqlteacher.desktop;
 
 import com.sqlteacher.application.database.DatabaseInitializationService;
+import com.sqlteacher.application.ai.AiModelSelectionService;
 import com.sqlteacher.application.execution.SqlExecutionService;
 import com.sqlteacher.application.metadata.DatabaseMetadataService;
 import com.sqlteacher.application.nl2sql.Nl2SqlSafetyService;
@@ -40,6 +41,7 @@ public final class SqlTeacherFxApp extends Application {
     private SqlExecutionService sqlExecutionService;
     private DatabaseMetadataService databaseMetadataService;
     private Nl2SqlSafetyService nl2SqlSafetyService;
+    private AiModelSelectionService aiModelSelectionService;
     private SqlRiskAnalysisService sqlRiskAnalysisService;
 
     /**
@@ -54,6 +56,7 @@ public final class SqlTeacherFxApp extends Application {
             sqlExecutionService = context.getBean(SqlExecutionService.class);
             databaseMetadataService = context.getBean(DatabaseMetadataService.class);
             nl2SqlSafetyService = context.getBean(Nl2SqlSafetyService.class);
+            aiModelSelectionService = context.getBean(AiModelSelectionService.class);
             sqlRiskAnalysisService = context.getBean(SqlRiskAnalysisService.class);
             applicationContext = context;
         } catch (RuntimeException error) {
@@ -65,7 +68,8 @@ public final class SqlTeacherFxApp extends Application {
     @Override
     public void start(Stage stage) throws IOException {
         if (sqlExecutionService == null || databaseMetadataService == null
-            || nl2SqlSafetyService == null || sqlRiskAnalysisService == null) {
+            || nl2SqlSafetyService == null || aiModelSelectionService == null
+            || sqlRiskAnalysisService == null) {
             throw new IllegalStateException("Services are unavailable because application initialization did not complete");
         }
 
@@ -82,6 +86,7 @@ public final class SqlTeacherFxApp extends Application {
                     sqlExecutionService,
                     databaseMetadataService,
                     nl2SqlSafetyService,
+                    aiModelSelectionService,
                     sqlRiskAnalysisService
                 );
             }
@@ -114,6 +119,7 @@ public final class SqlTeacherFxApp extends Application {
         sqlExecutionService = null;
         databaseMetadataService = null;
         nl2SqlSafetyService = null;
+        aiModelSelectionService = null;
         sqlRiskAnalysisService = null;
     }
 

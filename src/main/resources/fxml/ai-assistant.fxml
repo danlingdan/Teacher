@@ -28,6 +28,7 @@
 -->
 
 <?import javafx.scene.control.Button?>
+<?import javafx.scene.control.ComboBox?>
 <?import javafx.scene.control.Label?>
 <?import javafx.scene.control.ScrollPane?>
 <?import javafx.scene.control.TextArea?>
@@ -57,6 +58,37 @@
                             <Label styleClass="page-title" text="AI 助手"/>
                             <Label styleClass="page-subtitle"
                                    text="用自然语言提问，AI 帮你生成 SQL 查询语句"/>
+                        </children>
+                    </VBox>
+
+                    <!-- 本地模型选择：自动读取 Ollama 已安装模型，用户可刷新并切换。 -->
+                    <VBox styleClass="panel-card" spacing="10.0">
+                        <children>
+                            <HBox styleClass="card-title-row" alignment="CENTER_LEFT" spacing="10.0">
+                                <children>
+                                    <Region styleClass="card-accent"/>
+                                    <Label styleClass="card-title" text="本地 AI 模型"/>
+                                </children>
+                            </HBox>
+                            <HBox alignment="CENTER_LEFT" spacing="12.0">
+                                <children>
+                                    <Label styleClass="model-label" text="选择模型"/>
+                                    <ComboBox fx:id="modelSelector"
+                                              styleClass="model-selector"
+                                              promptText="正在检测已安装模型…"
+                                              onAction="#onModelSelected"
+                                              maxWidth="Infinity"
+                                              HBox.hgrow="ALWAYS"/>
+                                    <Button fx:id="refreshModelsButton"
+                                            styleClass="model-refresh-button"
+                                            text="刷新"
+                                            onAction="#onRefreshModels"/>
+                                </children>
+                            </HBox>
+                            <Label fx:id="modelStatusLabel"
+                                   styleClass="model-status"
+                                   text="正在检测本地 Ollama 模型…"
+                                   wrapText="true"/>
                         </children>
                     </VBox>
 

@@ -51,6 +51,7 @@ public final class OllamaAiModelProvider implements AiModelProvider {
                 request.prompt(),
                 false,
                 "json",
+                false,
                 new GenerateOptions(2048)
             ));
 
@@ -90,7 +91,14 @@ public final class OllamaAiModelProvider implements AiModelProvider {
         }
     }
 
-    record GenerateRequest(String model, String prompt, boolean stream, String format, GenerateOptions options) {
+    record GenerateRequest(
+        String model,
+        String prompt,
+        boolean stream,
+        String format,
+        boolean think,
+        GenerateOptions options
+    ) {
     }
 
     record GenerateOptions(int num_predict) {

@@ -107,11 +107,13 @@ class OllamaAiModelProviderTest {
             "test prompt",
             false,
             "json",
+            false,
             new OllamaAiModelProvider.GenerateOptions(2048)
         );
         String json = objectMapper.writeValueAsString(request);
 
         assertTrue(json.contains("\"format\":\"json\""), "Request should include format: json");
+        assertTrue(json.contains("\"think\":false"), "Request should disable model thinking output");
         assertTrue(json.contains("\"options\":{"), "Request should include options object");
         assertTrue(json.contains("\"num_predict\":2048"), "Request should include num_predict in options");
         assertFalse(json.contains("\"num_predict\":1"), "num_predict should not be 1");

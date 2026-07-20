@@ -395,6 +395,49 @@
     -fx-padding: 2 0 0 0;
 }
 
+.model-label {
+    -fx-text-fill: #c9d3ea;
+    -fx-font-size: 13px;
+    -fx-font-weight: bold;
+}
+
+.model-selector {
+    -fx-background-color: #172035;
+    -fx-background-radius: 10;
+    -fx-border-color: rgba(120, 145, 200, 0.22);
+    -fx-border-radius: 10;
+    -fx-text-fill: #edf2ff;
+    -fx-pref-height: 40;
+}
+
+.model-selector .list-cell {
+    -fx-background-color: #172035;
+    -fx-text-fill: #edf2ff;
+}
+
+.model-selector .list-view {
+    -fx-background-color: #172035;
+    -fx-border-color: #3a4a6e;
+}
+
+.model-refresh-button {
+    -fx-background-color: #25314d;
+    -fx-background-radius: 10;
+    -fx-text-fill: #dbe5ff;
+    -fx-font-weight: bold;
+    -fx-padding: 9 18 9 18;
+    -fx-cursor: hand;
+}
+
+.model-refresh-button:hover {
+    -fx-background-color: #31405f;
+}
+
+.model-status {
+    -fx-text-fill: #8fa3c9;
+    -fx-font-size: 12px;
+}
+
 /* 执行 SQL 主操作按钮：蓝紫横向渐变 + 纯白字 + 12px 大圆角 + 舒适宽度。
  * 归零 insets 取消原生按钮灰色立体质感，呈现扁平渐变胶囊。 */
 .sql-execute-button {
