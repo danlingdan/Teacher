@@ -3,6 +3,7 @@ package com.sqlteacher.infrastructure.database;
 import com.sqlteacher.application.connection.ConnectionManagementService;
 import com.sqlteacher.application.connection.DatabaseConnectionProfile;
 import com.sqlteacher.application.connection.DatabaseCredentialSession;
+import com.sqlteacher.application.connection.DatabaseDialect;
 import com.sqlteacher.application.connection.ServerConnectionTarget;
 import com.sqlteacher.domain.SqlTeacherException;
 
@@ -63,6 +64,11 @@ public final class ProfileAwareJdbcConnectionProvider implements JdbcConnectionP
     @Override
     public boolean isReadOnly(String connectionId) {
         return requireProfile(connectionId).readOnly();
+    }
+
+    @Override
+    public DatabaseDialect dialect(String connectionId) {
+        return requireProfile(connectionId).dialect();
     }
 
     private DatabaseConnectionProfile requireProfile(String connectionId) {

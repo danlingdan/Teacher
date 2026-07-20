@@ -401,7 +401,8 @@ mvn javafx:run
 | 2026-07-21 | SQLite 连接 Profile 持久化 | 已完成 | schema 版本 2；覆盖内置连接、保存、列表、选择、禁用和删除回退；详见 `docs/stage2/2026-07-21-connection-profile-persistence.md` | `35fe4fa` |
 | 2026-07-21 | Profile 感知的 JDBC 连接与连接测试 | 已完成 | 相关增量测试通过；累计功能全量回归 180 项通过；详见 `docs/stage2/2026-07-21-profile-jdbc-connection-test.md` | `5225287` |
 | 2026-07-21 | 设置与连接管理 JavaFX 页面 | 已完成 | 增量测试和真实 JavaFX 导航走查通过；后台加载/测试、表单校验、选择、禁用与删除确认已接入；详见 `docs/stage2/2026-07-21-connection-settings-page.md` | `0a63f6c` |
-| 2026-07-21 | 当前 Profile 接入 SQL、元数据与 NL2SQL 链路 | 已完成 | 增量测试通过；MySQL 9.7.1 真实连接、当前 catalog 元数据和只读查询通过；会话凭据不持久化；详见 `docs/stage2/2026-07-21-current-profile-database-flow.md` | 本次提交 |
-| 2026-07-21 | MySQL 失败场景与方言安全回归 | 下一项 | 覆盖错误凭据、无效地址、超时、权限不足、只读与多语句；补充 MySQL/MariaDB 方言风险样例 | - |
+| 2026-07-21 | 当前 Profile 接入 SQL、元数据与 NL2SQL 链路 | 已完成 | 增量测试通过；MySQL 9.7.1 真实连接、当前 catalog 元数据和只读查询通过；会话凭据不持久化；详见 `docs/stage2/2026-07-21-current-profile-database-flow.md` | `0c434cd` |
+| 2026-07-21 | MySQL 失败场景与方言安全回归 | 已完成 | JDBC 身份验证、权限、超时、连接和 SQL 错误统一脱敏分类；MySQL/MariaDB 特有文件、锁和延迟查询在连接前拦截；197 项全量测试通过；详见 `docs/stage2/2026-07-21-mysql-failure-and-dialect-safety.md` | 本次提交 |
+| 2026-07-21 | 受限账号真实集成与 MariaDB 兼容验证 | 下一项 | 使用专用只读测试账号覆盖权限边界；验证支持版本、元数据差异和只读查询；不修改个人管理员账号 | - |
 
 每完成一个功能，在本表追加一条记录并填写对应提交短哈希，确保计划、实现、验证和 Git 历史可以相互追溯。

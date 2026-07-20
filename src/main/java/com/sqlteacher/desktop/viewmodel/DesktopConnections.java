@@ -1,6 +1,7 @@
 package com.sqlteacher.desktop.viewmodel;
 
 import com.sqlteacher.application.connection.ConnectionManagementService;
+import com.sqlteacher.application.connection.DatabaseConnectionProfile;
 import com.sqlteacher.domain.SqlTeacherException;
 
 import java.util.Objects;
@@ -17,10 +18,13 @@ public final class DesktopConnections {
     public static final String DEMO = "demo";
 
     public static String currentId(ConnectionManagementService connectionManagementService) {
+        return currentProfile(connectionManagementService).id();
+    }
+
+    public static DatabaseConnectionProfile currentProfile(ConnectionManagementService connectionManagementService) {
         Objects.requireNonNull(connectionManagementService, "connectionManagementService must not be null");
         return connectionManagementService.currentProfile()
             .filter(profile -> profile.enabled())
-            .map(profile -> profile.id())
             .orElseThrow(() -> new SqlTeacherException(
                 "DATABASE_CONNECTION_NOT_FOUND",
                 "找不到可用的当前数据库连接，请在设置页重新选择。"

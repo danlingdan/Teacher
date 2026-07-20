@@ -1,5 +1,7 @@
 package com.sqlteacher.infrastructure.database;
 
+import com.sqlteacher.application.connection.DatabaseDialect;
+
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.time.Duration;
@@ -10,5 +12,9 @@ public interface JdbcConnectionProvider {
 
     default boolean isReadOnly(String connectionId) {
         return false;
+    }
+
+    default DatabaseDialect dialect(String connectionId) {
+        return DatabaseDialect.SQLITE;
     }
 }

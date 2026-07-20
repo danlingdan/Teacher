@@ -74,5 +74,5 @@ mvn -q "-Dtest=CurrentProfileDatabaseFlowTest,InMemoryDatabaseCredentialSessionT
 
 - 本次未使用 MariaDB 实例验证兼容协议。
 - 本次未实际提交只读连接上的写语句；Java 侧拒绝由自动化测试覆盖，避免对本地数据库产生修改风险。
-- MySQL 错误凭据、无效地址、超时和权限不足仍需形成独立的脱敏测试矩阵。
+- MySQL 错误凭据、无效地址、超时和权限不足已形成确定性的脱敏分类回归，详见 `2026-07-21-mysql-failure-and-dialect-safety.md`；专用受限账号的真实权限验证仍待独立环境。
 - MySQL 方言的 NL2SQL Prompt 已接入当前 Profile，但真实模型输出质量需要单独回归。

@@ -47,13 +47,16 @@ public final class JdbcDatabaseConnectionTestService implements DatabaseConnecti
                 elapsedSince(startedAt)
             );
         } catch (Exception error) {
+            JdbcFailureClassifier.JdbcFailure failure = JdbcFailureClassifier.classify(error);
             log.warn(
-                "Database connection test failed, connectionId={}, dialect={}, failureType={}",
+                "Database connection test failed, connectionId={}, dialect={}, failureType={}, sqlState={}, vendorCode={}",
                 profile.id(),
                 profile.dialect(),
-                error.getClass().getSimpleName()
+                failure,
+                JdbcFailureClassifier.sqlState(error),
+                JdbcFailureClassifier.vendorCode(error)
             );
-            return failure(FAILURE_MESSAGE, startedAt);
+            return failure(connectionTestMessage(failure), startedAt);
         }
     }
 
@@ -65,6 +68,10 @@ public final class JdbcDatabaseConnectionTestService implements DatabaseConnecti
             "",
             elapsedSince(startedAt)
         );
+    }
+
+    private static String connectionTestMessage(JdbcFailureClassifier.JdbcFailure failure) {
+        return failure == JdbcFailureClassifier.JdbcFailure.SQL ? FAILURE_MESSAGE : failure.userMessage();
     }
 
     private static String safeMetadata(String value) {

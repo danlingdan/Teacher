@@ -3,6 +3,7 @@ package com.sqlteacher.desktop.controller;
 import com.sqlteacher.application.ai.AiModelSelection;
 import com.sqlteacher.application.ai.AiModelSelectionService;
 import com.sqlteacher.application.connection.ConnectionManagementService;
+import com.sqlteacher.application.connection.DatabaseConnectionProfile;
 import com.sqlteacher.application.nl2sql.Nl2SqlPlan;
 import com.sqlteacher.application.nl2sql.Nl2SqlRequest;
 import com.sqlteacher.application.nl2sql.Nl2SqlSafetyResult;
@@ -178,9 +179,11 @@ public final class AiAssistantController {
             Task<Nl2SqlSafetyResult> task = new Task<>() {
                 @Override
                 protected Nl2SqlSafetyResult call() {
+                    DatabaseConnectionProfile profile = DesktopConnections.currentProfile(connectionManagementService);
                     Nl2SqlRequest request = new Nl2SqlRequest(
                         question,
-                        DesktopConnections.currentId(connectionManagementService)
+                        profile.id(),
+                        profile.dialect()
                     );
                     return nl2SqlSafetyService.generateAndAssess(request);
                 }

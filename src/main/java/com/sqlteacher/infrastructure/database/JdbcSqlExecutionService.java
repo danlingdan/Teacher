@@ -42,12 +42,15 @@ public final class JdbcSqlExecutionService implements SqlExecutionService {
         
         validate(request);
 
-         log.debug("Executing SQL on connection '{}': {}",
+         log.debug("Executing SQL on connection '{}', sqlLength={}",
                 request.connectionId(),
-                request.sql().length() > 200 ? request.sql().substring(0, 200) + "..." : request.sql()
+                request.sql().length()
         );
 
-        SqlRiskAnalysis risk = riskAnalysisService.analyze(request.sql());
+        SqlRiskAnalysis risk = riskAnalysisService.analyze(
+            request.sql(),
+            connectionProvider.dialect(request.connectionId())
+        );
 
         log.debug("Risk analysis result: level={}, executable={}, confirmationRequired={}, type={}",
                 risk.level(),
@@ -169,10 +172,12 @@ public final class JdbcSqlExecutionService implements SqlExecutionService {
             return result;
 
         } catch (SQLException exception) {
-            log.error("SQL execution failed on connection '{}': {}",
+            JdbcFailureClassifier.JdbcFailure failure = JdbcFailureClassifier.classify(exception);
+            log.warn("SQL execution failed, connectionId={}, failureType={}, sqlState={}, vendorCode={}",
                     request.connectionId(),
-                    exception.getMessage(),
-                    exception
+                    failure,
+                    JdbcFailureClassifier.sqlState(exception),
+                    JdbcFailureClassifier.vendorCode(exception)
             );
             
             // Record failed SQL execution event
@@ -183,13 +188,12 @@ public final class JdbcSqlExecutionService implements SqlExecutionService {
                     risk.statementType(),
                     duration,
                     0,
-                    "SQL_EXECUTION_FAILED"
+                    failure.errorCode()
             );
             
             throw new SqlTeacherException(
-                    "SQL_EXECUTION_FAILED",
-                    exception.getMessage(),
-                    exception
+                    failure.errorCode(),
+                    failure.userMessage()
             );
 
         }

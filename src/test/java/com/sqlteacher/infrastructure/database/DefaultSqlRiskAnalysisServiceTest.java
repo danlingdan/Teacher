@@ -1,5 +1,6 @@
 package com.sqlteacher.infrastructure.database;
 
+import com.sqlteacher.application.connection.DatabaseDialect;
 import com.sqlteacher.application.risk.SqlRiskAnalysis;
 import com.sqlteacher.application.risk.SqlRiskLevel;
 import org.junit.jupiter.api.Test;
@@ -110,6 +111,36 @@ class DefaultSqlRiskAnalysisServiceTest {
 
         assertFalse(result.executable());
         assertEquals(SqlRiskLevel.FORBIDDEN, result.level());
+    }
+
+    @Test
+    void shouldBlockMysqlFileOutputLockingAndDangerousFunctions() {
+        for (String sql : java.util.List.of(
+            "SELECT * FROM student INTO OUTFILE '/tmp/students.csv'",
+            "SELECT * FROM student FOR UPDATE",
+            "SELECT GET_LOCK('lesson', 5)",
+            "SELECT LOAD_FILE('/etc/passwd')",
+            "SELECT SLEEP(10)"
+        )) {
+            SqlRiskAnalysis result = service.analyze(sql, DatabaseDialect.MYSQL);
+            assertFalse(result.executable(), sql);
+            assertEquals(SqlRiskLevel.FORBIDDEN, result.level(), sql);
+        }
+    }
+
+    @Test
+    void shouldApplyMysqlRulesToMariaDbWithoutMatchingQuotedTeachingText() {
+        SqlRiskAnalysis blocked = service.analyze(
+            "SELECT * FROM lesson LOCK IN SHARE MODE",
+            DatabaseDialect.MARIADB
+        );
+        SqlRiskAnalysis quoted = service.analyze(
+            "SELECT 'INTO OUTFILE', 'SLEEP(10)', 'FOR UPDATE'",
+            DatabaseDialect.MYSQL
+        );
+
+        assertFalse(blocked.executable());
+        assertTrue(quoted.executable());
     }
 
 }

@@ -63,11 +63,23 @@ public final class JdbcDatabaseMetadataService implements DatabaseMetadataServic
             return tables;
 
         } catch (SQLException e) {
-            log.error("Failed to load database metadata for connection: {}", connectionId, e);
+            JdbcFailureClassifier.JdbcFailure failure = JdbcFailureClassifier.classify(e);
+            String errorCode = failure == JdbcFailureClassifier.JdbcFailure.SQL
+                ? "DATABASE_METADATA_FAILED"
+                : failure.errorCode();
+            String userMessage = failure == JdbcFailureClassifier.JdbcFailure.SQL
+                ? "表结构读取失败，请检查数据库连接后重试。"
+                : failure.userMessage();
+            log.warn(
+                "Database metadata failed, connectionId={}, failureType={}, sqlState={}, vendorCode={}",
+                connectionId,
+                failure,
+                JdbcFailureClassifier.sqlState(e),
+                JdbcFailureClassifier.vendorCode(e)
+            );
             throw new SqlTeacherException(
-                    "DATABASE_METADATA_FAILED",
-                    "Failed to load database metadata:"+ e.getMessage(),
-                    e
+                    errorCode,
+                    userMessage
             );
         }
     }

@@ -18,6 +18,10 @@ public final class DefaultApplicationExceptionMapper implements ApplicationExcep
         Map.entry("DATABASE_CONNECTION_NOT_FOUND", presentation("找不到所选数据库连接，请在设置页重新选择。", false)),
         Map.entry("DATABASE_CONNECTION_DISABLED", presentation("所选数据库连接已禁用，请在设置页启用或切换连接。", false)),
         Map.entry("DATABASE_CREDENTIALS_REQUIRED", presentation("服务器连接缺少临时凭据，请先在设置页测试连接。", false)),
+        Map.entry("DATABASE_AUTHENTICATION_FAILED", presentation("数据库身份验证失败，请检查用户名和临时密码。", false)),
+        Map.entry("DATABASE_PERMISSION_DENIED", presentation("数据库账号权限不足，请联系管理员配置只读查询权限。", false)),
+        Map.entry("DATABASE_CONNECTION_TIMEOUT", presentation("数据库连接超时，请检查网络、地址和服务状态。", true)),
+        Map.entry("DATABASE_CONNECTION_FAILED", presentation("无法连接数据库，请检查地址、端口和服务状态。", true)),
         Map.entry("EXTERNAL_CONNECTION_READ_ONLY_REQUIRED", presentation("外部数据库连接必须启用只读模式。", false)),
         Map.entry("DATABASE_METADATA_FAILED", presentation("表结构读取失败，请检查数据库连接后重试。", true)),
         Map.entry("SQL_BLOCKED", presentation("SQL 被安全规则拦截，请检查是否包含危险操作或多条语句。", false)),
@@ -38,7 +42,11 @@ public final class DefaultApplicationExceptionMapper implements ApplicationExcep
                 ? presentation.userMessage()
                 : "操作未能完成，请重试或联系教师。";
             boolean retryable = presentation != null && presentation.retryable();
-            log.warn("Application operation failed, code={}", code, exception);
+            log.warn(
+                "Application operation failed, code={}, exceptionType={}",
+                code,
+                exception.getClass().getSimpleName()
+            );
             return new ApplicationError(
                 code,
                 ApplicationErrorType.APPLICATION,
@@ -47,7 +55,10 @@ public final class DefaultApplicationExceptionMapper implements ApplicationExcep
             );
         }
         if (throwable instanceof IllegalArgumentException) {
-            log.warn("Application request validation failed", throwable);
+            log.warn(
+                "Application request validation failed, exceptionType={}",
+                throwable.getClass().getSimpleName()
+            );
             return new ApplicationError(
                 "INVALID_REQUEST",
                 ApplicationErrorType.VALIDATION,
@@ -56,7 +67,10 @@ public final class DefaultApplicationExceptionMapper implements ApplicationExcep
             );
         }
 
-        log.error("Unexpected application failure", throwable);
+        log.error(
+            "Unexpected application failure, exceptionType={}",
+            throwable.getClass().getSimpleName()
+        );
         return new ApplicationError(
             "UNEXPECTED_ERROR",
             ApplicationErrorType.UNEXPECTED,

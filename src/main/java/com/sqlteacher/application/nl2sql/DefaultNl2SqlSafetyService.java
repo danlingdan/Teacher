@@ -42,7 +42,7 @@ public final class DefaultNl2SqlSafetyService implements Nl2SqlSafetyService {
             nl2SqlService.generate(request),
             "nl2SqlService result must not be null"
         );
-        SqlRiskAnalysis riskAnalysis = riskAnalysisService.analyze(plan.sqlDraft());
+        SqlRiskAnalysis riskAnalysis = riskAnalysisService.analyze(plan.sqlDraft(), request.dialect());
         Nl2SqlSafetyResult result = new Nl2SqlSafetyResult(plan, riskAnalysis);
 
         if (result.draftAvailable() && !result.accepted()) {

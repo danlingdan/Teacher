@@ -1,6 +1,7 @@
 package com.sqlteacher.application.nl2sql;
 
 import com.sqlteacher.application.event.LearningEventService;
+import com.sqlteacher.application.connection.DatabaseDialect;
 import com.sqlteacher.application.risk.SqlRiskAnalysis;
 import com.sqlteacher.application.risk.SqlRiskAnalysisService;
 import com.sqlteacher.application.risk.SqlRiskLevel;
@@ -9,6 +10,7 @@ import org.junit.jupiter.api.Test;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -79,6 +81,32 @@ class DefaultNl2SqlSafetyServiceTest {
         assertFalse(result.draftAvailable());
         assertFalse(result.accepted());
         assertTrue(events.blockedEvents.isEmpty());
+    }
+
+    @Test
+    void shouldForwardTheCurrentDatabaseDialectToRiskAnalysis() {
+        AtomicReference<DatabaseDialect> analyzedDialect = new AtomicReference<>();
+        SqlRiskAnalysisService riskService = new SqlRiskAnalysisService() {
+            @Override
+            public SqlRiskAnalysis analyze(String sql) {
+                throw new AssertionError("Dialect-aware analysis should be used");
+            }
+
+            @Override
+            public SqlRiskAnalysis analyze(String sql, DatabaseDialect dialect) {
+                analyzedDialect.set(dialect);
+                return analysis(SqlRiskLevel.LOW, true, false, false, "SELECT");
+            }
+        };
+        Nl2SqlSafetyService service = serviceFor(
+            plan("SELECT name FROM student"),
+            riskService,
+            new RecordingLearningEventService()
+        );
+
+        service.generateAndAssess(new Nl2SqlRequest("query", "mysql-demo", DatabaseDialect.MYSQL));
+
+        assertEquals(DatabaseDialect.MYSQL, analyzedDialect.get());
     }
 
     private static Nl2SqlSafetyService serviceFor(

@@ -70,4 +70,15 @@ class DefaultApplicationExceptionMapperTest {
         assertFalse(error.userMessage().contains("connection_profiles"));
         assertTrue(error.retryable());
     }
+
+    @Test
+    void shouldMapDatabaseAuthenticationFailureWithoutLeakingDriverDetails() {
+        ApplicationError error = mapper.map(
+            new SqlTeacherException("DATABASE_AUTHENTICATION_FAILED", "Access denied; password=secret")
+        );
+
+        assertEquals("数据库身份验证失败，请检查用户名和临时密码。", error.userMessage());
+        assertFalse(error.userMessage().contains("secret"));
+        assertFalse(error.retryable());
+    }
 }
