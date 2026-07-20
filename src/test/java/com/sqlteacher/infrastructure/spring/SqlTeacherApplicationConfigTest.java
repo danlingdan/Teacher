@@ -1,6 +1,7 @@
 package com.sqlteacher.infrastructure.spring;
 
 import com.sqlteacher.application.ai.AiStatusService;
+import com.sqlteacher.application.ai.AiModelSelectionService;
 import com.sqlteacher.application.config.AppConfigurationService;
 import com.sqlteacher.application.database.DatabaseInitializationService;
 import com.sqlteacher.application.error.ApplicationExceptionMapper;
@@ -24,6 +25,7 @@ class SqlTeacherApplicationConfigTest {
             assertNotNull(context.getBean(AppConfigurationService.class));
             assertNotNull(context.getBean(DatabaseInitializationService.class));
             assertNotNull(context.getBean(AiStatusService.class));
+            assertNotNull(context.getBean(AiModelSelectionService.class));
             assertNotNull(context.getBean(ApplicationExceptionMapper.class));
             assertNotNull(context.getBean(SqlExecutionService.class));
             assertNotNull(context.getBean(DatabaseMetadataService.class));

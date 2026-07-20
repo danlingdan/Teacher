@@ -1,5 +1,7 @@
 package com.sqlteacher.desktop.controller;
 
+import com.sqlteacher.application.ai.AiModelSelection;
+import com.sqlteacher.application.ai.AiModelSelectionService;
 import com.sqlteacher.application.nl2sql.Nl2SqlPlan;
 import com.sqlteacher.application.nl2sql.Nl2SqlRequest;
 import com.sqlteacher.application.nl2sql.Nl2SqlSafetyResult;
@@ -15,6 +17,7 @@ import javafx.concurrent.Task;
 import javafx.fxml.FXML;
 import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
+import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
 import javafx.scene.control.TextArea;
 import javafx.scene.Parent;
@@ -45,13 +48,26 @@ public final class AiAssistantController {
     private static final String ERROR_MESSAGE = "AI 生成失败，请稍后重试";
 
     private final Nl2SqlSafetyService nl2SqlSafetyService;
+    private final AiModelSelectionService aiModelSelectionService;
     private final Consumer<String> fillSqlCallback;
     private final Runnable switchPageCallback;
     private final SqlRiskAnalysisService sqlRiskAnalysisService;
     private Nl2SqlSafetyResult currentResult;
+    private boolean applyingModelSelection;
+    private boolean modelOperationInProgress;
+    private boolean generationInProgress;
 
     @FXML
     private TextArea questionInput;
+
+    @FXML
+    private ComboBox<String> modelSelector;
+
+    @FXML
+    private Button refreshModelsButton;
+
+    @FXML
+    private Label modelStatusLabel;
 
     @FXML
     private Button generateButton;
@@ -76,6 +92,7 @@ public final class AiAssistantController {
 
     public AiAssistantController(
         Nl2SqlSafetyService nl2SqlSafetyService,
+        AiModelSelectionService aiModelSelectionService,
         SqlRiskAnalysisService sqlRiskAnalysisService,
         Consumer<String> fillSqlCallback,
         Runnable switchPageCallback
@@ -83,6 +100,10 @@ public final class AiAssistantController {
         this.nl2SqlSafetyService = Objects.requireNonNull(
             nl2SqlSafetyService,
             "nl2SqlSafetyService must not be null"
+        );
+        this.aiModelSelectionService = Objects.requireNonNull(
+            aiModelSelectionService,
+            "aiModelSelectionService must not be null"
         );
         this.sqlRiskAnalysisService = Objects.requireNonNull(
             sqlRiskAnalysisService,
@@ -106,6 +127,24 @@ public final class AiAssistantController {
         if (questionInput == null) {
             log.error("questionInput is null, FXML binding failed");
         }
+        refreshModels();
+    }
+
+    @FXML
+    private void onRefreshModels() {
+        refreshModels();
+    }
+
+    @FXML
+    private void onModelSelected() {
+        if (applyingModelSelection || modelOperationInProgress || modelSelector == null) {
+            return;
+        }
+        String selected = modelSelector.getValue();
+        if (selected == null || selected.isBlank()) {
+            return;
+        }
+        runModelOperation(() -> aiModelSelectionService.select(selected), "正在保存模型选择…");
     }
 
     @FXML
@@ -118,8 +157,13 @@ public final class AiAssistantController {
                 log.warn("Empty input, returning early");
                 return;
             }
+            if (!aiModelSelectionService.current().hasSelection()) {
+                showAlert(Alert.AlertType.WARNING, "未检测到模型", "请先启动 Ollama、安装模型并刷新模型列表");
+                return;
+            }
 
-            generateButton.setDisable(true);
+            generationInProgress = true;
+            updateControlAvailability();
             GlobalLoading.show(GENERATING_MESSAGE);
             hideOfflineHint();
             log.info("Starting NL2SQL generation, questionLength={}", question.length());
@@ -148,7 +192,8 @@ public final class AiAssistantController {
                     displayResult(generateMockResult(question));
                     showOfflineHint();
                 } finally {
-                    generateButton.setDisable(false);
+                    generationInProgress = false;
+                    updateControlAvailability();
                     GlobalLoading.hide();
                 }
             });
@@ -164,7 +209,8 @@ public final class AiAssistantController {
                     log.error("Failed to handle task failure", e);
                     showOfflineHint();
                 } finally {
-                    generateButton.setDisable(false);
+                    generationInProgress = false;
+                    updateControlAvailability();
                     GlobalLoading.forceHide();
                 }
             });
@@ -172,7 +218,8 @@ public final class AiAssistantController {
             DesktopExecutors.background().execute(task);
         } catch (Exception e) {
             log.error("Unexpected error in onGenerateSql", e);
-            generateButton.setDisable(false);
+            generationInProgress = false;
+            updateControlAvailability();
             GlobalLoading.forceHide();
             showAlert(Alert.AlertType.ERROR, "错误", ERROR_MESSAGE);
         }
@@ -359,6 +406,77 @@ public final class AiAssistantController {
                 parent.setVisible(false);
                 parent.setManaged(false);
             }
+        }
+    }
+
+    private void refreshModels() {
+        runModelOperation(aiModelSelectionService::refresh, "正在检测本地 Ollama 模型…");
+    }
+
+    private void runModelOperation(
+        java.util.concurrent.Callable<AiModelSelection> operation,
+        String statusMessage
+    ) {
+        if (modelOperationInProgress) {
+            return;
+        }
+        modelOperationInProgress = true;
+        if (modelStatusLabel != null) {
+            modelStatusLabel.setText(statusMessage);
+        }
+        updateControlAvailability();
+
+        Task<AiModelSelection> task = new Task<>() {
+            @Override
+            protected AiModelSelection call() throws Exception {
+                return operation.call();
+            }
+        };
+        task.setOnSucceeded(event -> {
+            modelOperationInProgress = false;
+            applyModelSelection(task.getValue());
+            updateControlAvailability();
+        });
+        task.setOnFailed(event -> {
+            modelOperationInProgress = false;
+            applyModelSelection(aiModelSelectionService.current());
+            updateControlAvailability();
+            log.warn("Failed to update Ollama model selection", task.getException());
+            if (modelStatusLabel != null) {
+                modelStatusLabel.setText("模型检测失败，请确认 Ollama 已启动");
+            }
+        });
+        DesktopExecutors.background().execute(task);
+    }
+
+    private void applyModelSelection(AiModelSelection selection) {
+        if (selection == null || modelSelector == null) {
+            return;
+        }
+        applyingModelSelection = true;
+        try {
+            modelSelector.getItems().setAll(selection.installedModels());
+            modelSelector.setValue(selection.hasSelection() ? selection.selectedModel() : null);
+            if (modelStatusLabel != null) {
+                modelStatusLabel.setText(selection.hasSelection()
+                    ? "当前模型：" + selection.selectedModel()
+                    : "未检测到已安装模型");
+            }
+        } finally {
+            applyingModelSelection = false;
+        }
+    }
+
+    private void updateControlAvailability() {
+        boolean hasModel = aiModelSelectionService.current().hasSelection();
+        if (generateButton != null) {
+            generateButton.setDisable(modelOperationInProgress || generationInProgress || !hasModel);
+        }
+        if (modelSelector != null) {
+            modelSelector.setDisable(modelOperationInProgress || generationInProgress);
+        }
+        if (refreshModelsButton != null) {
+            refreshModelsButton.setDisable(modelOperationInProgress || generationInProgress);
         }
     }
 

@@ -2,6 +2,8 @@ package com.sqlteacher;
 
 import com.sqlteacher.application.ai.AiStatus;
 import com.sqlteacher.application.ai.AiStatusService;
+import com.sqlteacher.application.ai.AiModelSelection;
+import com.sqlteacher.application.ai.AiModelSelectionService;
 import com.sqlteacher.application.database.DatabaseInitializationResult;
 import com.sqlteacher.application.database.DatabaseInitializationService;
 import com.sqlteacher.infrastructure.spring.SqlTeacherApplicationConfig;
@@ -17,6 +19,8 @@ public final class StageOneVerificationApp {
             DatabaseInitializationResult databaseResult =
                 context.getBean(DatabaseInitializationService.class).initialize();
             AiStatus aiStatus = context.getBean(AiStatusService.class).checkStatus();
+            AiModelSelection modelSelection =
+                context.getBean(AiModelSelectionService.class).refresh();
 
             System.out.println("SQLTeacher stage 1 application verification");
             System.out.println("[PASS] Spring DI - application context started");
@@ -26,6 +30,12 @@ public final class StageOneVerificationApp {
                 "[%s] Ollama status - %s%n",
                 aiStatus.available() ? "PASS" : "WARNING",
                 aiStatus.message()
+            );
+            System.out.printf(
+                "[%s] Ollama models - installed=%s, selected=%s%n",
+                modelSelection.hasSelection() ? "PASS" : "WARNING",
+                modelSelection.installedModels(),
+                modelSelection.hasSelection() ? modelSelection.selectedModel() : "none"
             );
         }
     }

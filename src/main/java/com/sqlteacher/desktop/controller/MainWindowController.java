@@ -1,6 +1,7 @@
 package com.sqlteacher.desktop.controller;
 
 import com.sqlteacher.application.execution.SqlExecutionService;
+import com.sqlteacher.application.ai.AiModelSelectionService;
 import com.sqlteacher.application.metadata.DatabaseMetadataService;
 import com.sqlteacher.application.nl2sql.Nl2SqlSafetyService;
 import com.sqlteacher.application.risk.SqlRiskAnalysisService;
@@ -67,6 +68,9 @@ public final class MainWindowController {
 
     /** NL2SQL 服务（应用层接口）；运行期实现由 Spring 提供，向下注入到 AI 助手页控制器。 */
     private final Nl2SqlSafetyService nl2SqlSafetyService;
+
+    /** 本地 AI 模型发现与选择服务。 */
+    private final AiModelSelectionService aiModelSelectionService;
 
     /** SQL 风险分析服务（应用层接口）；运行期实现由 Spring 提供，向下注入到 AI 助手页控制器。 */
     private final SqlRiskAnalysisService sqlRiskAnalysisService;
@@ -140,10 +144,15 @@ public final class MainWindowController {
     public MainWindowController(SqlExecutionService sqlExecutionService,
                                 DatabaseMetadataService databaseMetadataService,
                                 Nl2SqlSafetyService nl2SqlSafetyService,
+                                AiModelSelectionService aiModelSelectionService,
                                 SqlRiskAnalysisService sqlRiskAnalysisService) {
         this.sqlExecutionService = Objects.requireNonNull(sqlExecutionService, "sqlExecutionService must not be null");
         this.databaseMetadataService = Objects.requireNonNull(databaseMetadataService, "databaseMetadataService must not be null");
         this.nl2SqlSafetyService = Objects.requireNonNull(nl2SqlSafetyService, "nl2SqlSafetyService must not be null");
+        this.aiModelSelectionService = Objects.requireNonNull(
+            aiModelSelectionService,
+            "aiModelSelectionService must not be null"
+        );
         this.sqlRiskAnalysisService = Objects.requireNonNull(sqlRiskAnalysisService, "sqlRiskAnalysisService must not be null");
         this.fillSqlCallback = sql -> {
             // 确保 SQL 练习页已加载并捕获控制器引用，仅填充 SQL 不跳转页面。
@@ -340,6 +349,7 @@ public final class MainWindowController {
             if (type == AiAssistantController.class) {
                 return new AiAssistantController(
                     nl2SqlSafetyService,
+                    aiModelSelectionService,
                     sqlRiskAnalysisService,
                     fillSqlCallback,
                     this::onNavigateSqlPractice

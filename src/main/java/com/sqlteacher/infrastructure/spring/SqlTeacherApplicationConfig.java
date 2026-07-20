@@ -1,6 +1,7 @@
 package com.sqlteacher.infrastructure.spring;
 
 import com.sqlteacher.application.ai.AiModelProvider;
+import com.sqlteacher.application.ai.AiModelSelectionService;
 import com.sqlteacher.application.ai.AiStatusService;
 import com.sqlteacher.application.config.AppConfigurationService;
 import com.sqlteacher.application.config.SqlTeacherConfiguration;
@@ -16,6 +17,7 @@ import com.sqlteacher.application.risk.SqlRiskAnalysisService;
 import com.sqlteacher.infrastructure.ai.Nl2SqlServiceImpl;
 import com.sqlteacher.infrastructure.ai.OllamaAiModelProvider;
 import com.sqlteacher.infrastructure.ai.OllamaAiStatusService;
+import com.sqlteacher.infrastructure.ai.OllamaModelSelectionService;
 import com.sqlteacher.infrastructure.config.PropertiesAppConfigurationService;
 import com.sqlteacher.infrastructure.database.DatabaseServiceConfig;
 import com.sqlteacher.infrastructure.database.SqliteAppDatabaseInitializer;
@@ -52,15 +54,25 @@ public class SqlTeacherApplicationConfig {
     }
 
     @Bean
+    public AiModelSelectionService aiModelSelectionService(SqlTeacherConfiguration properties) {
+        return new OllamaModelSelectionService(
+            properties.ai(),
+            properties.dataDirectory().resolve("selected-ai-model.txt")
+        );
+    }
+
+    @Bean
     public Nl2SqlService nl2SqlService(
         AiModelProvider aiModelProvider,
         SqlTeacherConfiguration properties,
+        AiModelSelectionService modelSelectionService,
         DatabaseMetadataService databaseMetadataService,
         LearningEventService learningEventService
     ) {
         return new Nl2SqlServiceImpl(
             aiModelProvider,
             properties.ai(),
+            modelSelectionService,
             databaseMetadataService,
             learningEventService
         );

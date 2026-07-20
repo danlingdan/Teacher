@@ -4,6 +4,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sqlteacher.application.ai.AiCompletionRequest;
 import com.sqlteacher.application.ai.AiCompletionResult;
 import com.sqlteacher.application.ai.AiModelProvider;
+import com.sqlteacher.application.ai.AiModelSelection;
+import com.sqlteacher.application.ai.AiModelSelectionService;
 import com.sqlteacher.application.config.AiConfiguration;
 import com.sqlteacher.application.event.LearningEventService;
 import com.sqlteacher.application.metadata.DatabaseColumn;
@@ -26,6 +28,7 @@ public final class Nl2SqlServiceImpl implements Nl2SqlService {
     private static final String PROMPT_VERSION = "v3";
     private final AiModelProvider aiModelProvider;
     private final AiConfiguration aiConfiguration;
+    private final AiModelSelectionService modelSelectionService;
     private final DatabaseMetadataService databaseMetadataService;
     private final LearningEventService learningEventService;
     private final ObjectMapper objectMapper;
@@ -36,10 +39,36 @@ public final class Nl2SqlServiceImpl implements Nl2SqlService {
         DatabaseMetadataService databaseMetadataService,
         LearningEventService learningEventService
     ) {
-        this.aiModelProvider = aiModelProvider;
-        this.aiConfiguration = aiConfiguration;
-        this.databaseMetadataService = databaseMetadataService;
-        this.learningEventService = learningEventService;
+        this(
+            aiModelProvider,
+            aiConfiguration,
+            AiModelSelectionService.fixed(aiConfiguration.defaultModel()),
+            databaseMetadataService,
+            learningEventService
+        );
+    }
+
+    public Nl2SqlServiceImpl(
+        AiModelProvider aiModelProvider,
+        AiConfiguration aiConfiguration,
+        AiModelSelectionService modelSelectionService,
+        DatabaseMetadataService databaseMetadataService,
+        LearningEventService learningEventService
+    ) {
+        this.aiModelProvider = Objects.requireNonNull(aiModelProvider, "aiModelProvider must not be null");
+        this.aiConfiguration = Objects.requireNonNull(aiConfiguration, "aiConfiguration must not be null");
+        this.modelSelectionService = Objects.requireNonNull(
+            modelSelectionService,
+            "modelSelectionService must not be null"
+        );
+        this.databaseMetadataService = Objects.requireNonNull(
+            databaseMetadataService,
+            "databaseMetadataService must not be null"
+        );
+        this.learningEventService = Objects.requireNonNull(
+            learningEventService,
+            "learningEventService must not be null"
+        );
         this.objectMapper = new ObjectMapper();
     }
 
@@ -54,8 +83,12 @@ public final class Nl2SqlServiceImpl implements Nl2SqlService {
         }
 
         String prompt = buildPrompt(request.naturalLanguage(), request.connectionId());
+        String selectedModel = resolveSelectedModel();
+        if (selectedModel.isEmpty()) {
+            return unavailableModelPlan(request.connectionId());
+        }
         AiCompletionRequest aiRequest = new AiCompletionRequest(
-            aiConfiguration.defaultModel(),
+            selectedModel,
             prompt,
             aiConfiguration.generateTimeout()
         );
@@ -146,7 +179,8 @@ public final class Nl2SqlServiceImpl implements Nl2SqlService {
         sb.append("- ONLY generate SELECT statements\n");
         sb.append("- NO INSERT, UPDATE, DELETE, CREATE, DROP, ALTER, or any modifying statements\n");
         sb.append("- NO multiple statements separated by semicolons\n");
-        sb.append("- Limit the result to 500 rows using LIMIT clause\n");
+        sb.append("- Limit the result to at most 500 rows using a LIMIT clause\n");
+        sb.append("- If the user requests a smaller number of rows, preserve that smaller LIMIT\n");
         sb.append("- Return ONLY a valid JSON object\n");
         sb.append("\n");
         sb.append("Natural language: ").append(naturalLanguage).append("\n");
@@ -208,8 +242,15 @@ public final class Nl2SqlServiceImpl implements Nl2SqlService {
         }
 
         String prompt = buildErrorExplanationPrompt(sql, errorMessage, connectionId);
+        String selectedModel = resolveSelectedModel();
+        if (selectedModel.isEmpty()) {
+            return SqlErrorExplanation.failure(
+                "No local Ollama model is installed",
+                aiConfiguration.defaultModel()
+            );
+        }
         AiCompletionRequest aiRequest = new AiCompletionRequest(
-            aiConfiguration.defaultModel(),
+            selectedModel,
             prompt,
             aiConfiguration.generateTimeout()
         );
@@ -243,6 +284,26 @@ public final class Nl2SqlServiceImpl implements Nl2SqlService {
             recordAiGeneration(connectionId, false, aiResult.model(), "PARSE_ERROR");
             return SqlErrorExplanation.failure("Failed to parse AI error explanation: " + ex.getClass().getSimpleName(), aiResult.model());
         }
+    }
+
+    private String resolveSelectedModel() {
+        AiModelSelection selection = modelSelectionService.current();
+        if (!selection.hasSelection()) {
+            selection = modelSelectionService.refresh();
+        }
+        return selection.selectedModel();
+    }
+
+    private Nl2SqlPlan unavailableModelPlan(String connectionId) {
+        String model = aiConfiguration.defaultModel();
+        recordAiGeneration(connectionId, false, model, "MODEL_UNAVAILABLE");
+        return new Nl2SqlPlan(
+            "",
+            "",
+            "No local Ollama model is installed. Install a model or refresh the model list.",
+            model,
+            PROMPT_VERSION
+        );
     }
 
     private String validateErrorExplanationResponse(OllamaSqlErrorResponse response) {
