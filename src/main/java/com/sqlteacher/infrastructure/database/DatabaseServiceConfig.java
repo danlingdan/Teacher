@@ -1,6 +1,7 @@
 package com.sqlteacher.infrastructure.database;
 
 import com.sqlteacher.application.connection.ConnectionManagementService;
+import com.sqlteacher.application.connection.DatabaseConnectionTestService;
 import com.sqlteacher.application.event.DefaultLearningEventService;
 import com.sqlteacher.application.event.LearningEventQueryService;
 import com.sqlteacher.application.event.LearningEventRecorder;
@@ -11,6 +12,8 @@ import com.sqlteacher.application.risk.SqlRiskAnalysisService;
 import com.sqlteacher.application.config.SqlTeacherConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+
+import java.time.Duration;
 
 @Configuration
 public class DatabaseServiceConfig {
@@ -35,6 +38,12 @@ public class DatabaseServiceConfig {
             JdbcConnectionFactory connectionFactory,
             SqlTeacherConfiguration configuration) {
         return new JdbcConnectionManagementService(connectionFactory, configuration.database());
+    }
+
+    @Bean
+    public DatabaseConnectionTestService databaseConnectionTestService(
+            JdbcConnectionFactory connectionFactory) {
+        return new JdbcDatabaseConnectionTestService(connectionFactory, Duration.ofSeconds(5));
     }
 
     @Bean

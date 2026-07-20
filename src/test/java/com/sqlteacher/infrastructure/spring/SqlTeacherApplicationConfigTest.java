@@ -4,6 +4,7 @@ import com.sqlteacher.application.ai.AiStatusService;
 import com.sqlteacher.application.ai.AiModelSelectionService;
 import com.sqlteacher.application.config.AppConfigurationService;
 import com.sqlteacher.application.connection.ConnectionManagementService;
+import com.sqlteacher.application.connection.DatabaseConnectionTestService;
 import com.sqlteacher.application.database.DatabaseInitializationService;
 import com.sqlteacher.application.error.ApplicationExceptionMapper;
 import com.sqlteacher.application.execution.SqlExecutionService;
@@ -28,6 +29,7 @@ class SqlTeacherApplicationConfigTest {
             assertNotNull(context.getBean(AiStatusService.class));
             assertNotNull(context.getBean(AiModelSelectionService.class));
             assertNotNull(context.getBean(ConnectionManagementService.class));
+            assertNotNull(context.getBean(DatabaseConnectionTestService.class));
             assertNotNull(context.getBean(ApplicationExceptionMapper.class));
             assertNotNull(context.getBean(SqlExecutionService.class));
             assertNotNull(context.getBean(DatabaseMetadataService.class));
