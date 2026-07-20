@@ -214,14 +214,24 @@ public final class Nl2SqlServiceImpl implements Nl2SqlService {
             aiConfiguration.generateTimeout()
         );
 
-        AiCompletionResult aiResult = aiModelProvider.explainError(aiRequest);
+        AiCompletionResult aiResult = aiModelProvider.complete(aiRequest);
 
         if (!aiResult.success()) {
+            recordAiGeneration(connectionId, false, aiResult.model(), "AI_PROVIDER_FAILED");
             return SqlErrorExplanation.failure(aiResult.errorMessage(), aiResult.model());
         }
 
         try {
             OllamaSqlErrorResponse response = objectMapper.readValue(aiResult.content(), OllamaSqlErrorResponse.class);
+
+            String validationError = validateErrorExplanationResponse(response);
+            if (validationError != null) {
+                log.warn("AI error explanation validation failed: {}", validationError);
+                recordAiGeneration(connectionId, false, aiResult.model(), "VALIDATION_FAILED");
+                return SqlErrorExplanation.failure(validationError, aiResult.model());
+            }
+
+            recordAiGeneration(connectionId, true, aiResult.model(), null);
             return SqlErrorExplanation.success(
                 response.errorCause(),
                 response.correctionSuggestion(),
@@ -230,8 +240,22 @@ public final class Nl2SqlServiceImpl implements Nl2SqlService {
             );
         } catch (Exception ex) {
             log.warn("Failed to parse AI error explanation response", ex);
+            recordAiGeneration(connectionId, false, aiResult.model(), "PARSE_ERROR");
             return SqlErrorExplanation.failure("Failed to parse AI error explanation: " + ex.getClass().getSimpleName(), aiResult.model());
         }
+    }
+
+    private String validateErrorExplanationResponse(OllamaSqlErrorResponse response) {
+        if (response.errorCause().isBlank()) {
+            return "AI generated empty error cause";
+        }
+        if (response.correctionSuggestion().isBlank()) {
+            return "AI generated empty correction suggestion";
+        }
+        if (response.correctedSql().isBlank()) {
+            return "AI generated empty corrected SQL draft";
+        }
+        return null;
     }
 
     private String buildErrorExplanationPrompt(String sql, String errorMessage, String connectionId) {

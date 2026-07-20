@@ -4,7 +4,6 @@ import com.sqlteacher.application.event.LearningEventService;
 import com.sqlteacher.application.risk.SqlRiskAnalysis;
 import com.sqlteacher.application.risk.SqlRiskAnalysisService;
 import com.sqlteacher.application.risk.SqlRiskLevel;
-import com.sqlteacher.application.nl2sql.SqlErrorExplanation;
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
@@ -87,18 +86,7 @@ class DefaultNl2SqlSafetyServiceTest {
         SqlRiskAnalysisService riskService,
         LearningEventService eventService
     ) {
-        Nl2SqlService nl2SqlService = new Nl2SqlService() {
-            @Override
-            public Nl2SqlPlan generate(Nl2SqlRequest request) {
-                return plan;
-            }
-
-            @Override
-            public SqlErrorExplanation explainSqlError(String connectionId, String sql, String errorMessage) {
-                return SqlErrorExplanation.success("test", "test", sql, "model");
-            }
-        };
-        return new DefaultNl2SqlSafetyService(nl2SqlService, riskService, eventService);
+        return new DefaultNl2SqlSafetyService(request -> plan, riskService, eventService);
     }
 
     private static Nl2SqlPlan plan(String sqlDraft) {

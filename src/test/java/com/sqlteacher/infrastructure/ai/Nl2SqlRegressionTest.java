@@ -266,10 +266,6 @@ public class Nl2SqlRegressionTest {
             return result;
         }
 
-        @Override
-        public AiCompletionResult explainError(AiCompletionRequest request) {
-            return result;
-        }
     }
 
     private static class NoOpLearningEventService implements LearningEventService {

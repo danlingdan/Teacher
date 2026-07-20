@@ -1,7 +1,6 @@
 package com.sqlteacher.application.ai;
 
+@FunctionalInterface
 public interface AiModelProvider {
     AiCompletionResult complete(AiCompletionRequest request);
-
-    AiCompletionResult explainError(AiCompletionRequest request);
 }
