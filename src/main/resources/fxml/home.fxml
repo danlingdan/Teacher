@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import java.net.URL?>
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.Region?>
+<?import javafx.scene.layout.VBox?>
+
+<VBox xmlns="http://javafx.com/javafx"
+      xmlns:fx="http://javafx.com/fxml"
+      fx:controller="com.sqlteacher.desktop.controller.HomeController"
+      styleClass="home-page"
+      alignment="TOP_CENTER"
+      spacing="24.0"
+      maxWidth="Infinity"
+      maxHeight="Infinity">
+
+    <stylesheets>
+        <URL value="@../css/app.css"/>
+    </stylesheets>
+
+    <VBox styleClass="intro-section"
+          alignment="CENTER"
+          spacing="12.0"
+          HBox.hgrow="ALWAYS"
+          VBox.vgrow="ALWAYS">
+        <VBox.margin>
+            <Insets top="32.0" right="32.0" bottom="16.0" left="32.0"/>
+        </VBox.margin>
+
+        <Label styleClass="intro-tag" text="AI + Database Education"/>
+
+        <Label styleClass="intro-title" text="SQL Teacher"/>
+
+        <Label styleClass="intro-description" text="一款面向数据库教学的本地实训平台，提供自然语言生成 SQL 草案、SQLite 演示库练习和表结构浏览。AI 输出仅作预览，所有 SQL 执行均经过 Java 侧风险分析。"/>
+
+        <Region styleClass="intro-divider"/>
+    </VBox>
+
+    <HBox styleClass="cards-container"
+          alignment="CENTER"
+          spacing="20.0"
+          HBox.hgrow="ALWAYS"
+          VBox.vgrow="ALWAYS">
+        <VBox.margin>
+            <Insets top="0.0" right="32.0" bottom="32.0" left="32.0"/>
+        </VBox.margin>
+
+        <VBox fx:id="sqlPracticeCard"
+              styleClass="home-card"
+              alignment="TOP_LEFT"
+              spacing="12.0"
+              onMouseClicked="#onSqlPracticeCardClick">
+            <VBox.margin>
+                <Insets top="0.0" right="0.0" bottom="0.0" left="0.0"/>
+            </VBox.margin>
+            <Label styleClass="card-icon" text="🔧"/>
+            <Label styleClass="card-title" text="SQL练习"/>
+            <Label styleClass="card-description" text="编写并执行 SQL，查看查询结果和教学提示；高风险语句执行前需要明确确认"/>
+            <Region VBox.vgrow="ALWAYS"/>
+            <Label styleClass="card-arrow" text="→"/>
+        </VBox>
+
+        <VBox fx:id="aiAssistantCard"
+              styleClass="home-card"
+              alignment="TOP_LEFT"
+              spacing="12.0"
+              onMouseClicked="#onAiAssistantCardClick">
+            <VBox.margin>
+                <Insets top="0.0" right="0.0" bottom="0.0" left="0.0"/>
+            </VBox.margin>
+            <Label styleClass="card-icon" text="✨"/>
+            <Label styleClass="card-title" text="AI助手"/>
+            <Label styleClass="card-description" text="根据自然语言生成 SQL 草案和解释，经过安全检查后可复制到 SQL 练习页"/>
+            <Region VBox.vgrow="ALWAYS"/>
+            <Label styleClass="card-arrow" text="→"/>
+        </VBox>
+
+        <VBox fx:id="tableSchemaCard"
+              styleClass="home-card"
+              alignment="TOP_LEFT"
+              spacing="12.0"
+              onMouseClicked="#onTableSchemaCardClick">
+            <VBox.margin>
+                <Insets top="0.0" right="0.0" bottom="0.0" left="0.0"/>
+            </VBox.margin>
+            <Label styleClass="card-icon" text="📊"/>
+            <Label styleClass="card-title" text="表结构浏览"/>
+            <Label styleClass="card-description" text="以树形结构查看演示数据库的表、字段类型和主键信息"/>
+            <Region VBox.vgrow="ALWAYS"/>
+            <Label styleClass="card-arrow" text="→"/>
+        </VBox>
+    </HBox>
+
+</VBox>

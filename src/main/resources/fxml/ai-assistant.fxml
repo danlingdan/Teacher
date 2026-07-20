@@ -1,0 +1,169 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!--
+  AI 助手子页面（深色主题 · 对齐 SQL 练习页样式 · 自然语言转 SQL · 离线降级提示 · 兼容 800×600）。
+
+  嵌入方式：
+    - 本页面不是独立窗口，而是被 MainWindow.fxml 的 pageContainer（StackPane）内嵌加载。
+
+  布局约束：
+    - 根 ScrollPane 负责低分辨率下的纵向滚动；fitToWidth=true 保证内容宽度贴合视口。
+    - 内层 VBox（page-content）设 maxWidth 约束，窗口变宽时内容整体居中、宽度固定；
+      内部自上而下：标题区 → 离线警告卡片 → 提问输入卡片 → SQL预览卡片 → AI解释卡片。
+    - 所有父容器设置 HBox.hgrow="ALWAYS" / VBox.vgrow="ALWAYS"，横向纵向自动撑满窗口。
+    - 输入框、预览区域高度自适应拉伸，减少页面底部空白。
+    - 所有最小尺寸适配 800×600。
+
+  业务 fx:id：
+    - questionInput：多行文本输入框
+    - generateButton：生成SQL按钮（主按钮）
+    - sqlPreviewArea：SQL预览区域
+    - copyToPracticeButton：复制至SQL练习页按钮（次要按钮）
+    - aiExplanationArea：AI文字解释展示文本区
+    - offlineHint：离线提示Label（带卡片容器）
+
+  样式：
+    - 全部引用全局 css/app.css 中的样式类，无内联 style，无独立 css 文件。
+    - 卡片、按钮、输入框样式与 SQL 练习页完全对齐。
+-->
+
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.ScrollPane?>
+<?import javafx.scene.control.TextArea?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.Region?>
+<?import javafx.scene.layout.StackPane?>
+<?import javafx.scene.layout.VBox?>
+
+<ScrollPane xmlns="http://javafx.com/javafx"
+            xmlns:fx="http://javafx.com/fxml"
+            fx:controller="com.sqlteacher.desktop.controller.AiAssistantController"
+            styleClass="sql-practice-scroll"
+            fitToWidth="true"
+            hbarPolicy="NEVER"
+            vbarPolicy="AS_NEEDED">
+    <content>
+        <VBox styleClass="sql-practice-page" alignment="TOP_CENTER">
+
+            <!-- 居中内容列：固定最大宽度，窗口变宽时保持居中；三张卡片纵向排布。 -->
+            <VBox styleClass="page-content" spacing="16.0" maxWidth="1040.0" VBox.vgrow="ALWAYS">
+                <children>
+
+                    <!-- 标题区：小图标徽标 + 主标题 + 弱化副标题，整体居中。 -->
+                    <VBox styleClass="title-area" alignment="CENTER" spacing="6.0">
+                        <children>
+                            <Region styleClass="title-badge"/>
+                            <Label styleClass="page-title" text="AI 助手"/>
+                            <Label styleClass="page-subtitle"
+                                   text="用自然语言提问，AI 帮你生成 SQL 查询语句"/>
+                        </children>
+                    </VBox>
+
+                    <!-- 离线警告卡片：Ollama 服务不可用时展示降级提示。 -->
+                    <VBox styleClass="offline-card" spacing="8.0" visible="false" managed="false">
+                        <children>
+                            <HBox alignment="CENTER_LEFT" spacing="10.0">
+                                <children>
+                                    <Region styleClass="warning-icon"/>
+                                    <Label styleClass="offline-title" text="服务离线"/>
+                                </children>
+                            </HBox>
+                            <Label fx:id="offlineHint"
+                                   styleClass="offline-message"
+                                   wrapText="true"
+                                   text="Ollama 服务未连接，AI 助手功能暂时不可用。请启动本地 Ollama 服务后重试。"/>
+                        </children>
+                    </VBox>
+
+                    <!-- 第一层卡片：自然语言提问。多行输入 + 右下生成按钮。 -->
+                    <VBox styleClass="panel-card" spacing="12.0">
+                        <children>
+                            <HBox styleClass="card-title-row" alignment="CENTER_LEFT" spacing="10.0">
+                                <children>
+                                    <Region styleClass="card-accent"/>
+                                    <Label styleClass="card-title" text="自然语言提问"/>
+                                </children>
+                            </HBox>
+                            <TextArea fx:id="questionInput"
+                                      styleClass="sql-editor"
+                                      promptText="例如：查询成绩大于90分的学生姓名和分数"
+                                      wrapText="true"
+                                      prefRowCount="4"/>
+                            <HBox styleClass="sql-action-row" alignment="CENTER_RIGHT" spacing="12.0">
+                                <children>
+                                    <Button fx:id="generateButton"
+                                            styleClass="sql-execute-button"
+                                            text="生成 SQL"
+                                            onAction="#onGenerateSql"/>
+                                </children>
+                            </HBox>
+                        </children>
+                    </VBox>
+
+                    <!-- 第二层卡片：SQL 预览。StackPane 叠放文本域与空态占位；右上角复制按钮。 -->
+                    <VBox styleClass="panel-card" spacing="12.0">
+                        <children>
+                            <HBox styleClass="card-title-row" alignment="CENTER_LEFT" spacing="10.0">
+                                <children>
+                                    <Region styleClass="card-accent"/>
+                                    <Label styleClass="card-title" text="SQL 预览"/>
+                                    <Region HBox.hgrow="ALWAYS"/>
+                                    <Button fx:id="copyToPracticeButton"
+                                            styleClass="sql-execute-button"
+                                            text="复制至 SQL 练习页"
+                                            onAction="#onCopyToPractice"/>
+                                </children>
+                            </HBox>
+                            <!-- 预览区：NORMAL 显示文本域；EMPTY/初始显示占位提示（居中，二者互斥）。 -->
+                            <StackPane styleClass="result-pane"
+                                       prefHeight="180.0"
+                                       minHeight="140.0"
+                                       VBox.vgrow="ALWAYS">
+                                <children>
+                                    <TextArea fx:id="sqlPreviewArea"
+                                              styleClass="sql-editor"
+                                              wrapText="true"
+                                              prefRowCount="6"
+                                              editable="false"/>
+                                    <Label fx:id="sqlPlaceholder"
+                                           styleClass="table-empty-hint"
+                                           text="生成的 SQL 将在此显示"/>
+                                </children>
+                            </StackPane>
+                        </children>
+                    </VBox>
+
+                    <!-- 第三层卡片：AI 解读。StackPane 叠放文本域与空态占位。 -->
+                    <VBox styleClass="panel-card" spacing="12.0" VBox.vgrow="ALWAYS">
+                        <children>
+                            <HBox styleClass="card-title-row" alignment="CENTER_LEFT" spacing="10.0">
+                                <children>
+                                    <Region styleClass="card-accent"/>
+                                    <Label styleClass="card-title" text="AI 解读"/>
+                                </children>
+                            </HBox>
+                            <!-- 解读区：NORMAL 显示文本域；EMPTY/初始显示占位提示（居中，二者互斥）。 -->
+                            <StackPane styleClass="result-pane"
+                                       prefHeight="180.0"
+                                       minHeight="140.0"
+                                       VBox.vgrow="ALWAYS">
+                                <children>
+                                    <TextArea fx:id="aiExplanationArea"
+                                              styleClass="sql-editor"
+                                              wrapText="true"
+                                              prefRowCount="4"
+                                              editable="false"/>
+                                    <Label fx:id="explanationPlaceholder"
+                                           styleClass="table-empty-hint"
+                                           text="AI 将在此解释生成的 SQL 逻辑"/>
+                                </children>
+                            </StackPane>
+                        </children>
+                    </VBox>
+
+                </children>
+            </VBox>
+        </VBox>
+    </content>
+</ScrollPane>

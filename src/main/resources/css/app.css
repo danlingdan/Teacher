@@ -145,6 +145,81 @@
 
 /* ===== 页面标题区 ===== */
 
+/* 标题分区容器：包含标题和分割线。 */
+.title-section {
+    -fx-background-color: transparent;
+}
+
+/* 区域分割线：淡灰色细横线，区分标题区与内容区。 */
+.section-divider {
+    -fx-min-height: 1;
+    -fx-pref-height: 1;
+    -fx-max-height: 1;
+    -fx-background-color: rgba(120, 145, 200, 0.15);
+}
+
+/* 卡片副标题：浅灰色小字，区分标题层级。 */
+.card-subtitle {
+    -fx-font-size: 12px;
+    -fx-text-fill: #6b7280;
+}
+
+/* 输入容器：透明背景，统一内边距。 */
+.input-container {
+    -fx-background-color: transparent;
+    -fx-padding: 0;
+}
+
+/* 按钮行：右对齐，增加顶部间距。 */
+.button-row {
+    -fx-padding: 4 0 0 0;
+}
+
+/* 预览容器：透明背景，统一内边距。 */
+.preview-container {
+    -fx-background-color: transparent;
+    -fx-padding: 0;
+}
+
+/* ===== AI 助手页面专属样式 ===== */
+
+/* 离线警告卡片：橙色半透明背景 + 细边框 + 圆角。 */
+.offline-card {
+    -fx-background-color:
+        linear-gradient(to bottom, rgba(251, 146, 60, 0.10) 0%, rgba(239, 68, 68, 0.05) 100%),
+        #2a1f1f;
+    -fx-background-radius: 12;
+    -fx-border-color: rgba(251, 146, 60, 0.35);
+    -fx-border-width: 1;
+    -fx-border-radius: 12;
+    -fx-padding: 14 16 14 16;
+}
+
+/* 警告图标：橙色小方块。 */
+.warning-icon {
+    -fx-min-width: 20;
+    -fx-pref-width: 20;
+    -fx-max-width: 20;
+    -fx-min-height: 20;
+    -fx-pref-height: 20;
+    -fx-max-height: 20;
+    -fx-background-color: linear-gradient(to bottom right, #fb923c, #f97316);
+    -fx-background-radius: 6;
+}
+
+/* 离线标题：橙色文字，加粗。 */
+.offline-title {
+    -fx-font-size: 14px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #fb923c;
+}
+
+/* 离线消息：浅橙色文字。 */
+.offline-message {
+    -fx-font-size: 13px;
+    -fx-text-fill: #fdba74;
+}
+
 /* 标题上方简约小图标徽标：纯 CSS 蓝紫渐变小方块（无图片），30x30、10px 圆角。 */
 .title-badge {
     -fx-min-width: 30;
@@ -416,6 +491,110 @@
     -fx-max-width: 9999px;
 }
 
+/* =====================================================================
+ * 首页（home.fxml）
+ * ===================================================================== */
+
+.home-page {
+    -fx-background-color: #141c30;
+    -fx-padding: 0;
+}
+
+.intro-section {
+    -fx-background-color: transparent;
+    -fx-padding: 32 32 16 32;
+}
+
+.intro-tag {
+    -fx-text-fill: #8259f0;
+    -fx-font-size: 13px;
+    -fx-font-weight: bold;
+    -fx-alignment: CENTER;
+}
+
+.intro-title {
+    -fx-text-fill: #ffffff;
+    -fx-font-size: 36px;
+    -fx-font-weight: bold;
+    -fx-alignment: CENTER;
+}
+
+.intro-description {
+    -fx-text-fill: #9ca3af;
+    -fx-font-size: 14px;
+    -fx-alignment: CENTER;
+    -fx-text-alignment: center;
+    -fx-wrap-text: true;
+    -fx-max-width: 720;
+    -fx-line-spacing: 4;
+}
+
+.intro-summary {
+    -fx-text-fill: #6b7280;
+    -fx-font-size: 13px;
+    -fx-alignment: CENTER;
+    -fx-text-alignment: center;
+}
+
+.intro-divider {
+    -fx-pref-height: 1;
+    -fx-max-height: 1;
+    -fx-background-color: rgba(159, 122, 234, 0.20);
+    -fx-min-width: 400;
+    -fx-max-width: 400;
+}
+
+.cards-container {
+    -fx-padding: 0 32 32 32;
+    -fx-alignment: CENTER;
+}
+
+.home-card {
+    -fx-background-color: #1b253d;
+    -fx-background-radius: 14;
+    -fx-border-color: rgba(159, 122, 234, 0.20);
+    -fx-border-width: 1;
+    -fx-border-radius: 14;
+    -fx-padding: 20;
+    -fx-min-width: 240;
+    -fx-pref-width: 280;
+    -fx-min-height: 200;
+    -fx-cursor: hand;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.25), 12, 0.0, 0, 4);
+}
+
+.home-card:hover {
+    -fx-background-color: #243050;
+    -fx-border-color: rgba(130, 89, 240, 0.40);
+    -fx-effect: dropshadow(gaussian, rgba(130, 89, 240, 0.20), 16, 0.0, 0, 6);
+}
+
+.home-card:pressed {
+    -fx-background-color: #1e2a44;
+}
+
+.card-icon {
+    -fx-font-size: 28px;
+}
+
+.card-title {
+    -fx-text-fill: #ffffff;
+    -fx-font-size: 18px;
+    -fx-font-weight: bold;
+}
+
+.card-description {
+    -fx-text-fill: #9ca3af;
+    -fx-font-size: 13px;
+    -fx-wrap-text: true;
+}
+
+.card-arrow {
+    -fx-text-fill: #8259f0;
+    -fx-font-size: 24px;
+    -fx-alignment: BASELINE_RIGHT;
+}
+
 /* 数据行：底色由 -fx-control-inner-background(-alt) 提供深浅交替；
  * 行底部 1px 极淡分隔线，配合单元格留白避免拥挤。 */
 .result-table .table-row-cell {
@@ -501,6 +680,13 @@
     -fx-padding: 10 14 10 14;
     -fx-font-size: 13px;
     -fx-wrap-text: true;
+}
+
+.risk-highlight {
+    -fx-background-color: rgba(247, 127, 0, 0.12);
+    -fx-border-color: rgba(247, 127, 0, 0.40);
+    -fx-border-width: 1;
+    -fx-border-radius: 8;
 }
 
 .sql-result-hint {
@@ -814,8 +1000,3 @@
     -fx-background-color: rgba(255,255,255,0.2);
     -fx-background-radius: 4;
 }
-.result-table .table-column {
-    -fx-min-width: 75px;
-    -fx-max-width: 9999px;
-}
-
