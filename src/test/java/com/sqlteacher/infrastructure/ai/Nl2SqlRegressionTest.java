@@ -284,9 +284,5 @@ public class Nl2SqlRegressionTest {
         @Override
         public void recordAiGeneration(String connectionId, boolean successful, String model, String promptVersion, String errorCode) {
         }
-
-        @Override
-        public void recordAiErrorExplanation(String connectionId, boolean successful, String model, String errorCode) {
-        }
     }
 }
