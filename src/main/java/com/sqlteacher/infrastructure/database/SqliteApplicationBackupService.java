@@ -75,6 +75,8 @@ public final class SqliteApplicationBackupService implements ApplicationBackupSe
             throw new SqlTeacherException("BACKUP_NOT_FOUND", "The selected backup no longer exists");
         }
         Path restoreDirectory = configuration.dataDirectory().resolve(".restore-" + UUID.randomUUID()).normalize();
+        String safetyBackupId = null;
+        boolean replacementStarted = false;
         try {
             Files.createDirectories(restoreDirectory);
             extractDatabaseFiles(archive, restoreDirectory);
@@ -88,12 +90,27 @@ public final class SqliteApplicationBackupService implements ApplicationBackupSe
                 verifyIntegrity(restoredDemo);
             }
 
-            createAutomaticBackup("before-restore");
+            safetyBackupId = createAutomaticBackup("before-restore").id();
+            replacementStarted = true;
             replaceDatabase(restoredApp, configuration.database().appDatabasePath());
             if (Files.exists(restoredDemo)) {
                 replaceDatabase(restoredDemo, configuration.database().demoDatabasePath());
             }
         } catch (IOException | SQLException error) {
+            if (replacementStarted && safetyBackupId != null) {
+                try {
+                    Path rollbackDirectory = restoreDirectory.resolve("rollback");
+                    Files.createDirectories(rollbackDirectory);
+                    extractDatabaseFiles(resolveBackup(safetyBackupId), rollbackDirectory);
+                    replaceDatabase(rollbackDirectory.resolve("app.db"), configuration.database().appDatabasePath());
+                    Path rollbackDemo = rollbackDirectory.resolve("demo.db");
+                    if (Files.exists(rollbackDemo)) {
+                        replaceDatabase(rollbackDemo, configuration.database().demoDatabasePath());
+                    }
+                } catch (IOException rollbackError) {
+                    error.addSuppressed(rollbackError);
+                }
+            }
             throw failure("BACKUP_RESTORE_FAILED", "Failed to restore the selected backup", error);
         } finally {
             deleteTreeQuietly(restoreDirectory);
