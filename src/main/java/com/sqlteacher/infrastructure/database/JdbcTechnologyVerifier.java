@@ -34,4 +34,13 @@ public final class JdbcTechnologyVerifier {
             return VerificationItem.failed("MySQL JDBC", "driver class not found");
         }
     }
+
+    public VerificationItem verifyMariaDbDriverAvailable() {
+        try {
+            Class.forName("org.mariadb.jdbc.Driver");
+            return VerificationItem.passed("MariaDB JDBC", "driver class is available");
+        } catch (ClassNotFoundException ex) {
+            return VerificationItem.failed("MariaDB JDBC", "driver class not found");
+        }
+    }
 }

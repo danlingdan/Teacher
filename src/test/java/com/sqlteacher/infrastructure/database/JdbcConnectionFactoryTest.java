@@ -2,7 +2,11 @@ package com.sqlteacher.infrastructure.database;
 
 import com.sqlteacher.application.config.DatabaseConfiguration;
 import com.sqlteacher.application.connection.DatabaseConnectionProfile;
+import com.sqlteacher.application.connection.DatabaseDialect;
+import com.sqlteacher.application.connection.ServerConnectionTarget;
 import com.sqlteacher.application.connection.SqliteConnectionTarget;
+import com.mysql.cj.jdbc.MysqlDataSource;
+import org.mariadb.jdbc.Configuration;
 import org.junit.jupiter.api.Test;
 
 import java.nio.file.Files;
@@ -117,6 +121,79 @@ class JdbcConnectionFactoryTest {
         assertThrows(
             IllegalArgumentException.class,
             () -> factory.open(enabled, new char[0], Duration.ZERO)
+        );
+    }
+
+    @Test
+    void shouldBuildHardenedMysqlDriverConfiguration() throws Exception {
+        ServerConnectionTarget target = new ServerConnectionTarget(
+            DatabaseDialect.MYSQL,
+            "db.internal",
+            3307,
+            "course",
+            "teacher"
+        );
+
+        MysqlDataSource dataSource = JdbcConnectionFactory.mysqlDataSource(
+            target,
+            "temporary".toCharArray(),
+            Duration.ofMillis(1250)
+        );
+
+        assertEquals("db.internal", dataSource.getServerName());
+        assertEquals(3307, dataSource.getPort());
+        assertEquals("course", dataSource.getDatabaseName());
+        assertEquals("teacher", dataSource.getUser());
+        assertEquals(1250, dataSource.getConnectTimeout());
+        assertEquals(1250, dataSource.getSocketTimeout());
+        assertFalse(dataSource.getAllowMultiQueries());
+        assertFalse(dataSource.getAllowLoadLocalInfile());
+    }
+
+    @Test
+    void shouldBuildHardenedMariaDbDriverConfiguration() {
+        ServerConnectionTarget target = new ServerConnectionTarget(
+            DatabaseDialect.MARIADB,
+            "maria.internal",
+            3308,
+            "lesson",
+            "student"
+        );
+
+        Configuration configuration = JdbcConnectionFactory.mariaDbConfiguration(
+            target,
+            "temporary".toCharArray(),
+            Duration.ofMillis(1750)
+        );
+
+        assertEquals("maria.internal", configuration.addresses().getFirst().host);
+        assertEquals(3308, configuration.addresses().getFirst().port);
+        assertEquals("lesson", configuration.database());
+        assertEquals("student", configuration.user());
+        assertEquals(1750, configuration.connectTimeout());
+        assertEquals(1750, configuration.socketTimeout());
+        assertFalse(configuration.allowMultiQueries());
+        assertFalse(configuration.allowLocalInfile());
+        assertFalse(configuration.dumpQueriesOnException());
+    }
+
+    @Test
+    void shouldRejectDriverConfigurationForTheWrongDialect() {
+        ServerConnectionTarget mariaDb = new ServerConnectionTarget(
+            DatabaseDialect.MARIADB,
+            "localhost",
+            3306,
+            "course",
+            "teacher"
+        );
+
+        assertThrows(
+            IllegalArgumentException.class,
+            () -> JdbcConnectionFactory.mysqlDataSource(
+                mariaDb,
+                new char[0],
+                Duration.ofSeconds(1)
+            )
         );
     }
 }

@@ -8,7 +8,7 @@
 
 - SQLite Profile 文件连接。
 - MySQL Profile 服务器连接。
-- MariaDB Profile 通过现有 MySQL Connector/J 使用兼容协议连接。
+- MariaDB Profile 现已通过独立 MariaDB Connector/J 连接，不再复用 MySQL Connector/J；详见 `2026-07-21-mariadb-driver-routing.md`。
 - 连接与 socket 超时。
 - Profile 只读属性传递。
 - 临时 `char[]` 密码输入。

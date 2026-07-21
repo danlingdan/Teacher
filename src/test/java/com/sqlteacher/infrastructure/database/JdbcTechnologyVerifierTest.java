@@ -17,4 +17,9 @@ class JdbcTechnologyVerifierTest {
     void shouldLoadMysqlDriver() {
         assertEquals(VerificationStatus.PASS, verifier.verifyMysqlDriverAvailable().status());
     }
+
+    @Test
+    void shouldLoadMariaDbDriver() {
+        assertEquals(VerificationStatus.PASS, verifier.verifyMariaDbDriverAvailable().status());
+    }
 }

@@ -31,6 +31,7 @@ public final class TechnologyVerificationApp {
         items.add(javaFxVerifier.verifyGraphicsEnvironment());
         items.add(jdbcVerifier.verifySqliteInMemoryQuery());
         items.add(jdbcVerifier.verifyMysqlDriverAvailable());
+        items.add(jdbcVerifier.verifyMariaDbDriverAvailable());
         items.add(ollamaHealthClient.checkHealth());
 
         System.out.println("SQLTeacher stage 0 technology verification");

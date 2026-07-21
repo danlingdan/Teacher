@@ -403,6 +403,7 @@ mvn javafx:run
 | 2026-07-21 | 设置与连接管理 JavaFX 页面 | 已完成 | 增量测试和真实 JavaFX 导航走查通过；后台加载/测试、表单校验、选择、禁用与删除确认已接入；详见 `docs/stage2/2026-07-21-connection-settings-page.md` | `0a63f6c` |
 | 2026-07-21 | 当前 Profile 接入 SQL、元数据与 NL2SQL 链路 | 已完成 | 增量测试通过；MySQL 9.7.1 真实连接、当前 catalog 元数据和只读查询通过；会话凭据不持久化；详见 `docs/stage2/2026-07-21-current-profile-database-flow.md` | `0c434cd` |
 | 2026-07-21 | MySQL 失败场景与方言安全回归 | 已完成 | JDBC 身份验证、权限、超时、连接和 SQL 错误统一脱敏分类；MySQL/MariaDB 特有文件、锁和延迟查询在连接前拦截；197 项全量测试通过；详见 `docs/stage2/2026-07-21-mysql-failure-and-dialect-safety.md` | 本次提交 |
-| 2026-07-21 | 受限账号真实集成与 MariaDB 兼容验证 | 下一项 | 使用专用只读测试账号覆盖权限边界；验证支持版本、元数据差异和只读查询；不修改个人管理员账号 | - |
+| 2026-07-21 | MariaDB 独立驱动与安全连接路由 | 已完成 | 引入 MariaDB Connector/J 3.5.9；MySQL/MariaDB 按方言使用独立驱动；固定连接超时并关闭多语句、本地文件导入；增量测试、CLI 和 app-image 验证通过；详见 `docs/stage2/2026-07-21-mariadb-driver-routing.md` | 本次提交 |
+| 2026-07-21 | 专用只读账号真实权限验证 | 下一项 | MySQL 服务可用后创建隔离测试库与临时只读账号，验证查询成功、写入拒绝和元数据范围，完成后清理；不修改个人管理员账号 | - |
 
 每完成一个功能，在本表追加一条记录并填写对应提交短哈希，确保计划、实现、验证和 Git 历史可以相互追溯。
