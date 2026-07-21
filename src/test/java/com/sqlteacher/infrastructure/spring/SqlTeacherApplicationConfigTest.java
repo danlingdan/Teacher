@@ -12,6 +12,7 @@ import com.sqlteacher.application.exercise.ExerciseManagementService;
 import com.sqlteacher.application.exercise.ExerciseCatalogService;
 import com.sqlteacher.application.exercise.ExercisePracticeService;
 import com.sqlteacher.application.exercise.SqlExerciseEvaluationService;
+import com.sqlteacher.application.exercise.ExerciseProgressService;
 import com.sqlteacher.application.event.LearningEventRecorder;
 import com.sqlteacher.application.metadata.DatabaseMetadataService;
 import com.sqlteacher.application.nl2sql.Nl2SqlSafetyService;
@@ -40,6 +41,7 @@ class SqlTeacherApplicationConfigTest {
             assertNotNull(context.getBean(ExerciseCatalogService.class));
             assertNotNull(context.getBean(SqlExerciseEvaluationService.class));
             assertNotNull(context.getBean(ExercisePracticeService.class));
+            assertNotNull(context.getBean(ExerciseProgressService.class));
             assertNotNull(context.getBean(DatabaseMetadataService.class));
             assertNotNull(context.getBean(SqlRiskAnalysisService.class));
             assertNotNull(context.getBean(Nl2SqlSafetyService.class));

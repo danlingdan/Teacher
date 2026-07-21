@@ -84,6 +84,11 @@
                             text="教师题库"
                             onAction="#onNavigateExerciseManagement"/>
 
+                    <Button fx:id="exerciseProgressNavButton"
+                            styleClass="nav-button"
+                            text="学习进度"
+                            onAction="#onNavigateExerciseProgress"/>
+
                     <Button fx:id="aiAssistantNavButton"
                             styleClass="nav-button"
                             text="AI助手"

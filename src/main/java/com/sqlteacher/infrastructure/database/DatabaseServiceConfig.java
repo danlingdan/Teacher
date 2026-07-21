@@ -12,6 +12,7 @@ import com.sqlteacher.application.exercise.ExerciseManagementService;
 import com.sqlteacher.application.exercise.ExerciseCatalogService;
 import com.sqlteacher.application.exercise.ExercisePracticeService;
 import com.sqlteacher.application.exercise.SqlExerciseEvaluationService;
+import com.sqlteacher.application.exercise.ExerciseProgressService;
 import com.sqlteacher.application.metadata.DatabaseMetadataService;
 import com.sqlteacher.application.risk.SqlRiskAnalysisService;
 import com.sqlteacher.application.config.SqlTeacherConfiguration;
@@ -130,5 +131,10 @@ public class DatabaseServiceConfig {
             resultMapper,
             configuration
         );
+    }
+
+    @Bean
+    public ExerciseProgressService exerciseProgressService(JdbcConnectionFactory connectionFactory) {
+        return new JdbcExerciseProgressService(connectionFactory);
     }
 }

@@ -1085,3 +1085,10 @@
 .exercise-workspace { -fx-padding: 0 20 20 10; }
 .exercise-result-split { -fx-background-color: transparent; }
 .exercise-result-split .text-area { -fx-font-size: 13px; }
+.progress-content { -fx-padding: 0 24 20 24; }
+.progress-card {
+    -fx-background-color: #1b253d; -fx-background-radius: 10;
+    -fx-border-color: rgba(159,122,234,0.22); -fx-border-radius: 10;
+    -fx-padding: 12; -fx-pref-width: 160; -fx-alignment: CENTER_LEFT;
+}
+.progress-value { -fx-text-fill: #ffffff; -fx-font-size: 21px; -fx-font-weight: bold; }
