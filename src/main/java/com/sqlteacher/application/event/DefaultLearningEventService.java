@@ -95,6 +95,60 @@ public final class DefaultLearningEventService implements LearningEventService {
         );
     }
 
+    @Override
+    public void recordExerciseAttempt(
+        String exerciseId,
+        String status,
+        boolean successful,
+        Duration duration,
+        String errorCode
+    ) {
+        validateText(exerciseId, "exerciseId");
+        validateText(status, "status");
+        Objects.requireNonNull(duration, "duration must not be null");
+        if (duration.isNegative()) {
+            throw new IllegalArgumentException("duration must not be negative");
+        }
+        Map<String, String> attributes = new LinkedHashMap<>();
+        attributes.put("exerciseId", exerciseId);
+        attributes.put("status", status);
+        attributes.put("durationMs", Long.toString(duration.toMillis()));
+        putIfPresent(attributes, "errorCode", errorCode);
+        LearningEventType type = switch (status) {
+            case "PASSED" -> LearningEventType.EXERCISE_PASSED;
+            case "FAILED" -> LearningEventType.EXERCISE_FAILED;
+            default -> LearningEventType.EXERCISE_ATTEMPT;
+        };
+        record(type, "exercise", successful, attributes);
+    }
+
+    @Override
+    public void recordExerciseHint(String exerciseId, int hintLevel) {
+        validateText(exerciseId, "exerciseId");
+        if (hintLevel < 1) {
+            throw new IllegalArgumentException("hintLevel must be positive");
+        }
+        record(
+            LearningEventType.EXERCISE_HINT_USED,
+            "exercise",
+            true,
+            Map.of("exerciseId", exerciseId, "hintLevel", Integer.toString(hintLevel))
+        );
+    }
+
+    @Override
+    public void recordKnowledgeSearch(int queryLength, int resultCount) {
+        if (queryLength < 1 || resultCount < 0) {
+            throw new IllegalArgumentException("knowledge search metrics are invalid");
+        }
+        record(
+            LearningEventType.KNOWLEDGE_SEARCHED,
+            "knowledge",
+            true,
+            Map.of("queryLength", Integer.toString(queryLength), "resultCount", Integer.toString(resultCount))
+        );
+    }
+
     private void record(
         LearningEventType type,
         String connectionId,

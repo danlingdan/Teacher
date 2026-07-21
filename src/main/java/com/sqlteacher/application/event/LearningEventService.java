@@ -31,4 +31,16 @@ public interface LearningEventService {
         String promptVersion,
         String errorCode
     );
+
+    void recordExerciseAttempt(
+        String exerciseId,
+        String status,
+        boolean successful,
+        Duration duration,
+        String errorCode
+    );
+
+    void recordExerciseHint(String exerciseId, int hintLevel);
+
+    void recordKnowledgeSearch(int queryLength, int resultCount);
 }

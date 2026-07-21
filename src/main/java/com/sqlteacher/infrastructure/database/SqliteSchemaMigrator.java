@@ -149,6 +149,58 @@ final class SqliteSchemaMigrator {
                     on exercise_attempts(session_id, created_at)
                     """
             )
+        ),
+        new Migration(
+            4,
+            "Create local knowledge document and FTS5 index tables",
+            List.of(
+                """
+                    create table knowledge_documents (
+                        id text primary key,
+                        title text not null,
+                        source_name text not null,
+                        content_hash text not null unique,
+                        chunk_count integer not null check (chunk_count > 0),
+                        imported_at text not null
+                    )
+                    """,
+                """
+                    create table knowledge_chunks (
+                        id text primary key,
+                        document_id text not null references knowledge_documents(id) on delete cascade,
+                        chunk_index integer not null check (chunk_index >= 0),
+                        content text not null,
+                        unique(document_id, chunk_index)
+                    )
+                    """,
+                """
+                    create virtual table knowledge_chunks_fts using fts5(
+                        content,
+                        content='knowledge_chunks',
+                        content_rowid='rowid',
+                        tokenize='unicode61 remove_diacritics 2'
+                    )
+                    """,
+                """
+                    create trigger knowledge_chunks_ai after insert on knowledge_chunks begin
+                        insert into knowledge_chunks_fts(rowid, content) values (new.rowid, new.content);
+                    end
+                    """,
+                """
+                    create trigger knowledge_chunks_ad after delete on knowledge_chunks begin
+                        insert into knowledge_chunks_fts(knowledge_chunks_fts, rowid, content)
+                        values ('delete', old.rowid, old.content);
+                    end
+                    """,
+                """
+                    create trigger knowledge_chunks_au after update on knowledge_chunks begin
+                        insert into knowledge_chunks_fts(knowledge_chunks_fts, rowid, content)
+                        values ('delete', old.rowid, old.content);
+                        insert into knowledge_chunks_fts(rowid, content) values (new.rowid, new.content);
+                    end
+                    """,
+                "create index knowledge_chunks_document_order on knowledge_chunks(document_id, chunk_index)"
+            )
         )
     );
 

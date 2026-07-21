@@ -12,6 +12,7 @@ import com.sqlteacher.application.exercise.ExercisePracticeService;
 import com.sqlteacher.application.exercise.ExerciseSession;
 import com.sqlteacher.application.exercise.ExerciseView;
 import com.sqlteacher.application.exercise.SqlExerciseEvaluationService;
+import com.sqlteacher.application.event.LearningEventService;
 import com.sqlteacher.application.risk.SqlRiskAnalysis;
 import com.sqlteacher.application.risk.SqlRiskAnalysisService;
 import com.sqlteacher.domain.SqlTeacherException;
@@ -49,6 +50,7 @@ public final class JdbcExercisePracticeService implements ExercisePracticeServic
     private final SqlExerciseEvaluationService evaluationService;
     private final SqlResultMapper resultMapper;
     private final ExerciseAttemptCodec attemptCodec;
+    private final LearningEventService learningEventService;
     private final Path sessionDirectory;
 
     public JdbcExercisePracticeService(
@@ -57,7 +59,8 @@ public final class JdbcExercisePracticeService implements ExercisePracticeServic
         SqlRiskAnalysisService riskAnalysisService,
         SqlExerciseEvaluationService evaluationService,
         SqlResultMapper resultMapper,
-        SqlTeacherConfiguration configuration
+        SqlTeacherConfiguration configuration,
+        LearningEventService learningEventService
     ) {
         this.connectionFactory = connectionFactory;
         this.managementService = managementService;
@@ -65,6 +68,7 @@ public final class JdbcExercisePracticeService implements ExercisePracticeServic
         this.evaluationService = evaluationService;
         this.resultMapper = resultMapper;
         this.attemptCodec = new ExerciseAttemptCodec();
+        this.learningEventService = learningEventService;
         this.sessionDirectory = configuration.dataDirectory().resolve("exercise-sessions").toAbsolutePath().normalize();
     }
 
@@ -122,6 +126,10 @@ public final class JdbcExercisePracticeService implements ExercisePracticeServic
             attemptId, session.id(), ExerciseAttemptStatus.RUN, sql, execution, null, occurredAt,
             execution.success() ? "" : "SQL_EXECUTION_FAILED"
         );
+        learningEventService.recordExerciseAttempt(
+            session.exerciseId(), ExerciseAttemptStatus.RUN.name(), execution.success(), execution.duration(),
+            execution.success() ? null : "SQL_EXECUTION_FAILED"
+        );
         return new ExerciseAttemptResult(
             attemptId, session.id(), ExerciseAttemptStatus.RUN, execution, null, occurredAt
         );
@@ -142,6 +150,10 @@ public final class JdbcExercisePracticeService implements ExercisePracticeServic
         Instant occurredAt = Instant.now();
         String attemptId = UUID.randomUUID().toString();
         recordAttempt(attemptId, session.id(), status, sql, execution, evaluation, occurredAt, evaluation.errorCode());
+        learningEventService.recordExerciseAttempt(
+            exercise.id(), status.name(), evaluation.passed(),
+            execution.duration().plus(evaluation.duration()), evaluation.errorCode()
+        );
         if (evaluation.passed()) {
             completeSession(session.id(), occurredAt);
             deleteSessionDatabase(sessionDatabase(session.id()));
@@ -170,6 +182,7 @@ public final class JdbcExercisePracticeService implements ExercisePracticeServic
             } catch (SQLException error) {
                 throw new SqlTeacherException("EXERCISE_HINT_FAILED", "Failed to record exercise hint", error);
             }
+            learningEventService.recordExerciseHint(exercise.id(), nextCount);
         }
         return new ExerciseHint(
             nextCount,

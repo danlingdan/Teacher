@@ -17,4 +17,16 @@ public final class MockLearningEventService implements LearningEventService {
     @Override
     public void recordAiGeneration(String connectionId, boolean successful, String model, String promptVersion, String errorCode) {
     }
+
+    @Override
+    public void recordExerciseAttempt(String exerciseId, String status, boolean successful, Duration duration, String errorCode) {
+    }
+
+    @Override
+    public void recordExerciseHint(String exerciseId, int hintLevel) {
+    }
+
+    @Override
+    public void recordKnowledgeSearch(int queryLength, int resultCount) {
+    }
 }

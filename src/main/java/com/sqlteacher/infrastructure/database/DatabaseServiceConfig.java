@@ -13,6 +13,8 @@ import com.sqlteacher.application.exercise.ExerciseCatalogService;
 import com.sqlteacher.application.exercise.ExercisePracticeService;
 import com.sqlteacher.application.exercise.SqlExerciseEvaluationService;
 import com.sqlteacher.application.exercise.ExerciseProgressService;
+import com.sqlteacher.application.analytics.LearningAnalyticsService;
+import com.sqlteacher.application.maintenance.DataMaintenanceService;
 import com.sqlteacher.application.metadata.DatabaseMetadataService;
 import com.sqlteacher.application.risk.SqlRiskAnalysisService;
 import com.sqlteacher.application.config.SqlTeacherConfiguration;
@@ -122,19 +124,38 @@ public class DatabaseServiceConfig {
             SqlRiskAnalysisService riskAnalysisService,
             SqlExerciseEvaluationService evaluationService,
             SqlResultMapper resultMapper,
-            SqlTeacherConfiguration configuration) {
+            SqlTeacherConfiguration configuration,
+            LearningEventService learningEventService) {
         return new JdbcExercisePracticeService(
             connectionFactory,
             managementService,
             riskAnalysisService,
             evaluationService,
             resultMapper,
-            configuration
+            configuration,
+            learningEventService
         );
     }
 
     @Bean
     public ExerciseProgressService exerciseProgressService(JdbcConnectionFactory connectionFactory) {
         return new JdbcExerciseProgressService(connectionFactory);
+    }
+
+    @Bean
+    public LearningAnalyticsService learningAnalyticsService(JdbcConnectionFactory connectionFactory) {
+        return new JdbcLearningAnalyticsService(connectionFactory);
+    }
+
+    @Bean
+    public SqliteKnowledgeService sqliteKnowledgeService(
+            JdbcConnectionFactory connectionFactory,
+            LearningEventService learningEventService) {
+        return new SqliteKnowledgeService(connectionFactory, learningEventService);
+    }
+
+    @Bean
+    public DataMaintenanceService dataMaintenanceService(JdbcConnectionFactory connectionFactory) {
+        return new JdbcDataMaintenanceService(connectionFactory);
     }
 }
