@@ -27,7 +27,7 @@
                 <Label fx:id="currentLabel" text="当前连接：-" styleClass="model-status"/>
             </VBox>
             <ScrollPane fitToWidth="true" styleClass="connection-form-scroll">
-                <VBox spacing="12" styleClass="panel-card connection-form">
+                <VBox spacing="12" styleClass="panel-card, connection-form">
                     <Label text="连接信息" styleClass="card-title"/>
                     <GridPane hgap="12" vgap="10">
                         <columnConstraints>

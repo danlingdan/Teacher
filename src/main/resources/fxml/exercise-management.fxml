@@ -30,7 +30,7 @@
                 </HBox>
             </VBox>
             <ScrollPane fitToWidth="true" styleClass="exercise-scroll">
-                <VBox spacing="12" styleClass="panel-card exercise-form">
+                <VBox spacing="12" styleClass="panel-card, exercise-form">
                     <HBox alignment="CENTER_LEFT">
                         <Label text="题目定义" styleClass="card-title"/>
                         <Region HBox.hgrow="ALWAYS"/>
