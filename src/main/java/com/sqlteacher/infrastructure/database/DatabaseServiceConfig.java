@@ -115,7 +115,7 @@ public class DatabaseServiceConfig {
         return new DeterministicSqlExerciseEvaluationService(riskAnalysisService, configuration);
     }
 
-    @Bean
+    @Bean(destroyMethod = "shutdown")
     public ExercisePracticeService exercisePracticeService(
             JdbcConnectionFactory connectionFactory,
             ExerciseManagementService managementService,

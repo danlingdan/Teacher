@@ -38,7 +38,7 @@ public final class SqliteAppDatabaseInitializer implements DatabaseInitializatio
             boolean appCreated = Files.notExists(appDatabase);
             boolean demoCreated = Files.notExists(demoDatabase);
 
-            initializeAppDatabase(appDatabase);
+            initializeAppDatabase(appDatabase, dataDirectory.resolve("exercise-sessions"));
             initializeDemoDatabase(demoDatabase);
 
             log.info("SQLite databases initialized, appDatabase={}, demoDatabase={}", appDatabase, demoDatabase);
@@ -48,19 +48,21 @@ public final class SqliteAppDatabaseInitializer implements DatabaseInitializatio
         }
     }
 
-    private static void initializeAppDatabase(Path databasePath) throws SQLException {
+    private static void initializeAppDatabase(Path databasePath, Path sessionDirectory) throws SQLException, IOException {
         new SqliteSchemaMigrator().migrate(databasePath);
         SqliteDriver.ensureLoaded();
         try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + databasePath)) {
             connection.setAutoCommit(false);
             try {
                 new DefaultExerciseCatalogSeeder().seed(connection);
+                ExerciseSessionRuntimeCleaner.closeActiveSessions(connection, java.time.Instant.now());
                 connection.commit();
             } catch (SQLException | RuntimeException error) {
                 connection.rollback();
                 throw error;
             }
         }
+        ExerciseSessionRuntimeCleaner.deleteSessionFiles(sessionDirectory);
     }
 
     private static void initializeDemoDatabase(Path databasePath) throws SQLException {

@@ -35,8 +35,11 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public final class JdbcExercisePracticeService implements ExercisePracticeService {
+    private static final Logger log = LoggerFactory.getLogger(JdbcExercisePracticeService.class);
     static final int MAX_RESULT_ROWS = 500;
     private static final int QUERY_TIMEOUT_SECONDS = 10;
 
@@ -182,6 +185,15 @@ public final class JdbcExercisePracticeService implements ExercisePracticeServic
             completeSession(session.id(), Instant.now());
         }
         deleteSessionDatabase(sessionDatabase(session.id()));
+    }
+
+    public void shutdown() {
+        try (Connection connection = connectionFactory.open("app")) {
+            ExerciseSessionRuntimeCleaner.closeActiveSessions(connection, Instant.now());
+            ExerciseSessionRuntimeCleaner.deleteSessionFiles(sessionDirectory);
+        } catch (SQLException | IOException error) {
+            log.warn("Failed to clean exercise sessions during application shutdown", error);
+        }
     }
 
     private SqlExecutionResult executeStudentQuery(String sessionId, String sql) {

@@ -80,6 +80,25 @@ class JdbcExercisePracticeServiceTest {
         assertFalse(Files.exists(fixture.sessionDatabase(session.id())));
     }
 
+    @Test
+    void shouldCloseActiveSessionsAndDeleteDatabasesOnShutdown() throws Exception {
+        Fixture fixture = fixture();
+        ExerciseSession session = fixture.service().start("query-02");
+        assertTrue(Files.exists(fixture.sessionDatabase(session.id())));
+
+        fixture.service().shutdown();
+
+        assertFalse(Files.exists(fixture.sessionDatabase(session.id())));
+        try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + fixture.appDb());
+             Statement statement = connection.createStatement();
+             ResultSet result = statement.executeQuery(
+                 "select completed_at from exercise_sessions where id = '" + session.id() + "'"
+             )) {
+            assertTrue(result.next());
+            assertTrue(result.getString(1) != null);
+        }
+    }
+
     private Fixture fixture() {
         Path appDb = tempDir.resolve("app.db");
         Path demoDb = tempDir.resolve("demo.db");
