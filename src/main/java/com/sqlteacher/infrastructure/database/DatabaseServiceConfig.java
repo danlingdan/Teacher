@@ -15,6 +15,7 @@ import com.sqlteacher.application.exercise.SqlExerciseEvaluationService;
 import com.sqlteacher.application.exercise.ExerciseProgressService;
 import com.sqlteacher.application.analytics.LearningAnalyticsService;
 import com.sqlteacher.application.maintenance.DataMaintenanceService;
+import com.sqlteacher.application.maintenance.ApplicationBackupService;
 import com.sqlteacher.application.metadata.DatabaseMetadataService;
 import com.sqlteacher.application.risk.SqlRiskAnalysisService;
 import com.sqlteacher.application.config.SqlTeacherConfiguration;
@@ -157,5 +158,10 @@ public class DatabaseServiceConfig {
     @Bean
     public DataMaintenanceService dataMaintenanceService(JdbcConnectionFactory connectionFactory) {
         return new JdbcDataMaintenanceService(connectionFactory);
+    }
+
+    @Bean
+    public ApplicationBackupService applicationBackupService(SqlTeacherConfiguration configuration) {
+        return new SqliteApplicationBackupService(configuration);
     }
 }

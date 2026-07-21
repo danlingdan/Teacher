@@ -46,10 +46,10 @@ public final class PropertiesAppConfigurationService implements AppConfiguration
 
     private static SqlTeacherConfiguration parse(Properties raw) {
         try {
-            Path dataDirectory = Path.of(raw.getProperty("sqlteacher.data.dir", "app-data"));
+            Path dataDirectory = resolveDataDirectory(raw.getProperty("sqlteacher.data.dir", "auto"));
             DatabaseConfiguration database = new DatabaseConfiguration(
-                Path.of(raw.getProperty("sqlteacher.database.app.path", "app-data/app.db")),
-                Path.of(raw.getProperty("sqlteacher.database.demo.path", "app-data/demo.db"))
+                resolveDataPath(dataDirectory, raw.getProperty("sqlteacher.database.app.path", "app.db")),
+                resolveDataPath(dataDirectory, raw.getProperty("sqlteacher.database.demo.path", "demo.db"))
             );
             AiConfiguration ai = new AiConfiguration(
                 URI.create(raw.getProperty("sqlteacher.ai.ollama.base-url", "http://localhost:11434")),
@@ -71,5 +71,25 @@ public final class PropertiesAppConfigurationService implements AppConfiguration
                 ex
             );
         }
+    }
+
+    private static Path resolveDataDirectory(String configured) {
+        String systemOverride = System.getProperty("sqlteacher.data.dir");
+        if (systemOverride != null && !systemOverride.isBlank()) {
+            return Path.of(systemOverride).toAbsolutePath().normalize();
+        }
+        if (configured != null && !configured.isBlank() && !"auto".equalsIgnoreCase(configured.trim())) {
+            return Path.of(configured).toAbsolutePath().normalize();
+        }
+        String localAppData = System.getenv("LOCALAPPDATA");
+        Path root = localAppData == null || localAppData.isBlank()
+            ? Path.of(System.getProperty("user.home"), ".sqlteacher")
+            : Path.of(localAppData, "SQLTeacher");
+        return root.toAbsolutePath().normalize();
+    }
+
+    private static Path resolveDataPath(Path dataDirectory, String configured) {
+        Path path = Path.of(configured);
+        return (path.isAbsolute() ? path : dataDirectory.resolve(path)).toAbsolutePath().normalize();
     }
 }

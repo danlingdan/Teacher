@@ -1,5 +1,5 @@
 <configuration>
-    <property name="LOG_DIR" value="app-data/logs"/>
+    <property name="LOG_DIR" value="${LOCALAPPDATA:-app-data}/SQLTeacher/logs"/>
 
     <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
         <encoder>

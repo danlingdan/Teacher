@@ -240,6 +240,23 @@ final class SqliteSchemaMigrator {
         return migrations.getLast().version();
     }
 
+    int currentVersion(Path databasePath) throws SQLException {
+        if (java.nio.file.Files.notExists(databasePath)) {
+            return 0;
+        }
+        SqliteDriver.ensureLoaded();
+        try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + databasePath);
+             Statement statement = connection.createStatement()) {
+            try (ResultSet result = statement.executeQuery(
+                "select max(version) from schema_version"
+            )) {
+                return result.next() ? result.getInt(1) : 0;
+            } catch (SQLException missingVersionTable) {
+                return 0;
+            }
+        }
+    }
+
     private static void createVersionTable(Connection connection) throws SQLException {
         try (Statement statement = connection.createStatement()) {
             statement.executeUpdate("""
