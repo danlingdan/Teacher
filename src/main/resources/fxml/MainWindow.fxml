@@ -86,8 +86,13 @@
 
                     <Button fx:id="exerciseProgressNavButton"
                             styleClass="nav-button"
-                            text="学习进度"
+                            text="教师看板"
                             onAction="#onNavigateExerciseProgress"/>
+
+                    <Button fx:id="knowledgeCenterNavButton"
+                            styleClass="nav-button"
+                            text="课程知识"
+                            onAction="#onNavigateKnowledgeCenter"/>
 
                     <Button fx:id="aiAssistantNavButton"
                             styleClass="nav-button"

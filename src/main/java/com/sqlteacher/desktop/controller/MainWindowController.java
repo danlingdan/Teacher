@@ -2,6 +2,7 @@ package com.sqlteacher.desktop.controller;
 
 import com.sqlteacher.application.execution.SqlExecutionService;
 import com.sqlteacher.application.ai.AiModelSelectionService;
+import com.sqlteacher.application.analytics.LearningAnalyticsService;
 import com.sqlteacher.application.connection.ConnectionManagementService;
 import com.sqlteacher.application.connection.DatabaseConnectionTestService;
 import com.sqlteacher.application.connection.DatabaseCredentialSession;
@@ -9,7 +10,9 @@ import com.sqlteacher.application.error.ApplicationExceptionMapper;
 import com.sqlteacher.application.exercise.ExerciseCatalogService;
 import com.sqlteacher.application.exercise.ExerciseManagementService;
 import com.sqlteacher.application.exercise.ExercisePracticeService;
-import com.sqlteacher.application.exercise.ExerciseProgressService;
+import com.sqlteacher.application.knowledge.KnowledgeDocumentService;
+import com.sqlteacher.application.knowledge.KnowledgeSearchService;
+import com.sqlteacher.application.maintenance.DataMaintenanceService;
 import com.sqlteacher.application.metadata.DatabaseMetadataService;
 import com.sqlteacher.application.nl2sql.Nl2SqlSafetyService;
 import com.sqlteacher.application.risk.SqlRiskAnalysisService;
@@ -71,6 +74,7 @@ public final class MainWindowController {
     private static final String STUDENT_EXERCISE_FXML = "/fxml/student-exercise.fxml";
     private static final String EXERCISE_MANAGEMENT_FXML = "/fxml/exercise-management.fxml";
     private static final String EXERCISE_PROGRESS_FXML = "/fxml/exercise-progress.fxml";
+    private static final String KNOWLEDGE_CENTER_FXML = "/fxml/knowledge-center.fxml";
 
     /** SQL 执行服务（应用层接口）；运行期实现由 Spring 提供，向下注入到 SQL 练习页控制器。 */
     private final SqlExecutionService sqlExecutionService;
@@ -93,7 +97,10 @@ public final class MainWindowController {
     private final ExerciseCatalogService exerciseCatalogService;
     private final ExercisePracticeService exercisePracticeService;
     private final ExerciseManagementService exerciseManagementService;
-    private final ExerciseProgressService exerciseProgressService;
+    private final LearningAnalyticsService learningAnalyticsService;
+    private final DataMaintenanceService dataMaintenanceService;
+    private final KnowledgeDocumentService knowledgeDocumentService;
+    private final KnowledgeSearchService knowledgeSearchService;
 
     /**
      * 表名选中回调：表结构页点击表名时触发，把 {@code "SELECT * FROM 表名"}
@@ -128,6 +135,8 @@ public final class MainWindowController {
     private Button exerciseManagementNavButton;
     @FXML
     private Button exerciseProgressNavButton;
+    @FXML
+    private Button knowledgeCenterNavButton;
 
     /** 右侧页面容器，导航切换时替换其中的内容节点。 */
     @FXML
@@ -164,6 +173,7 @@ public final class MainWindowController {
     private Node studentExercisePage;
     private Node exerciseManagementPage;
     private Node exerciseProgressPage;
+    private Node knowledgeCenterPage;
 
     /**
      * 构造注入 SQL 执行服务、表元数据服务、NL2SQL 服务与 SQL 风险分析服务，并初始化表名选中回调。
@@ -185,7 +195,10 @@ public final class MainWindowController {
                                 ExerciseCatalogService exerciseCatalogService,
                                 ExercisePracticeService exercisePracticeService,
                                 ExerciseManagementService exerciseManagementService,
-                                ExerciseProgressService exerciseProgressService) {
+                                LearningAnalyticsService learningAnalyticsService,
+                                DataMaintenanceService dataMaintenanceService,
+                                KnowledgeDocumentService knowledgeDocumentService,
+                                KnowledgeSearchService knowledgeSearchService) {
         this.sqlExecutionService = Objects.requireNonNull(sqlExecutionService, "sqlExecutionService must not be null");
         this.databaseMetadataService = Objects.requireNonNull(databaseMetadataService, "databaseMetadataService must not be null");
         this.nl2SqlSafetyService = Objects.requireNonNull(nl2SqlSafetyService, "nl2SqlSafetyService must not be null");
@@ -201,7 +214,10 @@ public final class MainWindowController {
         this.exerciseCatalogService = Objects.requireNonNull(exerciseCatalogService);
         this.exercisePracticeService = Objects.requireNonNull(exercisePracticeService);
         this.exerciseManagementService = Objects.requireNonNull(exerciseManagementService);
-        this.exerciseProgressService = Objects.requireNonNull(exerciseProgressService);
+        this.learningAnalyticsService = Objects.requireNonNull(learningAnalyticsService);
+        this.dataMaintenanceService = Objects.requireNonNull(dataMaintenanceService);
+        this.knowledgeDocumentService = Objects.requireNonNull(knowledgeDocumentService);
+        this.knowledgeSearchService = Objects.requireNonNull(knowledgeSearchService);
         this.fillSqlCallback = sql -> {
             // 确保 SQL 练习页已加载并捕获控制器引用，仅填充 SQL 不跳转页面。
             sqlPracticePage();
@@ -305,6 +321,12 @@ public final class MainWindowController {
         showPage(exerciseProgressPage());
     }
 
+    @FXML
+    private void onNavigateKnowledgeCenter() {
+        selectNav(knowledgeCenterNavButton);
+        showPage(knowledgeCenterPage());
+    }
+
     /**
      * 切换导航选中态：清除所有导航按钮的选中样式，仅对目标按钮追加选中样式。
      */
@@ -322,7 +344,7 @@ public final class MainWindowController {
         return List.of(
             homeNavButton, sqlPracticeNavButton, studentExerciseNavButton, exerciseManagementNavButton,
             exerciseProgressNavButton,
-            aiAssistantNavButton, tableSchemaNavButton, settingsNavButton
+            knowledgeCenterNavButton, aiAssistantNavButton, tableSchemaNavButton, settingsNavButton
         );
     }
 
@@ -547,7 +569,9 @@ public final class MainWindowController {
             FXMLLoader loader = new FXMLLoader(fxml);
             loader.setControllerFactory(type -> {
                 if (type == ExerciseProgressController.class) {
-                    return new ExerciseProgressController(exerciseProgressService, applicationExceptionMapper);
+                    return new ExerciseProgressController(
+                        learningAnalyticsService, exerciseCatalogService, dataMaintenanceService, applicationExceptionMapper
+                    );
                 }
                 throw new IllegalStateException("Unexpected controller type for exercise progress: " + type);
             });
@@ -558,6 +582,28 @@ public final class MainWindowController {
             }
         }
         return exerciseProgressPage;
+    }
+
+    private Node knowledgeCenterPage() {
+        if (knowledgeCenterPage == null) {
+            URL fxml = MainWindowController.class.getResource(KNOWLEDGE_CENTER_FXML);
+            if (fxml == null) throw new IllegalStateException("Missing FXML resource: " + KNOWLEDGE_CENTER_FXML);
+            FXMLLoader loader = new FXMLLoader(fxml);
+            loader.setControllerFactory(type -> {
+                if (type == KnowledgeCenterController.class) {
+                    return new KnowledgeCenterController(
+                        knowledgeDocumentService, knowledgeSearchService, applicationExceptionMapper
+                    );
+                }
+                throw new IllegalStateException("Unexpected controller type for knowledge center: " + type);
+            });
+            try {
+                knowledgeCenterPage = loader.load();
+            } catch (IOException error) {
+                throw new IllegalStateException("Failed to load " + KNOWLEDGE_CENTER_FXML, error);
+            }
+        }
+        return knowledgeCenterPage;
     }
 
     /**

@@ -1092,3 +1092,31 @@
     -fx-padding: 12; -fx-pref-width: 160; -fx-alignment: CENTER_LEFT;
 }
 .progress-value { -fx-text-fill: #ffffff; -fx-font-size: 21px; -fx-font-weight: bold; }
+
+/* v0.4 教师看板与课程知识 */
+.analytics-filter-bar {
+    -fx-background-color: #1b253d; -fx-background-radius: 10; -fx-padding: 9;
+}
+.analytics-filter-bar .label, .section-title { -fx-text-fill: #d5dce9; -fx-font-weight: bold; }
+.analytics-filter-bar .date-picker, .analytics-filter-bar .combo-box,
+.knowledge-split .text-field {
+    -fx-background-color: #172035; -fx-text-fill: #edf2ff;
+    -fx-border-color: rgba(120,145,200,0.28); -fx-border-radius: 8; -fx-background-radius: 8;
+}
+.analytics-filter-bar .combo-box .list-cell { -fx-text-fill: #edf2ff; -fx-background-color: #172035; }
+.knowledge-split { -fx-background-color: transparent; -fx-padding: 0 12 8 12; }
+.knowledge-split > .split-pane-divider { -fx-background-color: transparent; -fx-padding: 4; }
+.primary-button, .secondary-button, .danger-outline-button {
+    -fx-background-radius: 8; -fx-border-radius: 8; -fx-padding: 7 14; -fx-cursor: hand;
+}
+.primary-button { -fx-background-color: #6d5dfc; -fx-text-fill: white; -fx-font-weight: bold; }
+.secondary-button {
+    -fx-background-color: rgba(109,93,252,0.14); -fx-text-fill: #c9c3ff;
+    -fx-border-color: rgba(109,93,252,0.35);
+}
+.danger-outline-button {
+    -fx-background-color: rgba(239,68,68,0.10); -fx-text-fill: #fca5a5;
+    -fx-border-color: rgba(239,68,68,0.38);
+}
+.primary-button:hover, .secondary-button:hover { -fx-background-color: #7b6cff; -fx-text-fill: white; }
+.danger-outline-button:hover { -fx-background-color: rgba(239,68,68,0.22); }

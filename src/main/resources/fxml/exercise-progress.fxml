@@ -8,38 +8,75 @@
             fx:controller="com.sqlteacher.desktop.controller.ExerciseProgressController"
             styleClass="exercise-page">
     <top>
-        <VBox spacing="6" styleClass="title-area">
-            <padding><Insets top="20" right="24" bottom="14" left="24"/></padding>
+        <VBox spacing="12" styleClass="title-area">
+            <padding><Insets top="18" right="24" bottom="12" left="24"/></padding>
             <HBox alignment="CENTER_LEFT">
-                <VBox spacing="6">
-                    <Label text="学习进度" styleClass="page-title"/>
-                    <Label text="v0.3 基础口径；常见错误、时间趋势和 CSV 看板将在 v0.4 提供。" styleClass="page-subtitle"/>
+                <VBox spacing="5">
+                    <Label text="教师学情看板" styleClass="page-title"/>
+                    <Label text="统一统计口径，可按日期、题目、知识点和错误类型筛选并导出 CSV。" styleClass="page-subtitle"/>
                 </VBox>
                 <Region HBox.hgrow="ALWAYS"/>
+                <Button text="清理学习数据" onAction="#onResetLearningData" styleClass="danger-outline-button"/>
+                <Button fx:id="exportButton" text="导出 CSV" onAction="#onExport" styleClass="secondary-button" disable="true"/>
                 <Button text="刷新" onAction="#onRefresh" styleClass="refresh-button"/>
+            </HBox>
+            <HBox spacing="8" alignment="CENTER_LEFT" styleClass="analytics-filter-bar">
+                <Label text="开始"/><DatePicker fx:id="startDatePicker" prefWidth="130"/>
+                <Label text="结束"/><DatePicker fx:id="endDatePicker" prefWidth="130"/>
+                <ComboBox fx:id="exerciseFilter" promptText="全部题目" prefWidth="170"/>
+                <ComboBox fx:id="knowledgeFilter" promptText="全部知识点" prefWidth="135"/>
+                <ComboBox fx:id="errorFilter" promptText="全部错误" prefWidth="165"/>
+                <Button text="应用" onAction="#onRefresh" styleClass="secondary-button"/>
+                <Button text="清除" onAction="#onClearFilters" styleClass="secondary-button"/>
             </HBox>
         </VBox>
     </top>
     <center>
-        <VBox spacing="12" styleClass="progress-content">
-            <TilePane prefColumns="6" hgap="10" vgap="10">
+        <VBox spacing="10" styleClass="progress-content">
+            <TilePane prefColumns="6" hgap="10" vgap="8">
                 <VBox styleClass="progress-card"><Label text="会话" styleClass="model-status"/><Label fx:id="sessionsLabel" text="0" styleClass="progress-value"/></VBox>
                 <VBox styleClass="progress-card"><Label text="尝试" styleClass="model-status"/><Label fx:id="attemptsLabel" text="0" styleClass="progress-value"/></VBox>
                 <VBox styleClass="progress-card"><Label text="提交通过率" styleClass="model-status"/><Label fx:id="passRateLabel" text="0%" styleClass="progress-value"/></VBox>
+                <VBox styleClass="progress-card"><Label text="题目完成率" styleClass="model-status"/><Label fx:id="completionRateLabel" text="0%" styleClass="progress-value"/></VBox>
+                <VBox styleClass="progress-card"><Label text="平均尝试/完成题" styleClass="model-status"/><Label fx:id="averageAttemptsLabel" text="0" styleClass="progress-value"/></VBox>
                 <VBox styleClass="progress-card"><Label text="平均提交耗时" styleClass="model-status"/><Label fx:id="durationLabel" text="0 ms" styleClass="progress-value"/></VBox>
-                <VBox styleClass="progress-card"><Label text="提示次数" styleClass="model-status"/><Label fx:id="hintsLabel" text="0" styleClass="progress-value"/></VBox>
-                <VBox styleClass="progress-card"><Label text="已完成题目" styleClass="model-status"/><Label fx:id="completedLabel" text="0" styleClass="progress-value"/></VBox>
             </TilePane>
-            <TableView fx:id="progressTable" styleClass="result-table" VBox.vgrow="ALWAYS">
-                <columns>
-                    <TableColumn fx:id="titleColumn" text="题目" prefWidth="220"/>
-                    <TableColumn fx:id="knowledgeColumn" text="知识点" prefWidth="150"/>
-                    <TableColumn fx:id="attemptsColumn" text="尝试" prefWidth="80"/>
-                    <TableColumn fx:id="failuresColumn" text="失败提交" prefWidth="100"/>
-                    <TableColumn fx:id="passedColumn" text="状态" prefWidth="90"/>
-                    <TableColumn fx:id="lastAttemptColumn" text="最后尝试" prefWidth="130"/>
-                </columns>
-            </TableView>
+            <TabPane VBox.vgrow="ALWAYS" tabClosingPolicy="UNAVAILABLE">
+                <tabs>
+                    <Tab text="题目完成情况">
+                        <TableView fx:id="exerciseTable" styleClass="result-table">
+                            <columns>
+                                <TableColumn fx:id="titleColumn" text="题目" prefWidth="220"/>
+                                <TableColumn fx:id="knowledgeColumn" text="知识点" prefWidth="130"/>
+                                <TableColumn fx:id="attemptsColumn" text="尝试" prefWidth="70"/>
+                                <TableColumn fx:id="submissionsColumn" text="提交" prefWidth="70"/>
+                                <TableColumn fx:id="passColumn" text="通过率" prefWidth="90"/>
+                                <TableColumn fx:id="completedColumn" text="状态" prefWidth="90"/>
+                                <TableColumn fx:id="lastAttemptColumn" text="最后尝试" prefWidth="130"/>
+                            </columns>
+                        </TableView>
+                    </Tab>
+                    <Tab text="常见错误">
+                        <TableView fx:id="errorTable" styleClass="result-table">
+                            <columns>
+                                <TableColumn fx:id="errorCodeColumn" text="错误类型" prefWidth="320"/>
+                                <TableColumn fx:id="errorCountColumn" text="次数" prefWidth="120"/>
+                            </columns>
+                        </TableView>
+                    </Tab>
+                    <Tab text="知识点薄弱项">
+                        <TableView fx:id="knowledgeTable" styleClass="result-table">
+                            <columns>
+                                <TableColumn fx:id="pointColumn" text="知识点" prefWidth="180"/>
+                                <TableColumn fx:id="pointAttemptsColumn" text="尝试" prefWidth="90"/>
+                                <TableColumn fx:id="pointFailuresColumn" text="失败提交" prefWidth="110"/>
+                                <TableColumn fx:id="pointCompletionColumn" text="完成题目" prefWidth="110"/>
+                                <TableColumn fx:id="weaknessColumn" text="薄弱度" prefWidth="100"/>
+                            </columns>
+                        </TableView>
+                    </Tab>
+                </tabs>
+            </TabPane>
             <Label fx:id="statusLabel" visible="false" managed="false" wrapText="true"/>
         </VBox>
     </center>

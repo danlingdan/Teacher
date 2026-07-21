@@ -2,6 +2,7 @@ package com.sqlteacher.desktop;
 
 import com.sqlteacher.application.database.DatabaseInitializationService;
 import com.sqlteacher.application.ai.AiModelSelectionService;
+import com.sqlteacher.application.analytics.LearningAnalyticsService;
 import com.sqlteacher.application.connection.ConnectionManagementService;
 import com.sqlteacher.application.connection.DatabaseConnectionTestService;
 import com.sqlteacher.application.connection.DatabaseCredentialSession;
@@ -10,7 +11,9 @@ import com.sqlteacher.application.execution.SqlExecutionService;
 import com.sqlteacher.application.exercise.ExerciseCatalogService;
 import com.sqlteacher.application.exercise.ExerciseManagementService;
 import com.sqlteacher.application.exercise.ExercisePracticeService;
-import com.sqlteacher.application.exercise.ExerciseProgressService;
+import com.sqlteacher.application.knowledge.KnowledgeDocumentService;
+import com.sqlteacher.application.knowledge.KnowledgeSearchService;
+import com.sqlteacher.application.maintenance.DataMaintenanceService;
 import com.sqlteacher.application.metadata.DatabaseMetadataService;
 import com.sqlteacher.application.nl2sql.Nl2SqlSafetyService;
 import com.sqlteacher.application.risk.SqlRiskAnalysisService;
@@ -58,7 +61,10 @@ public final class SqlTeacherFxApp extends Application {
     private ExerciseCatalogService exerciseCatalogService;
     private ExercisePracticeService exercisePracticeService;
     private ExerciseManagementService exerciseManagementService;
-    private ExerciseProgressService exerciseProgressService;
+    private LearningAnalyticsService learningAnalyticsService;
+    private DataMaintenanceService dataMaintenanceService;
+    private KnowledgeDocumentService knowledgeDocumentService;
+    private KnowledgeSearchService knowledgeSearchService;
 
     /**
      * JavaFX 在非 Application Thread 上调用本方法，数据库初始化不会阻塞界面线程。
@@ -81,7 +87,10 @@ public final class SqlTeacherFxApp extends Application {
             exerciseCatalogService = context.getBean(ExerciseCatalogService.class);
             exercisePracticeService = context.getBean(ExercisePracticeService.class);
             exerciseManagementService = context.getBean(ExerciseManagementService.class);
-            exerciseProgressService = context.getBean(ExerciseProgressService.class);
+            learningAnalyticsService = context.getBean(LearningAnalyticsService.class);
+            dataMaintenanceService = context.getBean(DataMaintenanceService.class);
+            knowledgeDocumentService = context.getBean(KnowledgeDocumentService.class);
+            knowledgeSearchService = context.getBean(KnowledgeSearchService.class);
             applicationContext = context;
         } catch (RuntimeException error) {
             context.close();
@@ -97,7 +106,8 @@ public final class SqlTeacherFxApp extends Application {
             || databaseConnectionTestService == null || applicationExceptionMapper == null
             || databaseCredentialSession == null || exerciseCatalogService == null
             || exercisePracticeService == null || exerciseManagementService == null
-            || exerciseProgressService == null) {
+            || learningAnalyticsService == null || dataMaintenanceService == null
+            || knowledgeDocumentService == null || knowledgeSearchService == null) {
             throw new IllegalStateException("Services are unavailable because application initialization did not complete");
         }
 
@@ -123,7 +133,10 @@ public final class SqlTeacherFxApp extends Application {
                     exerciseCatalogService,
                     exercisePracticeService,
                     exerciseManagementService,
-                    exerciseProgressService
+                    learningAnalyticsService,
+                    dataMaintenanceService,
+                    knowledgeDocumentService,
+                    knowledgeSearchService
                 );
             }
             throw new IllegalStateException("Unexpected controller type for MainWindow.fxml: " + type);
@@ -164,7 +177,10 @@ public final class SqlTeacherFxApp extends Application {
         exerciseCatalogService = null;
         exercisePracticeService = null;
         exerciseManagementService = null;
-        exerciseProgressService = null;
+        learningAnalyticsService = null;
+        dataMaintenanceService = null;
+        knowledgeDocumentService = null;
+        knowledgeSearchService = null;
     }
 
     public static void main(String[] args) {

@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+
+<BorderPane xmlns="http://javafx.com/javafx" xmlns:fx="http://javafx.com/fxml"
+            fx:controller="com.sqlteacher.desktop.controller.KnowledgeCenterController"
+            styleClass="exercise-page">
+    <top>
+        <VBox spacing="12" styleClass="title-area">
+            <padding><Insets top="18" right="24" bottom="12" left="24"/></padding>
+            <HBox alignment="CENTER_LEFT">
+                <VBox spacing="5">
+                    <Label text="课程知识检索" styleClass="page-title"/>
+                    <Label text="资料仅保存在本机，通过 SQLite FTS5 检索并始终展示标题、来源和命中片段。" styleClass="page-subtitle"/>
+                </VBox>
+                <Region HBox.hgrow="ALWAYS"/>
+                <Button text="刷新" onAction="#onRefresh" styleClass="secondary-button"/>
+                <Button fx:id="importButton" text="导入文档" onAction="#onImport" styleClass="refresh-button"/>
+            </HBox>
+            <HBox spacing="8" alignment="CENTER_LEFT">
+                <TextField fx:id="queryField" promptText="输入课程概念、SQL 关键字或错误名称" HBox.hgrow="ALWAYS"/>
+                <Button text="本地检索" onAction="#onSearch" styleClass="primary-button"/>
+            </HBox>
+        </VBox>
+    </top>
+    <center>
+        <SplitPane dividerPositions="0.38" styleClass="knowledge-split">
+            <items>
+                <VBox spacing="8" styleClass="progress-content">
+                    <HBox alignment="CENTER_LEFT">
+                        <Label text="已导入文档" styleClass="section-title"/>
+                        <Region HBox.hgrow="ALWAYS"/>
+                        <Button text="删除" onAction="#onDelete" styleClass="danger-outline-button"/>
+                    </HBox>
+                    <TableView fx:id="documentTable" styleClass="result-table" VBox.vgrow="ALWAYS">
+                        <columns>
+                            <TableColumn fx:id="documentTitleColumn" text="标题" prefWidth="180"/>
+                            <TableColumn fx:id="sourceColumn" text="来源" prefWidth="130"/>
+                            <TableColumn fx:id="chunksColumn" text="片段" prefWidth="65"/>
+                            <TableColumn fx:id="importedColumn" text="导入时间" prefWidth="130"/>
+                        </columns>
+                    </TableView>
+                </VBox>
+                <VBox spacing="8" styleClass="progress-content">
+                    <Label text="检索结果" styleClass="section-title"/>
+                    <TableView fx:id="resultTable" styleClass="result-table" VBox.vgrow="ALWAYS">
+                        <columns>
+                            <TableColumn fx:id="resultTitleColumn" text="标题" prefWidth="160"/>
+                            <TableColumn fx:id="resultSourceColumn" text="来源" prefWidth="120"/>
+                            <TableColumn fx:id="resultSnippetColumn" text="命中片段" prefWidth="430"/>
+                        </columns>
+                    </TableView>
+                </VBox>
+            </items>
+        </SplitPane>
+    </center>
+    <bottom>
+        <Label fx:id="statusLabel" visible="false" managed="false" wrapText="true">
+            <BorderPane.margin><Insets top="6" right="24" bottom="14" left="24"/></BorderPane.margin>
+        </Label>
+    </bottom>
+</BorderPane>
