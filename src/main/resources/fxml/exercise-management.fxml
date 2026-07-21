@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+
+<BorderPane xmlns="http://javafx.com/javafx" xmlns:fx="http://javafx.com/fxml"
+            fx:controller="com.sqlteacher.desktop.controller.ExerciseManagementController"
+            styleClass="exercise-page">
+    <top>
+        <VBox spacing="6" styleClass="title-area">
+            <padding><Insets top="20" right="24" bottom="14" left="24"/></padding>
+            <Label text="教师题库" styleClass="page-title"/>
+            <Label text="维护题目、评测规则和分级提示；题包导入发生冲突时会整体回滚。" styleClass="page-subtitle"/>
+        </VBox>
+    </top>
+    <center>
+        <SplitPane dividerPositions="0.30" styleClass="exercise-split">
+            <VBox spacing="10" styleClass="panel-card">
+                <HBox spacing="8" alignment="CENTER_LEFT">
+                    <Label text="全部题目" styleClass="card-title"/>
+                    <Region HBox.hgrow="ALWAYS"/>
+                    <Button text="刷新" onAction="#onRefresh" styleClass="refresh-button"/>
+                    <Button text="新建" onAction="#onNew" styleClass="refresh-button"/>
+                </HBox>
+                <ListView fx:id="exerciseList" VBox.vgrow="ALWAYS" styleClass="exercise-list"/>
+                <HBox spacing="8">
+                    <Button text="导入" onAction="#onImport" styleClass="refresh-button"/>
+                    <Button text="导出选中/全部" onAction="#onExport" styleClass="refresh-button"/>
+                </HBox>
+            </VBox>
+            <ScrollPane fitToWidth="true" styleClass="exercise-scroll">
+                <VBox spacing="12" styleClass="panel-card exercise-form">
+                    <HBox alignment="CENTER_LEFT">
+                        <Label text="题目定义" styleClass="card-title"/>
+                        <Region HBox.hgrow="ALWAYS"/>
+                        <Label fx:id="versionLabel" text="新题目" styleClass="model-status"/>
+                    </HBox>
+                    <GridPane hgap="12" vgap="10">
+                        <columnConstraints>
+                            <ColumnConstraints minWidth="92" halignment="RIGHT"/>
+                            <ColumnConstraints hgrow="ALWAYS" minWidth="260"/>
+                        </columnConstraints>
+                        <Label text="题目 ID" GridPane.rowIndex="0" styleClass="form-label"/>
+                        <TextField fx:id="idField" promptText="留空则自动生成" GridPane.columnIndex="1" GridPane.rowIndex="0"/>
+                        <Label text="标题" GridPane.rowIndex="1" styleClass="form-label"/>
+                        <TextField fx:id="titleField" GridPane.columnIndex="1" GridPane.rowIndex="1"/>
+                        <Label text="知识点" GridPane.rowIndex="2" styleClass="form-label"/>
+                        <TextField fx:id="knowledgePointField" GridPane.columnIndex="1" GridPane.rowIndex="2"/>
+                        <Label text="难度" GridPane.rowIndex="3" styleClass="form-label"/>
+                        <ComboBox fx:id="difficultyBox" maxWidth="Infinity" GridPane.columnIndex="1" GridPane.rowIndex="3"/>
+                        <Label text="数据集" GridPane.rowIndex="4" styleClass="form-label"/>
+                        <ComboBox fx:id="datasetBox" maxWidth="Infinity" GridPane.columnIndex="1" GridPane.rowIndex="4"/>
+                    </GridPane>
+                    <Label text="题目说明" styleClass="form-label"/>
+                    <TextArea fx:id="descriptionArea" prefRowCount="3" wrapText="true"/>
+                    <Label text="参考 SQL（仅教师/评测器可见）" styleClass="form-label"/>
+                    <TextArea fx:id="referenceSqlArea" prefRowCount="4" styleClass="sql-editor"/>
+                    <Label text="评测规则" styleClass="form-label"/>
+                    <FlowPane hgap="14" vgap="8">
+                        <CheckBox fx:id="compareColumnsCheck" text="比较列" selected="true"/>
+                        <CheckBox fx:id="compareRowsCheck" text="比较行和值" selected="true"/>
+                        <CheckBox fx:id="rowOrderCheck" text="顺序必须一致"/>
+                        <CheckBox fx:id="enabledCheck" text="启用"/>
+                    </FlowPane>
+                    <GridPane hgap="12" vgap="10">
+                        <columnConstraints>
+                            <ColumnConstraints minWidth="92" halignment="RIGHT"/>
+                            <ColumnConstraints hgrow="ALWAYS" minWidth="260"/>
+                        </columnConstraints>
+                        <Label text="指定行数" GridPane.rowIndex="0" styleClass="form-label"/>
+                        <TextField fx:id="rowCountField" promptText="可选" GridPane.columnIndex="1" GridPane.rowIndex="0"/>
+                        <Label text="必需结构" GridPane.rowIndex="1" styleClass="form-label"/>
+                        <TextField fx:id="keywordsField" promptText="逗号分隔，如 GROUP BY, HAVING" GridPane.columnIndex="1" GridPane.rowIndex="1"/>
+                    </GridPane>
+                    <Label text="分级提示（每行一级，最多三级）" styleClass="form-label"/>
+                    <TextArea fx:id="hintsArea" prefRowCount="3" wrapText="true"/>
+                    <Label fx:id="statusLabel" visible="false" managed="false" wrapText="true"/>
+                    <HBox spacing="8" alignment="CENTER_RIGHT">
+                        <Button fx:id="toggleButton" text="启用" disable="true" onAction="#onToggleEnabled" styleClass="danger-button"/>
+                        <Button text="复制" onAction="#onCopy" styleClass="refresh-button"/>
+                        <Button text="保存" onAction="#onSave" styleClass="sql-execute-button"/>
+                    </HBox>
+                </VBox>
+            </ScrollPane>
+        </SplitPane>
+    </center>
+</BorderPane>

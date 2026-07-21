@@ -71,8 +71,18 @@
 
                     <Button fx:id="sqlPracticeNavButton"
                             styleClass="nav-button"
-                            text="SQL练习"
+                            text="自由 SQL"
                             onAction="#onNavigateSqlPractice"/>
+
+                    <Button fx:id="studentExerciseNavButton"
+                            styleClass="nav-button"
+                            text="闯关练习"
+                            onAction="#onNavigateStudentExercise"/>
+
+                    <Button fx:id="exerciseManagementNavButton"
+                            styleClass="nav-button"
+                            text="教师题库"
+                            onAction="#onNavigateExerciseManagement"/>
 
                     <Button fx:id="aiAssistantNavButton"
                             styleClass="nav-button"

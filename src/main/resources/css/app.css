@@ -1062,3 +1062,26 @@
 .form-label { -fx-text-fill: #9ca3af; }
 .danger-button { -fx-background-color: rgba(239,68,68,0.15); -fx-text-fill: #fca5a5;
     -fx-border-color: rgba(239,68,68,0.4); -fx-border-radius: 8; -fx-background-radius: 8; -fx-padding: 7 14; }
+
+/* v0.3 题库与闯关练习 */
+.top-nav .nav-button { -fx-padding: 7 10 7 10; -fx-font-size: 13px; }
+.exercise-page { -fx-background-color: #141c30; }
+.exercise-split { -fx-background-color: transparent; -fx-padding: 0 20 20 20; }
+.exercise-split > .split-pane-divider,
+.exercise-result-split > .split-pane-divider { -fx-background-color: transparent; -fx-padding: 4; }
+.exercise-list { -fx-background-color: #172035; -fx-control-inner-background: #172035; }
+.exercise-list .list-cell { -fx-background-color: transparent; -fx-text-fill: #d5dce9; -fx-padding: 10; }
+.exercise-list .list-cell:selected { -fx-background-color: #33477a; -fx-text-fill: white; }
+.exercise-scroll, .exercise-scroll > .viewport { -fx-background-color: transparent; }
+.exercise-form { -fx-padding: 18; }
+.exercise-form .text-field, .exercise-form .text-area, .exercise-form .combo-box,
+.exercise-workspace .text-area {
+    -fx-background-color: #172035; -fx-text-fill: #edf2ff;
+    -fx-border-color: rgba(120,145,200,0.25); -fx-border-radius: 8; -fx-background-radius: 8;
+}
+.exercise-form .text-area .content, .exercise-workspace .text-area .content { -fx-background-color: #172035; }
+.exercise-form .combo-box .list-cell { -fx-text-fill: #edf2ff; -fx-background-color: #172035; }
+.exercise-form .check-box { -fx-text-fill: #c9d3ea; }
+.exercise-workspace { -fx-padding: 0 20 20 10; }
+.exercise-result-split { -fx-background-color: transparent; }
+.exercise-result-split .text-area { -fx-font-size: 13px; }

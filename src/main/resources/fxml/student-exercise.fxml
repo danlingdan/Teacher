@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+
+<BorderPane xmlns="http://javafx.com/javafx" xmlns:fx="http://javafx.com/fxml"
+            fx:controller="com.sqlteacher.desktop.controller.StudentExerciseController"
+            styleClass="exercise-page">
+    <top>
+        <VBox spacing="6" styleClass="title-area">
+            <padding><Insets top="20" right="24" bottom="14" left="24"/></padding>
+            <Label text="闯关练习" styleClass="page-title"/>
+            <Label text="在隔离数据集上运行并提交 SQL；评测无需 AI，也不会展示参考答案。" styleClass="page-subtitle"/>
+        </VBox>
+    </top>
+    <center>
+        <SplitPane dividerPositions="0.27" styleClass="exercise-split">
+            <VBox spacing="10" styleClass="panel-card">
+                <HBox alignment="CENTER_LEFT">
+                    <Label text="练习题" styleClass="card-title"/>
+                    <Region HBox.hgrow="ALWAYS"/>
+                    <Button text="刷新" onAction="#onRefresh" styleClass="refresh-button"/>
+                </HBox>
+                <ListView fx:id="exerciseList" VBox.vgrow="ALWAYS" styleClass="exercise-list"/>
+                <Button fx:id="startButton" text="开始选中题目" disable="true" onAction="#onStart"
+                        maxWidth="Infinity" styleClass="sql-execute-button"/>
+            </VBox>
+            <VBox spacing="10" styleClass="exercise-workspace">
+                <VBox spacing="5" styleClass="panel-card">
+                    <Label fx:id="titleLabel" text="请选择一道题目" styleClass="card-title"/>
+                    <Label fx:id="metaLabel" text="-" styleClass="model-status"/>
+                    <Label fx:id="descriptionLabel" text="选择题目并开始后，在下方编写 SQL。" wrapText="true" styleClass="card-description"/>
+                </VBox>
+                <VBox spacing="8" styleClass="panel-card" VBox.vgrow="ALWAYS">
+                    <HBox alignment="CENTER_LEFT">
+                        <Label text="SQL 编辑器" styleClass="card-title"/>
+                        <Region HBox.hgrow="ALWAYS"/>
+                        <Button fx:id="resetButton" text="重置数据" onAction="#onReset" styleClass="refresh-button"/>
+                        <Button fx:id="hintButton" text="提示" onAction="#onHint" styleClass="refresh-button"/>
+                        <Button fx:id="runButton" text="运行" onAction="#onRun" styleClass="refresh-button"/>
+                        <Button fx:id="submitButton" text="提交评测" onAction="#onSubmit" styleClass="sql-execute-button"/>
+                    </HBox>
+                    <TextArea fx:id="sqlArea" prefRowCount="5" styleClass="sql-editor" VBox.vgrow="NEVER"/>
+                    <SplitPane orientation="VERTICAL" dividerPositions="0.62" VBox.vgrow="ALWAYS" styleClass="exercise-result-split">
+                        <TableView fx:id="resultTable" styleClass="result-table"/>
+                        <TextArea fx:id="feedbackArea" editable="false" wrapText="true" promptText="运行结果和分项反馈会显示在这里。"/>
+                    </SplitPane>
+                    <Label fx:id="statusLabel" visible="false" managed="false" wrapText="true"/>
+                </VBox>
+            </VBox>
+        </SplitPane>
+    </center>
+</BorderPane>
