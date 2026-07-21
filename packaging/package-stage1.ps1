@@ -14,7 +14,13 @@ $outputPath = if ([System.IO.Path]::IsPathRooted($OutputDir)) {
 } else {
     [System.IO.Path]::GetFullPath((Join-Path $projectRoot $OutputDir))
 }
-$appImageDir = Join-Path $outputPath "SQLTeacherStage1"
+$pomPath = Join-Path $projectRoot "pom.xml"
+[xml]$pom = Get-Content -LiteralPath $pomPath -Raw
+$projectVersion = $pom.project.version
+$jarName = "Teacher-$projectVersion.jar"
+$appName = "SQLTeacher"
+$appImageDir = Join-Path $outputPath $appName
+$archivePath = Join-Path $outputPath "$appName-$projectVersion-windows-x64.zip"
 
 function Assert-ChildPath {
     param(
@@ -37,6 +43,7 @@ function Assert-ChildPath {
 
 Assert-ChildPath -Candidate $inputDir -Parent $targetRoot
 Assert-ChildPath -Candidate $appImageDir -Parent $outputPath
+Assert-ChildPath -Candidate $archivePath -Parent $outputPath
 
 if (-not (Get-Command jpackage -ErrorAction SilentlyContinue)) {
     throw "jpackage was not found. Use JDK 21 or newer with jpackage available on PATH."
@@ -60,20 +67,24 @@ try {
     Get-ChildItem -LiteralPath $dependencyDir -Filter "javafx-*-win.jar" |
         Copy-Item -Destination $javaFxModuleDir -Force
 
-    Copy-Item -LiteralPath "target\Teacher-1.0-SNAPSHOT.jar" `
-        -Destination (Join-Path $inputDir "Teacher-1.0-SNAPSHOT.jar") `
+    Copy-Item -LiteralPath (Join-Path $targetRoot $jarName) `
+        -Destination (Join-Path $inputDir $jarName) `
         -Force
 
     New-Item -ItemType Directory -Force -Path $outputPath | Out-Null
     if (Test-Path -LiteralPath $appImageDir) {
         Remove-Item -LiteralPath $appImageDir -Recurse -Force
     }
+    if (Test-Path -LiteralPath $archivePath) {
+        Remove-Item -LiteralPath $archivePath -Force
+    }
 
     jpackage `
         --type app-image `
-        --name SQLTeacherStage1 `
+        --name $appName `
+        --app-version $projectVersion `
         --input $inputDir `
-        --main-jar Teacher-1.0-SNAPSHOT.jar `
+        --main-jar $jarName `
         --main-class com.sqlteacher.desktop.SqlTeacherFxApp `
         --java-options "--enable-native-access=ALL-UNNAMED" `
         --java-options '--module-path=$APPDIR\javafx-modules' `
@@ -84,12 +95,15 @@ try {
         throw "jpackage failed with exit code $LASTEXITCODE."
     }
 
-    $launcher = Join-Path $appImageDir "SQLTeacherStage1.exe"
+    $launcher = Join-Path $appImageDir "$appName.exe"
     if (-not (Test-Path -LiteralPath $launcher)) {
         throw "App-image launcher was not created: $launcher"
     }
 
+    Compress-Archive -LiteralPath $appImageDir -DestinationPath $archivePath -CompressionLevel Optimal
+
     Write-Host "Created app-image: $appImageDir"
+    Write-Host "Created release archive: $archivePath"
 } finally {
     Pop-Location
 }
