@@ -8,6 +8,7 @@ import com.sqlteacher.application.event.LearningEventQueryService;
 import com.sqlteacher.application.event.LearningEventRecorder;
 import com.sqlteacher.application.event.LearningEventService;
 import com.sqlteacher.application.execution.SqlExecutionService;
+import com.sqlteacher.application.exercise.ExerciseManagementService;
 import com.sqlteacher.application.metadata.DatabaseMetadataService;
 import com.sqlteacher.application.risk.SqlRiskAnalysisService;
 import com.sqlteacher.application.config.SqlTeacherConfiguration;
@@ -91,5 +92,10 @@ public class DatabaseServiceConfig {
     @Bean
     public LearningEventQueryService learningEventQueryService(JdbcConnectionFactory connectionFactory) {
         return new JdbcLearningEventQueryService(connectionFactory);
+    }
+
+    @Bean
+    public ExerciseManagementService exerciseManagementService(JdbcConnectionFactory connectionFactory) {
+        return new JdbcExerciseManagementService(connectionFactory);
     }
 }

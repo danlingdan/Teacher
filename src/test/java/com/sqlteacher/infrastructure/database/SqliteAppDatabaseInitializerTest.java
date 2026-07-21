@@ -40,8 +40,18 @@ class SqliteAppDatabaseInitializerTest {
         assertTrue(result.demoDatabaseCreated());
         assertTrue(Files.exists(appDb));
         assertTrue(Files.exists(demoDb));
-        assertEquals(2, readSchemaVersion(appDb));
+        assertEquals(3, readSchemaVersion(appDb));
+        assertEquals(20, countExercises(appDb));
         assertEquals(2, countDemoStudents(demoDb));
+    }
+
+    private static int countExercises(Path appDb) throws Exception {
+        try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + appDb);
+             Statement statement = connection.createStatement();
+             ResultSet resultSet = statement.executeQuery("select count(*) from exercises")) {
+            resultSet.next();
+            return resultSet.getInt(1);
+        }
     }
 
     private static int readSchemaVersion(Path appDb) throws Exception {

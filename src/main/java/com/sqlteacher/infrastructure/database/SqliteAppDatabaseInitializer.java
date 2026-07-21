@@ -50,6 +50,17 @@ public final class SqliteAppDatabaseInitializer implements DatabaseInitializatio
 
     private static void initializeAppDatabase(Path databasePath) throws SQLException {
         new SqliteSchemaMigrator().migrate(databasePath);
+        SqliteDriver.ensureLoaded();
+        try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + databasePath)) {
+            connection.setAutoCommit(false);
+            try {
+                new DefaultExerciseCatalogSeeder().seed(connection);
+                connection.commit();
+            } catch (SQLException | RuntimeException error) {
+                connection.rollback();
+                throw error;
+            }
+        }
     }
 
     private static void initializeDemoDatabase(Path databasePath) throws SQLException {
