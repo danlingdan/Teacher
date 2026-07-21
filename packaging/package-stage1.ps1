@@ -181,6 +181,7 @@ try {
             --win-shortcut `
             --win-dir-chooser `
             --win-per-user-install `
+            --install-dir "SQLTeacher-App" `
             --win-upgrade-uuid "569f427c-d027-4420-8477-7222c9ba6c55"
         if ($LASTEXITCODE -ne 0) {
             throw "jpackage installer failed with exit code $LASTEXITCODE."
