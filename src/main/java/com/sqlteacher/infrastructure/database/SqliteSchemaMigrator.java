@@ -72,6 +72,81 @@ final class SqliteSchemaMigrator {
                         connection_id text not null,
                         updated_at text not null default current_timestamp
                     )
+                """
+            )
+        ),
+        new Migration(
+            3,
+            "Create exercise catalog and attempt tables",
+            List.of(
+                """
+                    create table exercise_datasets (
+                        id text primary key,
+                        name text not null,
+                        setup_sql text not null,
+                        version integer not null check (version > 0),
+                        created_at text not null default current_timestamp,
+                        updated_at text not null default current_timestamp
+                    )
+                    """,
+                """
+                    create table exercises (
+                        id text primary key,
+                        title text not null,
+                        description text not null,
+                        knowledge_point text not null,
+                        difficulty text not null check (
+                            difficulty in ('BEGINNER', 'INTERMEDIATE', 'ADVANCED')
+                        ),
+                        dataset_id text not null references exercise_datasets(id),
+                        reference_sql text not null,
+                        evaluation_rule_json text not null,
+                        hints_json text not null,
+                        version integer not null check (version > 0),
+                        enabled integer not null check (enabled in (0, 1)),
+                        created_at text not null default current_timestamp,
+                        updated_at text not null default current_timestamp
+                    )
+                    """,
+                """
+                    create index exercises_enabled_order
+                    on exercises(enabled, difficulty, knowledge_point, title)
+                    """,
+                """
+                    create table exercise_sessions (
+                        id text primary key,
+                        exercise_id text not null references exercises(id),
+                        exercise_version integer not null check (exercise_version > 0),
+                        started_at text not null,
+                        completed_at text,
+                        hints_used integer not null default 0 check (hints_used between 0 and 3)
+                    )
+                    """,
+                """
+                    create index exercise_sessions_exercise_started
+                    on exercise_sessions(exercise_id, started_at)
+                    """,
+                """
+                    create table exercise_attempts (
+                        id text primary key,
+                        session_id text not null references exercise_sessions(id),
+                        status text not null check (
+                            status in ('RUN', 'SUBMITTED', 'PASSED', 'FAILED')
+                        ),
+                        sql_text text not null,
+                        execution_success integer check (execution_success in (0, 1)),
+                        passed integer check (passed in (0, 1)),
+                        duration_ms integer not null check (duration_ms >= 0),
+                        result_columns_json text not null default '[]',
+                        result_rows_json text not null default '[]',
+                        feedback_json text not null default '[]',
+                        error_code text,
+                        created_at text not null
+                    )
+                    """,
+                """
+                    create index exercise_attempts_session_created
+                    on exercise_attempts(session_id, created_at)
                     """
             )
         )
