@@ -13,6 +13,8 @@ import com.sqlteacher.application.exercise.ExercisePracticeService;
 import com.sqlteacher.application.knowledge.KnowledgeDocumentService;
 import com.sqlteacher.application.knowledge.KnowledgeSearchService;
 import com.sqlteacher.application.maintenance.DataMaintenanceService;
+import com.sqlteacher.application.maintenance.ApplicationBackupService;
+import com.sqlteacher.application.config.SqlTeacherConfiguration;
 import com.sqlteacher.application.metadata.DatabaseMetadataService;
 import com.sqlteacher.application.nl2sql.Nl2SqlSafetyService;
 import com.sqlteacher.application.risk.SqlRiskAnalysisService;
@@ -25,6 +27,10 @@ import javafx.scene.control.ButtonBase;
 import javafx.scene.control.Label;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.StackPane;
+import javafx.scene.Scene;
+import javafx.scene.input.KeyCode;
+import javafx.scene.input.KeyCodeCombination;
+import javafx.scene.input.KeyCombination;
 
 import java.io.IOException;
 import java.net.URL;
@@ -70,7 +76,7 @@ public final class MainWindowController {
 
     /** AI 助手子页面 FXML 的类路径位置。 */
     private static final String AI_ASSISTANT_FXML = "/fxml/ai-assistant.fxml";
-    private static final String SETTINGS_FXML = "/fxml/connection-settings.fxml";
+    private static final String SETTINGS_FXML = "/fxml/settings.fxml";
     private static final String STUDENT_EXERCISE_FXML = "/fxml/student-exercise.fxml";
     private static final String EXERCISE_MANAGEMENT_FXML = "/fxml/exercise-management.fxml";
     private static final String EXERCISE_PROGRESS_FXML = "/fxml/exercise-progress.fxml";
@@ -101,6 +107,8 @@ public final class MainWindowController {
     private final DataMaintenanceService dataMaintenanceService;
     private final KnowledgeDocumentService knowledgeDocumentService;
     private final KnowledgeSearchService knowledgeSearchService;
+    private final ApplicationBackupService applicationBackupService;
+    private final SqlTeacherConfiguration configuration;
 
     /**
      * 表名选中回调：表结构页点击表名时触发，把 {@code "SELECT * FROM 表名"}
@@ -198,7 +206,9 @@ public final class MainWindowController {
                                 LearningAnalyticsService learningAnalyticsService,
                                 DataMaintenanceService dataMaintenanceService,
                                 KnowledgeDocumentService knowledgeDocumentService,
-                                KnowledgeSearchService knowledgeSearchService) {
+                                KnowledgeSearchService knowledgeSearchService,
+                                ApplicationBackupService applicationBackupService,
+                                SqlTeacherConfiguration configuration) {
         this.sqlExecutionService = Objects.requireNonNull(sqlExecutionService, "sqlExecutionService must not be null");
         this.databaseMetadataService = Objects.requireNonNull(databaseMetadataService, "databaseMetadataService must not be null");
         this.nl2SqlSafetyService = Objects.requireNonNull(nl2SqlSafetyService, "nl2SqlSafetyService must not be null");
@@ -218,6 +228,8 @@ public final class MainWindowController {
         this.dataMaintenanceService = Objects.requireNonNull(dataMaintenanceService);
         this.knowledgeDocumentService = Objects.requireNonNull(knowledgeDocumentService);
         this.knowledgeSearchService = Objects.requireNonNull(knowledgeSearchService);
+        this.applicationBackupService = Objects.requireNonNull(applicationBackupService);
+        this.configuration = Objects.requireNonNull(configuration);
         this.fillSqlCallback = sql -> {
             // 确保 SQL 练习页已加载并捕获控制器引用，仅填充 SQL 不跳转页面。
             sqlPracticePage();
@@ -290,6 +302,27 @@ public final class MainWindowController {
             showPage(aiAssistantPage());
         } catch (RuntimeException error) {
             throw new IllegalStateException("无法加载 AI 助手页", error);
+        }
+    }
+
+    public void registerKeyboardShortcuts(Scene scene) {
+        Objects.requireNonNull(scene, "scene must not be null");
+        Button[] buttons = {
+            homeNavButton, sqlPracticeNavButton, studentExerciseNavButton,
+            exerciseManagementNavButton, exerciseProgressNavButton, knowledgeCenterNavButton,
+            aiAssistantNavButton, tableSchemaNavButton, settingsNavButton
+        };
+        KeyCode[] keys = {
+            KeyCode.DIGIT1, KeyCode.DIGIT2, KeyCode.DIGIT3,
+            KeyCode.DIGIT4, KeyCode.DIGIT5, KeyCode.DIGIT6,
+            KeyCode.DIGIT7, KeyCode.DIGIT8, KeyCode.DIGIT9
+        };
+        for (int index = 0; index < buttons.length; index++) {
+            Button button = buttons[index];
+            scene.getAccelerators().put(
+                new KeyCodeCombination(keys[index], KeyCombination.CONTROL_DOWN),
+                button::fire
+            );
         }
     }
 
@@ -501,12 +534,14 @@ public final class MainWindowController {
             if (fxml == null) throw new IllegalStateException("Missing FXML resource: " + SETTINGS_FXML);
             FXMLLoader loader = new FXMLLoader(fxml);
             loader.setControllerFactory(type -> {
-                if (type == ConnectionSettingsController.class) {
-                    return new ConnectionSettingsController(
+                if (type == SettingsController.class) {
+                    return new SettingsController(
                         connectionManagementService,
                         databaseConnectionTestService,
                         applicationExceptionMapper,
-                        databaseCredentialSession
+                        databaseCredentialSession,
+                        applicationBackupService,
+                        configuration
                     );
                 }
                 throw new IllegalStateException("Unexpected controller type for settings: " + type);

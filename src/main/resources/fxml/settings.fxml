@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.scene.control.Tab?>
+<?import javafx.scene.control.TabPane?>
+
+<TabPane xmlns="http://javafx.com/javafx" xmlns:fx="http://javafx.com/fxml"
+         fx:controller="com.sqlteacher.desktop.controller.SettingsController"
+         tabClosingPolicy="UNAVAILABLE">
+    <tabs>
+        <Tab fx:id="connectionsTab" text="数据库连接"/>
+        <Tab fx:id="dataTab" text="版本与数据"/>
+    </tabs>
+</TabPane>

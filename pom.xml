@@ -107,6 +107,10 @@
                             <classpathPrefix>lib/</classpathPrefix>
                             <mainClass>com.sqlteacher.TechnologyVerificationApp</mainClass>
                         </manifest>
+                        <manifestEntries>
+                            <Implementation-Title>SQLTeacher</Implementation-Title>
+                            <Implementation-Version>${project.version}</Implementation-Version>
+                        </manifestEntries>
                     </archive>
                 </configuration>
             </plugin>

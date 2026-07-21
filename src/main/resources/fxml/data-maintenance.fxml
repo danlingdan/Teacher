@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+
+<ScrollPane xmlns="http://javafx.com/javafx" xmlns:fx="http://javafx.com/fxml"
+            fx:controller="com.sqlteacher.desktop.controller.DataMaintenanceController"
+            fitToWidth="true" styleClass="connection-form-scroll">
+    <VBox spacing="16" styleClass="panel-card">
+        <padding><Insets top="20" right="24" bottom="20" left="24"/></padding>
+        <Label text="版本与本地数据" styleClass="card-title"/>
+        <GridPane hgap="14" vgap="10">
+            <columnConstraints>
+                <ColumnConstraints minWidth="110" halignment="RIGHT"/>
+                <ColumnConstraints hgrow="ALWAYS"/>
+            </columnConstraints>
+            <Label text="应用版本" styleClass="form-label"/>
+            <Label fx:id="versionLabel" GridPane.columnIndex="1" wrapText="true"/>
+            <Label text="用户数据目录" GridPane.rowIndex="1" styleClass="form-label"/>
+            <Label fx:id="dataDirectoryLabel" GridPane.columnIndex="1" GridPane.rowIndex="1" wrapText="true"/>
+            <Label text="数据策略" GridPane.rowIndex="2" styleClass="form-label"/>
+            <Label text="升级前自动备份；卸载应用时保留用户数据。" GridPane.columnIndex="1" GridPane.rowIndex="2" wrapText="true"/>
+        </GridPane>
+        <Separator/>
+        <HBox spacing="8" alignment="CENTER_LEFT">
+            <Label text="应用备份" styleClass="card-title"/>
+            <Region HBox.hgrow="ALWAYS"/>
+            <Button text="刷新" onAction="#onRefreshBackups" styleClass="refresh-button"/>
+            <Button text="立即备份" onAction="#onCreateBackup" styleClass="sql-execute-button"/>
+        </HBox>
+        <Label text="备份包含应用数据库与演示数据库，恢复前会进行 SQLite 完整性检查。" wrapText="true" styleClass="page-subtitle"/>
+        <ListView fx:id="backupList" prefHeight="240" VBox.vgrow="ALWAYS" styleClass="connection-list"/>
+        <HBox spacing="8" alignment="CENTER_RIGHT">
+            <Button text="恢复内置演示库" onAction="#onRestoreDemo" styleClass="refresh-button"/>
+            <Button text="恢复所选备份" onAction="#onRestoreBackup" styleClass="danger-button"/>
+        </HBox>
+        <Label fx:id="maintenanceStatusLabel" text="请选择操作。" wrapText="true" styleClass="sql-result-hint"/>
+    </VBox>
+</ScrollPane>

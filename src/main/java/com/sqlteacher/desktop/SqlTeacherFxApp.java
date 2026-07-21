@@ -14,6 +14,8 @@ import com.sqlteacher.application.exercise.ExercisePracticeService;
 import com.sqlteacher.application.knowledge.KnowledgeDocumentService;
 import com.sqlteacher.application.knowledge.KnowledgeSearchService;
 import com.sqlteacher.application.maintenance.DataMaintenanceService;
+import com.sqlteacher.application.maintenance.ApplicationBackupService;
+import com.sqlteacher.application.config.SqlTeacherConfiguration;
 import com.sqlteacher.application.metadata.DatabaseMetadataService;
 import com.sqlteacher.application.nl2sql.Nl2SqlSafetyService;
 import com.sqlteacher.application.risk.SqlRiskAnalysisService;
@@ -23,6 +25,7 @@ import javafx.application.Application;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
+import javafx.scene.image.Image;
 import javafx.stage.Stage;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 
@@ -65,6 +68,8 @@ public final class SqlTeacherFxApp extends Application {
     private DataMaintenanceService dataMaintenanceService;
     private KnowledgeDocumentService knowledgeDocumentService;
     private KnowledgeSearchService knowledgeSearchService;
+    private ApplicationBackupService applicationBackupService;
+    private SqlTeacherConfiguration configuration;
 
     /**
      * JavaFX 在非 Application Thread 上调用本方法，数据库初始化不会阻塞界面线程。
@@ -91,6 +96,8 @@ public final class SqlTeacherFxApp extends Application {
             dataMaintenanceService = context.getBean(DataMaintenanceService.class);
             knowledgeDocumentService = context.getBean(KnowledgeDocumentService.class);
             knowledgeSearchService = context.getBean(KnowledgeSearchService.class);
+            applicationBackupService = context.getBean(ApplicationBackupService.class);
+            configuration = context.getBean(SqlTeacherConfiguration.class);
             applicationContext = context;
         } catch (RuntimeException error) {
             context.close();
@@ -107,7 +114,8 @@ public final class SqlTeacherFxApp extends Application {
             || databaseCredentialSession == null || exerciseCatalogService == null
             || exercisePracticeService == null || exerciseManagementService == null
             || learningAnalyticsService == null || dataMaintenanceService == null
-            || knowledgeDocumentService == null || knowledgeSearchService == null) {
+            || knowledgeDocumentService == null || knowledgeSearchService == null
+            || applicationBackupService == null || configuration == null) {
             throw new IllegalStateException("Services are unavailable because application initialization did not complete");
         }
 
@@ -136,16 +144,24 @@ public final class SqlTeacherFxApp extends Application {
                     learningAnalyticsService,
                     dataMaintenanceService,
                     knowledgeDocumentService,
-                    knowledgeSearchService
+                    knowledgeSearchService,
+                    applicationBackupService,
+                    configuration
                 );
             }
             throw new IllegalStateException("Unexpected controller type for MainWindow.fxml: " + type);
         });
 
         Parent root = loader.load();
+        MainWindowController mainWindowController = loader.getController();
 
         stage.setTitle("SQLTeacher");
+        URL icon = SqlTeacherFxApp.class.getResource("/images/sqlteacher-icon.png");
+        if (icon != null) {
+            stage.getIcons().add(new Image(icon.toExternalForm()));
+        }
         Scene scene = new Scene(root, DEFAULT_WIDTH, DEFAULT_HEIGHT);
+        mainWindowController.registerKeyboardShortcuts(scene);
         // 以绝对类路径加载 CSS，确保无论 FXML 相对路径如何解析，主题样式都能生效。
         URL css = SqlTeacherFxApp.class.getResource("/css/app.css");
         if (css != null) {

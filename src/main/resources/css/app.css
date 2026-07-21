@@ -1044,6 +1044,16 @@
     -fx-background-radius: 4;
 }
 
+.top-nav-scroll {
+    -fx-background-color: transparent;
+    -fx-background: transparent;
+    -fx-padding: 0;
+}
+
+.top-nav-scroll > .viewport {
+    -fx-background-color: transparent;
+}
+
 /* 数据库连接设置页 */
 .connection-settings-page { -fx-background-color: #141c30; }
 .connection-split { -fx-background-color: transparent; -fx-padding: 0 20 20 20; }
