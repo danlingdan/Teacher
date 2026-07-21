@@ -23,6 +23,7 @@ $appName = "SQLTeacher"
 $appImageDir = Join-Path $outputPath $appName
 $archivePath = Join-Path $outputPath "$appName-$projectVersion-windows-x64.zip"
 $installerPath = Join-Path $outputPath "$appName-$projectVersion.exe"
+$checksumPath = Join-Path $outputPath "SHA256SUMS.txt"
 $iconPath = Join-Path $projectRoot "packaging\sqlteacher.ico"
 $wixVersion = "3.14.1"
 $wixArchiveHash = "6AC824E1642D6F7277D0ED7EA09411A508F6116BA6FAE0AA5F2C7DAA2FF43D31"
@@ -52,6 +53,7 @@ Assert-ChildPath -Candidate $inputDir -Parent $targetRoot
 Assert-ChildPath -Candidate $appImageDir -Parent $outputPath
 Assert-ChildPath -Candidate $archivePath -Parent $outputPath
 Assert-ChildPath -Candidate $installerPath -Parent $outputPath
+Assert-ChildPath -Candidate $checksumPath -Parent $outputPath
 
 if (-not (Get-Command jpackage -ErrorAction SilentlyContinue)) {
     throw "jpackage was not found. Use JDK 21 or newer with jpackage available on PATH."
@@ -135,6 +137,9 @@ try {
     if (Test-Path -LiteralPath $installerPath) {
         Remove-Item -LiteralPath $installerPath -Force
     }
+    if (Test-Path -LiteralPath $checksumPath) {
+        Remove-Item -LiteralPath $checksumPath -Force
+    }
 
     jpackage `
         --type app-image `
@@ -191,11 +196,22 @@ try {
         }
     }
 
+    $releaseArtifacts = @($archivePath)
+    if (-not $SkipInstaller) {
+        $releaseArtifacts += $installerPath
+    }
+    $checksumLines = $releaseArtifacts | ForEach-Object {
+        $hash = (Get-FileHash -LiteralPath $_ -Algorithm SHA256).Hash.ToLowerInvariant()
+        "$hash  $([System.IO.Path]::GetFileName($_))"
+    }
+    Set-Content -LiteralPath $checksumPath -Value $checksumLines -Encoding ascii
+
     Write-Host "Created app-image: $appImageDir"
     Write-Host "Created release archive: $archivePath"
     if (-not $SkipInstaller) {
         Write-Host "Created Windows installer: $installerPath"
     }
+    Write-Host "Created checksums: $checksumPath"
 } finally {
     Pop-Location
 }

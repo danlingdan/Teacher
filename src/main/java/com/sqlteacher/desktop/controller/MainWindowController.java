@@ -15,6 +15,12 @@ import com.sqlteacher.application.knowledge.KnowledgeSearchService;
 import com.sqlteacher.application.maintenance.DataMaintenanceService;
 import com.sqlteacher.application.maintenance.ApplicationBackupService;
 import com.sqlteacher.application.config.SqlTeacherConfiguration;
+import com.sqlteacher.application.collaboration.CloudApiClient;
+import com.sqlteacher.application.collaboration.CloudSessionService;
+import com.sqlteacher.application.collaboration.CloudLearningSyncService;
+import com.sqlteacher.application.collaboration.DesktopAccessProfile;
+import com.sqlteacher.application.collaboration.DesktopCapability;
+import com.sqlteacher.application.ai.NetworkAiSettingsService;
 import com.sqlteacher.application.metadata.DatabaseMetadataService;
 import com.sqlteacher.application.nl2sql.Nl2SqlSafetyService;
 import com.sqlteacher.application.risk.SqlRiskAnalysisService;
@@ -81,6 +87,7 @@ public final class MainWindowController {
     private static final String EXERCISE_MANAGEMENT_FXML = "/fxml/exercise-management.fxml";
     private static final String EXERCISE_PROGRESS_FXML = "/fxml/exercise-progress.fxml";
     private static final String KNOWLEDGE_CENTER_FXML = "/fxml/knowledge-center.fxml";
+    private static final String CLOUD_CENTER_FXML = "/fxml/cloud-center.fxml";
 
     /** SQL 执行服务（应用层接口）；运行期实现由 Spring 提供，向下注入到 SQL 练习页控制器。 */
     private final SqlExecutionService sqlExecutionService;
@@ -109,6 +116,12 @@ public final class MainWindowController {
     private final KnowledgeSearchService knowledgeSearchService;
     private final ApplicationBackupService applicationBackupService;
     private final SqlTeacherConfiguration configuration;
+    private final CloudApiClient cloudApiClient;
+    private final CloudSessionService cloudSessionService;
+    private final CloudLearningSyncService cloudLearningSyncService;
+    private final NetworkAiSettingsService networkAiSettingsService;
+    private final DesktopAccessProfile accessProfile;
+    private final Runnable switchIdentityAction;
 
     /**
      * 表名选中回调：表结构页点击表名时触发，把 {@code "SELECT * FROM 表名"}
@@ -145,6 +158,10 @@ public final class MainWindowController {
     private Button exerciseProgressNavButton;
     @FXML
     private Button knowledgeCenterNavButton;
+    @FXML
+    private Button cloudCenterNavButton;
+    @FXML
+    private Label identityLabel;
 
     /** 右侧页面容器，导航切换时替换其中的内容节点。 */
     @FXML
@@ -182,6 +199,7 @@ public final class MainWindowController {
     private Node exerciseManagementPage;
     private Node exerciseProgressPage;
     private Node knowledgeCenterPage;
+    private Node cloudCenterPage;
 
     /**
      * 构造注入 SQL 执行服务、表元数据服务、NL2SQL 服务与 SQL 风险分析服务，并初始化表名选中回调。
@@ -208,7 +226,13 @@ public final class MainWindowController {
                                 KnowledgeDocumentService knowledgeDocumentService,
                                 KnowledgeSearchService knowledgeSearchService,
                                 ApplicationBackupService applicationBackupService,
-                                SqlTeacherConfiguration configuration) {
+                                SqlTeacherConfiguration configuration,
+                                CloudApiClient cloudApiClient,
+                                CloudSessionService cloudSessionService,
+                                CloudLearningSyncService cloudLearningSyncService,
+                                NetworkAiSettingsService networkAiSettingsService,
+                                DesktopAccessProfile accessProfile,
+                                Runnable switchIdentityAction) {
         this.sqlExecutionService = Objects.requireNonNull(sqlExecutionService, "sqlExecutionService must not be null");
         this.databaseMetadataService = Objects.requireNonNull(databaseMetadataService, "databaseMetadataService must not be null");
         this.nl2SqlSafetyService = Objects.requireNonNull(nl2SqlSafetyService, "nl2SqlSafetyService must not be null");
@@ -230,6 +254,12 @@ public final class MainWindowController {
         this.knowledgeSearchService = Objects.requireNonNull(knowledgeSearchService);
         this.applicationBackupService = Objects.requireNonNull(applicationBackupService);
         this.configuration = Objects.requireNonNull(configuration);
+        this.cloudApiClient = Objects.requireNonNull(cloudApiClient);
+        this.cloudSessionService = Objects.requireNonNull(cloudSessionService);
+        this.cloudLearningSyncService = Objects.requireNonNull(cloudLearningSyncService);
+        this.networkAiSettingsService = Objects.requireNonNull(networkAiSettingsService);
+        this.accessProfile = Objects.requireNonNull(accessProfile, "accessProfile must not be null");
+        this.switchIdentityAction = Objects.requireNonNull(switchIdentityAction, "switchIdentityAction must not be null");
         this.fillSqlCallback = sql -> {
             // 确保 SQL 练习页已加载并捕获控制器引用，仅填充 SQL 不跳转页面。
             sqlPracticePage();
@@ -246,7 +276,33 @@ public final class MainWindowController {
     @FXML
     private void initialize() {
         GlobalLoading.initialize(loadingOverlay, loadingText);
+        applyAccessPolicy();
         onNavigateHome();
+    }
+
+    private void applyAccessPolicy() {
+        identityLabel.setText(accessProfile.displayName() + " · " + accessProfile.roleLabel());
+        applyCapability(homeNavButton, DesktopCapability.HOME);
+        applyCapability(sqlPracticeNavButton, DesktopCapability.SQL_PRACTICE);
+        applyCapability(studentExerciseNavButton, DesktopCapability.STUDENT_EXERCISE);
+        applyCapability(exerciseManagementNavButton, DesktopCapability.EXERCISE_MANAGEMENT);
+        applyCapability(exerciseProgressNavButton, DesktopCapability.EXERCISE_PROGRESS);
+        applyCapability(knowledgeCenterNavButton, DesktopCapability.KNOWLEDGE_CENTER);
+        applyCapability(aiAssistantNavButton, DesktopCapability.AI_ASSISTANT);
+        applyCapability(tableSchemaNavButton, DesktopCapability.TABLE_SCHEMA);
+        applyCapability(settingsNavButton, DesktopCapability.SETTINGS);
+        applyCapability(cloudCenterNavButton, DesktopCapability.CLOUD_CENTER);
+    }
+
+    private void applyCapability(Button button, DesktopCapability capability) {
+        boolean allowed = accessProfile.can(capability);
+        button.setVisible(allowed);
+        button.setManaged(allowed);
+    }
+
+    @FXML
+    private void onSwitchIdentity() {
+        switchIdentityAction.run();
     }
 
     /**
@@ -268,6 +324,7 @@ public final class MainWindowController {
      */
     @FXML
     private void onNavigateSqlPractice() {
+        requireCapability(DesktopCapability.SQL_PRACTICE);
         selectNav(sqlPracticeNavButton);
         try {
             showPage(sqlPracticePage());
@@ -283,6 +340,7 @@ public final class MainWindowController {
      */
     @FXML
     private void onNavigateTableSchema() {
+        requireCapability(DesktopCapability.TABLE_SCHEMA);
         selectNav(tableSchemaNavButton);
         try {
             showPage(tableSchemaPage());
@@ -297,6 +355,7 @@ public final class MainWindowController {
      */
     @FXML
     private void onNavigateAiAssistant() {
+        requireCapability(DesktopCapability.AI_ASSISTANT);
         selectNav(aiAssistantNavButton);
         try {
             showPage(aiAssistantPage());
@@ -319,6 +378,7 @@ public final class MainWindowController {
         };
         for (int index = 0; index < buttons.length; index++) {
             Button button = buttons[index];
+            if (!button.isVisible()) continue;
             scene.getAccelerators().put(
                 new KeyCodeCombination(keys[index], KeyCombination.CONTROL_DOWN),
                 button::fire
@@ -328,6 +388,7 @@ public final class MainWindowController {
 
     @FXML
     private void onNavigateSettings() {
+        requireCapability(DesktopCapability.SETTINGS);
         selectNav(settingsNavButton);
         try {
             showPage(settingsPage());
@@ -338,26 +399,37 @@ public final class MainWindowController {
 
     @FXML
     private void onNavigateStudentExercise() {
+        requireCapability(DesktopCapability.STUDENT_EXERCISE);
         selectNav(studentExerciseNavButton);
         showPage(studentExercisePage());
     }
 
     @FXML
     private void onNavigateExerciseManagement() {
+        requireCapability(DesktopCapability.EXERCISE_MANAGEMENT);
         selectNav(exerciseManagementNavButton);
         showPage(exerciseManagementPage());
     }
 
     @FXML
     private void onNavigateExerciseProgress() {
+        requireCapability(DesktopCapability.EXERCISE_PROGRESS);
         selectNav(exerciseProgressNavButton);
         showPage(exerciseProgressPage());
     }
 
     @FXML
     private void onNavigateKnowledgeCenter() {
+        requireCapability(DesktopCapability.KNOWLEDGE_CENTER);
         selectNav(knowledgeCenterNavButton);
         showPage(knowledgeCenterPage());
+    }
+
+    @FXML
+    private void onNavigateCloudCenter() {
+        requireCapability(DesktopCapability.CLOUD_CENTER);
+        selectNav(cloudCenterNavButton);
+        showPage(cloudCenterPage());
     }
 
     /**
@@ -377,7 +449,8 @@ public final class MainWindowController {
         return List.of(
             homeNavButton, sqlPracticeNavButton, studentExerciseNavButton, exerciseManagementNavButton,
             exerciseProgressNavButton,
-            knowledgeCenterNavButton, aiAssistantNavButton, tableSchemaNavButton, settingsNavButton
+            knowledgeCenterNavButton, aiAssistantNavButton, tableSchemaNavButton, settingsNavButton,
+            cloudCenterNavButton
         );
     }
 
@@ -528,6 +601,12 @@ public final class MainWindowController {
         return homePage;
     }
 
+    private void requireCapability(DesktopCapability capability) {
+        if (!accessProfile.can(capability)) {
+            throw new SecurityException("当前“" + accessProfile.roleLabel() + "”身份无权使用此功能");
+        }
+    }
+
     private Node settingsPage() {
         if (settingsPage == null) {
             URL fxml = MainWindowController.class.getResource(SETTINGS_FXML);
@@ -639,6 +718,33 @@ public final class MainWindowController {
             }
         }
         return knowledgeCenterPage;
+    }
+
+    private Node cloudCenterPage() {
+        if (cloudCenterPage == null) {
+            URL fxml = MainWindowController.class.getResource(CLOUD_CENTER_FXML);
+            if (fxml == null) throw new IllegalStateException("Missing FXML resource: " + CLOUD_CENTER_FXML);
+            FXMLLoader loader = new FXMLLoader(fxml);
+            loader.setControllerFactory(type -> {
+                if (type == CloudCenterController.class) {
+                    return new CloudCenterController(
+                        cloudApiClient,
+                        cloudSessionService,
+                        cloudLearningSyncService,
+                        networkAiSettingsService,
+                        accessProfile,
+                        switchIdentityAction
+                    );
+                }
+                throw new IllegalStateException("Unexpected controller type for cloud center: " + type);
+            });
+            try {
+                cloudCenterPage = loader.load();
+            } catch (IOException error) {
+                throw new IllegalStateException("Failed to load " + CLOUD_CENTER_FXML, error);
+            }
+        }
+        return cloudCenterPage;
     }
 
     /**

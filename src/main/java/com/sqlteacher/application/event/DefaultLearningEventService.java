@@ -11,14 +11,31 @@ import java.util.Objects;
 public final class DefaultLearningEventService implements LearningEventService {
     private final LearningEventRecorder recorder;
     private final Clock clock;
+    private final LearningEventOwnerProvider ownerProvider;
 
     public DefaultLearningEventService(LearningEventRecorder recorder) {
-        this(recorder, Clock.systemUTC());
+        this(recorder, Clock.systemUTC(), () -> LearningEventOwnerProvider.GUEST_OWNER);
+    }
+
+    public DefaultLearningEventService(
+        LearningEventRecorder recorder,
+        LearningEventOwnerProvider ownerProvider
+    ) {
+        this(recorder, Clock.systemUTC(), ownerProvider);
     }
 
     DefaultLearningEventService(LearningEventRecorder recorder, Clock clock) {
+        this(recorder, clock, () -> LearningEventOwnerProvider.GUEST_OWNER);
+    }
+
+    DefaultLearningEventService(
+        LearningEventRecorder recorder,
+        Clock clock,
+        LearningEventOwnerProvider ownerProvider
+    ) {
         this.recorder = Objects.requireNonNull(recorder, "recorder must not be null");
         this.clock = Objects.requireNonNull(clock, "clock must not be null");
+        this.ownerProvider = Objects.requireNonNull(ownerProvider, "ownerProvider must not be null");
     }
 
     @Override
@@ -155,7 +172,9 @@ public final class DefaultLearningEventService implements LearningEventService {
         boolean successful,
         Map<String, String> attributes
     ) {
-        recorder.record(new LearningEvent(type, clock.instant(), connectionId, successful, attributes));
+        Map<String, String> ownedAttributes = new LinkedHashMap<>(attributes);
+        ownedAttributes.put(LearningEventOwnerProvider.OWNER_ATTRIBUTE, ownerProvider.currentOwnerId());
+        recorder.record(new LearningEvent(type, clock.instant(), connectionId, successful, ownedAttributes));
     }
 
     private static void validateConnectionId(String connectionId) {

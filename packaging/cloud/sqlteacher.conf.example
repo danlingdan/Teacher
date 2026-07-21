@@ -1,0 +1,29 @@
+# Replace api.example.edu with the approved domain before enabling this file.
+# Do not expose port 18080 directly to the Internet.
+server {
+    listen 80;
+    server_name api.example.edu;
+
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+server {
+    listen 443 ssl http2;
+    server_name api.example.edu;
+
+    ssl_certificate /etc/letsencrypt/live/api.example.edu/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/api.example.edu/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    add_header Strict-Transport-Security "max-age=31536000" always;
+
+    client_max_body_size 1m;
+    location / {
+        proxy_pass http://127.0.0.1:18080;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}

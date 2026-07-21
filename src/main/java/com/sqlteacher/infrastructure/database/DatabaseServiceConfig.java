@@ -6,6 +6,7 @@ import com.sqlteacher.application.connection.DatabaseCredentialSession;
 import com.sqlteacher.application.event.DefaultLearningEventService;
 import com.sqlteacher.application.event.LearningEventQueryService;
 import com.sqlteacher.application.event.LearningEventRecorder;
+import com.sqlteacher.application.event.LearningEventOwnerProvider;
 import com.sqlteacher.application.event.LearningEventService;
 import com.sqlteacher.application.execution.SqlExecutionService;
 import com.sqlteacher.application.exercise.ExerciseManagementService;
@@ -19,6 +20,7 @@ import com.sqlteacher.application.maintenance.ApplicationBackupService;
 import com.sqlteacher.application.metadata.DatabaseMetadataService;
 import com.sqlteacher.application.risk.SqlRiskAnalysisService;
 import com.sqlteacher.application.config.SqlTeacherConfiguration;
+import com.sqlteacher.infrastructure.cloud.InMemoryLearningEventOwnerContext;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -92,8 +94,15 @@ public class DatabaseServiceConfig {
     }
 
     @Bean
-    public LearningEventService learningEventService(LearningEventRecorder learningEventRecorder) {
-        return new DefaultLearningEventService(learningEventRecorder);
+    public InMemoryLearningEventOwnerContext learningEventOwnerContext() {
+        return new InMemoryLearningEventOwnerContext();
+    }
+
+    @Bean
+    public LearningEventService learningEventService(
+            LearningEventRecorder learningEventRecorder,
+            LearningEventOwnerProvider ownerProvider) {
+        return new DefaultLearningEventService(learningEventRecorder, ownerProvider);
     }
 
     @Bean

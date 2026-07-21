@@ -33,6 +33,7 @@ class DefaultLearningEventServiceTest {
         assertTrue(event.successful());
         assertEquals("18", event.attributes().get("durationMs"));
         assertEquals("2", event.attributes().get("resultCount"));
+        assertEquals(LearningEventOwnerProvider.GUEST_OWNER, event.attributes().get(LearningEventOwnerProvider.OWNER_ATTRIBUTE));
         assertFalse(event.attributes().containsKey("sql"));
         assertFalse(event.attributes().containsKey("errorCode"));
     }
@@ -46,7 +47,7 @@ class DefaultLearningEventServiceTest {
         assertFalse(event.successful());
         assertEquals("FORBIDDEN", event.attributes().get("riskLevel"));
         assertEquals("true", event.attributes().get("multiStatement"));
-        assertEquals(3, event.attributes().size());
+        assertEquals(4, event.attributes().size());
     }
 
     @Test
@@ -86,5 +87,18 @@ class DefaultLearningEventServiceTest {
         assertEquals(LearningEventType.KNOWLEDGE_SEARCHED, recorded.get(2).type());
         assertEquals("12", recorded.get(2).attributes().get("queryLength"));
         assertFalse(recorded.get(2).attributes().containsKey("query"));
+    }
+
+    @Test
+    void shouldTagEventsWithAuthenticatedOwner() {
+        var authenticatedService = new DefaultLearningEventService(
+            recorded::add,
+            Clock.fixed(NOW, ZoneOffset.UTC),
+            () -> "user-1"
+        );
+
+        authenticatedService.recordKnowledgeSearch(4, 1);
+
+        assertEquals("user-1", recorded.getFirst().attributes().get(LearningEventOwnerProvider.OWNER_ATTRIBUTE));
     }
 }

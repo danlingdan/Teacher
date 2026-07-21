@@ -1,6 +1,10 @@
 package com.sqlteacher.infrastructure.spring;
 
 import com.sqlteacher.application.ai.AiStatusService;
+import com.sqlteacher.application.ai.NetworkAiSettingsService;
+import com.sqlteacher.application.collaboration.CloudApiClient;
+import com.sqlteacher.application.collaboration.CloudLearningSyncService;
+import com.sqlteacher.application.collaboration.CloudSessionService;
 import com.sqlteacher.application.ai.AiModelSelectionService;
 import com.sqlteacher.application.config.AppConfigurationService;
 import com.sqlteacher.application.connection.ConnectionManagementService;
@@ -45,6 +49,10 @@ class SqlTeacherApplicationConfigTest {
             assertNotNull(context.getBean(DatabaseMetadataService.class));
             assertNotNull(context.getBean(SqlRiskAnalysisService.class));
             assertNotNull(context.getBean(Nl2SqlSafetyService.class));
+            assertNotNull(context.getBean(NetworkAiSettingsService.class));
+            assertNotNull(context.getBean(CloudApiClient.class));
+            assertNotNull(context.getBean(CloudSessionService.class));
+            assertNotNull(context.getBean(CloudLearningSyncService.class));
             assertInstanceOf(
                 JdbcLearningEventRecorder.class,
                 context.getBean(LearningEventRecorder.class)

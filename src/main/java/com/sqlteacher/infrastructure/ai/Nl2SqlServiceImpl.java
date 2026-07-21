@@ -339,6 +339,10 @@ public final class Nl2SqlServiceImpl implements Nl2SqlService {
     }
 
     private String resolveSelectedModel() {
+        String preferred = aiModelProvider.preferredModel();
+        if (!preferred.isBlank()) {
+            return preferred;
+        }
         AiModelSelection selection = modelSelectionService.current();
         if (!selection.hasSelection()) {
             selection = modelSelectionService.refresh();

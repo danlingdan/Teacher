@@ -112,8 +112,19 @@
                             text="设置与数据"
                             onAction="#onNavigateSettings"/>
 
+                    <Button fx:id="cloudCenterNavButton"
+                            styleClass="nav-button"
+                            text="云端教学"
+                            onAction="#onNavigateCloudCenter"/>
+
                     <!-- 弹性留白：把右侧按钮推到最右端 -->
                     <Region HBox.hgrow="ALWAYS"/>
+
+                    <Label fx:id="identityLabel" text="访客" styleClass="identity-pill"/>
+                    <Button fx:id="switchIdentityButton"
+                            text="切换身份"
+                            onAction="#onSwitchIdentity"
+                            styleClass="identity-switch-button"/>
                     </children>
                 </HBox>
                 </content>

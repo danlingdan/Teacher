@@ -16,11 +16,18 @@ import com.sqlteacher.application.knowledge.KnowledgeSearchService;
 import com.sqlteacher.application.maintenance.DataMaintenanceService;
 import com.sqlteacher.application.maintenance.ApplicationBackupService;
 import com.sqlteacher.application.config.SqlTeacherConfiguration;
+import com.sqlteacher.application.collaboration.CloudApiClient;
+import com.sqlteacher.application.collaboration.CloudSessionService;
+import com.sqlteacher.application.collaboration.CloudLearningSyncService;
+import com.sqlteacher.application.collaboration.DesktopAccessProfile;
+import com.sqlteacher.application.ai.NetworkAiSettingsService;
 import com.sqlteacher.application.metadata.DatabaseMetadataService;
 import com.sqlteacher.application.nl2sql.Nl2SqlSafetyService;
 import com.sqlteacher.application.risk.SqlRiskAnalysisService;
 import com.sqlteacher.desktop.controller.MainWindowController;
+import com.sqlteacher.desktop.controller.LoginGateController;
 import com.sqlteacher.infrastructure.spring.SqlTeacherApplicationConfig;
+import com.sqlteacher.infrastructure.cloud.InMemoryLearningEventOwnerContext;
 import javafx.application.Application;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.Parent;
@@ -28,6 +35,8 @@ import javafx.scene.Scene;
 import javafx.scene.image.Image;
 import javafx.stage.Stage;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.net.URL;
@@ -45,7 +54,9 @@ import java.net.URL;
  */
 public final class SqlTeacherFxApp extends Application {
 
+    private static final Logger LOG = LoggerFactory.getLogger(SqlTeacherFxApp.class);
     private static final String MAIN_WINDOW_FXML = "/fxml/MainWindow.fxml";
+    private static final String LOGIN_GATE_FXML = "/fxml/login-gate.fxml";
 
     /** 默认窗口尺寸：在 1366x768 分辨率下留出任务栏与边距的舒适可视区。 */
     private static final double DEFAULT_WIDTH = 1180.0;
@@ -70,6 +81,11 @@ public final class SqlTeacherFxApp extends Application {
     private KnowledgeSearchService knowledgeSearchService;
     private ApplicationBackupService applicationBackupService;
     private SqlTeacherConfiguration configuration;
+    private CloudApiClient cloudApiClient;
+    private CloudSessionService cloudSessionService;
+    private CloudLearningSyncService cloudLearningSyncService;
+    private NetworkAiSettingsService networkAiSettingsService;
+    private InMemoryLearningEventOwnerContext learningEventOwnerContext;
 
     /**
      * JavaFX 在非 Application Thread 上调用本方法，数据库初始化不会阻塞界面线程。
@@ -98,6 +114,11 @@ public final class SqlTeacherFxApp extends Application {
             knowledgeSearchService = context.getBean(KnowledgeSearchService.class);
             applicationBackupService = context.getBean(ApplicationBackupService.class);
             configuration = context.getBean(SqlTeacherConfiguration.class);
+            cloudApiClient = context.getBean(CloudApiClient.class);
+            cloudSessionService = context.getBean(CloudSessionService.class);
+            cloudLearningSyncService = context.getBean(CloudLearningSyncService.class);
+            networkAiSettingsService = context.getBean(NetworkAiSettingsService.class);
+            learningEventOwnerContext = context.getBean(InMemoryLearningEventOwnerContext.class);
             applicationContext = context;
         } catch (RuntimeException error) {
             context.close();
@@ -115,17 +136,53 @@ public final class SqlTeacherFxApp extends Application {
             || exercisePracticeService == null || exerciseManagementService == null
             || learningAnalyticsService == null || dataMaintenanceService == null
             || knowledgeDocumentService == null || knowledgeSearchService == null
-            || applicationBackupService == null || configuration == null) {
+            || applicationBackupService == null || configuration == null
+            || cloudApiClient == null || cloudSessionService == null || cloudLearningSyncService == null
+            || networkAiSettingsService == null || learningEventOwnerContext == null) {
             throw new IllegalStateException("Services are unavailable because application initialization did not complete");
         }
 
-        URL fxml = SqlTeacherFxApp.class.getResource(MAIN_WINDOW_FXML);
-        if (fxml == null) {
-            throw new IllegalStateException("Missing FXML resource on classpath: " + MAIN_WINDOW_FXML);
+        stage.setTitle("SQLTeacher");
+        URL icon = SqlTeacherFxApp.class.getResource("/images/sqlteacher-icon.png");
+        if (icon != null) {
+            stage.getIcons().add(new Image(icon.toExternalForm()));
         }
+        showLoginGate(stage);
+    }
 
+    private void showLoginGate(Stage stage) {
+        learningEventOwnerContext.useGuest();
+        URL fxml = requiredResource(LOGIN_GATE_FXML);
         FXMLLoader loader = new FXMLLoader(fxml);
-        // MainWindow.fxml 的控制器改为构造注入（无无参构造），故必须提供 controllerFactory。
+        loader.setControllerFactory(type -> {
+            if (type == LoginGateController.class) {
+                return new LoginGateController(
+                    cloudApiClient,
+                    cloudSessionService,
+                    cloudLearningSyncService,
+                    profile -> showMainWindow(stage, profile)
+                );
+            }
+            throw new IllegalStateException("Unexpected controller type for login gate: " + type);
+        });
+        try {
+            Parent root = loader.load();
+            Scene scene = themedScene(root, 1020.0, 650.0);
+            stage.setMinWidth(880.0);
+            stage.setMinHeight(600.0);
+            stage.setScene(scene);
+            stage.centerOnScreen();
+            stage.show();
+        } catch (IOException error) {
+            throw new IllegalStateException("Failed to load " + LOGIN_GATE_FXML, error);
+        }
+    }
+
+    private void showMainWindow(Stage stage, DesktopAccessProfile accessProfile) {
+        if (accessProfile.isGuest()) learningEventOwnerContext.useGuest();
+        else learningEventOwnerContext.useAuthenticatedUser(accessProfile.userId());
+        URL fxml = requiredResource(MAIN_WINDOW_FXML);
+        FXMLLoader loader = new FXMLLoader(fxml);
         loader.setControllerFactory(type -> {
             if (type == MainWindowController.class) {
                 return new MainWindowController(
@@ -146,33 +203,56 @@ public final class SqlTeacherFxApp extends Application {
                     knowledgeDocumentService,
                     knowledgeSearchService,
                     applicationBackupService,
-                    configuration
+                    configuration,
+                    cloudApiClient,
+                    cloudSessionService,
+                    cloudLearningSyncService,
+                    networkAiSettingsService,
+                    accessProfile,
+                    () -> switchToLogin(stage)
                 );
             }
             throw new IllegalStateException("Unexpected controller type for MainWindow.fxml: " + type);
         });
-
-        Parent root = loader.load();
-        MainWindowController mainWindowController = loader.getController();
-
-        stage.setTitle("SQLTeacher");
-        URL icon = SqlTeacherFxApp.class.getResource("/images/sqlteacher-icon.png");
-        if (icon != null) {
-            stage.getIcons().add(new Image(icon.toExternalForm()));
+        try {
+            Parent root = loader.load();
+            MainWindowController controller = loader.getController();
+            Scene scene = themedScene(root, DEFAULT_WIDTH, DEFAULT_HEIGHT);
+            controller.registerKeyboardShortcuts(scene);
+            stage.setMinWidth(960.0);
+            stage.setMinHeight(600.0);
+            stage.setScene(scene);
+            stage.centerOnScreen();
+        } catch (IOException error) {
+            throw new IllegalStateException("Failed to load " + MAIN_WINDOW_FXML, error);
         }
-        Scene scene = new Scene(root, DEFAULT_WIDTH, DEFAULT_HEIGHT);
-        mainWindowController.registerKeyboardShortcuts(scene);
-        // 以绝对类路径加载 CSS，确保无论 FXML 相对路径如何解析，主题样式都能生效。
+    }
+
+    private void switchToLogin(Stage stage) {
+        var current = cloudSessionService.current();
+        cloudSessionService.signOut();
+        current.ifPresent(value -> DesktopExecutors.background().execute(() -> {
+            try {
+                cloudApiClient.logout(value.accessToken());
+            } catch (RuntimeException error) {
+                LOG.warn("Cloud token revocation failed while switching identity: {}", error.getMessage());
+            }
+        }));
+        showLoginGate(stage);
+    }
+
+    private static Scene themedScene(Parent root, double width, double height) {
+        Scene scene = new Scene(root, width, height);
         URL css = SqlTeacherFxApp.class.getResource("/css/app.css");
-        if (css != null) {
-            scene.getStylesheets().add(css.toExternalForm());
-        }
-        // 设置 Scene 填充色，与 CSS 主题底色一致，作为兜底防止出现白色背景。
+        if (css != null) scene.getStylesheets().add(css.toExternalForm());
         scene.setFill(javafx.scene.paint.Color.web("#141c30"));
-        stage.setScene(scene);
-        stage.setMinWidth(960.0);
-        stage.setMinHeight(600.0);
-        stage.show();
+        return scene;
+    }
+
+    private static URL requiredResource(String path) {
+        URL resource = SqlTeacherFxApp.class.getResource(path);
+        if (resource == null) throw new IllegalStateException("Missing FXML resource on classpath: " + path);
+        return resource;
     }
 
     @Override
@@ -197,6 +277,11 @@ public final class SqlTeacherFxApp extends Application {
         dataMaintenanceService = null;
         knowledgeDocumentService = null;
         knowledgeSearchService = null;
+        cloudApiClient = null;
+        cloudSessionService = null;
+        cloudLearningSyncService = null;
+        networkAiSettingsService = null;
+        learningEventOwnerContext = null;
     }
 
     public static void main(String[] args) {

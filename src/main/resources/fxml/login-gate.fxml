@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+
+<StackPane xmlns="http://javafx.com/javafx"
+           xmlns:fx="http://javafx.com/fxml"
+           fx:controller="com.sqlteacher.desktop.controller.LoginGateController"
+           styleClass="login-gate">
+    <children>
+        <Region styleClass="login-glow, login-glow-one"/>
+        <Region styleClass="login-glow, login-glow-two"/>
+        <HBox alignment="CENTER" spacing="54" maxWidth="1040" styleClass="login-layout">
+            <children>
+                <VBox spacing="20" prefWidth="440" maxWidth="440" styleClass="login-brand-panel">
+                    <children>
+                        <HBox spacing="12" alignment="CENTER_LEFT">
+                            <children>
+                                <Region styleClass="login-logo"/>
+                                <Label text="SQL Teacher" styleClass="login-brand-name"/>
+                            </children>
+                        </HBox>
+                        <Label text="让每一次 SQL 练习，都有清晰的成长记录" wrapText="true" styleClass="login-hero-title"/>
+                        <Label text="登录后按身份进入专属教学工作区。学生专注练习与任务，教师管理班级与题库，管理员维护完整系统。" wrapText="true" styleClass="login-hero-copy"/>
+                        <VBox spacing="12" styleClass="login-feature-list">
+                            <children>
+                                <Label text="✓  账号、班级与学习记录保存在云端" styleClass="login-feature"/>
+                                <Label text="✓  学生、教师、管理员独立权限" styleClass="login-feature"/>
+                                <Label text="✓  AI 生成的 SQL 仍经过本地安全检查" styleClass="login-feature"/>
+                            </children>
+                        </VBox>
+                        <Label text="只想体验？可使用访客模式，本机数据不会上传到账号。" wrapText="true" styleClass="login-guest-note"/>
+                    </children>
+                </VBox>
+
+                <VBox spacing="14" prefWidth="390" maxWidth="390" styleClass="login-card">
+                    <children>
+                        <Label text="欢迎使用" styleClass="login-card-title"/>
+                        <Label text="登录或注册 SQLTeacher 云端账号" styleClass="login-card-subtitle"/>
+                        <HBox fx:id="statusBox" spacing="8" alignment="CENTER_LEFT" styleClass="login-status, login-status-info">
+                            <children>
+                                <ProgressIndicator fx:id="progressIndicator" visible="false" managed="false" prefWidth="18" prefHeight="18"/>
+                                <Label fx:id="statusLabel" wrapText="true" HBox.hgrow="ALWAYS"/>
+                            </children>
+                        </HBox>
+                        <VBox spacing="7">
+                            <children>
+                                <Label text="邮箱" styleClass="login-field-label"/>
+                                <TextField fx:id="emailField" promptText="name@example.com"/>
+                            </children>
+                        </VBox>
+                        <VBox spacing="7">
+                            <children>
+                                <Label text="昵称" styleClass="login-field-label"/>
+                                <TextField fx:id="displayNameField" promptText="仅注册新账号时需要"/>
+                            </children>
+                        </VBox>
+                        <VBox spacing="7">
+                            <children>
+                                <Label text="密码" styleClass="login-field-label"/>
+                                <PasswordField fx:id="passwordField" promptText="至少 12 位"/>
+                            </children>
+                        </VBox>
+                        <Button fx:id="loginButton" text="登录并进入" onAction="#onLogin" defaultButton="true" maxWidth="Infinity" styleClass="login-primary-button"/>
+                        <Button fx:id="registerButton" text="注册学生账号" onAction="#onRegister" maxWidth="Infinity" styleClass="login-secondary-button"/>
+                        <HBox alignment="CENTER" spacing="10">
+                            <children>
+                                <Separator HBox.hgrow="ALWAYS"/>
+                                <Label text="或" styleClass="login-or-label"/>
+                                <Separator HBox.hgrow="ALWAYS"/>
+                            </children>
+                        </HBox>
+                        <Button fx:id="guestButton" text="访客进入（仅本机体验）" onAction="#onGuest" maxWidth="Infinity" styleClass="login-guest-button"/>
+                        <Label text="注册即创建学生身份；教师身份由现有教师邀请后生效。" wrapText="true" styleClass="login-policy-note"/>
+                    </children>
+                </VBox>
+            </children>
+        </HBox>
+    </children>
+    <padding>
+        <Insets top="42" right="42" bottom="42" left="42"/>
+    </padding>
+</StackPane>

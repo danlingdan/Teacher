@@ -97,6 +97,33 @@
     -fx-background-color: linear-gradient(to right, #5670f5, #8666f5);
 }
 
+.identity-pill {
+    -fx-padding: 6 10 6 10;
+    -fx-background-color: rgba(109, 93, 252, 0.13);
+    -fx-background-radius: 999;
+    -fx-border-color: rgba(139, 124, 255, 0.28);
+    -fx-border-radius: 999;
+    -fx-text-fill: #d7d2ff;
+    -fx-font-size: 12px;
+    -fx-font-weight: bold;
+}
+
+.identity-switch-button {
+    -fx-background-color: transparent;
+    -fx-text-fill: #8f9bb5;
+    -fx-border-color: rgba(120, 145, 200, 0.24);
+    -fx-border-radius: 8;
+    -fx-background-radius: 8;
+    -fx-padding: 6 10 6 10;
+    -fx-font-size: 12px;
+    -fx-cursor: hand;
+}
+
+.identity-switch-button:hover {
+    -fx-background-color: rgba(255, 255, 255, 0.07);
+    -fx-text-fill: #e2e8f7;
+}
+
 /* 导航按钮：去除默认焦点描边，保持扁平质感。 */
 .nav-button:focused {
     -fx-focus-color: transparent;
@@ -1130,3 +1157,468 @@
 }
 .primary-button:hover, .secondary-button:hover { -fx-background-color: #7b6cff; -fx-text-fill: white; }
 .danger-outline-button:hover { -fx-background-color: rgba(239,68,68,0.22); }
+
+/* v1.1 云端教学 */
+.login-gate {
+    -fx-font-family: "Microsoft YaHei", "微软雅黑", "Segoe UI", sans-serif;
+    -fx-background-color:
+        radial-gradient(center 15% 10%, radius 55%, rgba(91, 110, 245, 0.18), transparent),
+        linear-gradient(to bottom right, #11192b, #141c30 55%, #101728);
+}
+
+.login-layout {
+    -fx-padding: 18;
+}
+
+.login-brand-panel {
+    -fx-padding: 20 8 20 8;
+}
+
+.login-logo {
+    -fx-min-width: 42;
+    -fx-pref-width: 42;
+    -fx-max-width: 42;
+    -fx-min-height: 42;
+    -fx-pref-height: 42;
+    -fx-max-height: 42;
+    -fx-background-color: linear-gradient(to bottom right, #5b6ef5, #8b5cf6);
+    -fx-background-radius: 13;
+    -fx-effect: dropshadow(gaussian, rgba(91, 110, 245, 0.42), 18, 0.08, 0, 5);
+}
+
+.login-brand-name {
+    -fx-font-size: 20px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #f4f6ff;
+}
+
+.login-hero-title {
+    -fx-font-size: 35px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #f6f7ff;
+    -fx-line-spacing: 5;
+}
+
+.login-hero-copy {
+    -fx-font-size: 15px;
+    -fx-text-fill: #a7b2ca;
+    -fx-line-spacing: 4;
+}
+
+.login-feature-list {
+    -fx-padding: 8 0 6 0;
+}
+
+.login-feature {
+    -fx-font-size: 14px;
+    -fx-text-fill: #d7def1;
+}
+
+.login-guest-note {
+    -fx-padding: 12 14 12 14;
+    -fx-background-color: rgba(255, 255, 255, 0.045);
+    -fx-background-radius: 10;
+    -fx-border-color: rgba(120, 145, 200, 0.16);
+    -fx-border-radius: 10;
+    -fx-text-fill: #8f9bb5;
+    -fx-font-size: 12px;
+}
+
+.login-card {
+    -fx-padding: 28 30 26 30;
+    -fx-background-color:
+        linear-gradient(to bottom, rgba(159, 122, 234, 0.06), transparent 35%),
+        #1b253d;
+    -fx-background-radius: 18;
+    -fx-border-color: rgba(159, 122, 234, 0.27);
+    -fx-border-radius: 18;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.38), 24, 0.04, 0, 9);
+}
+
+.login-card-title {
+    -fx-font-size: 25px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #f2f4ff;
+}
+
+.login-card-subtitle {
+    -fx-font-size: 13px;
+    -fx-text-fill: #8996b2;
+    -fx-padding: 0 0 3 0;
+}
+
+.login-field-label {
+    -fx-font-size: 12px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #b5c0d7;
+}
+
+.login-card .text-field,
+.login-card .password-field {
+    -fx-min-height: 40;
+    -fx-background-color: #141e34;
+    -fx-text-fill: #edf2ff;
+    -fx-prompt-text-fill: #63708b;
+    -fx-padding: 8 11 8 11;
+    -fx-background-radius: 9;
+    -fx-border-radius: 9;
+    -fx-border-color: rgba(120, 145, 200, 0.25);
+}
+
+.login-card .text-field:focused,
+.login-card .password-field:focused {
+    -fx-border-color: #8b7cff;
+    -fx-focus-color: transparent;
+    -fx-faint-focus-color: transparent;
+}
+
+.login-primary-button,
+.login-secondary-button,
+.login-guest-button {
+    -fx-min-height: 40;
+    -fx-background-radius: 9;
+    -fx-border-radius: 9;
+    -fx-font-weight: bold;
+    -fx-cursor: hand;
+}
+
+.login-primary-button {
+    -fx-background-color: linear-gradient(to right, #5b6ef5, #7c5ce7);
+    -fx-text-fill: white;
+}
+
+.login-primary-button:hover {
+    -fx-background-color: linear-gradient(to right, #6c7df7, #8b6aec);
+}
+
+.login-secondary-button {
+    -fx-background-color: rgba(109, 93, 252, 0.12);
+    -fx-border-color: rgba(139, 124, 255, 0.36);
+    -fx-text-fill: #d4ceff;
+}
+
+.login-secondary-button:hover {
+    -fx-background-color: rgba(109, 93, 252, 0.24);
+}
+
+.login-guest-button {
+    -fx-background-color: transparent;
+    -fx-border-color: rgba(147, 160, 188, 0.28);
+    -fx-text-fill: #aab6cd;
+}
+
+.login-guest-button:hover {
+    -fx-background-color: rgba(255, 255, 255, 0.055);
+    -fx-text-fill: #e1e7f5;
+}
+
+.login-status {
+    -fx-padding: 8 10 8 10;
+    -fx-background-radius: 8;
+    -fx-border-radius: 8;
+    -fx-border-width: 1;
+}
+
+.login-status-info {
+    -fx-background-color: rgba(91, 110, 245, 0.11);
+    -fx-border-color: rgba(124, 143, 255, 0.25);
+}
+
+.login-status-error {
+    -fx-background-color: rgba(239, 68, 68, 0.11);
+    -fx-border-color: rgba(248, 113, 113, 0.30);
+}
+
+.login-status .label {
+    -fx-font-size: 12px;
+    -fx-text-fill: #dce4f7;
+}
+
+.login-status .progress-indicator {
+    -fx-progress-color: #8b7cff;
+}
+
+.login-or-label,
+.login-policy-note {
+    -fx-font-size: 11px;
+    -fx-text-fill: #72809c;
+}
+
+.login-card .separator .line {
+    -fx-border-color: rgba(120, 145, 200, 0.16);
+    -fx-border-width: 1 0 0 0;
+}
+
+.cloud-center-scroll,
+.cloud-center-scroll > .viewport {
+    -fx-background-color: #141c30;
+}
+
+.cloud-center-scroll {
+    -fx-background-insets: 0;
+    -fx-padding: 0;
+}
+
+.cloud-center-page {
+    -fx-background-color:
+        radial-gradient(center 12% 0%, radius 70%, rgba(91, 110, 245, 0.10), transparent),
+        #141c30;
+}
+
+.cloud-page-header {
+    -fx-padding: 2 2 4 2;
+}
+
+.cloud-title-badge {
+    -fx-min-width: 42;
+    -fx-pref-width: 42;
+    -fx-max-width: 42;
+    -fx-min-height: 42;
+    -fx-pref-height: 42;
+    -fx-max-height: 42;
+    -fx-background-color: linear-gradient(to bottom right, #5b6ef5, #8b5cf6);
+    -fx-background-radius: 13;
+    -fx-border-color: rgba(255, 255, 255, 0.18);
+    -fx-border-radius: 13;
+    -fx-effect: dropshadow(gaussian, rgba(91, 110, 245, 0.34), 16, 0.05, 0, 5);
+}
+
+.cloud-page-title,
+.cloud-page-subtitle {
+    -fx-alignment: CENTER_LEFT;
+    -fx-text-alignment: left;
+}
+
+.cloud-page-title {
+    -fx-font-size: 25px;
+    -fx-text-fill: #f2f4ff;
+}
+
+.cloud-page-subtitle {
+    -fx-text-fill: #8f9cba;
+}
+
+.cloud-busy-indicator {
+    -fx-progress-color: #8b7cff;
+}
+
+.cloud-status-banner {
+    -fx-padding: 11 14 11 14;
+    -fx-background-radius: 11;
+    -fx-border-radius: 11;
+    -fx-border-width: 1;
+}
+
+.cloud-status-banner.status-info {
+    -fx-background-color: rgba(79, 110, 214, 0.12);
+    -fx-border-color: rgba(101, 132, 235, 0.28);
+}
+
+.cloud-status-banner.status-success {
+    -fx-background-color: rgba(34, 197, 94, 0.10);
+    -fx-border-color: rgba(74, 222, 128, 0.28);
+}
+
+.cloud-status-banner.status-error {
+    -fx-background-color: rgba(239, 68, 68, 0.11);
+    -fx-border-color: rgba(248, 113, 113, 0.32);
+}
+
+.cloud-status-banner .label {
+    -fx-text-fill: #dce5f8;
+}
+
+.cloud-status-dot {
+    -fx-min-width: 8;
+    -fx-pref-width: 8;
+    -fx-max-width: 8;
+    -fx-min-height: 8;
+    -fx-pref-height: 8;
+    -fx-max-height: 8;
+    -fx-background-radius: 999;
+}
+
+.status-info .cloud-status-dot { -fx-background-color: #7c8fff; }
+.status-success .cloud-status-dot { -fx-background-color: #4ade80; }
+.status-error .cloud-status-dot { -fx-background-color: #fb7185; }
+
+.cloud-account-pill,
+.cloud-selection-pill,
+.cloud-security-pill {
+    -fx-padding: 5 10 5 10;
+    -fx-background-radius: 999;
+    -fx-border-radius: 999;
+    -fx-font-size: 12px;
+}
+
+.cloud-account-pill {
+    -fx-background-color: rgba(255, 255, 255, 0.07);
+    -fx-border-color: rgba(255, 255, 255, 0.12);
+    -fx-text-fill: #b9c6df;
+}
+
+.cloud-selection-pill {
+    -fx-background-color: rgba(109, 93, 252, 0.14);
+    -fx-border-color: rgba(139, 124, 255, 0.26);
+    -fx-text-fill: #c9c3ff;
+}
+
+.cloud-security-pill {
+    -fx-background-color: rgba(34, 197, 94, 0.09);
+    -fx-border-color: rgba(74, 222, 128, 0.24);
+    -fx-text-fill: #86efac;
+}
+
+.cloud-section-card {
+    -fx-padding: 16 18 18 18;
+}
+
+.cloud-section-card .label {
+    -fx-text-fill: #d5dce9;
+}
+
+.cloud-helper-text {
+    -fx-font-size: 12px;
+    -fx-text-fill: #8693b0;
+}
+
+.cloud-form-flow {
+    -fx-padding: 2 0 1 0;
+}
+
+.cloud-subsection {
+    -fx-background-color: rgba(10, 16, 31, 0.22);
+    -fx-background-radius: 10;
+    -fx-padding: 11;
+}
+
+.cloud-subsection-title {
+    -fx-font-size: 13px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #b9c6df;
+}
+
+.cloud-center-page .text-field,
+.cloud-center-page .password-field,
+.cloud-center-page .combo-box,
+.cloud-center-page .list-view {
+    -fx-background-color: #151f35;
+    -fx-text-fill: #edf2ff;
+    -fx-prompt-text-fill: #687693;
+    -fx-border-color: rgba(120, 145, 200, 0.26);
+    -fx-border-radius: 9;
+    -fx-background-radius: 9;
+}
+
+.cloud-center-page .text-field,
+.cloud-center-page .password-field,
+.cloud-center-page .combo-box {
+    -fx-min-height: 36;
+    -fx-padding: 7 10 7 10;
+}
+
+.cloud-center-page .combo-box .list-cell {
+    -fx-text-fill: #dce5f8;
+    -fx-background-color: #151f35;
+}
+
+.cloud-list {
+    -fx-padding: 4;
+    -fx-control-inner-background: #151f35;
+}
+
+.cloud-center-page .list-cell {
+    -fx-background-color: transparent;
+    -fx-text-fill: #d5dce9;
+    -fx-padding: 10 11 10 11;
+    -fx-background-radius: 7;
+}
+
+.cloud-center-page .list-cell:filled:hover {
+    -fx-background-color: rgba(255, 255, 255, 0.05);
+}
+
+.cloud-center-page .list-cell:selected {
+    -fx-background-color: linear-gradient(to right, rgba(91, 110, 245, 0.48), rgba(130, 89, 240, 0.32));
+    -fx-text-fill: white;
+}
+
+.cloud-center-page .list-view .placeholder .label {
+    -fx-text-fill: #687693;
+    -fx-font-size: 12px;
+}
+
+.cloud-center-page .separator .line {
+    -fx-border-color: rgba(120, 145, 200, 0.14);
+    -fx-border-width: 1 0 0 0;
+}
+
+.cloud-center-page .button {
+    -fx-background-radius: 9;
+    -fx-border-radius: 9;
+    -fx-padding: 8 15 8 15;
+    -fx-cursor: hand;
+}
+
+.cloud-center-page .primary-button {
+    -fx-background-color: linear-gradient(to right, #5b6ef5, #7c5ce7);
+    -fx-text-fill: white;
+    -fx-font-weight: bold;
+    -fx-border-color: transparent;
+}
+
+.cloud-center-page .primary-button:hover {
+    -fx-background-color: linear-gradient(to right, #6b7cf7, #8b6aee);
+}
+
+.cloud-center-page .secondary-button {
+    -fx-background-color: rgba(109, 93, 252, 0.12);
+    -fx-text-fill: #d2ceff;
+    -fx-border-color: rgba(139, 124, 255, 0.34);
+}
+
+.cloud-center-page .secondary-button:hover {
+    -fx-background-color: rgba(109, 93, 252, 0.25);
+    -fx-text-fill: white;
+}
+
+.cloud-center-page .danger-outline-button {
+    -fx-background-color: rgba(239, 68, 68, 0.06);
+    -fx-text-fill: #fda4af;
+    -fx-border-color: rgba(248, 113, 113, 0.30);
+}
+
+.cloud-center-page .danger-outline-button:hover {
+    -fx-background-color: rgba(239, 68, 68, 0.17);
+}
+
+.cloud-center-page .compact-button {
+    -fx-padding: 5 10 5 10;
+    -fx-font-size: 12px;
+}
+
+.cloud-sync-card {
+    -fx-padding: 14 18 14 18;
+    -fx-border-color: rgba(91, 110, 245, 0.28);
+}
+
+.cloud-sync-button {
+    -fx-min-width: 106;
+}
+
+.cloud-center-page .button:disabled,
+.cloud-center-page .text-field:disabled,
+.cloud-center-page .password-field:disabled,
+.cloud-center-page .combo-box:disabled,
+.cloud-center-page .list-view:disabled {
+    -fx-opacity: 0.48;
+}
+
+.cloud-center-page .button:focused,
+.cloud-center-page .text-field:focused,
+.cloud-center-page .password-field:focused,
+.cloud-center-page .combo-box:focused,
+.cloud-center-page .list-view:focused {
+    -fx-focus-color: #a78bfa;
+    -fx-faint-focus-color: rgba(167,139,250,0.28);
+}

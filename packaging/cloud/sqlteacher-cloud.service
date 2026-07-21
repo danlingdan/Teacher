@@ -1,0 +1,22 @@
+[Unit]
+Description=SQLTeacher Cloud API
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=sqlteacher
+Group=sqlteacher
+WorkingDirectory=/opt/sqlteacher
+EnvironmentFile=/etc/sqlteacher/cloud.env
+ExecStart=/opt/sqlteacher/current/bin/run-cloud.sh
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/sqlteacher/data
+
+[Install]
+WantedBy=multi-user.target

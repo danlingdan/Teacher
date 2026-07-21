@@ -3,8 +3,14 @@ package com.sqlteacher.infrastructure.spring;
 import com.sqlteacher.application.ai.AiModelProvider;
 import com.sqlteacher.application.ai.AiModelSelectionService;
 import com.sqlteacher.application.ai.AiStatusService;
+import com.sqlteacher.application.ai.NetworkAiSettingsService;
 import com.sqlteacher.application.config.AppConfigurationService;
 import com.sqlteacher.application.config.SqlTeacherConfiguration;
+import com.sqlteacher.application.collaboration.CloudApiClient;
+import com.sqlteacher.application.collaboration.CloudSessionService;
+import com.sqlteacher.application.collaboration.CloudLearningSyncService;
+import com.sqlteacher.application.event.LearningEventQueryService;
+import com.sqlteacher.application.event.LearningEventRecorder;
 import com.sqlteacher.application.connection.ConnectionManagementService;
 import com.sqlteacher.application.database.DatabaseInitializationService;
 import com.sqlteacher.application.error.ApplicationExceptionMapper;
@@ -19,12 +25,19 @@ import com.sqlteacher.infrastructure.ai.Nl2SqlServiceImpl;
 import com.sqlteacher.infrastructure.ai.OllamaAiModelProvider;
 import com.sqlteacher.infrastructure.ai.OllamaAiStatusService;
 import com.sqlteacher.infrastructure.ai.OllamaModelSelectionService;
+import com.sqlteacher.infrastructure.ai.InMemoryNetworkAiSettingsService;
+import com.sqlteacher.infrastructure.ai.SwitchableAiModelProvider;
 import com.sqlteacher.infrastructure.config.PropertiesAppConfigurationService;
+import com.sqlteacher.infrastructure.cloud.HttpCloudApiClient;
+import com.sqlteacher.infrastructure.cloud.InMemoryCloudSessionService;
+import com.sqlteacher.infrastructure.cloud.DefaultCloudLearningSyncService;
 import com.sqlteacher.infrastructure.database.DatabaseServiceConfig;
 import com.sqlteacher.infrastructure.database.SqliteAppDatabaseInitializer;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
+
+import java.net.URI;
 
 @Configuration
 @Import(DatabaseServiceConfig.class)
@@ -50,9 +63,13 @@ public class SqlTeacherApplicationConfig {
     }
 
     @Bean
-    public AiModelProvider aiModelProvider(SqlTeacherConfiguration properties, AiStatusService aiStatusService) {
-        return new OllamaAiModelProvider(properties.ai(), aiStatusService);
+    public AiModelProvider aiModelProvider(SqlTeacherConfiguration properties, AiStatusService aiStatusService,
+            NetworkAiSettingsService networkSettings) {
+        return new SwitchableAiModelProvider(new OllamaAiModelProvider(properties.ai(), aiStatusService), networkSettings);
     }
+
+    @Bean(destroyMethod = "clear")
+    public NetworkAiSettingsService networkAiSettingsService() { return new InMemoryNetworkAiSettingsService(); }
 
     @Bean
     public AiModelSelectionService aiModelSelectionService(SqlTeacherConfiguration properties) {
@@ -97,5 +114,22 @@ public class SqlTeacherApplicationConfig {
     @Bean
     public ApplicationExceptionMapper applicationExceptionMapper() {
         return new DefaultApplicationExceptionMapper();
+    }
+
+    @Bean
+    public CloudApiClient cloudApiClient() {
+        return new HttpCloudApiClient(URI.create(System.getProperty("sqlteacher.cloud.base-url", "http://8.130.47.235")));
+    }
+
+    @Bean
+    public CloudSessionService cloudSessionService() {
+        return new InMemoryCloudSessionService();
+    }
+
+    @Bean
+    public CloudLearningSyncService cloudLearningSyncService(CloudApiClient api, CloudSessionService sessions,
+            LearningEventQueryService query, LearningEventRecorder recorder, SqlTeacherConfiguration configuration) {
+        return new DefaultCloudLearningSyncService(api, sessions, query, recorder,
+            configuration.dataDirectory().resolve("cloud-state"));
     }
 }

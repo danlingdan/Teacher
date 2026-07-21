@@ -1,0 +1,180 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+
+<ScrollPane xmlns="http://javafx.com/javafx"
+            xmlns:fx="http://javafx.com/fxml"
+            fx:controller="com.sqlteacher.desktop.controller.CloudCenterController"
+            fitToWidth="true"
+            hbarPolicy="NEVER"
+            vbarPolicy="AS_NEEDED"
+            styleClass="cloud-center-scroll">
+    <content>
+        <VBox spacing="16" styleClass="cloud-center-page">
+            <children>
+                <HBox alignment="CENTER_LEFT" spacing="12" styleClass="cloud-page-header">
+                    <children>
+                        <Region styleClass="cloud-title-badge"/>
+                        <VBox spacing="3">
+                            <children>
+                                <Label text="云端教学" styleClass="page-title, cloud-page-title"/>
+                                <Label text="管理教学班级、发布任务并安全同步学习记录" styleClass="page-subtitle, cloud-page-subtitle"/>
+                            </children>
+                        </VBox>
+                        <Region HBox.hgrow="ALWAYS"/>
+                        <ProgressIndicator fx:id="busyIndicator"
+                                           visible="false" managed="false"
+                                           prefWidth="26" prefHeight="26"
+                                           styleClass="cloud-busy-indicator"/>
+                    </children>
+                </HBox>
+
+                <HBox fx:id="statusBanner" alignment="CENTER_LEFT" spacing="10" styleClass="cloud-status-banner, status-info">
+                    <children>
+                        <Region styleClass="cloud-status-dot"/>
+                        <Label fx:id="statusLabel" text="请登录云端账号" wrapText="true" HBox.hgrow="ALWAYS"/>
+                        <Label fx:id="accountLabel" text="未登录" styleClass="cloud-account-pill"/>
+                    </children>
+                </HBox>
+
+                <VBox spacing="12" styleClass="panel-card, cloud-section-card">
+                    <children>
+                        <HBox alignment="CENTER_LEFT" spacing="8" styleClass="card-title-row">
+                            <children>
+                                <Region styleClass="card-accent"/>
+                                <Label text="云端账号" styleClass="card-title"/>
+                                <Region HBox.hgrow="ALWAYS"/>
+                                <Label text="访问令牌仅保留在当前程序内存" styleClass="cloud-helper-text"/>
+                            </children>
+                        </HBox>
+                        <HBox spacing="12" alignment="CENTER_LEFT">
+                            <children>
+                                <Label text="当前身份由启动登录页统一管理；退出后会立即返回身份选择界面。" wrapText="true" HBox.hgrow="ALWAYS" styleClass="cloud-helper-text"/>
+                                <Button fx:id="logoutButton" text="退出并切换身份" onAction="#onLogout" styleClass="danger-outline-button"/>
+                            </children>
+                        </HBox>
+                    </children>
+                </VBox>
+
+                <VBox fx:id="authenticatedContent" spacing="16" disable="true">
+                    <children>
+                        <GridPane hgap="16" vgap="16" prefHeight="470">
+                            <columnConstraints>
+                                <ColumnConstraints percentWidth="36" hgrow="ALWAYS" minWidth="250"/>
+                                <ColumnConstraints percentWidth="64" hgrow="ALWAYS" minWidth="390"/>
+                            </columnConstraints>
+                            <children>
+                                <VBox spacing="12" styleClass="panel-card, cloud-section-card" GridPane.columnIndex="0" GridPane.hgrow="ALWAYS" GridPane.vgrow="ALWAYS">
+                                    <children>
+                                        <HBox alignment="CENTER_LEFT" spacing="8" styleClass="card-title-row">
+                                            <children>
+                                                <Region styleClass="card-accent"/>
+                                                <Label text="我的班级" styleClass="card-title"/>
+                                                <Region HBox.hgrow="ALWAYS"/>
+                                                <Button text="刷新" onAction="#onRefresh" styleClass="compact-button, secondary-button"/>
+                                            </children>
+                                        </HBox>
+                                        <Label fx:id="classSummaryLabel" text="登录后加载班级" wrapText="true" styleClass="cloud-helper-text"/>
+                                        <FlowPane fx:id="classCreationPane" hgap="8" vgap="8" prefWrapLength="300">
+                                            <children>
+                                                <TextField fx:id="classNameField" promptText="新班级名称" prefWidth="190"/>
+                                                <Button text="创建" onAction="#onCreateClass" styleClass="primary-button"/>
+                                            </children>
+                                        </FlowPane>
+                                        <ListView fx:id="classList" VBox.vgrow="ALWAYS" minHeight="260" styleClass="cloud-list"/>
+                                    </children>
+                                </VBox>
+
+                                <VBox spacing="14" styleClass="panel-card, cloud-section-card" GridPane.columnIndex="1" GridPane.hgrow="ALWAYS" GridPane.vgrow="ALWAYS">
+                                    <children>
+                                        <HBox alignment="CENTER_LEFT" spacing="8" styleClass="card-title-row">
+                                            <children>
+                                                <Region styleClass="card-accent"/>
+                                                <Label text="班级工作区" styleClass="card-title"/>
+                                                <Region HBox.hgrow="ALWAYS"/>
+                                                <Label fx:id="selectedClassLabel" text="尚未选择班级" styleClass="cloud-selection-pill"/>
+                                            </children>
+                                        </HBox>
+
+                                        <VBox fx:id="memberManagementPane" spacing="8" styleClass="cloud-subsection">
+                                            <children>
+                                                <Label text="添加成员" styleClass="cloud-subsection-title"/>
+                                                <FlowPane fx:id="assignmentCreationPane" hgap="8" vgap="8" prefWrapLength="560">
+                                                    <children>
+                                                        <TextField fx:id="memberEmailField" promptText="成员邮箱" prefWidth="240"/>
+                                                        <ComboBox fx:id="memberRoleCombo" prefWidth="125"/>
+                                                        <Button text="添加成员" onAction="#onAddMember" styleClass="secondary-button"/>
+                                                    </children>
+                                                </FlowPane>
+                                            </children>
+                                        </VBox>
+
+                                        <Separator/>
+
+                                        <VBox spacing="8" VBox.vgrow="ALWAYS" styleClass="cloud-subsection">
+                                            <children>
+                                                <Label text="发布班级任务" styleClass="cloud-subsection-title"/>
+                                                <FlowPane hgap="8" vgap="8" prefWrapLength="560">
+                                                    <children>
+                                                        <TextField fx:id="assignmentExerciseField" promptText="本地题目 ID" prefWidth="180"/>
+                                                        <TextField fx:id="assignmentTitleField" promptText="任务标题" prefWidth="230"/>
+                                                        <Button text="发布任务" onAction="#onCreateAssignment" styleClass="primary-button"/>
+                                                    </children>
+                                                </FlowPane>
+                                                <ListView fx:id="assignmentList" VBox.vgrow="ALWAYS" minHeight="170" styleClass="cloud-list"/>
+                                            </children>
+                                        </VBox>
+                                    </children>
+                                </VBox>
+                            </children>
+                        </GridPane>
+
+                        <HBox alignment="CENTER_LEFT" spacing="12" styleClass="panel-card, cloud-sync-card">
+                            <children>
+                                <VBox spacing="3" HBox.hgrow="ALWAYS">
+                                    <children>
+                                        <Label text="学习记录同步" styleClass="card-title"/>
+                                        <Label text="上传本机未同步事件，并下载此账号在其他设备产生的新记录" wrapText="true" styleClass="cloud-helper-text"/>
+                                    </children>
+                                </VBox>
+                                <Button fx:id="syncButton" text="立即同步" onAction="#onSync" styleClass="primary-button, cloud-sync-button"/>
+                            </children>
+                        </HBox>
+                    </children>
+                </VBox>
+
+                <VBox spacing="12" styleClass="panel-card, cloud-section-card">
+                    <children>
+                        <HBox alignment="CENTER_LEFT" spacing="8" styleClass="card-title-row">
+                            <children>
+                                <Region styleClass="card-accent"/>
+                                <Label text="网络 AI" styleClass="card-title"/>
+                                <Region HBox.hgrow="ALWAYS"/>
+                                <Label text="API Key 不上传云端、不写入磁盘" styleClass="cloud-security-pill"/>
+                            </children>
+                        </HBox>
+                        <Label text="支持 OpenAI Chat Completions compatible HTTPS 接口；模型输出仍会经过本地 SQL 安全检查。" wrapText="true" styleClass="cloud-helper-text"/>
+                        <FlowPane hgap="10" vgap="10" prefWrapLength="920" styleClass="cloud-form-flow">
+                            <children>
+                                <TextField fx:id="aiEndpointField" promptText="HTTPS Chat Completions 地址" prefWidth="360"/>
+                                <TextField fx:id="aiModelField" promptText="模型名称" prefWidth="190"/>
+                                <PasswordField fx:id="aiKeyField" promptText="API Key（仅当前会话）" prefWidth="245"/>
+                            </children>
+                        </FlowPane>
+                        <HBox spacing="10">
+                            <children>
+                                <Button text="启用网络 AI" onAction="#onConfigureNetworkAi" styleClass="primary-button"/>
+                                <Button text="切换回本地模型" onAction="#onClearNetworkAi" styleClass="secondary-button"/>
+                            </children>
+                        </HBox>
+                    </children>
+                </VBox>
+            </children>
+            <padding>
+                <Insets top="22" right="24" bottom="28" left="24"/>
+            </padding>
+        </VBox>
+    </content>
+</ScrollPane>
