@@ -3,6 +3,8 @@ package com.sqlteacher.application.execution;
 import java.util.List;
 import java.util.Map;
 import java.time.Duration;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 
 public record SqlExecutionResult(
     boolean success,
@@ -15,7 +17,9 @@ public record SqlExecutionResult(
 ) {
     public SqlExecutionResult {
         columns = List.copyOf(columns);
-        rows = rows.stream().map(Map::copyOf).toList();
+        rows = rows.stream()
+            .map(row -> Collections.unmodifiableMap(new LinkedHashMap<>(row)))
+            .toList();
     }
 
     public SqlExecutionResult(

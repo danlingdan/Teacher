@@ -10,6 +10,8 @@ import com.sqlteacher.application.event.LearningEventService;
 import com.sqlteacher.application.execution.SqlExecutionService;
 import com.sqlteacher.application.exercise.ExerciseManagementService;
 import com.sqlteacher.application.exercise.ExerciseCatalogService;
+import com.sqlteacher.application.exercise.ExercisePracticeService;
+import com.sqlteacher.application.exercise.SqlExerciseEvaluationService;
 import com.sqlteacher.application.metadata.DatabaseMetadataService;
 import com.sqlteacher.application.risk.SqlRiskAnalysisService;
 import com.sqlteacher.application.config.SqlTeacherConfiguration;
@@ -103,5 +105,30 @@ public class DatabaseServiceConfig {
     @Bean
     public ExerciseCatalogService exerciseCatalogService(ExerciseManagementService managementService) {
         return new JdbcExerciseCatalogService(managementService);
+    }
+
+    @Bean
+    public SqlExerciseEvaluationService sqlExerciseEvaluationService(
+            SqlRiskAnalysisService riskAnalysisService,
+            SqlTeacherConfiguration configuration) {
+        return new DeterministicSqlExerciseEvaluationService(riskAnalysisService, configuration);
+    }
+
+    @Bean
+    public ExercisePracticeService exercisePracticeService(
+            JdbcConnectionFactory connectionFactory,
+            ExerciseManagementService managementService,
+            SqlRiskAnalysisService riskAnalysisService,
+            SqlExerciseEvaluationService evaluationService,
+            SqlResultMapper resultMapper,
+            SqlTeacherConfiguration configuration) {
+        return new JdbcExercisePracticeService(
+            connectionFactory,
+            managementService,
+            riskAnalysisService,
+            evaluationService,
+            resultMapper,
+            configuration
+        );
     }
 }
