@@ -404,7 +404,8 @@ mvn javafx:run
 | 2026-07-21 | 当前 Profile 接入 SQL、元数据与 NL2SQL 链路 | 已完成 | 增量测试通过；MySQL 9.7.1 真实连接、当前 catalog 元数据和只读查询通过；会话凭据不持久化；详见 `docs/stage2/2026-07-21-current-profile-database-flow.md` | `0c434cd` |
 | 2026-07-21 | MySQL 失败场景与方言安全回归 | 已完成 | JDBC 身份验证、权限、超时、连接和 SQL 错误统一脱敏分类；MySQL/MariaDB 特有文件、锁和延迟查询在连接前拦截；197 项全量测试通过；详见 `docs/stage2/2026-07-21-mysql-failure-and-dialect-safety.md` | `4e43523` |
 | 2026-07-21 | MariaDB 独立驱动与安全连接路由 | 已完成 | 引入 MariaDB Connector/J 3.5.9；MySQL/MariaDB 按方言使用独立驱动；固定连接超时并关闭多语句、本地文件导入；增量测试、CLI 和 app-image 验证通过；详见 `docs/stage2/2026-07-21-mariadb-driver-routing.md` | `66ea903` |
-| 2026-07-21 | 专用只读账号真实权限验证 | 已完成 | MySQL 9.7.1 隔离测试库和服务器生成的临时账号完成查询、元数据、写入拒绝和系统表拒绝验证；账号与数据库已清理；累计 203 项全量测试通过；详见 `docs/stage2/2026-07-21-mysql-readonly-account-verification.md` | 本次提交 |
-| 2026-07-21 | `v0.2.0` 阶段门禁验收 | 下一项 | 汇总 SQLite/MySQL 回归、连接失败提示、密码扫描、外部库安全拦截与 app-image；明确 MariaDB 实例未实测边界 | - |
+| 2026-07-21 | 专用只读账号真实权限验证 | 已完成 | MySQL 9.7.1 隔离测试库和服务器生成的临时账号完成查询、元数据、写入拒绝和系统表拒绝验证；账号与数据库已清理；累计 203 项全量测试通过；详见 `docs/stage2/2026-07-21-mysql-readonly-account-verification.md` | `2824004` |
+| 2026-07-21 | `v0.2.0` 阶段门禁验收 | 条件通过 | 203 项测试、CLI、MySQL 9.7.1 只读权限、凭据扫描及 app-image 通过；因未实测计划指定的 MySQL 8.x 或 MariaDB 实例，暂不宣布正式发布；详见 `docs/acceptance/2026-07-21-v0.2-stage-gate.md` | 本次提交 |
+| 2026-07-21 | MySQL 8.x / MariaDB 发布兼容环境验证 | 下一项 | 在独立 MySQL 8.x 或 MariaDB 环境复用只读验证矩阵，确认元数据与查询差异后解除 `v0.2.0` 发布条件 | - |
 
 每完成一个功能，在本表追加一条记录并填写对应提交短哈希，确保计划、实现、验证和 Git 历史可以相互追溯。
