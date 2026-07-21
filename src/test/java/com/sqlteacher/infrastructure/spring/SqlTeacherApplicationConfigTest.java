@@ -9,6 +9,7 @@ import com.sqlteacher.application.database.DatabaseInitializationService;
 import com.sqlteacher.application.error.ApplicationExceptionMapper;
 import com.sqlteacher.application.execution.SqlExecutionService;
 import com.sqlteacher.application.exercise.ExerciseManagementService;
+import com.sqlteacher.application.exercise.ExerciseCatalogService;
 import com.sqlteacher.application.event.LearningEventRecorder;
 import com.sqlteacher.application.metadata.DatabaseMetadataService;
 import com.sqlteacher.application.nl2sql.Nl2SqlSafetyService;
@@ -34,6 +35,7 @@ class SqlTeacherApplicationConfigTest {
             assertNotNull(context.getBean(ApplicationExceptionMapper.class));
             assertNotNull(context.getBean(SqlExecutionService.class));
             assertNotNull(context.getBean(ExerciseManagementService.class));
+            assertNotNull(context.getBean(ExerciseCatalogService.class));
             assertNotNull(context.getBean(DatabaseMetadataService.class));
             assertNotNull(context.getBean(SqlRiskAnalysisService.class));
             assertNotNull(context.getBean(Nl2SqlSafetyService.class));
