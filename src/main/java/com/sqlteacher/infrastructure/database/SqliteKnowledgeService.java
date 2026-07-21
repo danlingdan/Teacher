@@ -9,6 +9,9 @@ import com.sqlteacher.domain.SqlTeacherException;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.ByteBuffer;
+import java.nio.charset.CharacterCodingException;
+import java.nio.charset.CodingErrorAction;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.MessageDigest;
@@ -51,7 +54,7 @@ public final class SqliteKnowledgeService implements KnowledgeDocumentService, K
         } catch (IOException error) {
             throw new SqlTeacherException("KNOWLEDGE_DOCUMENT_READ_FAILED", "Failed to read knowledge document", error);
         }
-        String content = new String(bytes, StandardCharsets.UTF_8).replace("\u0000", "").trim();
+        String content = decodeUtf8(bytes).replace("\u0000", "").trim();
         if (content.isBlank()) {
             throw new IllegalArgumentException("Knowledge document must contain UTF-8 text");
         }
@@ -293,6 +296,18 @@ public final class SqliteKnowledgeService implements KnowledgeDocumentService, K
             return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(content));
         } catch (NoSuchAlgorithmException impossible) {
             throw new IllegalStateException("SHA-256 is unavailable", impossible);
+        }
+    }
+
+    private static String decodeUtf8(byte[] content) {
+        try {
+            return StandardCharsets.UTF_8.newDecoder()
+                .onMalformedInput(CodingErrorAction.REPORT)
+                .onUnmappableCharacter(CodingErrorAction.REPORT)
+                .decode(ByteBuffer.wrap(content))
+                .toString();
+        } catch (CharacterCodingException error) {
+            throw new IllegalArgumentException("Knowledge document must use valid UTF-8", error);
         }
     }
 

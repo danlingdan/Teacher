@@ -32,15 +32,18 @@ public interface LearningEventService {
         String errorCode
     );
 
-    void recordExerciseAttempt(
+    default void recordExerciseAttempt(
         String exerciseId,
         String status,
         boolean successful,
         Duration duration,
         String errorCode
-    );
+    ) {
+    }
 
-    void recordExerciseHint(String exerciseId, int hintLevel);
+    default void recordExerciseHint(String exerciseId, int hintLevel) {
+    }
 
-    void recordKnowledgeSearch(int queryLength, int resultCount);
+    default void recordKnowledgeSearch(int queryLength, int resultCount) {
+    }
 }

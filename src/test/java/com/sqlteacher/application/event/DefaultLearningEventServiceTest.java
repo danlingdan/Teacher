@@ -71,4 +71,20 @@ class DefaultLearningEventServiceTest {
         );
         assertTrue(recorded.isEmpty());
     }
+
+    @Test
+    void shouldRecordExerciseAndKnowledgeMetricsWithoutSensitiveContent() {
+        service.recordExerciseAttempt("query-01", "PASSED", true, Duration.ofMillis(25), null);
+        service.recordExerciseHint("query-01", 2);
+        service.recordKnowledgeSearch(12, 3);
+
+        assertEquals(LearningEventType.EXERCISE_PASSED, recorded.get(0).type());
+        assertEquals("query-01", recorded.get(0).attributes().get("exerciseId"));
+        assertFalse(recorded.get(0).attributes().containsKey("sql"));
+        assertEquals(LearningEventType.EXERCISE_HINT_USED, recorded.get(1).type());
+        assertEquals("2", recorded.get(1).attributes().get("hintLevel"));
+        assertEquals(LearningEventType.KNOWLEDGE_SEARCHED, recorded.get(2).type());
+        assertEquals("12", recorded.get(2).attributes().get("queryLength"));
+        assertFalse(recorded.get(2).attributes().containsKey("query"));
+    }
 }

@@ -3,6 +3,7 @@ package com.sqlteacher.infrastructure.database;
 import com.sqlteacher.application.config.AiConfiguration;
 import com.sqlteacher.application.config.DatabaseConfiguration;
 import com.sqlteacher.application.config.SqlTeacherConfiguration;
+import com.sqlteacher.application.mock.MockLearningEventService;
 import com.sqlteacher.application.exercise.EvaluationCriterionResult;
 import com.sqlteacher.application.exercise.ExerciseAttemptResult;
 import com.sqlteacher.application.exercise.ExerciseEvaluationResult;
@@ -127,7 +128,8 @@ class JdbcExercisePracticeServiceTest {
             new DefaultSqlRiskAnalysisService(),
             evaluator,
             new SqlResultMapper(),
-            configuration
+            configuration,
+            new MockLearningEventService()
         );
         return new Fixture(service, appDb, tempDir.resolve("exercise-sessions"));
     }
