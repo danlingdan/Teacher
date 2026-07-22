@@ -1,5 +1,6 @@
 param(
     [string]$OutputDir = "target\installer",
+    [string]$CloudBaseUrl = "https://api.sqlteacher.tech",
     [switch]$SkipInstaller
 )
 
@@ -18,6 +19,14 @@ $outputPath = if ([System.IO.Path]::IsPathRooted($OutputDir)) {
 $pomPath = Join-Path $projectRoot "pom.xml"
 [xml]$pom = Get-Content -LiteralPath $pomPath -Raw
 $projectVersion = $pom.project.version
+$cloudUri = $null
+if (-not [System.Uri]::TryCreate($CloudBaseUrl, [System.UriKind]::Absolute, [ref]$cloudUri) -or
+    $cloudUri.Scheme -ne [System.Uri]::UriSchemeHttps -or
+    [string]::IsNullOrWhiteSpace($cloudUri.Host)) {
+    throw "CloudBaseUrl must be an absolute HTTPS URL."
+}
+$normalizedCloudBaseUrl = $cloudUri.AbsoluteUri.TrimEnd('/')
+$cloudJavaOption = "-Dsqlteacher.cloud.base-url=$normalizedCloudBaseUrl"
 $jarName = "Teacher-$projectVersion.jar"
 $appName = "SQLTeacher"
 $appImageDir = Join-Path $outputPath $appName
@@ -156,6 +165,7 @@ try {
         --java-options '--module-path=$APPDIR\javafx-modules' `
         --java-options "--add-modules=javafx.controls,javafx.fxml" `
         --java-options "-Dfile.encoding=UTF-8" `
+        --java-options $cloudJavaOption `
         --dest $outputPath
     if ($LASTEXITCODE -ne 0) {
         throw "jpackage failed with exit code $LASTEXITCODE."
@@ -164,6 +174,11 @@ try {
     $launcher = Join-Path $appImageDir "$appName.exe"
     if (-not (Test-Path -LiteralPath $launcher)) {
         throw "App-image launcher was not created: $launcher"
+    }
+    $launcherConfig = Join-Path $appImageDir "app\$appName.cfg"
+    if (-not (Test-Path -LiteralPath $launcherConfig) -or
+        -not (Select-String -LiteralPath $launcherConfig -SimpleMatch $cloudJavaOption -Quiet)) {
+        throw "App-image does not contain the configured cloud API URL."
     }
 
     Compress-Archive -LiteralPath $appImageDir -DestinationPath $archivePath -CompressionLevel Optimal
