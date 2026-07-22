@@ -15,6 +15,8 @@ import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class HttpCloudApiClientTest {
     private static final ObjectMapper JSON = new ObjectMapper();
@@ -62,6 +64,14 @@ class HttpCloudApiClientTest {
         assertEquals("Bearer member-token", authorization);
         assertEquals(1, assignments.size());
         assertEquals("select-1", assignments.getFirst().exerciseId());
+    }
+
+    @Test
+    void shouldAllowHttpsAndLoopbackHttpEndpointsOnly() {
+        assertDoesNotThrow(() -> new HttpCloudApiClient(URI.create("https://api.example.edu")));
+        assertDoesNotThrow(() -> new HttpCloudApiClient(URI.create("http://localhost:18080")));
+        assertThrows(IllegalArgumentException.class,
+            () -> new HttpCloudApiClient(URI.create("http://8.130.47.235")));
     }
 
     private void assignments(HttpExchange exchange) throws IOException {

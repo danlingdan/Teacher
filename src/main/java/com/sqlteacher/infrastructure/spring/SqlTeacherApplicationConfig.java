@@ -29,7 +29,8 @@ import com.sqlteacher.infrastructure.ai.InMemoryNetworkAiSettingsService;
 import com.sqlteacher.infrastructure.ai.SwitchableAiModelProvider;
 import com.sqlteacher.infrastructure.config.PropertiesAppConfigurationService;
 import com.sqlteacher.infrastructure.cloud.HttpCloudApiClient;
-import com.sqlteacher.infrastructure.cloud.InMemoryCloudSessionService;
+import com.sqlteacher.infrastructure.cloud.PersistentCloudSessionService;
+import com.sqlteacher.infrastructure.cloud.WindowsDpapiCloudSessionStore;
 import com.sqlteacher.infrastructure.cloud.DefaultCloudLearningSyncService;
 import com.sqlteacher.infrastructure.database.DatabaseServiceConfig;
 import com.sqlteacher.infrastructure.database.SqliteAppDatabaseInitializer;
@@ -118,12 +119,16 @@ public class SqlTeacherApplicationConfig {
 
     @Bean
     public CloudApiClient cloudApiClient() {
-        return new HttpCloudApiClient(URI.create(System.getProperty("sqlteacher.cloud.base-url", "http://8.130.47.235")));
+        return new HttpCloudApiClient(URI.create(System.getProperty(
+            "sqlteacher.cloud.base-url", "https://api.sqlteacher.invalid"
+        )));
     }
 
     @Bean
-    public CloudSessionService cloudSessionService() {
-        return new InMemoryCloudSessionService();
+    public CloudSessionService cloudSessionService(SqlTeacherConfiguration configuration, CloudApiClient api) {
+        return new PersistentCloudSessionService(
+            new WindowsDpapiCloudSessionStore(configuration.dataDirectory().resolve("cloud-session.dat")), api
+        );
     }
 
     @Bean

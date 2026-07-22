@@ -3,15 +3,19 @@ package com.sqlteacher.infrastructure.cloud;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sqlteacher.application.collaboration.AuthenticatedUser;
+import com.sqlteacher.application.collaboration.AssignmentStatus;
 import com.sqlteacher.application.collaboration.ClassroomService;
 import com.sqlteacher.application.collaboration.CloudApiClient;
 import com.sqlteacher.application.collaboration.CloudAuthenticationService;
 import com.sqlteacher.application.collaboration.CloudSyncItem;
 import com.sqlteacher.application.collaboration.ClassAssignment;
+import com.sqlteacher.application.collaboration.ClassLearningSummary;
 import com.sqlteacher.application.collaboration.UserRole;
 
 import java.io.IOException;
 import java.net.URI;
+import java.net.InetAddress;
+import java.net.UnknownHostException;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
@@ -21,7 +25,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
-/** HTTPS/HTTP test client. Production configuration must use HTTPS. */
+/** HTTPS cloud client. HTTP is accepted only for loopback integration tests. */
 public final class HttpCloudApiClient implements CloudApiClient {
     private final URI baseUri;
     private final HttpClient client = HttpClient.newHttpClient();
@@ -29,8 +33,22 @@ public final class HttpCloudApiClient implements CloudApiClient {
 
     public HttpCloudApiClient(URI baseUri) {
         this.baseUri = Objects.requireNonNull(baseUri, "baseUri must not be null");
-        if (!"https".equalsIgnoreCase(baseUri.getScheme()) && !"http".equalsIgnoreCase(baseUri.getScheme())) {
-            throw new IllegalArgumentException("Cloud API must use HTTP or HTTPS");
+        if (!"https".equalsIgnoreCase(baseUri.getScheme())) {
+            if (!"http".equalsIgnoreCase(baseUri.getScheme()) || !isLoopback(baseUri)) {
+                throw new IllegalArgumentException("Cloud API must use HTTPS; HTTP is allowed only for loopback tests");
+            }
+        }
+    }
+
+    private static boolean isLoopback(URI uri) {
+        String host = uri.getHost();
+        if (host == null || host.isBlank()) {
+            return false;
+        }
+        try {
+            return InetAddress.getByName(host).isLoopbackAddress();
+        } catch (UnknownHostException error) {
+            return false;
         }
     }
 
@@ -44,7 +62,13 @@ public final class HttpCloudApiClient implements CloudApiClient {
         return authenticate("auth/register", Map.of("email", email, "displayName", displayName, "password", new String(password)));
     }
 
+    @Override
+    public CloudAuthenticationService.Session refresh(String refreshToken) {
+        return authenticate("auth/refresh", Map.of("refreshToken", refreshToken));
+    }
+
     @Override public void logout(String accessToken){send("auth/logout","POST",Map.of(),accessToken);}
+    @Override public void logout(String accessToken,String refreshToken){send("auth/logout","POST",refreshToken==null?Map.of():Map.of("refreshToken",refreshToken),accessToken);}
 
     @Override
     public List<ClassroomService.Classroom> listClasses(String accessToken) {
@@ -62,8 +86,14 @@ public final class HttpCloudApiClient implements CloudApiClient {
         return request("classes/"+classroomId+"/members","POST",Map.of("email",email,"role",role.name()),accessToken,ClassroomDto.class).toDomain();
     }
 
-    @Override public ClassAssignment createAssignment(String token,String classroomId,String exerciseId,String title){return request("classes/"+classroomId+"/assignments","POST",Map.of("exerciseId",exerciseId,"title",title),token,ClassAssignment.class);}
+    @Override public ClassAssignment createAssignment(String token,String classroomId,String exerciseId,String title){return createAssignment(token,classroomId,exerciseId,title,null);}
+    @Override public ClassAssignment createAssignment(String token,String classroomId,String exerciseId,String title,Instant dueAt){Map<String,String> body=new java.util.LinkedHashMap<>();body.put("exerciseId",exerciseId);body.put("title",title);if(dueAt!=null)body.put("dueAt",dueAt.toString());return request("classes/"+classroomId+"/assignments","POST",body,token,ClassAssignment.class);}
+    @Override public ClassAssignment changeAssignmentStatus(String token,String classroomId,String assignmentId,AssignmentStatus status){return request("classes/"+classroomId+"/assignments/"+assignmentId+"/status","POST",Map.of("status",status.name()),token,ClassAssignment.class);}
+    @Override public ClassAssignment setAssignmentDueAt(String token,String classroomId,String assignmentId,Instant dueAt){return request("classes/"+classroomId+"/assignments/"+assignmentId+"/due","POST",Map.of("dueAt",dueAt.toString()),token,ClassAssignment.class);}
+    @Override public ClassAssignment updateAssignment(String token,String classroomId,String assignmentId,String title,Instant dueAt){Map<String,String> body=new java.util.LinkedHashMap<>();body.put("title",title);if(dueAt!=null)body.put("dueAt",dueAt.toString());return request("classes/"+classroomId+"/assignments/"+assignmentId+"/details","POST",body,token,ClassAssignment.class);}
     @Override public List<ClassAssignment> listAssignments(String token,String classroomId){Map<String,List<ClassAssignment>> result=request("classes/"+classroomId+"/assignments","GET",null,token,new TypeReference<Map<String,List<ClassAssignment>>>(){});return result.getOrDefault("assignments",List.of());}
+    @Override public ClassLearningSummary getClassLearningSummary(String token,String classroomId){return request("classes/"+classroomId+"/analytics","GET",null,token,ClassLearningSummary.class);}
+    @Override public String exportClassLearningCsv(String token,String classroomId){return send("classes/"+classroomId+"/analytics/export","GET",null,token);}
 
     @Override
     public int uploadSyncItems(String accessToken, List<CloudSyncItem> items) {
@@ -106,8 +136,8 @@ public final class HttpCloudApiClient implements CloudApiClient {
         catch (InterruptedException error) { Thread.currentThread().interrupt(); throw new IllegalStateException("Cloud API request was interrupted", error); }
     }
 
-    private record SessionDto(String accessToken, Instant expiresAt, UserDto user) {
-        CloudAuthenticationService.Session toDomain() { return new CloudAuthenticationService.Session(accessToken, expiresAt, user.toDomain()); }
+    private record SessionDto(String accessToken, Instant expiresAt, UserDto user, String refreshToken) {
+        CloudAuthenticationService.Session toDomain() { return new CloudAuthenticationService.Session(accessToken, expiresAt, user.toDomain(), refreshToken); }
     }
     private record UserDto(String id, String email, String displayName, List<UserRole> roles) {
         AuthenticatedUser toDomain() { return new AuthenticatedUser(id, email, displayName, java.util.Set.copyOf(roles)); }

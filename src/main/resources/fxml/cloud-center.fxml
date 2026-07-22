@@ -97,6 +97,12 @@
                                                 <Label fx:id="selectedClassLabel" text="尚未选择班级" styleClass="cloud-selection-pill"/>
                                             </children>
                                         </HBox>
+                                        <HBox spacing="8" alignment="CENTER_LEFT">
+                                            <children>
+                                                <Label fx:id="classAnalyticsLabel" text="选择班级后查看教学记录" wrapText="true" HBox.hgrow="ALWAYS" styleClass="cloud-helper-text"/>
+                                                <Button fx:id="exportClassRecordsButton" text="导出教学记录" onAction="#onExportClassRecords" styleClass="compact-button, secondary-button"/>
+                                            </children>
+                                        </HBox>
 
                                         <VBox fx:id="memberManagementPane" spacing="8" styleClass="cloud-subsection">
                                             <children>
@@ -120,9 +126,18 @@
                                                     <children>
                                                         <TextField fx:id="assignmentExerciseField" promptText="本地题目 ID" prefWidth="180"/>
                                                         <TextField fx:id="assignmentTitleField" promptText="任务标题" prefWidth="230"/>
+                                                        <TextField fx:id="assignmentDueAtField" promptText="截止时间（ISO-8601，可选）" prefWidth="230"/>
                                                         <Button text="发布任务" onAction="#onCreateAssignment" styleClass="primary-button"/>
                                                     </children>
                                                 </FlowPane>
+                                                <HBox fx:id="assignmentLifecyclePane" spacing="8">
+                                                    <children>
+                                                        <Button text="截止所选任务" onAction="#onCloseAssignment" styleClass="compact-button, secondary-button"/>
+                                                        <Button text="撤回所选任务" onAction="#onWithdrawAssignment" styleClass="compact-button, danger-outline-button"/>
+                                                        <Button text="更新所选任务" onAction="#onUpdateAssignment" styleClass="compact-button, secondary-button"/>
+                                                        <Button text="归档所选任务" onAction="#onArchiveAssignment" styleClass="compact-button, secondary-button"/>
+                                                    </children>
+                                                </HBox>
                                                 <ListView fx:id="assignmentList" VBox.vgrow="ALWAYS" minHeight="170" styleClass="cloud-list"/>
                                             </children>
                                         </VBox>
