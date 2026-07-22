@@ -1,8 +1,8 @@
-# SQLTeacher v1.0 Windows 安装、升级与卸载
+# SQLTeacher v1.2 Windows 安装、升级与卸载
 
 ## 安装
 
-运行 `SQLTeacher-1.1.0.exe`，选择当前用户安装目录并完成安装。默认程序目录为 `%LOCALAPPDATA%\SQLTeacher-App`，与 `%LOCALAPPDATA%\SQLTeacher` 用户数据目录严格分离。安装器包含 Java 21 运行时，可创建开始菜单和桌面快捷方式。安装包尚未代码签名，Windows 可能显示来源提示；请只使用项目 GitHub Release 发布的文件并核对 SHA-256。
+运行 `SQLTeacher-1.2.0.exe`，选择当前用户安装目录并完成安装。默认程序目录为 `%LOCALAPPDATA%\SQLTeacher-App`，与 `%LOCALAPPDATA%\SQLTeacher` 用户数据目录严格分离。安装器包含 Java 21 运行时，可创建开始菜单和桌面快捷方式。安装包尚未代码签名，Windows 可能显示来源提示；请只使用正式发布的文件并核对 SHA-256。
 
 ## 升级
 

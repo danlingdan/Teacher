@@ -6,6 +6,11 @@ import java.util.Optional;
 public interface CloudSessionService {
     Optional<CloudAuthenticationService.Session> current();
 
+    /** Attempts to rotate a persisted refresh token without exposing it to callers. */
+    default Optional<CloudAuthenticationService.Session> refresh() {
+        return current();
+    }
+
     void signIn(CloudAuthenticationService.Session session);
 
     void signOut();

@@ -54,6 +54,18 @@ public final class LoginGateController {
     private void initialize() {
         statusBox.setVisible(false);
         statusBox.setManaged(false);
+        restorePersistedSession();
+    }
+
+    private void restorePersistedSession() {
+        setBusy(true, "正在恢复安全登录状态…");
+        DesktopExecutors.background().execute(() -> {
+            var restored = sessions.refresh();
+            Platform.runLater(() -> restored.ifPresentOrElse(
+                value -> onAuthenticated.accept(DesktopAccessProfile.from(value)),
+                () -> setBusy(false, null)
+            ));
+        });
     }
 
     @FXML private void onLogin() { authenticate(false); }

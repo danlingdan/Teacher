@@ -152,6 +152,13 @@ public final class SqlTeacherFxApp extends Application {
 
     private void showLoginGate(Stage stage) {
         learningEventOwnerContext.useGuest();
+        cloudSessionService.current().ifPresentOrElse(
+            session -> showMainWindow(stage, DesktopAccessProfile.from(session)),
+            () -> showLoginGateContent(stage)
+        );
+    }
+
+    private void showLoginGateContent(Stage stage) {
         URL fxml = requiredResource(LOGIN_GATE_FXML);
         FXMLLoader loader = new FXMLLoader(fxml);
         loader.setControllerFactory(type -> {
@@ -233,7 +240,7 @@ public final class SqlTeacherFxApp extends Application {
         cloudSessionService.signOut();
         current.ifPresent(value -> DesktopExecutors.background().execute(() -> {
             try {
-                cloudApiClient.logout(value.accessToken());
+                cloudApiClient.logout(value.accessToken(), value.refreshToken());
             } catch (RuntimeException error) {
                 LOG.warn("Cloud token revocation failed while switching identity: {}", error.getMessage());
             }

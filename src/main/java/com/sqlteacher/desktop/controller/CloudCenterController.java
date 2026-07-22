@@ -2,6 +2,7 @@ package com.sqlteacher.desktop.controller;
 
 import com.sqlteacher.application.ai.NetworkAiSettingsService;
 import com.sqlteacher.application.collaboration.ClassAssignment;
+import com.sqlteacher.application.collaboration.AssignmentStatus;
 import com.sqlteacher.application.collaboration.ClassroomService;
 import com.sqlteacher.application.collaboration.CloudApiClient;
 import com.sqlteacher.application.collaboration.CloudAuthenticationService;
@@ -19,12 +20,17 @@ import javafx.scene.control.ListView;
 import javafx.scene.control.PasswordField;
 import javafx.scene.control.ProgressIndicator;
 import javafx.scene.control.TextField;
+import javafx.stage.FileChooser;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
 import javafx.scene.layout.FlowPane;
 import javafx.util.StringConverter;
 
 import java.net.URI;
+import java.time.Instant;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -44,13 +50,16 @@ public final class CloudCenterController {
     @FXML private Label accountLabel;
     @FXML private Label classSummaryLabel;
     @FXML private Label selectedClassLabel;
+    @FXML private Label classAnalyticsLabel;
     @FXML private HBox statusBanner;
     @FXML private VBox authenticatedContent;
     @FXML private FlowPane classCreationPane;
     @FXML private VBox memberManagementPane;
     @FXML private FlowPane assignmentCreationPane;
+    @FXML private HBox assignmentLifecyclePane;
     @FXML private ProgressIndicator busyIndicator;
     @FXML private Button logoutButton;
+    @FXML private Button exportClassRecordsButton;
     @FXML private ListView<String> classList;
     @FXML private TextField aiEndpointField;
     @FXML private TextField aiModelField;
@@ -59,9 +68,11 @@ public final class CloudCenterController {
     @FXML private ComboBox<UserRole> memberRoleCombo;
     @FXML private TextField assignmentExerciseField;
     @FXML private TextField assignmentTitleField;
+    @FXML private TextField assignmentDueAtField;
     @FXML private ListView<String> assignmentList;
 
     private List<ClassroomService.Classroom> classrooms = List.of();
+    private List<ClassAssignment> assignments = List.of();
     private boolean applyingClassSelection;
     private final Runnable switchIdentityAction;
     private final DesktopAccessProfile accessProfile;
@@ -105,6 +116,14 @@ public final class CloudCenterController {
             updateSelectedClassLabel();
             if (!applyingClassSelection) refreshAssignments();
         });
+        assignmentList.getSelectionModel().selectedIndexProperty().addListener((observable, oldValue, newValue) -> {
+            int index = newValue.intValue();
+            if (index >= 0 && index < assignments.size()) {
+                ClassAssignment selected = assignments.get(index);
+                assignmentTitleField.setText(selected.title());
+                assignmentDueAtField.setText(selected.dueAt() == null ? "" : selected.dueAt().toString());
+            }
+        });
         boolean canManageClass = canManageClass();
         classCreationPane.setVisible(canManageClass);
         classCreationPane.setManaged(canManageClass);
@@ -112,6 +131,10 @@ public final class CloudCenterController {
         memberManagementPane.setManaged(canManageClass);
         assignmentCreationPane.setVisible(canManageClass);
         assignmentCreationPane.setManaged(canManageClass);
+        assignmentLifecyclePane.setVisible(canManageClass);
+        assignmentLifecyclePane.setManaged(canManageClass);
+        exportClassRecordsButton.setVisible(canManageClass);
+        exportClassRecordsButton.setManaged(canManageClass);
         updateSessionState();
     }
 
@@ -154,6 +177,32 @@ public final class CloudCenterController {
                 "同步完成：上传 " + result.uploaded() + " 条，下载 " + result.downloaded() + " 条",
                 Status.SUCCESS
             ));
+        });
+    }
+
+    @FXML
+    private void onExportClassRecords() {
+        requireClassManager();
+        var selected = selectedClass();
+        if (selected == null) {
+            showStatus("请先选择班级", Status.ERROR);
+            return;
+        }
+        FileChooser chooser = new FileChooser();
+        chooser.setTitle("导出班级教学记录");
+        chooser.setInitialFileName("SQLTeacher-" + selected.name().replaceAll("[\\/:*?\"<>|]", "_") + "-教学记录.csv");
+        chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("CSV 文件", "*.csv"));
+        var selectedFile = chooser.showSaveDialog(classAnalyticsLabel.getScene().getWindow());
+        if (selectedFile == null) return;
+        Path target = selectedFile.toPath();
+        run("正在导出班级教学记录…", () -> {
+            String csv = api.exportClassLearningCsv(currentSession().accessToken(), selected.id());
+            try {
+                Files.writeString(target, csv, StandardCharsets.UTF_8);
+            } catch (java.io.IOException error) {
+                throw new IllegalStateException("无法写入教学记录 CSV", error);
+            }
+            Platform.runLater(() -> showStatus("教学记录已导出到 " + target, Status.SUCCESS));
         });
     }
 
@@ -220,15 +269,91 @@ public final class CloudCenterController {
         String exerciseId = required(assignmentExerciseField, "请输入本地题目 ID");
         String title = required(assignmentTitleField, "请输入任务标题");
         if (exerciseId == null || title == null) return;
+        Instant dueAt;
+        try {
+            String dueAtText = assignmentDueAtField.getText() == null ? "" : assignmentDueAtField.getText().trim();
+            dueAt = dueAtText.isEmpty() ? null : Instant.parse(dueAtText);
+        } catch (RuntimeException error) {
+            showStatus("截止时间请使用 ISO-8601 格式，例如 2026-12-31T15:00:00Z", Status.ERROR);
+            assignmentDueAtField.requestFocus();
+            return;
+        }
         run("正在发布班级任务…", () -> {
             var current = currentSession();
-            api.createAssignment(current.accessToken(), selected.id(), exerciseId, title);
+            api.createAssignment(current.accessToken(), selected.id(), exerciseId, title, dueAt);
             List<ClassAssignment> assignments = api.listAssignments(current.accessToken(), selected.id());
             Platform.runLater(() -> {
                 applyAssignments(selected.id(), assignments);
                 assignmentExerciseField.clear();
                 assignmentTitleField.clear();
+                assignmentDueAtField.clear();
                 showStatus("任务“" + title + "”已发布", Status.SUCCESS);
+            });
+        });
+    }
+
+    @FXML
+    private void onCloseAssignment() {
+        changeSelectedAssignmentStatus(AssignmentStatus.CLOSED, "任务已截止，学生可查看但不能继续提交");
+    }
+
+    @FXML
+    private void onWithdrawAssignment() {
+        changeSelectedAssignmentStatus(AssignmentStatus.WITHDRAWN, "任务已撤回，学生将不再看到该任务");
+    }
+
+    @FXML
+    private void onArchiveAssignment() {
+        changeSelectedAssignmentStatus(AssignmentStatus.ARCHIVED, "任务已归档");
+    }
+
+    @FXML
+    private void onUpdateAssignment() {
+        requireClassManager();
+        var selectedClass = selectedClass();
+        int index = assignmentList.getSelectionModel().getSelectedIndex();
+        if (selectedClass == null || index < 0 || index >= assignments.size()) {
+            showStatus("请先选择一个班级任务", Status.ERROR);
+            return;
+        }
+        String title = required(assignmentTitleField, "请输入更新后的任务标题");
+        if (title == null) return;
+        Instant dueAt;
+        try {
+            String value = assignmentDueAtField.getText() == null ? "" : assignmentDueAtField.getText().trim();
+            dueAt = value.isEmpty() ? null : Instant.parse(value);
+        } catch (RuntimeException error) {
+            showStatus("截止时间请使用 ISO-8601 格式", Status.ERROR);
+            return;
+        }
+        ClassAssignment assignment = assignments.get(index);
+        run("正在更新任务…", () -> {
+            var current = currentSession();
+            api.updateAssignment(current.accessToken(), selectedClass.id(), assignment.id(), title, dueAt);
+            List<ClassAssignment> refreshed = api.listAssignments(current.accessToken(), selectedClass.id());
+            Platform.runLater(() -> {
+                applyAssignments(selectedClass.id(), refreshed);
+                showStatus("任务已更新", Status.SUCCESS);
+            });
+        });
+    }
+
+    private void changeSelectedAssignmentStatus(AssignmentStatus status, String successMessage) {
+        requireClassManager();
+        var selectedClass = selectedClass();
+        int index = assignmentList.getSelectionModel().getSelectedIndex();
+        if (selectedClass == null || index < 0 || index >= assignments.size()) {
+            showStatus("请先选择一个班级任务", Status.ERROR);
+            return;
+        }
+        ClassAssignment assignment = assignments.get(index);
+        run("正在更新任务状态…", () -> {
+            var current = currentSession();
+            api.changeAssignmentStatus(current.accessToken(), selectedClass.id(), assignment.id(), status);
+            List<ClassAssignment> refreshed = api.listAssignments(current.accessToken(), selectedClass.id());
+            Platform.runLater(() -> {
+                applyAssignments(selectedClass.id(), refreshed);
+                showStatus(successMessage, Status.SUCCESS);
             });
         });
     }
@@ -242,8 +367,10 @@ public final class CloudCenterController {
         }
         run("正在加载“" + selected.name() + "”的任务…", () -> {
             List<ClassAssignment> assignments = api.listAssignments(current.orElseThrow().accessToken(), selected.id());
+            var summary = canManageClass() ? api.getClassLearningSummary(current.orElseThrow().accessToken(), selected.id()) : null;
             Platform.runLater(() -> {
                 applyAssignments(selected.id(), assignments);
+                applyClassAnalytics(summary);
                 showStatus("已加载“" + selected.name() + "”", Status.INFO);
             });
         });
@@ -286,12 +413,34 @@ public final class CloudCenterController {
 
     private void applyAssignments(String classroomId, List<ClassAssignment> assignments) {
         if (classroomId != null && !classroomId.equals(selectedClassId())) return;
+        this.assignments = List.copyOf(assignments);
         assignmentList.getItems().setAll(assignments.stream()
-            .map(item -> item.title() + "\n题目 ID：" + item.exerciseId())
+            .map(item -> item.title() + "\n题目 ID：" + item.exerciseId() + " · " + assignmentStatusLabel(item.status())
+                + (item.dueAt() == null ? "" : " · 截止：" + item.dueAt()))
             .toList());
         assignmentList.setPlaceholder(new Label(classroomId == null
             ? "选择班级后查看已发布任务"
             : "这个班级还没有发布任务"));
+    }
+
+    private void applyClassAnalytics(com.sqlteacher.application.collaboration.ClassLearningSummary summary) {
+        if (summary == null) {
+            classAnalyticsLabel.setText("仅教师和管理员可查看本班教学记录");
+            return;
+        }
+        classAnalyticsLabel.setText("学生 " + summary.studentCount() + " 人 · 已产生记录 "
+            + summary.activeStudentCount() + " 人 · 同步事件 " + summary.syncedEvents() + " 条 · 成功 "
+            + summary.successfulEvents() + " 条");
+    }
+
+    private String assignmentStatusLabel(AssignmentStatus status) {
+        return switch (status) {
+            case DRAFT -> "草稿";
+            case PUBLISHED -> "已发布";
+            case CLOSED -> "已截止";
+            case WITHDRAWN -> "已撤回";
+            case ARCHIVED -> "已归档";
+        };
     }
 
     private ClassroomService.Classroom selectedClass() {

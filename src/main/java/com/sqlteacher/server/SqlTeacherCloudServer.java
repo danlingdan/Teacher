@@ -40,7 +40,7 @@ import javax.crypto.SecretKeyFactory;
 import javax.crypto.spec.PBEKeySpec;
 
 /**
- * Small deployable cloud API for v1.1. It intentionally exposes only account and class APIs;
+ * Small deployable cloud API for v1.2. It intentionally exposes only account and class APIs;
  * desktop database credentials and BYO-AI keys never cross this boundary.
  */
 public final class SqlTeacherCloudServer {
@@ -49,11 +49,13 @@ public final class SqlTeacherCloudServer {
     private static final int SALT_BYTES = 16;
     private static final int PBKDF2_ITERATIONS = 310_000;
     private static final int HASH_BITS = 256;
+    private static final long ACCESS_TOKEN_HOURS = 8;
+    private static final long REFRESH_TOKEN_DAYS = 30;
 
     private final CloudStore store;
     private final HttpServer server;
 
-    private SqlTeacherCloudServer(Path databasePath, int port) throws IOException, SQLException {
+    SqlTeacherCloudServer(Path databasePath, int port) throws IOException, SQLException {
         this.store = new CloudStore(databasePath);
         String bootstrapEmail = System.getenv("SQLTEACHER_CLOUD_BOOTSTRAP_ADMIN_EMAIL");
         String bootstrapPassword = System.getenv("SQLTEACHER_CLOUD_BOOTSTRAP_ADMIN_PASSWORD");
@@ -65,6 +67,7 @@ public final class SqlTeacherCloudServer {
         this.server.createContext("/health", this::health);
         this.server.createContext("/api/v1/auth/register", this::register);
         this.server.createContext("/api/v1/auth/login", this::login);
+        this.server.createContext("/api/v1/auth/refresh", this::refresh);
         this.server.createContext("/api/v1/auth/logout", this::logout);
         this.server.createContext("/api/v1/classes", this::classes);
         this.server.createContext("/api/v1/sync/events", this::syncEvents);
@@ -79,6 +82,10 @@ public final class SqlTeacherCloudServer {
         cloudServer.server.start();
         System.out.println("SQLTeacher cloud API started on port " + port);
     }
+
+    void start() { server.start(); }
+    void stop() { server.stop(0); }
+    int port() { return server.getAddress().getPort(); }
 
     private void health(HttpExchange exchange) throws IOException {
         if (!"GET".equals(exchange.getRequestMethod())) { methodNotAllowed(exchange); return; }
@@ -112,9 +119,20 @@ public final class SqlTeacherCloudServer {
     private void logout(HttpExchange exchange) throws IOException {
         if (!"POST".equals(exchange.getRequestMethod())) { methodNotAllowed(exchange); return; }
         try {
-            store.logout(token(exchange));
+            Map<String, String> body = optionalRequest(exchange);
+            store.logout(token(exchange), body.get("refreshToken"));
             exchange.sendResponseHeaders(204, -1);
         } catch (SecurityException error) { respond(exchange, 401, errorResponse("UNAUTHORIZED", "Login is required.")); }
+    }
+
+    private void refresh(HttpExchange exchange) throws IOException {
+        if (!"POST".equals(exchange.getRequestMethod())) { methodNotAllowed(exchange); return; }
+        try {
+            Map<String, String> body = request(exchange);
+            respond(exchange, 200, sessionResponse(store.refreshData(body.get("refreshToken"))));
+        } catch (IllegalArgumentException error) { respond(exchange, 400, errorResponse("INVALID_REQUEST", error.getMessage())); }
+        catch (SecurityException error) { respond(exchange, 401, errorResponse("REFRESH_FAILED", "Refresh token is invalid or expired.")); }
+        catch (RuntimeException error) { error.printStackTrace(); respond(exchange, 500, errorResponse("SERVER_ERROR", "Session refresh failed.")); }
     }
 
     private void classes(HttpExchange exchange) throws IOException {
@@ -145,8 +163,37 @@ public final class SqlTeacherCloudServer {
                 }
                 if ("POST".equals(exchange.getRequestMethod())) {
                     Map<String,String> body=request(exchange);
-                    respond(exchange,201,store.createAssignment(actor,segments[4],body.get("exerciseId"),body.get("title")));return;
+                    respond(exchange,201,store.createAssignment(actor,segments[4],body.get("exerciseId"),body.get("title"),instantOrNull(body.get("dueAt"))));return;
                 }
+            }
+            if (segments.length == 6 && "analytics".equals(segments[5]) && "GET".equals(exchange.getRequestMethod())) {
+                respond(exchange, 200, store.classLearningSummary(actor, segments[4]));
+                return;
+            }
+            if (segments.length == 7 && "analytics".equals(segments[5]) && "export".equals(segments[6])
+                && "GET".equals(exchange.getRequestMethod())) {
+                respondCsv(exchange, store.exportClassLearningCsv(actor, segments[4]));
+                return;
+            }
+            if (segments.length == 8 && "assignments".equals(segments[5]) && "status".equals(segments[7])
+                && "POST".equals(exchange.getRequestMethod())) {
+                Map<String, String> body = request(exchange);
+                respond(exchange, 200, store.changeAssignmentStatus(actor, segments[4], segments[6],
+                    com.sqlteacher.application.collaboration.AssignmentStatus.valueOf(body.get("status").toUpperCase(Locale.ROOT))));
+                return;
+            }
+            if (segments.length == 8 && "assignments".equals(segments[5]) && "due".equals(segments[7])
+                && "POST".equals(exchange.getRequestMethod())) {
+                Map<String, String> body = request(exchange);
+                respond(exchange, 200, store.setAssignmentDueAt(actor, segments[4], segments[6], instantOrNull(body.get("dueAt"))));
+                return;
+            }
+            if (segments.length == 8 && "assignments".equals(segments[5]) && "details".equals(segments[7])
+                && "POST".equals(exchange.getRequestMethod())) {
+                Map<String, String> body = request(exchange);
+                respond(exchange, 200, store.updateAssignment(actor, segments[4], segments[6], body.get("title"),
+                    instantOrNull(body.get("dueAt"))));
+                return;
             }
             respond(exchange, 404, errorResponse("NOT_FOUND", "API endpoint was not found."));
         } catch (SecurityException error) { respond(exchange, 403, errorResponse("FORBIDDEN", "You do not have access to this resource.")); }
@@ -187,11 +234,22 @@ public final class SqlTeacherCloudServer {
         return defaultValue;
     }
 
+    private static Instant instantOrNull(String value) {
+        if (value == null || value.isBlank()) return null;
+        return Instant.parse(value);
+    }
+
     private static Map<String, String> request(HttpExchange exchange) throws IOException {
         Map<String, Object> decoded = JSON.readValue(exchange.getRequestBody(), new TypeReference<>() { });
         Map<String, String> result = new LinkedHashMap<>();
         decoded.forEach((key, value) -> result.put(key, value == null ? "" : String.valueOf(value)));
         return result;
+    }
+
+    private static Map<String, String> optionalRequest(HttpExchange exchange) throws IOException {
+        if (exchange.getRequestHeaders().getFirst("Content-Length") == null
+            || "0".equals(exchange.getRequestHeaders().getFirst("Content-Length"))) return Map.of();
+        return request(exchange);
     }
 
     private static char[] password(Map<String, String> body) { return body.getOrDefault("password", "").toCharArray(); }
@@ -217,9 +275,19 @@ public final class SqlTeacherCloudServer {
         exchange.close();
     }
 
+    private static void respondCsv(HttpExchange exchange, String csv) throws IOException {
+        byte[] bytes = csv.getBytes(StandardCharsets.UTF_8);
+        exchange.getResponseHeaders().set("Content-Type", "text/csv; charset=utf-8");
+        exchange.getResponseHeaders().set("Content-Disposition", "attachment; filename=class-learning-records.csv");
+        exchange.getResponseHeaders().set("Cache-Control", "no-store");
+        exchange.sendResponseHeaders(200, bytes.length);
+        exchange.getResponseBody().write(bytes);
+        exchange.close();
+    }
+
     private static Map<String, Object> errorResponse(String code, String message) { return Map.of("code", code, "message", message); }
     private static Map<String, Object> sessionResponse(SessionData session) {
-        return Map.of("accessToken", session.token(), "expiresAt", session.expiresAt().toString(), "user", session.user());
+        return Map.of("accessToken", session.token(), "expiresAt", session.expiresAt().toString(), "refreshToken", session.refreshToken(), "user", session.user());
     }
     private record SyncUpload(List<CloudSyncItem> items) {
         private SyncUpload { items = items == null ? List.of() : List.copyOf(items); }
@@ -243,7 +311,8 @@ public final class SqlTeacherCloudServer {
         @Override public Session register(String email, String displayName, char[] password) { return toSession(registerData(email, displayName, password)); }
         @Override public Session login(String email, char[] password) { return toSession(loginData(email, password)); }
         @Override public AuthenticatedUser authenticate(String accessToken) { return authenticateData(accessToken); }
-        @Override public void logout(String accessToken) { revoke(accessToken); }
+        @Override public void logout(String accessToken) { logout(accessToken, null); }
+        void logout(String accessToken,String refreshToken){try(Connection c=open()){c.setAutoCommit(false);revoke(c,"access_tokens",accessToken);if(refreshToken!=null&&!refreshToken.isBlank())revoke(c,"refresh_tokens",refreshToken);c.commit();}catch(SQLException e){throw database(e);}}
 
         SessionData registerData(String email, String displayName, char[] password) {
             String normalizedEmail = validateEmail(email);
@@ -298,6 +367,31 @@ public final class SqlTeacherCloudServer {
                 }
             } catch (SQLException error) { throw database(error); }
             return issue(user(userId));
+        }
+
+        SessionData refreshData(String refreshToken) {
+            if (refreshToken == null || refreshToken.isBlank()) throw new IllegalArgumentException("refreshToken must not be blank");
+            try (Connection connection = open();
+                 PreparedStatement token = connection.prepareStatement(
+                     "select user_id from refresh_tokens where token_hash=? and expires_at>? and revoked_at is null")) {
+                connection.setAutoCommit(false);
+                token.setBytes(1, tokenHash(refreshToken));
+                token.setString(2, Instant.now().toString());
+                String userId;
+                try (ResultSet result = token.executeQuery()) {
+                    if (!result.next()) throw new SecurityException("invalid refresh token");
+                    userId = result.getString(1);
+                }
+                try (PreparedStatement revoke = connection.prepareStatement(
+                    "update refresh_tokens set revoked_at=? where token_hash=? and revoked_at is null")) {
+                    revoke.setString(1, Instant.now().toString());
+                    revoke.setBytes(2, tokenHash(refreshToken));
+                    if (revoke.executeUpdate() != 1) throw new SecurityException("refresh token already used");
+                }
+                SessionData session = issue(connection, user(userId));
+                connection.commit();
+                return session;
+            } catch (SQLException error) { throw database(error); }
         }
 
         @Override public Classroom create(AuthenticatedUser actor, String name) {
@@ -371,8 +465,18 @@ public final class SqlTeacherCloudServer {
             return List.copyOf(items);
         }
 
-        ClassAssignment createAssignment(AuthenticatedUser actor,String classroomId,String exerciseId,String title){requireTeacher(actor,classroomId);if(exerciseId==null||exerciseId.isBlank()||title==null||title.isBlank())throw new IllegalArgumentException("exerciseId and title must not be blank");String id=UUID.randomUUID().toString();Instant now=Instant.now();try(Connection c=open();PreparedStatement s=c.prepareStatement("insert into class_assignments(id,classroom_id,exercise_id,title,created_at) values(?,?,?,?,?)")){s.setString(1,id);s.setString(2,classroomId);s.setString(3,exerciseId.trim());s.setString(4,title.trim());s.setString(5,now.toString());s.executeUpdate();return new ClassAssignment(id,classroomId,exerciseId.trim(),title.trim(),now);}catch(SQLException e){throw database(e);}}
-        List<ClassAssignment> listAssignments(AuthenticatedUser actor,String classroomId){requireMember(actor,classroomId);List<ClassAssignment> result=new ArrayList<>();try(Connection c=open();PreparedStatement s=c.prepareStatement("select id,exercise_id,title,created_at from class_assignments where classroom_id=? order by created_at desc")){s.setString(1,classroomId);try(ResultSet r=s.executeQuery()){while(r.next())result.add(new ClassAssignment(r.getString(1),classroomId,r.getString(2),r.getString(3),Instant.parse(r.getString(4))));}return List.copyOf(result);}catch(SQLException e){throw database(e);}}
+        ClassAssignment createAssignment(AuthenticatedUser actor,String classroomId,String exerciseId,String title,Instant dueAt){requireTeacher(actor,classroomId);if(exerciseId==null||exerciseId.isBlank()||title==null||title.isBlank())throw new IllegalArgumentException("exerciseId and title must not be blank");String id=UUID.randomUUID().toString();Instant now=Instant.now();if(dueAt!=null&&dueAt.isBefore(now))throw new IllegalArgumentException("dueAt must be in the future");try(Connection c=open();PreparedStatement s=c.prepareStatement("insert into class_assignments(id,classroom_id,exercise_id,title,created_at,status,due_at,updated_at) values(?,?,?,?,?,'PUBLISHED',?,?)")){s.setString(1,id);s.setString(2,classroomId);s.setString(3,exerciseId.trim());s.setString(4,title.trim());s.setString(5,now.toString());s.setString(6,dueAt==null?null:dueAt.toString());s.setString(7,now.toString());s.executeUpdate();return new ClassAssignment(id,classroomId,exerciseId.trim(),title.trim(),now,com.sqlteacher.application.collaboration.AssignmentStatus.PUBLISHED,dueAt,now);}catch(SQLException e){throw database(e);}}
+        ClassAssignment setAssignmentDueAt(AuthenticatedUser actor,String classroomId,String assignmentId,Instant dueAt){requireTeacher(actor,classroomId);if(dueAt==null||!dueAt.isAfter(Instant.now()))throw new IllegalArgumentException("dueAt must be in the future");try(Connection c=open();PreparedStatement s=c.prepareStatement("update class_assignments set due_at=?,updated_at=? where id=? and classroom_id=?")){s.setString(1,dueAt.toString());s.setString(2,Instant.now().toString());s.setString(3,assignmentId);s.setString(4,classroomId);if(s.executeUpdate()!=1)throw new IllegalArgumentException("Assignment was not found");return assignment(c,classroomId,assignmentId);}catch(SQLException e){throw database(e);}}
+        ClassAssignment changeAssignmentStatus(AuthenticatedUser actor,String classroomId,String assignmentId,com.sqlteacher.application.collaboration.AssignmentStatus status){requireTeacher(actor,classroomId);Instant now=Instant.now();try(Connection c=open()){ClassAssignment current=assignment(c,classroomId,assignmentId);if(!validTransition(current.status(),status))throw new IllegalArgumentException("Assignment status transition is not allowed");try(PreparedStatement s=c.prepareStatement("update class_assignments set status=?,updated_at=? where id=? and classroom_id=?")){s.setString(1,status.name());s.setString(2,now.toString());s.setString(3,assignmentId);s.setString(4,classroomId);s.executeUpdate();}return assignment(c,classroomId,assignmentId);}catch(SQLException e){throw database(e);}}
+        ClassAssignment updateAssignment(AuthenticatedUser actor,String classroomId,String assignmentId,String title,Instant dueAt){requireTeacher(actor,classroomId);if(title==null||title.isBlank()||title.length()>160)throw new IllegalArgumentException("title must be 1 to 160 characters");if(dueAt!=null&&!dueAt.isAfter(Instant.now()))throw new IllegalArgumentException("dueAt must be in the future");try(Connection c=open()){ClassAssignment current=assignment(c,classroomId,assignmentId);if(current.status()==com.sqlteacher.application.collaboration.AssignmentStatus.ARCHIVED)throw new IllegalArgumentException("Archived assignments cannot be edited");try(PreparedStatement s=c.prepareStatement("update class_assignments set title=?,due_at=?,updated_at=? where id=? and classroom_id=?")){s.setString(1,title.trim());s.setString(2,dueAt==null?null:dueAt.toString());s.setString(3,Instant.now().toString());s.setString(4,assignmentId);s.setString(5,classroomId);s.executeUpdate();}return assignment(c,classroomId,assignmentId);}catch(SQLException e){throw database(e);}}
+        private boolean validTransition(com.sqlteacher.application.collaboration.AssignmentStatus from,com.sqlteacher.application.collaboration.AssignmentStatus to){if(from==to)return true;return switch(from){case DRAFT->to==com.sqlteacher.application.collaboration.AssignmentStatus.PUBLISHED||to==com.sqlteacher.application.collaboration.AssignmentStatus.WITHDRAWN;case PUBLISHED->to==com.sqlteacher.application.collaboration.AssignmentStatus.CLOSED||to==com.sqlteacher.application.collaboration.AssignmentStatus.WITHDRAWN;case CLOSED,WITHDRAWN->to==com.sqlteacher.application.collaboration.AssignmentStatus.ARCHIVED;case ARCHIVED->false;};}
+        List<ClassAssignment> listAssignments(AuthenticatedUser actor,String classroomId){requireMember(actor,classroomId);closeExpiredAssignments(classroomId);List<ClassAssignment> result=new ArrayList<>();boolean teacher=actor.hasRole(UserRole.ADMIN)||isTeacher(actor,classroomId);String sql=teacher?"select id,exercise_id,title,created_at,status,due_at,updated_at from class_assignments where classroom_id=? order by created_at desc":"select id,exercise_id,title,created_at,status,due_at,updated_at from class_assignments where classroom_id=? and status in ('PUBLISHED','CLOSED') order by created_at desc";try(Connection c=open();PreparedStatement s=c.prepareStatement(sql)){s.setString(1,classroomId);try(ResultSet r=s.executeQuery()){while(r.next())result.add(assignment(r,classroomId));}return List.copyOf(result);}catch(SQLException e){throw database(e);}}
+        private void closeExpiredAssignments(String classroomId){Instant now=Instant.now();try(Connection c=open();PreparedStatement s=c.prepareStatement("update class_assignments set status='CLOSED',updated_at=? where classroom_id=? and status='PUBLISHED' and due_at is not null and due_at<=?")){s.setString(1,now.toString());s.setString(2,classroomId);s.setString(3,now.toString());s.executeUpdate();}catch(SQLException e){throw database(e);}}
+        com.sqlteacher.application.collaboration.ClassLearningSummary classLearningSummary(AuthenticatedUser actor,String classroomId){requireTeacher(actor,classroomId);int students=0;int active=0;int events=0;int success=0;try(Connection c=open();PreparedStatement s=c.prepareStatement("select m.user_id,e.payload_json from classroom_members m left join sync_events e on e.user_id=m.user_id where m.classroom_id=? and m.role='STUDENT'")){s.setString(1,classroomId);java.util.Set<String> seenStudents=new java.util.HashSet<>();java.util.Set<String> activeStudents=new java.util.HashSet<>();try(ResultSet r=s.executeQuery()){while(r.next()){String userId=r.getString(1);seenStudents.add(userId);String payload=r.getString(2);if(payload==null)continue;events++;activeStudents.add(userId);try{if(JSON.readTree(payload).path("successful").asBoolean(false))success++;}catch(IOException ignored){}}}students=seenStudents.size();active=activeStudents.size();}catch(SQLException e){throw database(e);}return new com.sqlteacher.application.collaboration.ClassLearningSummary(classroomId,students,active,events,success,Instant.now());}
+        String exportClassLearningCsv(AuthenticatedUser actor,String classroomId){requireTeacher(actor,classroomId);StringBuilder csv=new StringBuilder("\uFEFFstudent_email,event_type,occurred_at,successful\r\n");int rows=0;try(Connection c=open();PreparedStatement s=c.prepareStatement("select u.email,e.event_type,e.occurred_at,e.payload_json from classroom_members m join users u on u.id=m.user_id join sync_events e on e.user_id=m.user_id where m.classroom_id=? and m.role='STUDENT' order by e.occurred_at")){s.setString(1,classroomId);try(ResultSet r=s.executeQuery()){while(r.next()){boolean successful=false;try{successful=JSON.readTree(r.getString(4)).path("successful").asBoolean(false);}catch(IOException ignored){}csv.append(csvCell(r.getString(1))).append(',').append(csvCell(r.getString(2))).append(',').append(csvCell(r.getString(3))).append(',').append(successful).append("\r\n");rows++;}}try(PreparedStatement audit=c.prepareStatement("insert into export_audit(id,user_id,classroom_id,row_count,created_at) values(?,?,?,?,?)")){audit.setString(1,UUID.randomUUID().toString());audit.setString(2,actor.id());audit.setString(3,classroomId);audit.setInt(4,rows);audit.setString(5,Instant.now().toString());audit.executeUpdate();}}catch(SQLException e){throw database(e);}return csv.toString();}
+        private String csvCell(String value){String normalized=value==null?"":value;if(!normalized.isEmpty()&&"=+-@".indexOf(normalized.charAt(0))>=0)normalized="'"+normalized;return "\""+normalized.replace("\"","\"\"")+"\"";}
+        private ClassAssignment assignment(Connection c,String classroomId,String assignmentId)throws SQLException{try(PreparedStatement s=c.prepareStatement("select id,exercise_id,title,created_at,status,due_at,updated_at from class_assignments where id=? and classroom_id=?")){s.setString(1,assignmentId);s.setString(2,classroomId);try(ResultSet r=s.executeQuery()){if(!r.next())throw new IllegalArgumentException("Assignment was not found");return assignment(r,classroomId);}}}
+        private ClassAssignment assignment(ResultSet r,String classroomId)throws SQLException{String due=r.getString("due_at");return new ClassAssignment(r.getString("id"),classroomId,r.getString("exercise_id"),r.getString("title"),Instant.parse(r.getString("created_at")),com.sqlteacher.application.collaboration.AssignmentStatus.valueOf(r.getString("status")),due==null?null:Instant.parse(due),Instant.parse(r.getString("updated_at")));}
 
         private AuthenticatedUser authenticateData(String token) {
             try (Connection connection = open(); PreparedStatement statement = connection.prepareStatement("select user_id from access_tokens where token_hash=? and expires_at>? and revoked_at is null")) {
@@ -380,8 +484,9 @@ public final class SqlTeacherCloudServer {
                 try (ResultSet result = statement.executeQuery()) { if (!result.next()) throw new SecurityException("invalid token"); return user(result.getString(1)); }
             } catch (SQLException error) { throw database(error); }
         }
-        private void revoke(String token) { try (Connection c=open(); PreparedStatement s=c.prepareStatement("update access_tokens set revoked_at=? where token_hash=?")) { s.setString(1,Instant.now().toString()); s.setBytes(2,tokenHash(token)); if(s.executeUpdate()==0) throw new SecurityException("invalid token"); } catch(SQLException e){throw database(e);} }
-        private SessionData issue(AuthenticatedUser user) { String token=Base64.getUrlEncoder().withoutPadding().encodeToString(bytes(TOKEN_BYTES)); Instant expiry=Instant.now().plus(8, ChronoUnit.HOURS); try(Connection c=open(); PreparedStatement s=c.prepareStatement("insert into access_tokens(token_hash,user_id,expires_at,created_at) values(?,?,?,?)")){s.setBytes(1,tokenHash(token));s.setString(2,user.id());s.setString(3,expiry.toString());s.setString(4,Instant.now().toString());s.executeUpdate();}catch(SQLException e){throw database(e);} return new SessionData(token,expiry,user); }
+        private void revoke(Connection c,String table,String token)throws SQLException{try(PreparedStatement s=c.prepareStatement("update "+table+" set revoked_at=? where token_hash=? and revoked_at is null")){s.setString(1,Instant.now().toString());s.setBytes(2,tokenHash(token));s.executeUpdate();}}
+        private SessionData issue(AuthenticatedUser user) { try(Connection c=open()){return issue(c,user);}catch(SQLException e){throw database(e);} }
+        private SessionData issue(Connection c, AuthenticatedUser user) throws SQLException { String token=Base64.getUrlEncoder().withoutPadding().encodeToString(bytes(TOKEN_BYTES)); String refresh=Base64.getUrlEncoder().withoutPadding().encodeToString(bytes(TOKEN_BYTES)); Instant now=Instant.now(); Instant expiry=now.plus(ACCESS_TOKEN_HOURS, ChronoUnit.HOURS); Instant refreshExpiry=now.plus(REFRESH_TOKEN_DAYS, ChronoUnit.DAYS); try(PreparedStatement access=c.prepareStatement("insert into access_tokens(token_hash,user_id,expires_at,created_at) values(?,?,?,?)");PreparedStatement refreshStatement=c.prepareStatement("insert into refresh_tokens(token_hash,user_id,expires_at,created_at) values(?,?,?,?)")){access.setBytes(1,tokenHash(token));access.setString(2,user.id());access.setString(3,expiry.toString());access.setString(4,now.toString());access.executeUpdate();refreshStatement.setBytes(1,tokenHash(refresh));refreshStatement.setString(2,user.id());refreshStatement.setString(3,refreshExpiry.toString());refreshStatement.setString(4,now.toString());refreshStatement.executeUpdate();} return new SessionData(token,expiry,user,refresh); }
         private AuthenticatedUser user(String id) { try(Connection c=open(); PreparedStatement s=c.prepareStatement("select id,email,display_name from users where id=? and disabled=0")){s.setString(1,id);try(ResultSet r=s.executeQuery()){if(!r.next())throw new SecurityException("unknown user");Set<UserRole> roles=new java.util.HashSet<>();try(PreparedStatement rs=c.prepareStatement("select role from user_roles where user_id=?")){rs.setString(1,id);try(ResultSet rr=rs.executeQuery()){while(rr.next())roles.add(UserRole.valueOf(rr.getString(1)));}}return new AuthenticatedUser(r.getString(1),r.getString(2),r.getString(3),roles);}}catch(SQLException e){throw database(e);} }
         private String userIdByEmail(String email){String normalized=validateEmail(email);try(Connection c=open();PreparedStatement s=c.prepareStatement("select id from users where email=? and disabled=0")){s.setString(1,normalized);try(ResultSet r=s.executeQuery()){if(!r.next())throw new IllegalArgumentException("User email was not found");return r.getString(1);}}catch(SQLException e){throw database(e);}}
         private Classroom classroom(String id) {
@@ -410,10 +515,12 @@ public final class SqlTeacherCloudServer {
             }
         }
         private void requireTeacher(AuthenticatedUser actor,String classId){if(actor.hasRole(UserRole.ADMIN))return;try(Connection c=open();PreparedStatement s=c.prepareStatement("select 1 from classroom_members where classroom_id=? and user_id=? and role='TEACHER'")){s.setString(1,classId);s.setString(2,actor.id());try(ResultSet r=s.executeQuery()){if(!r.next())throw new SecurityException("not classroom teacher");}}catch(SQLException e){throw database(e);}}
+        private boolean isTeacher(AuthenticatedUser actor,String classId){if(actor.hasRole(UserRole.ADMIN))return true;try(Connection c=open();PreparedStatement s=c.prepareStatement("select 1 from classroom_members where classroom_id=? and user_id=? and role='TEACHER'")){s.setString(1,classId);s.setString(2,actor.id());try(ResultSet r=s.executeQuery()){return r.next();}}catch(SQLException e){throw database(e);}}
         private void requireMember(AuthenticatedUser actor,String classId){if(actor.hasRole(UserRole.ADMIN))return;try(Connection c=open();PreparedStatement s=c.prepareStatement("select 1 from classroom_members where classroom_id=? and user_id=?")){s.setString(1,classId);s.setString(2,actor.id());try(ResultSet r=s.executeQuery()){if(!r.next())throw new SecurityException("not classroom member");}}catch(SQLException e){throw database(e);}}
         private Connection open() throws SQLException { return DriverManager.getConnection("jdbc:sqlite:"+database); }
-        private void initialize() throws SQLException { try(Connection c=open(); Statement s=c.createStatement()){s.executeUpdate("pragma foreign_keys=on");s.executeUpdate("create table if not exists users(id text primary key,email text not null unique,display_name text not null,password_hash blob not null,password_salt blob not null,disabled integer not null default 0,created_at text not null)");s.executeUpdate("create table if not exists user_roles(user_id text not null references users(id),role text not null check(role in ('ADMIN','TEACHER','STUDENT')),primary key(user_id,role))");s.executeUpdate("create table if not exists access_tokens(token_hash blob primary key,user_id text not null references users(id),expires_at text not null,created_at text not null,revoked_at text)");s.executeUpdate("create table if not exists classrooms(id text primary key,name text not null,created_at text not null)");s.executeUpdate("create table if not exists classroom_members(classroom_id text not null references classrooms(id),user_id text not null references users(id),role text not null check(role in ('TEACHER','STUDENT')),primary key(classroom_id,user_id))");s.executeUpdate("create table if not exists class_assignments(id text primary key,classroom_id text not null references classrooms(id),exercise_id text not null,title text not null,created_at text not null)");s.executeUpdate("create table if not exists sync_events(version integer primary key autoincrement,user_id text not null references users(id),event_id text not null,event_type text not null,payload_json text not null,occurred_at text not null,unique(user_id,event_id))");} }
-        private byte[] bytes(int count){byte[] value=new byte[count];random.nextBytes(value);return value;} private byte[] hash(char[] password,byte[] salt){try{KeySpec spec=new PBEKeySpec(password,salt,PBKDF2_ITERATIONS,HASH_BITS);return SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256").generateSecret(spec).getEncoded();}catch(GeneralSecurityException e){throw new IllegalStateException("Password hashing unavailable",e);}} private byte[] tokenHash(String token){try{return java.security.MessageDigest.getInstance("SHA-256").digest(token.getBytes(StandardCharsets.UTF_8));}catch(GeneralSecurityException e){throw new IllegalStateException(e);}} private static boolean constantTimeEquals(byte[] a,byte[] b){return java.security.MessageDigest.isEqual(a,b);} private static String validateEmail(String e){if(e==null||!e.matches("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$")||e.length()>254)throw new IllegalArgumentException("email must be valid");return e.trim().toLowerCase(Locale.ROOT);} private static void validatePassword(char[] p){if(p==null||p.length<12||p.length>128)throw new IllegalArgumentException("password must contain 12 to 128 characters");} private static IllegalStateException database(SQLException e){return new IllegalStateException("Cloud database operation failed",e);} private static CloudAuthenticationService.Session toSession(SessionData s){return new CloudAuthenticationService.Session(s.token(),s.expiresAt(),s.user());}
+        private void initialize() throws SQLException { try(Connection c=open(); Statement s=c.createStatement()){s.executeUpdate("pragma foreign_keys=on");s.executeUpdate("create table if not exists users(id text primary key,email text not null unique,display_name text not null,password_hash blob not null,password_salt blob not null,disabled integer not null default 0,created_at text not null)");s.executeUpdate("create table if not exists user_roles(user_id text not null references users(id),role text not null check(role in ('ADMIN','TEACHER','STUDENT')),primary key(user_id,role))");s.executeUpdate("create table if not exists access_tokens(token_hash blob primary key,user_id text not null references users(id),expires_at text not null,created_at text not null,revoked_at text)");s.executeUpdate("create table if not exists refresh_tokens(token_hash blob primary key,user_id text not null references users(id),expires_at text not null,created_at text not null,revoked_at text)");s.executeUpdate("create table if not exists classrooms(id text primary key,name text not null,created_at text not null)");s.executeUpdate("create table if not exists classroom_members(classroom_id text not null references classrooms(id),user_id text not null references users(id),role text not null check(role in ('TEACHER','STUDENT')),primary key(classroom_id,user_id))");s.executeUpdate("create table if not exists class_assignments(id text primary key,classroom_id text not null references classrooms(id),exercise_id text not null,title text not null,created_at text not null,status text not null default 'PUBLISHED',due_at text,updated_at text not null)");s.executeUpdate("create table if not exists sync_events(version integer primary key autoincrement,user_id text not null references users(id),event_id text not null,event_type text not null,payload_json text not null,occurred_at text not null,unique(user_id,event_id))");s.executeUpdate("create table if not exists export_audit(id text primary key,user_id text not null references users(id),classroom_id text not null references classrooms(id),row_count integer not null,created_at text not null)");addColumnIfMissing(s,"class_assignments","status text not null default 'PUBLISHED'");addColumnIfMissing(s,"class_assignments","due_at text");addColumnIfMissing(s,"class_assignments","updated_at text");s.executeUpdate("update class_assignments set updated_at=created_at where updated_at is null");} }
+        private void addColumnIfMissing(Statement statement,String table,String definition)throws SQLException{try{statement.executeUpdate("alter table "+table+" add column "+definition);}catch(SQLException error){if(!error.getMessage().toLowerCase(Locale.ROOT).contains("duplicate column"))throw error;}}
+        private byte[] bytes(int count){byte[] value=new byte[count];random.nextBytes(value);return value;} private byte[] hash(char[] password,byte[] salt){try{KeySpec spec=new PBEKeySpec(password,salt,PBKDF2_ITERATIONS,HASH_BITS);return SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256").generateSecret(spec).getEncoded();}catch(GeneralSecurityException e){throw new IllegalStateException("Password hashing unavailable",e);}} private byte[] tokenHash(String token){try{return java.security.MessageDigest.getInstance("SHA-256").digest(token.getBytes(StandardCharsets.UTF_8));}catch(GeneralSecurityException e){throw new IllegalStateException(e);}} private static boolean constantTimeEquals(byte[] a,byte[] b){return java.security.MessageDigest.isEqual(a,b);} private static String validateEmail(String e){if(e==null||!e.matches("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$")||e.length()>254)throw new IllegalArgumentException("email must be valid");return e.trim().toLowerCase(Locale.ROOT);} private static void validatePassword(char[] p){if(p==null||p.length<12||p.length>128)throw new IllegalArgumentException("password must contain 12 to 128 characters");} private static IllegalStateException database(SQLException e){return new IllegalStateException("Cloud database operation failed",e);} private static CloudAuthenticationService.Session toSession(SessionData s){return new CloudAuthenticationService.Session(s.token(),s.expiresAt(),s.user(),s.refreshToken());}
     }
-    private record SessionData(String token, Instant expiresAt, AuthenticatedUser user) { }
+    private record SessionData(String token, Instant expiresAt, AuthenticatedUser user, String refreshToken) { }
 }
