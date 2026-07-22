@@ -2,7 +2,7 @@
 
 ## 安装
 
-运行 `SQLTeacher-1.2.0.exe`，选择当前用户安装目录并完成安装。默认程序目录为 `%LOCALAPPDATA%\SQLTeacher-App`，与 `%LOCALAPPDATA%\SQLTeacher` 用户数据目录严格分离。安装器包含 Java 21 运行时，可创建开始菜单和桌面快捷方式。安装包尚未代码签名，Windows 可能显示来源提示；请只使用正式发布的文件并核对 SHA-256。
+运行 `SQLTeacher-1.2.1.exe`，选择当前用户安装目录并完成安装。默认程序目录为 `%LOCALAPPDATA%\SQLTeacher-App`，与 `%LOCALAPPDATA%\SQLTeacher` 用户数据目录严格分离。安装器包含 Java 21 运行时，可创建开始菜单和桌面快捷方式。安装包尚未代码签名，Windows 可能显示来源提示；请只使用正式发布的文件并核对 SHA-256。
 
 ## 升级
 
@@ -28,3 +28,11 @@
 ```
 
 脚本生成 EXE、app-image 和 ZIP。首次构建会下载并校验 WiX 3.14.1；`-SkipInstaller` 仅生成 app-image 和 ZIP。
+
+正式包默认写入 `https://api.sqlteacher.tech`。如需为独立 HTTPS 环境构建，可显式传入：
+
+```powershell
+.\packaging\package-stage1.ps1 -CloudBaseUrl https://api.example.edu
+```
+
+推送与 `pom.xml` 版本完全一致的标签（例如 `v1.2.1`）后，`.github/workflows/release.yml` 会在 GitHub Windows Runner 上自动测试、打包、保存工作流产物，并在三项发布资产上传完成后公开 GitHub Release。
