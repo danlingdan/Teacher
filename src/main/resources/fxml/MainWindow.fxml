@@ -117,6 +117,11 @@
                             text="云端教学"
                             onAction="#onNavigateCloudCenter"/>
 
+                    <Button fx:id="teachingContentNavButton"
+                            styleClass="nav-button"
+                            text="课程协作"
+                            onAction="#onNavigateTeachingContent"/>
+
                     <!-- 弹性留白：把右侧按钮推到最右端 -->
                     <Region HBox.hgrow="ALWAYS"/>
 

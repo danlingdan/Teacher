@@ -29,6 +29,8 @@ import com.sqlteacher.application.collaboration.RetentionCategory;
 import com.sqlteacher.application.collaboration.RetentionJob;
 import com.sqlteacher.application.collaboration.RetentionPreview;
 import com.sqlteacher.application.collaboration.UserRole;
+import com.sqlteacher.application.collaboration.ContentStatus;
+import com.sqlteacher.application.collaboration.FeedbackStatus;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 
@@ -76,10 +78,12 @@ public final class SqlTeacherCloudServer {
     private static final long REFRESH_TOKEN_DAYS = 30;
 
     private final CloudStore store;
+    private final V14CloudStore v14Store;
     private final HttpServer server;
 
     SqlTeacherCloudServer(Path databasePath, int port) throws IOException, SQLException {
         this.store = new CloudStore(databasePath);
+        this.v14Store = new V14CloudStore(databasePath);
         String bootstrapEmail = System.getenv("SQLTEACHER_CLOUD_BOOTSTRAP_ADMIN_EMAIL");
         String bootstrapPassword = System.getenv("SQLTEACHER_CLOUD_BOOTSTRAP_ADMIN_PASSWORD");
         if (bootstrapEmail != null && !bootstrapEmail.isBlank()
@@ -95,6 +99,7 @@ public final class SqlTeacherCloudServer {
         this.server.createContext("/api/v1/classes", this::classes);
         this.server.createContext("/api/v1/sync/events", this::syncEvents);
         this.server.createContext("/api/v1/admin", this::admin);
+        this.server.createContext("/api/v1/v14", this::v14);
         this.server.setExecutor(Executors.newVirtualThreadPerTaskExecutor());
     }
 
@@ -217,7 +222,9 @@ public final class SqlTeacherCloudServer {
                         body.get("operationId"), requiredBoolean(body, "passed"), body.get("resultHash"),
                         body.get("errorCode"), instantOrNull(body.get("clientCompletedAt"))
                     );
-                    respond(exchange, 201, store.submitAssignment(actor, segments[4], segments[6], submission));
+                    AssignmentSubmission created = store.submitAssignment(actor, segments[4], segments[6], submission);
+                    v14Store.recordSubmissionNotification(actor, segments[4], created);
+                    respond(exchange, 201, created);
                     return;
                 }
                 if ("GET".equals(exchange.getRequestMethod())) {
@@ -293,6 +300,175 @@ public final class SqlTeacherCloudServer {
         } catch (RuntimeException error) {
             error.printStackTrace();
             respond(exchange, 500, errorResponse("SERVER_ERROR", "Synchronization failed."));
+        }
+    }
+
+    private void v14(HttpExchange exchange) throws IOException {
+        try {
+            AuthenticatedUser actor = store.authenticate(token(exchange));
+            String[] segments = exchange.getRequestURI().getPath().split("/");
+            String method = exchange.getRequestMethod();
+            if (segments.length == 5 && "courses".equals(segments[4])) {
+                if ("GET".equals(method)) {
+                    respond(exchange, 200, Map.of("courses", v14Store.listCourses(actor)));
+                    return;
+                }
+                if ("POST".equals(method)) {
+                    Map<String, Object> body = objectRequest(exchange);
+                    respond(exchange, 201, v14Store.createCourse(actor, string(body, "name"), string(body, "description")));
+                    return;
+                }
+            }
+            if (segments.length == 6 && "courses".equals(segments[4]) && "import".equals(segments[5])
+                && "POST".equals(method)) {
+                Map<String, Object> body = objectRequest(exchange);
+                respond(exchange, 201, v14Store.importCourse(actor, string(body, "bundleJson"),
+                    string(body, "operationId")));
+                return;
+            }
+            if (segments.length == 7 && "courses".equals(segments[4])) {
+                String courseId = segments[5];
+                String action = segments[6];
+                if ("sections".equals(action)) {
+                    if ("GET".equals(method)) {
+                        respond(exchange, 200, Map.of("sections", v14Store.listSections(actor, courseId)));
+                        return;
+                    }
+                    if ("POST".equals(method)) {
+                        Map<String, Object> body = objectRequest(exchange);
+                        respond(exchange, 201, v14Store.createSection(actor, courseId, string(body, "name"),
+                            integer(body, "sortOrder", 0)));
+                        return;
+                    }
+                }
+                if ("knowledge-points".equals(action)) {
+                    if ("GET".equals(method)) {
+                        respond(exchange, 200, Map.of("knowledgePoints", v14Store.listKnowledgePoints(actor, courseId)));
+                        return;
+                    }
+                    if ("POST".equals(method)) {
+                        Map<String, Object> body = objectRequest(exchange);
+                        respond(exchange, 201, v14Store.createKnowledgePoint(actor, courseId,
+                            string(body, "sectionId"), string(body, "name"), string(body, "description"),
+                            integer(body, "sortOrder", 0)));
+                        return;
+                    }
+                }
+                if ("exercises".equals(action)) {
+                    if ("GET".equals(method)) {
+                        respond(exchange, 200, Map.of("exercises", v14Store.listExercises(actor, courseId,
+                            queryValue(exchange.getRequestURI().getRawQuery(), "knowledgePointId"))));
+                        return;
+                    }
+                    if ("POST".equals(method)) {
+                        Map<String, Object> body = objectRequest(exchange);
+                        respond(exchange, 201, v14Store.publishExercise(actor, courseId, string(body, "exerciseId"),
+                            string(body, "title"), string(body, "prompt"), string(body, "datasetVersion"),
+                            string(body, "evaluationRule"), strings(body, "knowledgePointIds"),
+                            string(body, "operationId")));
+                        return;
+                    }
+                }
+                if ("export".equals(action) && "GET".equals(method)) {
+                    respond(exchange, 200, Map.of("bundleJson", v14Store.exportCourse(actor, courseId)));
+                    return;
+                }
+            }
+            if (segments.length == 7 && "courses".equals(segments[4]) && "POST".equals(method)) {
+                Map<String, Object> body = objectRequest(exchange);
+                respond(exchange, 200, v14Store.updateCourse(actor, segments[5], string(body, "name"),
+                    string(body, "description"), ContentStatus.valueOf(string(body, "status").toUpperCase(Locale.ROOT)),
+                    longValue(body, "expectedVersion", 0)));
+                return;
+            }
+            if (segments.length == 8 && "courses".equals(segments[4]) && "POST".equals(method)) {
+                Map<String, Object> body = objectRequest(exchange);
+                if ("sections".equals(segments[6])) {
+                    respond(exchange, 200, v14Store.updateSection(actor, segments[5], segments[7],
+                        string(body, "name"), integer(body, "sortOrder", 0),
+                        ContentStatus.valueOf(string(body, "status").toUpperCase(Locale.ROOT)),
+                        longValue(body, "expectedVersion", 0)));
+                    return;
+                }
+                if ("knowledge-points".equals(segments[6])) {
+                    respond(exchange, 200, v14Store.updateKnowledgePoint(actor, segments[5], segments[7],
+                        string(body, "sectionId"), string(body, "name"), string(body, "description"),
+                        integer(body, "sortOrder", 0),
+                        ContentStatus.valueOf(string(body, "status").toUpperCase(Locale.ROOT)),
+                        longValue(body, "expectedVersion", 0)));
+                    return;
+                }
+            }
+            if (segments.length == 9 && "courses".equals(segments[4]) && "exercises".equals(segments[6])
+                && "status".equals(segments[8]) && "POST".equals(method)) {
+                Map<String, Object> body = objectRequest(exchange);
+                respond(exchange, 200, v14Store.setExerciseStatus(actor, segments[5], segments[7],
+                    ContentStatus.valueOf(string(body, "status").toUpperCase(Locale.ROOT))));
+                return;
+            }
+            if (segments.length == 8 && "classes".equals(segments[4]) && "assignments".equals(segments[6])
+                && "from-version".equals(segments[7]) && "POST".equals(method)) {
+                Map<String, Object> body = objectRequest(exchange);
+                respond(exchange, 201, v14Store.createAssignmentFromVersion(actor, segments[5],
+                    string(body, "exerciseVersionId"), string(body, "title"), string(body, "description"),
+                    instantOrNull(string(body, "dueAt")), string(body, "operationId")));
+                return;
+            }
+            if (segments.length == 9 && "classes".equals(segments[4]) && "assignments".equals(segments[6])) {
+                String classroomId = segments[5];
+                String assignmentId = segments[7];
+                if ("snapshot".equals(segments[8]) && "GET".equals(method)) {
+                    respond(exchange, 200, v14Store.assignmentSnapshot(actor, classroomId, assignmentId));
+                    return;
+                }
+                if ("feedback".equals(segments[8])) {
+                    if ("GET".equals(method)) {
+                        respond(exchange, 200, Map.of("feedback", v14Store.listFeedback(actor, classroomId, assignmentId)));
+                        return;
+                    }
+                    if ("POST".equals(method)) {
+                        Map<String, Object> body = objectRequest(exchange);
+                        respond(exchange, 200, v14Store.saveFeedback(actor, classroomId, assignmentId,
+                            string(body, "submissionId"), FeedbackStatus.valueOf(string(body, "status").toUpperCase(Locale.ROOT)),
+                            string(body, "comment"), strings(body, "knowledgePointIds"),
+                            longValue(body, "expectedVersion", 0), string(body, "operationId")));
+                        return;
+                    }
+                }
+            }
+            if (segments.length == 11 && "classes".equals(segments[4]) && "assignments".equals(segments[6])
+                && "submissions".equals(segments[8]) && "feedback-draft".equals(segments[10])
+                && "GET".equals(method)) {
+                respond(exchange, 200, v14Store.draftFeedback(actor, segments[5], segments[7], segments[9]));
+                return;
+            }
+            if (segments.length == 7 && "classes".equals(segments[4]) && "mastery".equals(segments[6])
+                && "GET".equals(method)) {
+                respond(exchange, 200, Map.of("mastery", v14Store.mastery(actor, segments[5],
+                    queryValue(exchange.getRequestURI().getRawQuery(), "studentUserId"))));
+                return;
+            }
+            if (segments.length == 5 && "notifications".equals(segments[4]) && "GET".equals(method)) {
+                String query = exchange.getRequestURI().getRawQuery();
+                respond(exchange, 200, Map.of("notifications", v14Store.notifications(actor,
+                    (int) queryLong(query, "page", 0), (int) queryLong(query, "pageSize", 50))));
+                return;
+            }
+            if (segments.length == 7 && "notifications".equals(segments[4]) && "read".equals(segments[6])
+                && "POST".equals(method)) {
+                respond(exchange, 200, v14Store.markRead(actor, segments[5]));
+                return;
+            }
+            respond(exchange, 404, errorResponse("NOT_FOUND", "API endpoint was not found."));
+        } catch (V14VersionConflictException error) {
+            respond(exchange, 409, errorResponse("CONTENT_VERSION_CONFLICT", error.getMessage()));
+        } catch (SecurityException error) {
+            respond(exchange, 403, errorResponse("FORBIDDEN", "You do not have access to this resource."));
+        } catch (IllegalArgumentException error) {
+            respond(exchange, 400, errorResponse("INVALID_REQUEST", error.getMessage()));
+        } catch (RuntimeException error) {
+            error.printStackTrace();
+            respond(exchange, 500, errorResponse("SERVER_ERROR", "v1.4 operation failed."));
         }
     }
 
@@ -456,6 +632,34 @@ public final class SqlTeacherCloudServer {
         if (exchange.getRequestHeaders().getFirst("Content-Length") == null
             || "0".equals(exchange.getRequestHeaders().getFirst("Content-Length"))) return Map.of();
         return request(exchange);
+    }
+
+    private static Map<String, Object> objectRequest(HttpExchange exchange) throws IOException {
+        return JSON.readValue(exchange.getRequestBody(), new TypeReference<>() { });
+    }
+
+    private static String string(Map<String, Object> body, String name) {
+        Object value = body.get(name);
+        return value == null ? null : String.valueOf(value);
+    }
+
+    private static int integer(Map<String, Object> body, String name, int defaultValue) {
+        Object value = body.get(name);
+        if (value == null) return defaultValue;
+        return value instanceof Number number ? number.intValue() : Integer.parseInt(String.valueOf(value));
+    }
+
+    private static long longValue(Map<String, Object> body, String name, long defaultValue) {
+        Object value = body.get(name);
+        if (value == null) return defaultValue;
+        return value instanceof Number number ? number.longValue() : Long.parseLong(String.valueOf(value));
+    }
+
+    private static List<String> strings(Map<String, Object> body, String name) {
+        Object value = body.get(name);
+        if (value == null) return List.of();
+        if (!(value instanceof List<?> values)) throw new IllegalArgumentException(name + " must be a list");
+        return values.stream().map(String::valueOf).toList();
     }
 
     private static char[] password(Map<String, String> body) { return body.getOrDefault("password", "").toCharArray(); }

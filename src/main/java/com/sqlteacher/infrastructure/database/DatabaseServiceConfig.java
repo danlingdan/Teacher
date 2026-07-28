@@ -23,8 +23,10 @@ import com.sqlteacher.application.config.SqlTeacherConfiguration;
 import com.sqlteacher.application.collaboration.AssignmentDeliveryService;
 import com.sqlteacher.application.collaboration.CloudApiClient;
 import com.sqlteacher.application.collaboration.CloudSessionService;
+import com.sqlteacher.application.collaboration.TeachingContentCache;
 import com.sqlteacher.infrastructure.cloud.JdbcAssignmentDeliveryService;
 import com.sqlteacher.infrastructure.cloud.InMemoryLearningEventOwnerContext;
+import com.sqlteacher.infrastructure.cloud.JdbcTeachingContentCache;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.beans.factory.ObjectProvider;
@@ -211,5 +213,10 @@ public class DatabaseServiceConfig {
                     api, sessions, configuration.database().appDatabasePath());
             }
         };
+    }
+
+    @Bean
+    public TeachingContentCache teachingContentCache(SqlTeacherConfiguration configuration) {
+        return new JdbcTeachingContentCache(configuration.database().appDatabasePath());
     }
 }

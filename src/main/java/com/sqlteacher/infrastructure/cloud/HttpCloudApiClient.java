@@ -23,6 +23,18 @@ import com.sqlteacher.application.collaboration.CloudSyncItem;
 import com.sqlteacher.application.collaboration.ClassAssignment;
 import com.sqlteacher.application.collaboration.ClassLearningSummary;
 import com.sqlteacher.application.collaboration.UserRole;
+import com.sqlteacher.application.collaboration.AssignmentContentSnapshot;
+import com.sqlteacher.application.collaboration.CloudNotification;
+import com.sqlteacher.application.collaboration.ContentStatus;
+import com.sqlteacher.application.collaboration.CourseBundleImportResult;
+import com.sqlteacher.application.collaboration.CourseCatalog;
+import com.sqlteacher.application.collaboration.CourseSection;
+import com.sqlteacher.application.collaboration.FeedbackDraft;
+import com.sqlteacher.application.collaboration.FeedbackStatus;
+import com.sqlteacher.application.collaboration.KnowledgeMastery;
+import com.sqlteacher.application.collaboration.KnowledgePoint;
+import com.sqlteacher.application.collaboration.SharedExerciseVersion;
+import com.sqlteacher.application.collaboration.SubmissionFeedback;
 
 import java.io.IOException;
 import java.net.URI;
@@ -218,6 +230,201 @@ public final class HttpCloudApiClient implements CloudApiClient {
         Map<String, List<CloudSyncItem>> result = request("sync/events?afterVersion=" + afterVersion, "GET", null,
             accessToken, new TypeReference<Map<String, List<CloudSyncItem>>>() { });
         return result.getOrDefault("items", List.of());
+    }
+
+    @Override
+    public CourseCatalog createCourse(String token, String name, String description) {
+        return request("v14/courses", "POST", Map.of("name", name, "description", description == null ? "" : description),
+            token, CourseCatalog.class);
+    }
+
+    @Override
+    public List<CourseCatalog> listCourses(String token) {
+        Map<String, List<CourseCatalog>> result = request("v14/courses", "GET", null, token,
+            new TypeReference<>() { });
+        return result.getOrDefault("courses", List.of());
+    }
+
+    @Override
+    public CourseCatalog updateCourse(String token, String courseId, String name, String description,
+                                      ContentStatus status, long expectedVersion) {
+        return request("v14/courses/" + courseId + "/details", "POST", Map.of(
+            "name", name, "description", description == null ? "" : description,
+            "status", status.name(), "expectedVersion", expectedVersion), token, CourseCatalog.class);
+    }
+
+    @Override
+    public CourseSection createCourseSection(String token, String courseId, String name, int sortOrder) {
+        return request("v14/courses/" + courseId + "/sections", "POST",
+            Map.of("name", name, "sortOrder", sortOrder), token, CourseSection.class);
+    }
+
+    @Override
+    public KnowledgePoint createKnowledgePoint(String token, String courseId, String sectionId, String name,
+                                               String description, int sortOrder) {
+        Map<String, Object> body = new java.util.LinkedHashMap<>();
+        if (sectionId != null && !sectionId.isBlank()) body.put("sectionId", sectionId);
+        body.put("name", name);
+        body.put("description", description == null ? "" : description);
+        body.put("sortOrder", sortOrder);
+        return request("v14/courses/" + courseId + "/knowledge-points", "POST", body, token,
+            KnowledgePoint.class);
+    }
+
+    @Override
+    public List<CourseSection> listCourseSections(String token, String courseId) {
+        Map<String, List<CourseSection>> result = request("v14/courses/" + courseId + "/sections", "GET", null,
+            token, new TypeReference<>() { });
+        return result.getOrDefault("sections", List.of());
+    }
+
+    @Override
+    public CourseSection updateCourseSection(String token, String courseId, String sectionId, String name,
+                                             int sortOrder, ContentStatus status, long expectedVersion) {
+        return request("v14/courses/" + courseId + "/sections/" + sectionId, "POST", Map.of(
+            "name", name, "sortOrder", sortOrder, "status", status.name(), "expectedVersion", expectedVersion),
+            token, CourseSection.class);
+    }
+
+    @Override
+    public List<KnowledgePoint> listKnowledgePoints(String token, String courseId) {
+        Map<String, List<KnowledgePoint>> result = request("v14/courses/" + courseId + "/knowledge-points", "GET",
+            null, token, new TypeReference<>() { });
+        return result.getOrDefault("knowledgePoints", List.of());
+    }
+
+    @Override
+    public KnowledgePoint updateKnowledgePoint(String token, String courseId, String knowledgePointId,
+                                               String sectionId, String name, String description, int sortOrder,
+                                               ContentStatus status, long expectedVersion) {
+        Map<String, Object> body = new java.util.LinkedHashMap<>();
+        if (sectionId != null && !sectionId.isBlank()) body.put("sectionId", sectionId);
+        body.put("name", name);
+        body.put("description", description == null ? "" : description);
+        body.put("sortOrder", sortOrder);
+        body.put("status", status.name());
+        body.put("expectedVersion", expectedVersion);
+        return request("v14/courses/" + courseId + "/knowledge-points/" + knowledgePointId, "POST", body,
+            token, KnowledgePoint.class);
+    }
+
+    @Override
+    public SharedExerciseVersion publishSharedExercise(String token, String courseId, String exerciseId,
+                                                       String title, String prompt, String datasetVersion,
+                                                       String evaluationRule, List<String> knowledgePointIds,
+                                                       String operationId) {
+        Map<String, Object> body = new java.util.LinkedHashMap<>();
+        if (exerciseId != null && !exerciseId.isBlank()) body.put("exerciseId", exerciseId);
+        body.put("title", title);
+        body.put("prompt", prompt);
+        body.put("datasetVersion", datasetVersion);
+        body.put("evaluationRule", evaluationRule);
+        body.put("knowledgePointIds", knowledgePointIds == null ? List.of() : knowledgePointIds);
+        body.put("operationId", operationId);
+        return request("v14/courses/" + courseId + "/exercises", "POST", body, token,
+            SharedExerciseVersion.class);
+    }
+
+    @Override
+    public List<SharedExerciseVersion> listSharedExercises(String token, String courseId, String knowledgePointId) {
+        String path = "v14/courses/" + courseId + "/exercises";
+        if (knowledgePointId != null && !knowledgePointId.isBlank()) {
+            path += "?knowledgePointId=" + URLEncoder.encode(knowledgePointId, StandardCharsets.UTF_8);
+        }
+        Map<String, List<SharedExerciseVersion>> result = request(path, "GET", null, token,
+            new TypeReference<>() { });
+        return result.getOrDefault("exercises", List.of());
+    }
+
+    @Override
+    public SharedExerciseVersion setSharedExerciseStatus(String token, String courseId, String exerciseId,
+                                                         ContentStatus status) {
+        return request("v14/courses/" + courseId + "/exercises/" + exerciseId + "/status", "POST",
+            Map.of("status", status.name()), token, SharedExerciseVersion.class);
+    }
+
+    @Override
+    public ClassAssignment createAssignmentFromVersion(String token, String classroomId, String exerciseVersionId,
+                                                       String title, String description, Instant dueAt,
+                                                       String operationId) {
+        Map<String, Object> body = new java.util.LinkedHashMap<>();
+        body.put("exerciseVersionId", exerciseVersionId);
+        body.put("title", title == null ? "" : title);
+        body.put("description", description == null ? "" : description);
+        if (dueAt != null) body.put("dueAt", dueAt.toString());
+        body.put("operationId", operationId);
+        return request("v14/classes/" + classroomId + "/assignments/from-version", "POST", body, token,
+            ClassAssignment.class);
+    }
+
+    @Override
+    public AssignmentContentSnapshot getAssignmentContentSnapshot(String token, String classroomId,
+                                                                  String assignmentId) {
+        return request("v14/classes/" + classroomId + "/assignments/" + assignmentId + "/snapshot", "GET",
+            null, token, AssignmentContentSnapshot.class);
+    }
+
+    @Override
+    public SubmissionFeedback saveSubmissionFeedback(String token, String classroomId, String assignmentId,
+                                                      String submissionId, FeedbackStatus status, String comment,
+                                                      List<String> knowledgePointIds, long expectedVersion,
+                                                      String operationId) {
+        return request("v14/classes/" + classroomId + "/assignments/" + assignmentId + "/feedback", "POST",
+            Map.of("submissionId", submissionId, "status", status.name(), "comment", comment == null ? "" : comment,
+                "knowledgePointIds", knowledgePointIds == null ? List.of() : knowledgePointIds,
+                "expectedVersion", expectedVersion, "operationId", operationId), token, SubmissionFeedback.class);
+    }
+
+    @Override
+    public List<SubmissionFeedback> listSubmissionFeedback(String token, String classroomId, String assignmentId) {
+        Map<String, List<SubmissionFeedback>> result = request(
+            "v14/classes/" + classroomId + "/assignments/" + assignmentId + "/feedback", "GET", null, token,
+            new TypeReference<>() { });
+        return result.getOrDefault("feedback", List.of());
+    }
+
+    @Override
+    public FeedbackDraft draftSubmissionFeedback(String token, String classroomId, String assignmentId,
+                                                  String submissionId) {
+        return request("v14/classes/" + classroomId + "/assignments/" + assignmentId + "/submissions/"
+            + submissionId + "/feedback-draft", "GET", null, token, FeedbackDraft.class);
+    }
+
+    @Override
+    public List<KnowledgeMastery> getKnowledgeMastery(String token, String classroomId, String studentUserId) {
+        String path = "v14/classes/" + classroomId + "/mastery";
+        if (studentUserId != null && !studentUserId.isBlank()) {
+            path += "?studentUserId=" + URLEncoder.encode(studentUserId, StandardCharsets.UTF_8);
+        }
+        Map<String, List<KnowledgeMastery>> result = request(path, "GET", null, token,
+            new TypeReference<>() { });
+        return result.getOrDefault("mastery", List.of());
+    }
+
+    @Override
+    public List<CloudNotification> listNotifications(String token, int page, int pageSize) {
+        Map<String, List<CloudNotification>> result = request("v14/notifications?page=" + page + "&pageSize=" + pageSize,
+            "GET", null, token, new TypeReference<>() { });
+        return result.getOrDefault("notifications", List.of());
+    }
+
+    @Override
+    public CloudNotification markNotificationRead(String token, String notificationId) {
+        return request("v14/notifications/" + notificationId + "/read", "POST", Map.of(), token,
+            CloudNotification.class);
+    }
+
+    @Override
+    public String exportCourseBundle(String token, String courseId) {
+        Map<String, String> result = request("v14/courses/" + courseId + "/export", "GET", null, token,
+            new TypeReference<>() { });
+        return result.getOrDefault("bundleJson", "");
+    }
+
+    @Override
+    public CourseBundleImportResult importCourseBundle(String token, String bundleJson, String operationId) {
+        return request("v14/courses/import", "POST", Map.of("bundleJson", bundleJson,
+            "operationId", operationId), token, CourseBundleImportResult.class);
     }
 
     private CloudAuthenticationService.Session authenticate(String path, Map<String, String> payload) {

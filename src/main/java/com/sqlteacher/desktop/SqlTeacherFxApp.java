@@ -21,6 +21,8 @@ import com.sqlteacher.application.collaboration.CloudSessionService;
 import com.sqlteacher.application.collaboration.CloudLearningSyncService;
 import com.sqlteacher.application.collaboration.DesktopAccessProfile;
 import com.sqlteacher.application.collaboration.AssignmentDeliveryService;
+import com.sqlteacher.application.collaboration.FeedbackDraftEnhancer;
+import com.sqlteacher.application.collaboration.TeachingContentCache;
 import com.sqlteacher.application.ai.NetworkAiSettingsService;
 import com.sqlteacher.application.metadata.DatabaseMetadataService;
 import com.sqlteacher.application.nl2sql.Nl2SqlSafetyService;
@@ -87,6 +89,8 @@ public final class SqlTeacherFxApp extends Application {
     private CloudLearningSyncService cloudLearningSyncService;
     private AssignmentDeliveryService assignmentDeliveryService;
     private NetworkAiSettingsService networkAiSettingsService;
+    private FeedbackDraftEnhancer feedbackDraftEnhancer;
+    private TeachingContentCache teachingContentCache;
     private InMemoryLearningEventOwnerContext learningEventOwnerContext;
 
     /**
@@ -121,6 +125,8 @@ public final class SqlTeacherFxApp extends Application {
             cloudLearningSyncService = context.getBean(CloudLearningSyncService.class);
             assignmentDeliveryService = context.getBean(AssignmentDeliveryService.class);
             networkAiSettingsService = context.getBean(NetworkAiSettingsService.class);
+            feedbackDraftEnhancer = context.getBean(FeedbackDraftEnhancer.class);
+            teachingContentCache = context.getBean(TeachingContentCache.class);
             learningEventOwnerContext = context.getBean(InMemoryLearningEventOwnerContext.class);
             applicationContext = context;
         } catch (RuntimeException error) {
@@ -220,6 +226,8 @@ public final class SqlTeacherFxApp extends Application {
                     cloudLearningSyncService,
                     assignmentDeliveryService,
                     networkAiSettingsService,
+                    feedbackDraftEnhancer,
+                    teachingContentCache,
                     accessProfile,
                     () -> switchToLogin(stage)
                 );

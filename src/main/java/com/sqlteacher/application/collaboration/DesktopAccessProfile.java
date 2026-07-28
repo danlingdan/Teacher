@@ -24,7 +24,8 @@ public record DesktopAccessProfile(
     private static final Set<DesktopCapability> STUDENT_CAPABILITIES = union(
         GUEST_CAPABILITIES,
         DesktopCapability.KNOWLEDGE_CENTER,
-        DesktopCapability.CLOUD_CENTER
+        DesktopCapability.CLOUD_CENTER,
+        DesktopCapability.TEACHING_CONTENT
     );
 
     private static final Set<DesktopCapability> TEACHER_CAPABILITIES = union(

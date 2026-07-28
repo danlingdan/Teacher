@@ -1,0 +1,145 @@
+package com.sqlteacher.server;
+
+import com.sqlteacher.application.collaboration.AssignmentSubmissionRequest;
+import com.sqlteacher.application.collaboration.FeedbackStatus;
+import com.sqlteacher.application.collaboration.ContentStatus;
+import com.sqlteacher.application.collaboration.CloudApiRequestException;
+import com.sqlteacher.application.collaboration.NotificationType;
+import com.sqlteacher.application.collaboration.UserRole;
+import com.sqlteacher.infrastructure.cloud.HttpCloudApiClient;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+
+import java.net.URI;
+import java.nio.file.Path;
+import java.sql.DriverManager;
+import java.time.Instant;
+import java.util.List;
+import java.util.UUID;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+
+class V14CloudApiClientIntegrationTest {
+    @TempDir Path directory;
+    private SqlTeacherCloudServer server;
+
+    @AfterEach
+    void stop() {
+        if (server != null) server.stop();
+    }
+
+    @Test
+    void shouldMapTheCompleteV14ClientWorkflow() throws Exception {
+        Path database = directory.resolve("cloud.db");
+        server = new SqlTeacherCloudServer(database, 0);
+        server.start();
+        HttpCloudApiClient client = new HttpCloudApiClient(
+            URI.create("http://127.0.0.1:" + server.port()));
+
+        var teacherSession = client.register("client-teacher@example.edu", "Teacher",
+            "strong-password-123".toCharArray());
+        var studentSession = client.register("client-student@example.edu", "Student",
+            "strong-password-123".toCharArray());
+        promoteTeacher(database, teacherSession.user().id());
+        String teacher = teacherSession.accessToken();
+        String student = studentSession.accessToken();
+
+        var classroom = client.createClass(teacher, "Client workflow");
+        client.addClassMember(teacher, classroom.id(), "client-student@example.edu", UserRole.STUDENT);
+        var course = client.createCourse(teacher, "SQL Client", "client mapping");
+        var section = client.createCourseSection(teacher, course.id(), "SELECT", 1);
+        var point = client.createKnowledgePoint(teacher, course.id(), section.id(), "过滤", "WHERE", 1);
+        assertEquals(2, client.updateCourseSection(teacher, course.id(), section.id(), "SELECT 查询", 2,
+            ContentStatus.ACTIVE, section.version()).version());
+        assertEquals(2, client.updateKnowledgePoint(teacher, course.id(), point.id(), section.id(), "WHERE 过滤",
+            "条件过滤", 2, ContentStatus.ACTIVE, point.version()).version());
+        var version = client.publishSharedExercise(teacher, course.id(), "select-1", "过滤题",
+            "筛选数据", "dataset-v1", "RESULT_SET", List.of(point.id()), UUID.randomUUID().toString());
+        assertEquals(1, client.listSharedExercises(teacher, course.id(), point.id()).size());
+        client.setSharedExerciseStatus(teacher, course.id(), version.exerciseId(), ContentStatus.INACTIVE);
+        assertThrows(CloudApiRequestException.class, () -> client.createAssignmentFromVersion(teacher,
+            classroom.id(), version.id(), "不应创建", "", Instant.now().plusSeconds(3_600),
+            UUID.randomUUID().toString()));
+        client.setSharedExerciseStatus(teacher, course.id(), version.exerciseId(), ContentStatus.ACTIVE);
+
+        var assignment = client.createAssignmentFromVersion(teacher, classroom.id(), version.id(),
+            "客户端任务", "验证映射", Instant.now().plusSeconds(3_600), UUID.randomUUID().toString());
+        assertEquals(version.id(), client.getAssignmentContentSnapshot(student, classroom.id(), assignment.id())
+            .exerciseVersionId());
+        var otherClass = client.createClass(teacher, "Other class");
+        client.addClassMember(teacher, otherClass.id(), "client-student@example.edu", UserRole.STUDENT);
+        assertThrows(CloudApiRequestException.class, () -> client.getAssignmentContentSnapshot(student,
+            otherClass.id(), assignment.id()));
+        assertTrue(client.listSubmissionFeedback(student, otherClass.id(), assignment.id()).isEmpty());
+        var submission = client.submitAssignment(student, classroom.id(), assignment.id(),
+            new AssignmentSubmissionRequest(UUID.randomUUID().toString(), false, "a".repeat(64),
+                "FILTER_MISMATCH", Instant.now()));
+        assertFalse(client.draftSubmissionFeedback(teacher, classroom.id(), assignment.id(), submission.id())
+            .aiGenerated());
+        var feedback = client.saveSubmissionFeedback(teacher, classroom.id(), assignment.id(), submission.id(),
+            FeedbackStatus.NEEDS_WORK, "检查过滤条件", List.of(point.id()), 0, UUID.randomUUID().toString());
+        assertEquals(1, feedback.version());
+        assertEquals(1, client.listSubmissionFeedback(student, classroom.id(), assignment.id()).size());
+        assertEquals(0, client.getKnowledgeMastery(student, classroom.id(), null).getFirst().masteryPercent());
+
+        var notifications = client.listNotifications(student, 0, 50);
+        assertTrue(notifications.stream().anyMatch(item -> item.type() == NotificationType.ASSIGNMENT_PUBLISHED));
+        assertTrue(notifications.stream().anyMatch(item -> item.type() == NotificationType.SUBMISSION_CONFIRMED));
+        assertTrue(notifications.stream().anyMatch(item -> item.type() == NotificationType.FEEDBACK_PUBLISHED));
+        assertFalse(client.markNotificationRead(student, notifications.getFirst().id()).unread());
+
+        String bundle = client.exportCourseBundle(teacher, course.id());
+        String importOperation = UUID.randomUUID().toString();
+        var imported = client.importCourseBundle(teacher, bundle, importOperation);
+        assertEquals(1, imported.sections());
+        assertEquals(1, imported.knowledgePoints());
+        assertEquals(1, imported.exercises());
+        assertEquals(imported.courseId(), client.importCourseBundle(teacher, bundle, importOperation).courseId());
+
+        int courseCountBeforeFailure = tableCount(database, "courses");
+        var invalidBundle = new ObjectMapper().readTree(bundle);
+        ((com.fasterxml.jackson.databind.node.ObjectNode) invalidBundle.at("/exercises/0")).put("title", "");
+        assertThrows(CloudApiRequestException.class, () -> client.importCourseBundle(teacher,
+            invalidBundle.toString(), UUID.randomUUID().toString()));
+        assertEquals(courseCountBeforeFailure, tableCount(database, "courses"));
+
+        try (var connection = DriverManager.getConnection("jdbc:sqlite:" + database);
+             var statement = connection.createStatement();
+             var row = statement.executeQuery("select max(version) from cloud_schema_version")) {
+            assertEquals(2, row.getInt(1));
+        }
+
+        try (var connection = DriverManager.getConnection("jdbc:sqlite:" + database);
+             var statement = connection.prepareStatement(
+                 "delete from classroom_members where classroom_id=? and user_id=?")) {
+            statement.setString(1, classroom.id());
+            statement.setString(2, studentSession.user().id());
+            statement.executeUpdate();
+        }
+        assertTrue(client.listNotifications(student, 0, 50).stream()
+            .noneMatch(item -> item.resourceId().equals(assignment.id())));
+    }
+
+    private void promoteTeacher(Path database, String userId) throws Exception {
+        try (var connection = DriverManager.getConnection("jdbc:sqlite:" + database);
+             var statement = connection.prepareStatement(
+                 "insert or ignore into user_roles(user_id,role) values(?, 'TEACHER')")) {
+            statement.setString(1, userId);
+            statement.executeUpdate();
+        }
+    }
+
+    private int tableCount(Path database, String table) throws Exception {
+        if (!List.of("courses").contains(table)) throw new IllegalArgumentException("Unexpected table");
+        try (var connection = DriverManager.getConnection("jdbc:sqlite:" + database);
+             var statement = connection.createStatement();
+             var row = statement.executeQuery("select count(*) from " + table)) {
+            return row.getInt(1);
+        }
+    }
+}

@@ -11,5 +11,6 @@ public enum DesktopCapability {
     AI_ASSISTANT,
     TABLE_SCHEMA,
     SETTINGS,
-    CLOUD_CENTER
+    CLOUD_CENTER,
+    TEACHING_CONTENT
 }

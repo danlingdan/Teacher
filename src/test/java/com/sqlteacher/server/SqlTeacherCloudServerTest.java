@@ -447,6 +447,108 @@ class SqlTeacherCloudServerTest {
         assertEquals(3, tableCount(database, "sync_events"));
     }
 
+    @Test
+    void shouldDeliverVersionedCourseFeedbackMasteryAndNotifications() throws Exception {
+        Path database = start();
+        JsonNode teacher = register("v14-teacher@example.edu", "V14 Teacher");
+        JsonNode student = register("v14-student@example.edu", "V14 Student");
+        promoteTeacher(database, teacher.at("/user/id").asText());
+        String teacherToken = teacher.get("accessToken").asText();
+        String studentToken = student.get("accessToken").asText();
+        String studentId = student.at("/user/id").asText();
+
+        String classroomId = post("classes", teacherToken, "{\"name\":\"V14 class\"}").get("id").asText();
+        post("classes/" + classroomId + "/members", teacherToken,
+            "{\"email\":\"v14-student@example.edu\",\"role\":\"STUDENT\"}");
+
+        JsonNode course = post("v14/courses", teacherToken,
+            "{\"name\":\"SQL 基础\",\"description\":\"共享课程\"}");
+        String courseId = course.get("id").asText();
+        JsonNode section = post("v14/courses/" + courseId + "/sections", teacherToken,
+            "{\"name\":\"查询基础\",\"sortOrder\":1}");
+        JsonNode point = post("v14/courses/" + courseId + "/knowledge-points", teacherToken,
+            JSON.writeValueAsString(java.util.Map.of("sectionId", section.get("id").asText(),
+                "name", "WHERE 过滤", "description", "条件过滤", "sortOrder", 1)));
+        String pointId = point.get("id").asText();
+
+        java.util.Map<String, Object> exerciseBody = new java.util.LinkedHashMap<>();
+        exerciseBody.put("exerciseId", "select-1");
+        exerciseBody.put("title", "筛选学生");
+        exerciseBody.put("prompt", "查询分数大于 80 的学生");
+        exerciseBody.put("datasetVersion", "student-v1");
+        exerciseBody.put("evaluationRule", "RESULT_SET");
+        exerciseBody.put("knowledgePointIds", java.util.List.of(pointId));
+        exerciseBody.put("operationId", "publish-exercise-0001");
+        JsonNode versionOne = post("v14/courses/" + courseId + "/exercises", teacherToken,
+            JSON.writeValueAsString(exerciseBody));
+        JsonNode repeated = post("v14/courses/" + courseId + "/exercises", teacherToken,
+            JSON.writeValueAsString(exerciseBody));
+        assertEquals(versionOne.get("id").asText(), repeated.get("id").asText());
+
+        JsonNode assignment = post("v14/classes/" + classroomId + "/assignments/from-version", teacherToken,
+            JSON.writeValueAsString(java.util.Map.of("exerciseVersionId", versionOne.get("id").asText(),
+                "title", "第一次课堂任务", "description", "完成筛选", "operationId", "assignment-v14-0001",
+                "dueAt", Instant.now().plusSeconds(7_200).toString())));
+        String assignmentId = assignment.get("id").asText();
+        JsonNode snapshot = JSON.readTree(getText(
+            "v14/classes/" + classroomId + "/assignments/" + assignmentId + "/snapshot", studentToken));
+        assertEquals(versionOne.get("id").asText(), snapshot.get("exerciseVersionId").asText());
+        String originalSnapshotHash = snapshot.get("snapshotHash").asText();
+
+        JsonNode notifications = JSON.readTree(getText("v14/notifications?page=0&pageSize=50", studentToken));
+        assertTrue(java.util.stream.StreamSupport.stream(notifications.get("notifications").spliterator(), false)
+            .anyMatch(item -> "ASSIGNMENT_PUBLISHED".equals(item.get("type").asText())));
+
+        JsonNode submission = post("classes/" + classroomId + "/assignments/" + assignmentId + "/submissions",
+            studentToken, submissionJson("v14-submit-0001", false, "f", "FILTER_MISMATCH"));
+        String submissionId = submission.get("id").asText();
+        JsonNode draft = JSON.readTree(getText("v14/classes/" + classroomId + "/assignments/" + assignmentId
+            + "/submissions/" + submissionId + "/feedback-draft", teacherToken));
+        assertTrue(draft.get("text").asText().contains("FILTER_MISMATCH"));
+        assertEquals(false, draft.get("aiGenerated").asBoolean());
+
+        JsonNode feedback = post("v14/classes/" + classroomId + "/assignments/" + assignmentId + "/feedback",
+            teacherToken, JSON.writeValueAsString(java.util.Map.of("submissionId", submissionId,
+                "status", "NEEDS_WORK", "comment", "请检查 WHERE 条件", "knowledgePointIds", java.util.List.of(pointId),
+                "expectedVersion", 0, "operationId", "feedback-v14-0001")));
+        assertEquals(1, feedback.get("version").asLong());
+        assertEquals(409, postStatus("v14/classes/" + classroomId + "/assignments/" + assignmentId + "/feedback",
+            teacherToken, JSON.writeValueAsString(java.util.Map.of("submissionId", submissionId,
+                "status", "REVIEWED", "comment", "stale", "knowledgePointIds", java.util.List.of(pointId),
+                "expectedVersion", 0, "operationId", "feedback-v14-stale"))));
+
+        JsonNode studentFeedback = JSON.readTree(getText(
+            "v14/classes/" + classroomId + "/assignments/" + assignmentId + "/feedback", studentToken));
+        assertEquals(1, studentFeedback.get("feedback").size());
+        JsonNode mastery = JSON.readTree(getText(
+            "v14/classes/" + classroomId + "/mastery?studentUserId=" + studentId, teacherToken));
+        assertEquals(1, mastery.get("mastery").size());
+        assertEquals(0, mastery.at("/mastery/0/masteryPercent").asInt());
+        assertEquals(1, mastery.at("/mastery/0/recommendations").size());
+
+        exerciseBody.put("prompt", "查询分数至少为 80 的学生");
+        exerciseBody.put("operationId", "publish-exercise-0002");
+        JsonNode versionTwo = post("v14/courses/" + courseId + "/exercises", teacherToken,
+            JSON.writeValueAsString(exerciseBody));
+        assertEquals(2, versionTwo.get("version").asInt());
+        JsonNode unchanged = JSON.readTree(getText(
+            "v14/classes/" + classroomId + "/assignments/" + assignmentId + "/snapshot", studentToken));
+        assertEquals(originalSnapshotHash, unchanged.get("snapshotHash").asText());
+
+        JsonNode bundle = JSON.readTree(getText("v14/courses/" + courseId + "/export", teacherToken));
+        JsonNode imported = post("v14/courses/import", teacherToken, JSON.writeValueAsString(java.util.Map.of(
+            "bundleJson", bundle.get("bundleJson").asText(), "operationId", "import-v14-0001")));
+        assertEquals(1, imported.get("sections").asInt());
+        assertEquals(1, imported.get("knowledgePoints").asInt());
+        assertEquals(1, imported.get("exercises").asInt());
+
+        JsonNode allNotifications = JSON.readTree(getText("v14/notifications?page=0&pageSize=50", studentToken));
+        assertTrue(allNotifications.get("notifications").size() >= 3);
+        String notificationId = allNotifications.at("/notifications/0/id").asText();
+        JsonNode read = post("v14/notifications/" + notificationId + "/read", studentToken, "{}");
+        assertTrue(!read.get("readAt").isNull());
+    }
+
     private Path start() throws Exception {
         Path database = directory.resolve("cloud.db");
         server = new SqlTeacherCloudServer(database, 0);

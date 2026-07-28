@@ -129,4 +129,110 @@ public interface CloudApiClient {
     int uploadSyncItems(String accessToken, List<CloudSyncItem> items);
 
     List<CloudSyncItem> downloadSyncItems(String accessToken, long afterVersion);
+
+    default CourseCatalog createCourse(String accessToken, String name, String description) {
+        throw new UnsupportedOperationException("Course content is unavailable");
+    }
+
+    default List<CourseCatalog> listCourses(String accessToken) {
+        throw new UnsupportedOperationException("Course content is unavailable");
+    }
+
+    default CourseCatalog updateCourse(String accessToken, String courseId, String name, String description,
+                                       ContentStatus status, long expectedVersion) {
+        throw new UnsupportedOperationException("Course content is unavailable");
+    }
+
+    default CourseSection createCourseSection(String accessToken, String courseId, String name, int sortOrder) {
+        throw new UnsupportedOperationException("Course content is unavailable");
+    }
+
+    default KnowledgePoint createKnowledgePoint(String accessToken, String courseId, String sectionId,
+                                                String name, String description, int sortOrder) {
+        throw new UnsupportedOperationException("Course content is unavailable");
+    }
+
+    default List<CourseSection> listCourseSections(String accessToken, String courseId) {
+        throw new UnsupportedOperationException("Course content is unavailable");
+    }
+
+    default CourseSection updateCourseSection(String accessToken, String courseId, String sectionId, String name,
+                                              int sortOrder, ContentStatus status, long expectedVersion) {
+        throw new UnsupportedOperationException("Course content is unavailable");
+    }
+
+    default List<KnowledgePoint> listKnowledgePoints(String accessToken, String courseId) {
+        throw new UnsupportedOperationException("Course content is unavailable");
+    }
+
+    default KnowledgePoint updateKnowledgePoint(String accessToken, String courseId, String knowledgePointId,
+                                                String sectionId, String name, String description, int sortOrder,
+                                                ContentStatus status, long expectedVersion) {
+        throw new UnsupportedOperationException("Course content is unavailable");
+    }
+
+    default SharedExerciseVersion publishSharedExercise(String accessToken, String courseId, String exerciseId,
+                                                        String title, String prompt, String datasetVersion,
+                                                        String evaluationRule, List<String> knowledgePointIds,
+                                                        String operationId) {
+        throw new UnsupportedOperationException("Shared exercises are unavailable");
+    }
+
+    default List<SharedExerciseVersion> listSharedExercises(String accessToken, String courseId,
+                                                            String knowledgePointId) {
+        throw new UnsupportedOperationException("Shared exercises are unavailable");
+    }
+
+    default SharedExerciseVersion setSharedExerciseStatus(String accessToken, String courseId, String exerciseId,
+                                                          ContentStatus status) {
+        throw new UnsupportedOperationException("Shared exercises are unavailable");
+    }
+
+    default ClassAssignment createAssignmentFromVersion(String accessToken, String classroomId,
+                                                        String exerciseVersionId, String title,
+                                                        String description, Instant dueAt, String operationId) {
+        throw new UnsupportedOperationException("Versioned assignment content is unavailable");
+    }
+
+    default AssignmentContentSnapshot getAssignmentContentSnapshot(String accessToken, String classroomId,
+                                                                   String assignmentId) {
+        throw new UnsupportedOperationException("Assignment snapshots are unavailable");
+    }
+
+    default SubmissionFeedback saveSubmissionFeedback(String accessToken, String classroomId, String assignmentId,
+                                                       String submissionId, FeedbackStatus status, String comment,
+                                                       List<String> knowledgePointIds, long expectedVersion,
+                                                       String operationId) {
+        throw new UnsupportedOperationException("Submission feedback is unavailable");
+    }
+
+    default List<SubmissionFeedback> listSubmissionFeedback(String accessToken, String classroomId,
+                                                            String assignmentId) {
+        throw new UnsupportedOperationException("Submission feedback is unavailable");
+    }
+
+    default FeedbackDraft draftSubmissionFeedback(String accessToken, String classroomId, String assignmentId,
+                                                   String submissionId) {
+        throw new UnsupportedOperationException("Feedback drafts are unavailable");
+    }
+
+    default List<KnowledgeMastery> getKnowledgeMastery(String accessToken, String classroomId, String studentUserId) {
+        throw new UnsupportedOperationException("Knowledge mastery is unavailable");
+    }
+
+    default List<CloudNotification> listNotifications(String accessToken, int page, int pageSize) {
+        throw new UnsupportedOperationException("Notifications are unavailable");
+    }
+
+    default CloudNotification markNotificationRead(String accessToken, String notificationId) {
+        throw new UnsupportedOperationException("Notifications are unavailable");
+    }
+
+    default String exportCourseBundle(String accessToken, String courseId) {
+        throw new UnsupportedOperationException("Course export is unavailable");
+    }
+
+    default CourseBundleImportResult importCourseBundle(String accessToken, String bundleJson, String operationId) {
+        throw new UnsupportedOperationException("Course import is unavailable");
+    }
 }

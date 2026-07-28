@@ -9,6 +9,7 @@ import com.sqlteacher.application.config.SqlTeacherConfiguration;
 import com.sqlteacher.application.collaboration.CloudApiClient;
 import com.sqlteacher.application.collaboration.CloudSessionService;
 import com.sqlteacher.application.collaboration.CloudLearningSyncService;
+import com.sqlteacher.application.collaboration.FeedbackDraftEnhancer;
 import com.sqlteacher.application.event.LearningEventQueryService;
 import com.sqlteacher.application.event.LearningEventRecorder;
 import com.sqlteacher.application.connection.ConnectionManagementService;
@@ -27,6 +28,7 @@ import com.sqlteacher.infrastructure.ai.OllamaAiStatusService;
 import com.sqlteacher.infrastructure.ai.OllamaModelSelectionService;
 import com.sqlteacher.infrastructure.ai.InMemoryNetworkAiSettingsService;
 import com.sqlteacher.infrastructure.ai.SwitchableAiModelProvider;
+import com.sqlteacher.infrastructure.ai.SafeAiFeedbackDraftEnhancer;
 import com.sqlteacher.infrastructure.config.PropertiesAppConfigurationService;
 import com.sqlteacher.infrastructure.cloud.HttpCloudApiClient;
 import com.sqlteacher.infrastructure.cloud.PersistentCloudSessionService;
@@ -69,6 +71,11 @@ public class SqlTeacherApplicationConfig {
     public AiModelProvider aiModelProvider(SqlTeacherConfiguration properties, AiStatusService aiStatusService,
             NetworkAiSettingsService networkSettings) {
         return new SwitchableAiModelProvider(new OllamaAiModelProvider(properties.ai(), aiStatusService), networkSettings);
+    }
+
+    @Bean
+    public FeedbackDraftEnhancer feedbackDraftEnhancer(AiModelProvider aiModelProvider) {
+        return new SafeAiFeedbackDraftEnhancer(aiModelProvider);
     }
 
     @Bean(destroyMethod = "clear")

@@ -22,6 +22,8 @@ import com.sqlteacher.application.collaboration.DesktopAccessProfile;
 import com.sqlteacher.application.collaboration.DesktopCapability;
 import com.sqlteacher.application.collaboration.AssignmentDeliveryService;
 import com.sqlteacher.application.collaboration.AssignmentTaskContext;
+import com.sqlteacher.application.collaboration.FeedbackDraftEnhancer;
+import com.sqlteacher.application.collaboration.TeachingContentCache;
 import com.sqlteacher.application.ai.NetworkAiSettingsService;
 import com.sqlteacher.application.metadata.DatabaseMetadataService;
 import com.sqlteacher.application.nl2sql.Nl2SqlSafetyService;
@@ -90,6 +92,7 @@ public final class MainWindowController {
     private static final String EXERCISE_PROGRESS_FXML = "/fxml/exercise-progress.fxml";
     private static final String KNOWLEDGE_CENTER_FXML = "/fxml/knowledge-center.fxml";
     private static final String CLOUD_CENTER_FXML = "/fxml/cloud-center.fxml";
+    private static final String TEACHING_CONTENT_FXML = "/fxml/teaching-content.fxml";
 
     /** SQL 执行服务（应用层接口）；运行期实现由 Spring 提供，向下注入到 SQL 练习页控制器。 */
     private final SqlExecutionService sqlExecutionService;
@@ -124,6 +127,8 @@ public final class MainWindowController {
     private final AssignmentDeliveryService assignmentDeliveryService;
     private final NetworkAiSettingsService networkAiSettingsService;
     private final DesktopAccessProfile accessProfile;
+    private final FeedbackDraftEnhancer feedbackDraftEnhancer;
+    private final TeachingContentCache teachingContentCache;
     private final Runnable switchIdentityAction;
 
     /**
@@ -163,6 +168,8 @@ public final class MainWindowController {
     private Button knowledgeCenterNavButton;
     @FXML
     private Button cloudCenterNavButton;
+    @FXML
+    private Button teachingContentNavButton;
     @FXML
     private Label identityLabel;
 
@@ -204,6 +211,7 @@ public final class MainWindowController {
     private Node exerciseProgressPage;
     private Node knowledgeCenterPage;
     private Node cloudCenterPage;
+    private Node teachingContentPage;
 
     /**
      * 构造注入 SQL 执行服务、表元数据服务、NL2SQL 服务与 SQL 风险分析服务，并初始化表名选中回调。
@@ -236,6 +244,8 @@ public final class MainWindowController {
                                 CloudLearningSyncService cloudLearningSyncService,
                                 AssignmentDeliveryService assignmentDeliveryService,
                                 NetworkAiSettingsService networkAiSettingsService,
+                                FeedbackDraftEnhancer feedbackDraftEnhancer,
+                                TeachingContentCache teachingContentCache,
                                 DesktopAccessProfile accessProfile,
                                 Runnable switchIdentityAction) {
         this.sqlExecutionService = Objects.requireNonNull(sqlExecutionService, "sqlExecutionService must not be null");
@@ -264,6 +274,8 @@ public final class MainWindowController {
         this.cloudLearningSyncService = Objects.requireNonNull(cloudLearningSyncService);
         this.assignmentDeliveryService = Objects.requireNonNull(assignmentDeliveryService);
         this.networkAiSettingsService = Objects.requireNonNull(networkAiSettingsService);
+        this.feedbackDraftEnhancer = Objects.requireNonNull(feedbackDraftEnhancer);
+        this.teachingContentCache = Objects.requireNonNull(teachingContentCache);
         this.accessProfile = Objects.requireNonNull(accessProfile, "accessProfile must not be null");
         this.switchIdentityAction = Objects.requireNonNull(switchIdentityAction, "switchIdentityAction must not be null");
         this.fillSqlCallback = sql -> {
@@ -298,6 +310,7 @@ public final class MainWindowController {
         applyCapability(tableSchemaNavButton, DesktopCapability.TABLE_SCHEMA);
         applyCapability(settingsNavButton, DesktopCapability.SETTINGS);
         applyCapability(cloudCenterNavButton, DesktopCapability.CLOUD_CENTER);
+        applyCapability(teachingContentNavButton, DesktopCapability.TEACHING_CONTENT);
     }
 
     private void applyCapability(Button button, DesktopCapability capability) {
@@ -438,6 +451,13 @@ public final class MainWindowController {
         showPage(cloudCenterPage());
     }
 
+    @FXML
+    private void onNavigateTeachingContent() {
+        requireCapability(DesktopCapability.TEACHING_CONTENT);
+        selectNav(teachingContentNavButton);
+        showPage(teachingContentPage());
+    }
+
     /**
      * 切换导航选中态：清除所有导航按钮的选中样式，仅对目标按钮追加选中样式。
      */
@@ -456,7 +476,7 @@ public final class MainWindowController {
             homeNavButton, sqlPracticeNavButton, studentExerciseNavButton, exerciseManagementNavButton,
             exerciseProgressNavButton,
             knowledgeCenterNavButton, aiAssistantNavButton, tableSchemaNavButton, settingsNavButton,
-            cloudCenterNavButton
+            cloudCenterNavButton, teachingContentNavButton
         );
     }
 
@@ -754,6 +774,27 @@ public final class MainWindowController {
             }
         }
         return cloudCenterPage;
+    }
+
+    private Node teachingContentPage() {
+        if (teachingContentPage == null) {
+            URL fxml = MainWindowController.class.getResource(TEACHING_CONTENT_FXML);
+            if (fxml == null) throw new IllegalStateException("Missing FXML resource: " + TEACHING_CONTENT_FXML);
+            FXMLLoader loader = new FXMLLoader(fxml);
+            loader.setControllerFactory(type -> {
+                if (type == TeachingContentController.class) {
+                    return new TeachingContentController(cloudApiClient, cloudSessionService, accessProfile,
+                        feedbackDraftEnhancer, teachingContentCache);
+                }
+                throw new IllegalStateException("Unexpected controller type for teaching content: " + type);
+            });
+            try {
+                teachingContentPage = loader.load();
+            } catch (IOException error) {
+                throw new IllegalStateException("Failed to load " + TEACHING_CONTENT_FXML, error);
+            }
+        }
+        return teachingContentPage;
     }
 
     private void openAssignment(AssignmentTaskContext task) {

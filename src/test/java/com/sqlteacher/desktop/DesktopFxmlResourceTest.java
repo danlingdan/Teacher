@@ -23,6 +23,7 @@ class DesktopFxmlResourceTest {
         assertWellFormed("/fxml/exercise-progress.fxml");
         assertWellFormed("/fxml/knowledge-center.fxml");
         assertWellFormed("/fxml/cloud-center.fxml");
+        assertWellFormed("/fxml/teaching-content.fxml");
         assertWellFormed("/fxml/login-gate.fxml");
     }
 

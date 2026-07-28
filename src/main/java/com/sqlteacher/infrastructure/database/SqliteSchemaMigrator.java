@@ -229,6 +229,25 @@ final class SqliteSchemaMigrator {
                     on assignment_submission_queue(account_id, status, next_retry_at)
                     """
             )
+        ),
+        new Migration(
+            6,
+            "Create account-isolated v1.4 teaching content cache",
+            List.of(
+                """
+                    create table teaching_content_cache (
+                        account_id text not null,
+                        cache_key text not null,
+                        payload_json text not null,
+                        updated_at text not null,
+                        primary key(account_id, cache_key)
+                    )
+                    """,
+                """
+                    create index teaching_content_cache_updated
+                    on teaching_content_cache(account_id, updated_at desc)
+                    """
+            )
         )
     );
 
