@@ -24,6 +24,12 @@ class HttpCloudApiClientTest {
         {"id":"assignment-1","classroomId":"class-1","exerciseId":"select-1",\
         "title":"查询练习","createdAt":"2026-07-22T00:00:00Z"}
         """;
+    private static final String SUBMISSION_JSON = """
+        {"id":"submission-1","operationId":"operation-0001","classroomId":"class-1",\
+        "assignmentId":"assignment-1","userId":"student-1","attemptNumber":1,"status":"PASSED",\
+        "resultHash":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",\
+        "submittedAt":"2026-07-28T00:00:00Z"}
+        """;
 
     private HttpServer server;
     private HttpCloudApiClient client;
@@ -82,6 +88,18 @@ class HttpCloudApiClientTest {
     }
 
     @Test
+    void shouldSendOnlyDeterministicSubmissionSummary() {
+        var submission = client.submitAssignment("student-token", "class-1", "assignment-1",
+            new com.sqlteacher.application.collaboration.AssignmentSubmissionRequest(
+                "operation-0001", true, "a".repeat(64), null, Instant.parse("2026-07-28T00:00:00Z")));
+
+        assertEquals("operation-0001", requestBody.get("operationId").asText());
+        assertEquals("a".repeat(64), requestBody.get("resultHash").asText());
+        assertEquals(null, requestBody.get("sql"));
+        assertEquals(1, submission.attemptNumber());
+    }
+
+    @Test
     void shouldAllowHttpsAndLoopbackHttpEndpointsOnly() {
         assertDoesNotThrow(() -> new HttpCloudApiClient(URI.create("https://api.example.edu")));
         assertDoesNotThrow(() -> new HttpCloudApiClient(URI.create("http://localhost:18080")));
@@ -94,9 +112,10 @@ class HttpCloudApiClientTest {
         authorization = exchange.getRequestHeaders().getFirst("Authorization");
         byte[] requestBytes = exchange.getRequestBody().readAllBytes();
         requestBody = requestBytes.length == 0 ? null : JSON.readTree(requestBytes);
-        String response = "GET".equals(requestMethod)
-            ? "{\"assignments\":[" + ASSIGNMENT_JSON + "]}"
-            : ASSIGNMENT_JSON;
+        boolean submissionRequest = exchange.getRequestURI().getPath().endsWith("/submissions");
+        String response = submissionRequest
+            ? ("GET".equals(requestMethod) ? "{\"submissions\":[" + SUBMISSION_JSON + "]}" : SUBMISSION_JSON)
+            : ("GET".equals(requestMethod) ? "{\"assignments\":[" + ASSIGNMENT_JSON + "]}" : ASSIGNMENT_JSON);
         byte[] responseBytes = response.getBytes(StandardCharsets.UTF_8);
         exchange.getResponseHeaders().set("Content-Type", "application/json; charset=utf-8");
         exchange.sendResponseHeaders(200, responseBytes.length);

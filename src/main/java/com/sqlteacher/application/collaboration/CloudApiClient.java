@@ -66,6 +66,16 @@ public interface CloudApiClient {
 
     List<ClassAssignment> listAssignments(String accessToken, String classroomId);
 
+    default AssignmentSubmission submitAssignment(String accessToken, String classroomId, String assignmentId,
+                                                   AssignmentSubmissionRequest request) {
+        throw new UnsupportedOperationException("Assignment submissions are unavailable");
+    }
+
+    default List<AssignmentSubmission> listOwnAssignmentSubmissions(String accessToken, String classroomId,
+                                                                    String assignmentId) {
+        throw new UnsupportedOperationException("Assignment submissions are unavailable");
+    }
+
     ClassLearningSummary getClassLearningSummary(String accessToken, String classroomId);
 
     String exportClassLearningCsv(String accessToken, String classroomId);

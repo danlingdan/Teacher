@@ -2,9 +2,15 @@ package com.sqlteacher.server;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
 import com.sqlteacher.application.collaboration.AuthenticatedUser;
 import com.sqlteacher.application.collaboration.AssignmentStatus;
+import com.sqlteacher.application.collaboration.AssignmentSubmission;
+import com.sqlteacher.application.collaboration.AssignmentSubmissionRequest;
+import com.sqlteacher.application.collaboration.AssignmentSubmissionRejectedException;
+import com.sqlteacher.application.collaboration.AssignmentSubmissionStatus;
 import com.sqlteacher.application.collaboration.AssignmentVersionConflictException;
+import com.sqlteacher.application.collaboration.SubmissionOperationConflictException;
 import com.sqlteacher.application.collaboration.ClassroomService;
 import com.sqlteacher.application.collaboration.CloudAuthenticationService;
 import com.sqlteacher.application.collaboration.CloudSyncItem;
@@ -46,7 +52,8 @@ import javax.crypto.spec.PBEKeySpec;
  * desktop database credentials and BYO-AI keys never cross this boundary.
  */
 public final class SqlTeacherCloudServer {
-    private static final ObjectMapper JSON = new ObjectMapper().findAndRegisterModules();
+    private static final ObjectMapper JSON = new ObjectMapper().findAndRegisterModules()
+        .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
     private static final int TOKEN_BYTES = 32;
     private static final int SALT_BYTES = 16;
     private static final int PBKDF2_ITERATIONS = 310_000;
@@ -188,6 +195,22 @@ public final class SqlTeacherCloudServer {
                     positiveLong(body, "expectedVersion")));
                 return;
             }
+            if (segments.length == 8 && "assignments".equals(segments[5]) && "submissions".equals(segments[7])) {
+                if ("POST".equals(exchange.getRequestMethod())) {
+                    Map<String, String> body = request(exchange);
+                    AssignmentSubmissionRequest submission = new AssignmentSubmissionRequest(
+                        body.get("operationId"), requiredBoolean(body, "passed"), body.get("resultHash"),
+                        body.get("errorCode"), instantOrNull(body.get("clientCompletedAt"))
+                    );
+                    respond(exchange, 201, store.submitAssignment(actor, segments[4], segments[6], submission));
+                    return;
+                }
+                if ("GET".equals(exchange.getRequestMethod())) {
+                    respond(exchange, 200, Map.of("submissions",
+                        store.listOwnSubmissions(actor, segments[4], segments[6])));
+                    return;
+                }
+            }
             if (segments.length == 8 && "assignments".equals(segments[5]) && "status".equals(segments[7])
                 && "POST".equals(exchange.getRequestMethod())) {
                 Map<String, String> body = request(exchange);
@@ -213,6 +236,10 @@ public final class SqlTeacherCloudServer {
         } catch (AssignmentVersionConflictException error) {
             respond(exchange, 409, Map.of("code", "ASSIGNMENT_VERSION_CONFLICT", "message", error.getMessage(),
                 "latest", error.latest()));
+        } catch (SubmissionOperationConflictException error) {
+            respond(exchange, 409, errorResponse("SUBMISSION_OPERATION_CONFLICT", error.getMessage()));
+        } catch (AssignmentSubmissionRejectedException error) {
+            respond(exchange, 409, errorResponse(error.code(), error.getMessage()));
         } catch (SecurityException error) { respond(exchange, 403, errorResponse("FORBIDDEN", "You do not have access to this resource.")); }
         catch (IllegalArgumentException error) { respond(exchange, 400, errorResponse("INVALID_REQUEST", error.getMessage())); }
         catch (RuntimeException error) { error.printStackTrace(); respond(exchange, 500, errorResponse("SERVER_ERROR", "Classroom operation failed.")); }
@@ -287,6 +314,14 @@ public final class SqlTeacherCloudServer {
         }
     }
 
+    private static boolean requiredBoolean(Map<String, String> body, String name) {
+        String value = body.get(name);
+        if (!"true".equalsIgnoreCase(value) && !"false".equalsIgnoreCase(value)) {
+            throw new IllegalArgumentException(name + " must be true or false");
+        }
+        return Boolean.parseBoolean(value);
+    }
+
     private static Map<String, String> request(HttpExchange exchange) throws IOException {
         Map<String, Object> decoded = JSON.readValue(exchange.getRequestBody(), new TypeReference<>() { });
         Map<String, String> result = new LinkedHashMap<>();
@@ -344,6 +379,8 @@ public final class SqlTeacherCloudServer {
     private static final class CloudStore implements CloudAuthenticationService, ClassroomService {
         private static final String ASSIGNMENT_COLUMNS = "id,exercise_id,title,description,created_at,status,"
             + "due_at,updated_at,published_at,copied_from_assignment_id,version";
+        private static final String SUBMISSION_COLUMNS = "id,operation_id,classroom_id,assignment_id,user_id,"
+            + "attempt_number,status,result_hash,error_code,client_completed_at,submitted_at";
         private final Path database;
         private final SecureRandom random = new SecureRandom();
 
@@ -696,6 +733,121 @@ public final class SqlTeacherCloudServer {
                 statement.executeUpdate();
             } catch (SQLException error) { throw database(error); }
         }
+
+        AssignmentSubmission submitAssignment(AuthenticatedUser actor, String classroomId, String assignmentId,
+                                              AssignmentSubmissionRequest request) {
+            requireStudent(actor, classroomId);
+            closeExpiredAssignments(classroomId);
+            try (Connection connection = open()) {
+                ClassAssignment assignment = assignment(connection, classroomId, assignmentId);
+                ensureSubmissionOpen(assignment);
+                AssignmentSubmission existing = submissionByOperation(connection, actor.id(), request.operationId());
+                if (existing != null) {
+                    if (!existing.assignmentId().equals(assignmentId)) {
+                        throw new SubmissionOperationConflictException();
+                    }
+                    return existing;
+                }
+                String id = UUID.randomUUID().toString();
+                Instant submittedAt = Instant.now();
+                try (PreparedStatement statement = connection.prepareStatement(
+                    "insert into assignment_submissions(id,operation_id,classroom_id,assignment_id,user_id,"
+                        + "attempt_number,status,result_hash,error_code,client_completed_at,submitted_at) "
+                        + "values(?,?,?,?,?,(select coalesce(max(attempt_number),0)+1 from assignment_submissions "
+                        + "where assignment_id=? and user_id=?),?,?,?,?,?) "
+                        + "on conflict(user_id,operation_id) do nothing")) {
+                    statement.setString(1, id);
+                    statement.setString(2, request.operationId());
+                    statement.setString(3, classroomId);
+                    statement.setString(4, assignmentId);
+                    statement.setString(5, actor.id());
+                    statement.setString(6, assignmentId);
+                    statement.setString(7, actor.id());
+                    statement.setString(8, request.passed()
+                        ? AssignmentSubmissionStatus.PASSED.name() : AssignmentSubmissionStatus.FAILED.name());
+                    statement.setString(9, request.resultHash());
+                    statement.setString(10, request.errorCode());
+                    statement.setString(11, request.clientCompletedAt() == null
+                        ? null : request.clientCompletedAt().toString());
+                    statement.setString(12, submittedAt.toString());
+                    if (statement.executeUpdate() == 0) {
+                        AssignmentSubmission concurrent = submissionByOperation(
+                            connection, actor.id(), request.operationId());
+                        if (concurrent == null || !concurrent.assignmentId().equals(assignmentId)) {
+                            throw new SubmissionOperationConflictException();
+                        }
+                        return concurrent;
+                    }
+                }
+                return submissionById(connection, id);
+            } catch (SQLException error) { throw database(error); }
+        }
+
+        List<AssignmentSubmission> listOwnSubmissions(AuthenticatedUser actor, String classroomId,
+                                                      String assignmentId) {
+            requireStudent(actor, classroomId);
+            try (Connection connection = open()) {
+                assignment(connection, classroomId, assignmentId);
+                List<AssignmentSubmission> submissions = new ArrayList<>();
+                try (PreparedStatement statement = connection.prepareStatement(
+                    "select " + SUBMISSION_COLUMNS + " from assignment_submissions "
+                        + "where classroom_id=? and assignment_id=? and user_id=? order by attempt_number")) {
+                    statement.setString(1, classroomId);
+                    statement.setString(2, assignmentId);
+                    statement.setString(3, actor.id());
+                    try (ResultSet rows = statement.executeQuery()) {
+                        while (rows.next()) submissions.add(submission(rows));
+                    }
+                }
+                return List.copyOf(submissions);
+            } catch (SQLException error) { throw database(error); }
+        }
+
+        private void ensureSubmissionOpen(ClassAssignment assignment) {
+            if (assignment.status() == AssignmentStatus.PUBLISHED
+                && (assignment.dueAt() == null || assignment.dueAt().isAfter(Instant.now()))) return;
+            String code = switch (assignment.status()) {
+                case DRAFT -> "ASSIGNMENT_NOT_PUBLISHED";
+                case PUBLISHED, CLOSED -> "ASSIGNMENT_CLOSED";
+                case WITHDRAWN -> "ASSIGNMENT_WITHDRAWN";
+                case ARCHIVED -> "ASSIGNMENT_ARCHIVED";
+            };
+            throw new AssignmentSubmissionRejectedException(code, "Assignment does not accept submissions");
+        }
+
+        private AssignmentSubmission submissionByOperation(Connection connection, String userId, String operationId)
+            throws SQLException {
+            try (PreparedStatement statement = connection.prepareStatement(
+                "select " + SUBMISSION_COLUMNS + " from assignment_submissions where user_id=? and operation_id=?")) {
+                statement.setString(1, userId);
+                statement.setString(2, operationId);
+                try (ResultSet row = statement.executeQuery()) {
+                    return row.next() ? submission(row) : null;
+                }
+            }
+        }
+
+        private AssignmentSubmission submissionById(Connection connection, String id) throws SQLException {
+            try (PreparedStatement statement = connection.prepareStatement(
+                "select " + SUBMISSION_COLUMNS + " from assignment_submissions where id=?")) {
+                statement.setString(1, id);
+                try (ResultSet row = statement.executeQuery()) {
+                    if (!row.next()) throw new IllegalStateException("Submission insert did not return a row");
+                    return submission(row);
+                }
+            }
+        }
+
+        private AssignmentSubmission submission(ResultSet row) throws SQLException {
+            String clientCompletedAt = row.getString("client_completed_at");
+            return new AssignmentSubmission(
+                row.getString("id"), row.getString("operation_id"), row.getString("classroom_id"),
+                row.getString("assignment_id"), row.getString("user_id"), row.getInt("attempt_number"),
+                AssignmentSubmissionStatus.valueOf(row.getString("status")), row.getString("result_hash"),
+                row.getString("error_code"), clientCompletedAt == null ? null : Instant.parse(clientCompletedAt),
+                Instant.parse(row.getString("submitted_at"))
+            );
+        }
         com.sqlteacher.application.collaboration.ClassLearningSummary classLearningSummary(AuthenticatedUser actor,String classroomId){requireTeacher(actor,classroomId);int students=0;int active=0;int events=0;int success=0;try(Connection c=open();PreparedStatement s=c.prepareStatement("select m.user_id,e.payload_json from classroom_members m left join sync_events e on e.user_id=m.user_id where m.classroom_id=? and m.role='STUDENT'")){s.setString(1,classroomId);java.util.Set<String> seenStudents=new java.util.HashSet<>();java.util.Set<String> activeStudents=new java.util.HashSet<>();try(ResultSet r=s.executeQuery()){while(r.next()){String userId=r.getString(1);seenStudents.add(userId);String payload=r.getString(2);if(payload==null)continue;events++;activeStudents.add(userId);try{if(JSON.readTree(payload).path("successful").asBoolean(false))success++;}catch(IOException ignored){}}}students=seenStudents.size();active=activeStudents.size();}catch(SQLException e){throw database(e);}return new com.sqlteacher.application.collaboration.ClassLearningSummary(classroomId,students,active,events,success,Instant.now());}
         String exportClassLearningCsv(AuthenticatedUser actor,String classroomId){requireTeacher(actor,classroomId);StringBuilder csv=new StringBuilder("\uFEFFstudent_email,event_type,occurred_at,successful\r\n");int rows=0;try(Connection c=open();PreparedStatement s=c.prepareStatement("select u.email,e.event_type,e.occurred_at,e.payload_json from classroom_members m join users u on u.id=m.user_id join sync_events e on e.user_id=m.user_id where m.classroom_id=? and m.role='STUDENT' order by e.occurred_at")){s.setString(1,classroomId);try(ResultSet r=s.executeQuery()){while(r.next()){boolean successful=false;try{successful=JSON.readTree(r.getString(4)).path("successful").asBoolean(false);}catch(IOException ignored){}csv.append(csvCell(r.getString(1))).append(',').append(csvCell(r.getString(2))).append(',').append(csvCell(r.getString(3))).append(',').append(successful).append("\r\n");rows++;}}try(PreparedStatement audit=c.prepareStatement("insert into export_audit(id,user_id,classroom_id,row_count,created_at) values(?,?,?,?,?)")){audit.setString(1,UUID.randomUUID().toString());audit.setString(2,actor.id());audit.setString(3,classroomId);audit.setInt(4,rows);audit.setString(5,Instant.now().toString());audit.executeUpdate();}}catch(SQLException e){throw database(e);}return csv.toString();}
         private String csvCell(String value){String normalized=value==null?"":value;if(!normalized.isEmpty()&&"=+-@".indexOf(normalized.charAt(0))>=0)normalized="'"+normalized;return "\""+normalized.replace("\"","\"\"")+"\"";}
@@ -800,7 +952,24 @@ public final class SqlTeacherCloudServer {
         private void requireTeacher(AuthenticatedUser actor,String classId){if(actor.hasRole(UserRole.ADMIN))return;try(Connection c=open();PreparedStatement s=c.prepareStatement("select 1 from classroom_members where classroom_id=? and user_id=? and role='TEACHER'")){s.setString(1,classId);s.setString(2,actor.id());try(ResultSet r=s.executeQuery()){if(!r.next())throw new SecurityException("not classroom teacher");}}catch(SQLException e){throw database(e);}}
         private boolean isTeacher(AuthenticatedUser actor,String classId){if(actor.hasRole(UserRole.ADMIN))return true;try(Connection c=open();PreparedStatement s=c.prepareStatement("select 1 from classroom_members where classroom_id=? and user_id=? and role='TEACHER'")){s.setString(1,classId);s.setString(2,actor.id());try(ResultSet r=s.executeQuery()){return r.next();}}catch(SQLException e){throw database(e);}}
         private void requireMember(AuthenticatedUser actor,String classId){if(actor.hasRole(UserRole.ADMIN))return;try(Connection c=open();PreparedStatement s=c.prepareStatement("select 1 from classroom_members where classroom_id=? and user_id=?")){s.setString(1,classId);s.setString(2,actor.id());try(ResultSet r=s.executeQuery()){if(!r.next())throw new SecurityException("not classroom member");}}catch(SQLException e){throw database(e);}}
-        private Connection open() throws SQLException { return DriverManager.getConnection("jdbc:sqlite:"+database); }
+        private void requireStudent(AuthenticatedUser actor, String classId) {
+            try (Connection connection = open(); PreparedStatement statement = connection.prepareStatement(
+                "select 1 from classroom_members where classroom_id=? and user_id=? and role='STUDENT'")) {
+                statement.setString(1, classId);
+                statement.setString(2, actor.id());
+                try (ResultSet result = statement.executeQuery()) {
+                    if (!result.next()) throw new SecurityException("student classroom membership required");
+                }
+            } catch (SQLException error) { throw database(error); }
+        }
+        private Connection open() throws SQLException {
+            Connection connection = DriverManager.getConnection("jdbc:sqlite:" + database);
+            try (Statement statement = connection.createStatement()) {
+                statement.executeUpdate("pragma foreign_keys=on");
+                statement.executeUpdate("pragma busy_timeout=5000");
+            }
+            return connection;
+        }
         private void initialize() throws SQLException {
             try (Connection connection = open(); Statement statement = connection.createStatement()) {
                 statement.executeUpdate("pragma foreign_keys=on");
@@ -825,6 +994,12 @@ public final class SqlTeacherCloudServer {
                 statement.executeUpdate("create table if not exists sync_events(version integer primary key autoincrement,"
                     + "user_id text not null references users(id),event_id text not null,event_type text not null,"
                     + "payload_json text not null,occurred_at text not null,unique(user_id,event_id))");
+                statement.executeUpdate("create table if not exists assignment_submissions(id text primary key,"
+                    + "operation_id text not null,classroom_id text not null references classrooms(id),"
+                    + "assignment_id text not null references class_assignments(id),user_id text not null references users(id),"
+                    + "attempt_number integer not null,status text not null check(status in ('PASSED','FAILED')),"
+                    + "result_hash text not null,error_code text,client_completed_at text,submitted_at text not null,"
+                    + "unique(user_id,operation_id),unique(assignment_id,user_id,attempt_number))");
                 statement.executeUpdate("create table if not exists export_audit(id text primary key,"
                     + "user_id text not null references users(id),classroom_id text not null references classrooms(id),"
                     + "row_count integer not null,created_at text not null)");
@@ -842,6 +1017,8 @@ public final class SqlTeacherCloudServer {
                     + "where published_at is null and status<>'DRAFT'");
                 statement.executeUpdate("create index if not exists idx_assignments_class_status "
                     + "on class_assignments(classroom_id,status,created_at desc)");
+                statement.executeUpdate("create index if not exists idx_submissions_assignment_user "
+                    + "on assignment_submissions(assignment_id,user_id,submitted_at)");
             }
         }
         private void addColumnIfMissing(Statement statement,String table,String definition)throws SQLException{try{statement.executeUpdate("alter table "+table+" add column "+definition);}catch(SQLException error){if(!error.getMessage().toLowerCase(Locale.ROOT).contains("duplicate column"))throw error;}}

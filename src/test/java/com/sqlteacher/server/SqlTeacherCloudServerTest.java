@@ -161,6 +161,101 @@ class SqlTeacherCloudServerTest {
         }
     }
 
+    @Test
+    void shouldRecordIdempotentStudentSubmissionsAndEnforceServerState() throws Exception {
+        Path database = start();
+        JsonNode teacher = register("submit-teacher@example.edu", "Submit Teacher");
+        JsonNode student = register("submit-student@example.edu", "Submit Student");
+        JsonNode outsider = register("submit-outsider@example.edu", "Submit Outsider");
+        promoteTeacher(database, teacher.at("/user/id").asText());
+        String teacherToken = teacher.get("accessToken").asText();
+        String studentToken = student.get("accessToken").asText();
+        String classroomId = post("classes", teacherToken, "{\"name\":\"Submission class\"}")
+            .get("id").asText();
+        post("classes/" + classroomId + "/members", teacherToken,
+            "{\"email\":\"submit-student@example.edu\",\"role\":\"STUDENT\"}");
+        JsonNode assignment = post("classes/" + classroomId + "/assignments", teacherToken,
+            "{\"exerciseId\":\"deterministic-1\",\"title\":\"Deterministic task\",\"status\":\"PUBLISHED\"}");
+        String submissionPath = "classes/" + classroomId + "/assignments/"
+            + assignment.get("id").asText() + "/submissions";
+        String firstBody = JSON.writeValueAsString(java.util.Map.of(
+            "operationId", "operation-0001", "passed", true, "resultHash", "a".repeat(64),
+            "clientCompletedAt", "2099-01-01T00:00:00Z", "sql", "DROP DATABASE forbidden"));
+
+        JsonNode first = post(submissionPath, studentToken, firstBody);
+        JsonNode duplicate = post(submissionPath, studentToken, firstBody);
+        JsonNode second = post(submissionPath, studentToken, JSON.writeValueAsString(java.util.Map.of(
+            "operationId", "operation-0002", "passed", false, "resultHash", "b".repeat(64),
+            "errorCode", "RESULT_MISMATCH")));
+
+        assertEquals(first.get("id").asText(), duplicate.get("id").asText());
+        assertEquals(1, first.get("attemptNumber").asInt());
+        assertEquals(2, second.get("attemptNumber").asInt());
+        assertEquals("PASSED", first.get("status").asText());
+        assertEquals("FAILED", second.get("status").asText());
+        assertEquals("RESULT_MISMATCH", second.get("errorCode").asText());
+        assertTrue(Instant.parse(first.get("submittedAt").asText()).isBefore(Instant.parse("2099-01-01T00:00:00Z")));
+        assertEquals(2, JSON.readTree(getText(submissionPath, studentToken)).get("submissions").size());
+
+        server.stop();
+        server = new SqlTeacherCloudServer(database, 0);
+        server.start();
+        JsonNode duplicateAfterRestart = post(submissionPath, studentToken, firstBody);
+        assertEquals(first.get("id").asText(), duplicateAfterRestart.get("id").asText());
+
+        assertEquals(403, send("POST", submissionPath, teacherToken, firstBody).statusCode());
+        assertEquals(403, send("POST", submissionPath, outsider.get("accessToken").asText(), firstBody).statusCode());
+
+        JsonNode otherAssignment = post("classes/" + classroomId + "/assignments", teacherToken,
+            "{\"exerciseId\":\"deterministic-2\",\"title\":\"Other task\",\"status\":\"PUBLISHED\"}");
+        HttpResponse<String> operationConflict = send("POST", "classes/" + classroomId + "/assignments/"
+            + otherAssignment.get("id").asText() + "/submissions", studentToken, firstBody);
+        assertEquals(409, operationConflict.statusCode());
+        assertEquals("SUBMISSION_OPERATION_CONFLICT", JSON.readTree(operationConflict.body()).get("code").asText());
+
+        JsonNode closed = post("classes/" + classroomId + "/assignments/" + assignment.get("id").asText()
+            + "/status", teacherToken, JSON.writeValueAsString(java.util.Map.of(
+                "status", "CLOSED", "expectedVersion", assignment.get("version").asLong())));
+        HttpResponse<String> closedSubmission = send("POST", submissionPath, studentToken,
+            JSON.writeValueAsString(java.util.Map.of(
+                "operationId", "operation-0003", "passed", true, "resultHash", "c".repeat(64))));
+        assertEquals(409, closedSubmission.statusCode());
+        assertEquals("ASSIGNMENT_CLOSED", JSON.readTree(closedSubmission.body()).get("code").asText());
+        assertEquals("CLOSED", closed.get("status").asText());
+
+        JsonNode archived = post("classes/" + classroomId + "/assignments/" + assignment.get("id").asText()
+            + "/status", teacherToken, JSON.writeValueAsString(java.util.Map.of(
+                "status", "ARCHIVED", "expectedVersion", closed.get("version").asLong())));
+        HttpResponse<String> archivedSubmission = send("POST", submissionPath, studentToken,
+            JSON.writeValueAsString(java.util.Map.of(
+                "operationId", "operation-0004", "passed", true, "resultHash", "d".repeat(64))));
+        assertEquals("ARCHIVED", archived.get("status").asText());
+        assertEquals("ASSIGNMENT_ARCHIVED", JSON.readTree(archivedSubmission.body()).get("code").asText());
+
+        JsonNode withdrawn = post("classes/" + classroomId + "/assignments/" + otherAssignment.get("id").asText()
+            + "/status", teacherToken, JSON.writeValueAsString(java.util.Map.of(
+                "status", "WITHDRAWN", "expectedVersion", otherAssignment.get("version").asLong())));
+        HttpResponse<String> withdrawnSubmission = send("POST", "classes/" + classroomId + "/assignments/"
+            + otherAssignment.get("id").asText() + "/submissions", studentToken,
+            JSON.writeValueAsString(java.util.Map.of(
+                "operationId", "operation-0005", "passed", true, "resultHash", "e".repeat(64))));
+        assertEquals("WITHDRAWN", withdrawn.get("status").asText());
+        assertEquals("ASSIGNMENT_WITHDRAWN", JSON.readTree(withdrawnSubmission.body()).get("code").asText());
+
+        JsonNode deadlineAssignment = post("classes/" + classroomId + "/assignments", teacherToken,
+            JSON.writeValueAsString(java.util.Map.of(
+                "exerciseId", "deadline", "title", "Deadline task", "status", "PUBLISHED",
+                "dueAt", Instant.now().plusSeconds(1).toString())));
+        Thread.sleep(1_100);
+        HttpResponse<String> lateSubmission = send("POST", "classes/" + classroomId + "/assignments/"
+            + deadlineAssignment.get("id").asText() + "/submissions", studentToken,
+            JSON.writeValueAsString(java.util.Map.of(
+                "operationId", "operation-0006", "passed", true, "resultHash", "f".repeat(64),
+                "clientCompletedAt", Instant.now().minusSeconds(60).toString())));
+        assertEquals(409, lateSubmission.statusCode());
+        assertEquals("ASSIGNMENT_CLOSED", JSON.readTree(lateSubmission.body()).get("code").asText());
+    }
+
     private Path start() throws Exception {
         Path database = directory.resolve("cloud.db");
         server = new SqlTeacherCloudServer(database, 0);

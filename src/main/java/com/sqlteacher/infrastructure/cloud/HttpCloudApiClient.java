@@ -2,8 +2,11 @@ package com.sqlteacher.infrastructure.cloud;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
 import com.sqlteacher.application.collaboration.AuthenticatedUser;
 import com.sqlteacher.application.collaboration.AssignmentStatus;
+import com.sqlteacher.application.collaboration.AssignmentSubmission;
+import com.sqlteacher.application.collaboration.AssignmentSubmissionRequest;
 import com.sqlteacher.application.collaboration.ClassroomService;
 import com.sqlteacher.application.collaboration.CloudApiClient;
 import com.sqlteacher.application.collaboration.CloudAuthenticationService;
@@ -29,7 +32,8 @@ import java.util.Objects;
 public final class HttpCloudApiClient implements CloudApiClient {
     private final URI baseUri;
     private final HttpClient client = HttpClient.newHttpClient();
-    private final ObjectMapper json = new ObjectMapper().findAndRegisterModules();
+    private final ObjectMapper json = new ObjectMapper().findAndRegisterModules()
+        .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
 
     public HttpCloudApiClient(URI baseUri) {
         this.baseUri = Objects.requireNonNull(baseUri, "baseUri must not be null");
@@ -97,6 +101,8 @@ public final class HttpCloudApiClient implements CloudApiClient {
     @Override public ClassAssignment updateAssignment(String token,String classroomId,String assignmentId,String title,Instant dueAt){return updateAssignment(token,classroomId,assignmentId,title,"",dueAt,1);}
     @Override public ClassAssignment updateAssignment(String token,String classroomId,String assignmentId,String title,String description,Instant dueAt,long expectedVersion){Map<String,String> body=assignmentBody(null,title,description,dueAt);body.put("expectedVersion",Long.toString(expectedVersion));return request("classes/"+classroomId+"/assignments/"+assignmentId+"/details","POST",body,token,ClassAssignment.class);}
     @Override public List<ClassAssignment> listAssignments(String token,String classroomId){Map<String,List<ClassAssignment>> result=request("classes/"+classroomId+"/assignments","GET",null,token,new TypeReference<Map<String,List<ClassAssignment>>>(){});return result.getOrDefault("assignments",List.of());}
+    @Override public AssignmentSubmission submitAssignment(String token,String classroomId,String assignmentId,AssignmentSubmissionRequest submission){return request("classes/"+classroomId+"/assignments/"+assignmentId+"/submissions","POST",submission,token,AssignmentSubmission.class);}
+    @Override public List<AssignmentSubmission> listOwnAssignmentSubmissions(String token,String classroomId,String assignmentId){Map<String,List<AssignmentSubmission>> result=request("classes/"+classroomId+"/assignments/"+assignmentId+"/submissions","GET",null,token,new TypeReference<Map<String,List<AssignmentSubmission>>>(){});return result.getOrDefault("submissions",List.of());}
     @Override public ClassLearningSummary getClassLearningSummary(String token,String classroomId){return request("classes/"+classroomId+"/analytics","GET",null,token,ClassLearningSummary.class);}
     @Override public String exportClassLearningCsv(String token,String classroomId){return send("classes/"+classroomId+"/analytics/export","GET",null,token);}
 
