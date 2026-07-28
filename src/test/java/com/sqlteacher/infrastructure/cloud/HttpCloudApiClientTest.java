@@ -37,6 +37,10 @@ class HttpCloudApiClientTest {
         "commonErrors":[],"rows":[],"page":0,"pageSize":50,"totalRows":1,\
         "generatedAt":"2026-07-28T00:00:00Z"}
         """;
+    private static final String ADMIN_USER_JSON = """
+        {"id":"user-1","email":"student@example.com","displayName":"Student",\
+        "roles":["STUDENT"],"disabled":true,"createdAt":"2026-07-28T00:00:00Z"}
+        """;
 
     private HttpServer server;
     private HttpCloudApiClient client;
@@ -49,6 +53,7 @@ class HttpCloudApiClientTest {
     void startServer() throws IOException {
         server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         server.createContext("/api/v1/classes/class-1/assignments", this::assignments);
+        server.createContext("/api/v1/admin", this::admin);
         server.start();
         client = new HttpCloudApiClient(URI.create("http://127.0.0.1:" + server.getAddress().getPort()));
     }
@@ -120,6 +125,27 @@ class HttpCloudApiClientTest {
     }
 
     @Test
+    void shouldCallAdministratorOperationsAndEncodeAuditFilter() {
+        var health = client.getAdminHealth("admin-token");
+
+        assertEquals(3, health.activeUsers());
+        assertEquals("Bearer admin-token", authorization);
+
+        var user = client.setUserDisabled("admin-token", "user-1", true, "POLICY_VIOLATION");
+
+        assertEquals("POST", requestMethod);
+        assertEquals("POLICY_VIOLATION", requestBody.get("reasonCode").asText());
+        assertTrue(user.disabled());
+
+        var audit = client.getAdminAudit("admin-token", "AUTH_LOGIN", Instant.parse("2026-07-01T00:00:00Z"),
+            Instant.parse("2026-07-31T00:00:00Z"), 1, 20);
+
+        assertTrue(requestQuery.contains("action=AUTH_LOGIN"));
+        assertTrue(requestQuery.contains("page=1"));
+        assertEquals(1, audit.totalRows());
+    }
+
+    @Test
     void shouldAllowHttpsAndLoopbackHttpEndpointsOnly() {
         assertDoesNotThrow(() -> new HttpCloudApiClient(URI.create("https://api.example.edu")));
         assertDoesNotThrow(() -> new HttpCloudApiClient(URI.create("http://localhost:18080")));
@@ -138,6 +164,36 @@ class HttpCloudApiClientTest {
         String response = analyticsRequest ? ANALYTICS_JSON : submissionRequest
             ? ("GET".equals(requestMethod) ? "{\"submissions\":[" + SUBMISSION_JSON + "]}" : SUBMISSION_JSON)
             : ("GET".equals(requestMethod) ? "{\"assignments\":[" + ASSIGNMENT_JSON + "]}" : ASSIGNMENT_JSON);
+        byte[] responseBytes = response.getBytes(StandardCharsets.UTF_8);
+        exchange.getResponseHeaders().set("Content-Type", "application/json; charset=utf-8");
+        exchange.sendResponseHeaders(200, responseBytes.length);
+        exchange.getResponseBody().write(responseBytes);
+        exchange.close();
+    }
+
+    private void admin(HttpExchange exchange) throws IOException {
+        requestMethod = exchange.getRequestMethod();
+        requestQuery = exchange.getRequestURI().getRawQuery();
+        authorization = exchange.getRequestHeaders().getFirst("Authorization");
+        byte[] requestBytes = exchange.getRequestBody().readAllBytes();
+        requestBody = requestBytes.length == 0 ? null : JSON.readTree(requestBytes);
+        String path = exchange.getRequestURI().getPath();
+        String response;
+        if (path.endsWith("/health")) {
+            response = """
+                {"activeUsers":3,"disabledUsers":1,"activeAccessSessions":2,"activeRefreshSessions":2,
+                "assignments":4,"submissions":5,"generatedAt":"2026-07-28T00:00:00Z"}
+                """;
+        } else if (path.endsWith("/audit")) {
+            response = """
+                {"entries":[{"id":"audit-1","actorUserId":"admin-1","action":"AUTH_LOGIN",
+                "targetType":"USER","targetId":"user-1","result":"SUCCESS","reasonCode":"CREDENTIAL_VERIFIED",
+                "correlationId":"request-1","createdAt":"2026-07-28T00:00:00Z"}],
+                "page":1,"pageSize":20,"totalRows":1}
+                """;
+        } else {
+            response = ADMIN_USER_JSON;
+        }
         byte[] responseBytes = response.getBytes(StandardCharsets.UTF_8);
         exchange.getResponseHeaders().set("Content-Type", "application/json; charset=utf-8");
         exchange.sendResponseHeaders(200, responseBytes.length);

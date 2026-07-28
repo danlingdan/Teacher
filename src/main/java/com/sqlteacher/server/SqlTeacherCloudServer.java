@@ -4,6 +4,11 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.sqlteacher.application.collaboration.AuthenticatedUser;
+import com.sqlteacher.application.collaboration.AdminAuditEntry;
+import com.sqlteacher.application.collaboration.AdminAuditPage;
+import com.sqlteacher.application.collaboration.AdminHealthSummary;
+import com.sqlteacher.application.collaboration.AdminOperationRejectedException;
+import com.sqlteacher.application.collaboration.AdminUserSummary;
 import com.sqlteacher.application.collaboration.AssignmentStatus;
 import com.sqlteacher.application.collaboration.AssignmentAnalyticsFilter;
 import com.sqlteacher.application.collaboration.AssignmentAnalyticsReport;
@@ -86,6 +91,7 @@ public final class SqlTeacherCloudServer {
         this.server.createContext("/api/v1/auth/logout", this::logout);
         this.server.createContext("/api/v1/classes", this::classes);
         this.server.createContext("/api/v1/sync/events", this::syncEvents);
+        this.server.createContext("/api/v1/admin", this::admin);
         this.server.setExecutor(Executors.newVirtualThreadPerTaskExecutor());
     }
 
@@ -287,6 +293,61 @@ public final class SqlTeacherCloudServer {
         }
     }
 
+    private void admin(HttpExchange exchange) throws IOException {
+        try {
+            AuthenticatedUser actor = store.authenticate(token(exchange));
+            String[] segments = exchange.getRequestURI().getPath().split("/");
+            if (segments.length == 5 && "health".equals(segments[4])
+                && "GET".equals(exchange.getRequestMethod())) {
+                respond(exchange, 200, store.adminHealth(actor));
+                return;
+            }
+            if (segments.length == 5 && "users".equals(segments[4])
+                && "GET".equals(exchange.getRequestMethod())) {
+                respond(exchange, 200, Map.of("users", store.adminUsers(actor)));
+                return;
+            }
+            if (segments.length == 7 && "users".equals(segments[4])
+                && "POST".equals(exchange.getRequestMethod())) {
+                Map<String, String> body = request(exchange);
+                String action = segments[6];
+                if ("disable".equals(action) || "restore".equals(action)) {
+                    respond(exchange, 200, store.setUserDisabled(actor, segments[5], "disable".equals(action),
+                        body.get("reasonCode")));
+                    return;
+                }
+                if ("revoke-sessions".equals(action)) {
+                    store.revokeUserSessions(actor, segments[5], body.get("reasonCode"));
+                    respond(exchange, 200, Map.of("status", "ok"));
+                    return;
+                }
+            }
+            if (segments.length == 5 && "audit".equals(segments[4])
+                && "GET".equals(exchange.getRequestMethod())) {
+                String query = exchange.getRequestURI().getRawQuery();
+                long page = queryLong(query, "page", 0);
+                long pageSize = queryLong(query, "pageSize", 50);
+                if (page > Integer.MAX_VALUE || pageSize > Integer.MAX_VALUE) {
+                    throw new IllegalArgumentException("Pagination value is too large");
+                }
+                respond(exchange, 200, store.adminAudit(actor, queryValue(query, "action"),
+                    instantOrNull(queryValue(query, "from")), instantOrNull(queryValue(query, "to")),
+                    (int) page, (int) pageSize));
+                return;
+            }
+            respond(exchange, 404, errorResponse("NOT_FOUND", "API endpoint was not found."));
+        } catch (AdminOperationRejectedException error) {
+            respond(exchange, 409, errorResponse(error.code(), error.getMessage()));
+        } catch (SecurityException error) {
+            respond(exchange, 403, errorResponse("FORBIDDEN", "Administrator role is required."));
+        } catch (IllegalArgumentException error) {
+            respond(exchange, 400, errorResponse("INVALID_REQUEST", error.getMessage()));
+        } catch (RuntimeException error) {
+            error.printStackTrace();
+            respond(exchange, 500, errorResponse("SERVER_ERROR", "Administrator operation failed."));
+        }
+    }
+
     private static long queryLong(String query, String name, long defaultValue) {
         if (query == null || query.isBlank()) return defaultValue;
         for (String pair : query.split("&")) {
@@ -457,6 +518,7 @@ public final class SqlTeacherCloudServer {
                 statement.setString(1, id); statement.setString(2, normalizedEmail); statement.setString(3, displayName.trim());
                 statement.setBytes(4, hash); statement.setBytes(5, salt); statement.setString(6, Instant.now().toString()); statement.executeUpdate();
                 try (PreparedStatement role = connection.prepareStatement("insert into user_roles(user_id,role) values(?, 'STUDENT')")) { role.setString(1, id); role.executeUpdate(); }
+                audit(connection, id, "AUTH_REGISTER", "USER", id, "SUCCESS", "SELF_SERVICE");
             } catch (SQLException error) { if (error.getMessage().contains("UNIQUE")) throw new SecurityException("duplicate account"); throw database(error); }
             return issue(user(id));
         }
@@ -490,11 +552,19 @@ public final class SqlTeacherCloudServer {
             String normalizedEmail = validateEmail(email); validatePassword(password);
             String userId;
             try (Connection connection = open(); PreparedStatement statement = connection.prepareStatement(
-                "select id,password_hash,password_salt,disabled from users where email=?")) {
+                 "select id,password_hash,password_salt,disabled from users where email=?")) {
                 statement.setString(1, normalizedEmail);
                 try (ResultSet result = statement.executeQuery()) {
-                    if (!result.next() || result.getInt("disabled") != 0 || !constantTimeEquals(result.getBytes("password_hash"), hash(password, result.getBytes("password_salt")))) throw new SecurityException("invalid credentials");
-                    userId = result.getString("id");
+                    boolean exists = result.next();
+                    userId = exists ? result.getString("id") : null;
+                    boolean valid = exists && result.getInt("disabled") == 0
+                        && constantTimeEquals(result.getBytes("password_hash"),
+                            hash(password, result.getBytes("password_salt")));
+                    if (!valid) {
+                        audit(connection, null, "AUTH_LOGIN", "USER", userId, "DENIED", "INVALID_CREDENTIALS");
+                        throw new SecurityException("invalid credentials");
+                    }
+                    audit(connection, userId, "AUTH_LOGIN", "USER", userId, "SUCCESS", "CREDENTIAL_VERIFIED");
                 }
             } catch (SQLException error) { throw database(error); }
             return issue(user(userId));
@@ -621,6 +691,7 @@ public final class SqlTeacherCloudServer {
                 statement.setString(10, null);
                 statement.setString(11, now.toString());
                 statement.executeUpdate();
+                audit(connection, actor.id(), "ASSIGNMENT_CREATE", "ASSIGNMENT", id, "SUCCESS", status.name());
                 return assignment(connection, classroomId, id);
             } catch (SQLException error) { throw database(error); }
         }
@@ -650,6 +721,7 @@ public final class SqlTeacherCloudServer {
                     statement.setString(9, now.toString());
                     statement.executeUpdate();
                 }
+                audit(connection, actor.id(), "ASSIGNMENT_COPY", "ASSIGNMENT", id, "SUCCESS", "SOURCE_VERSION_OK");
                 return assignment(connection, classroomId, id);
             } catch (SQLException error) { throw database(error); }
         }
@@ -675,6 +747,8 @@ public final class SqlTeacherCloudServer {
                     statement.setLong(5, expectedVersion);
                     requireUpdated(statement, connection, classroomId, assignmentId);
                 }
+                audit(connection, actor.id(), "ASSIGNMENT_DUE_UPDATE", "ASSIGNMENT", assignmentId,
+                    "SUCCESS", "VERSION_MATCHED");
                 return assignment(connection, classroomId, assignmentId);
             } catch (SQLException error) { throw database(error); }
         }
@@ -703,6 +777,8 @@ public final class SqlTeacherCloudServer {
                     statement.setLong(6, expectedVersion);
                     requireUpdated(statement, connection, classroomId, assignmentId);
                 }
+                audit(connection, actor.id(), "ASSIGNMENT_STATUS_UPDATE", "ASSIGNMENT", assignmentId,
+                    "SUCCESS", status.name());
                 return assignment(connection, classroomId, assignmentId);
             } catch (SQLException error) { throw database(error); }
         }
@@ -727,6 +803,8 @@ public final class SqlTeacherCloudServer {
                     statement.setLong(7, expectedVersion);
                     requireUpdated(statement, connection, classroomId, assignmentId);
                 }
+                audit(connection, actor.id(), "ASSIGNMENT_DETAILS_UPDATE", "ASSIGNMENT", assignmentId,
+                    "SUCCESS", "VERSION_MATCHED");
                 return assignment(connection, classroomId, assignmentId);
             } catch (SQLException error) { throw database(error); }
         }
@@ -948,6 +1026,8 @@ public final class SqlTeacherCloudServer {
                     audit.setString(8, analyticsFilterSummary(applied));
                     audit.executeUpdate();
                 }
+                audit(connection, actor.id(), "ASSIGNMENT_ANALYTICS_EXPORT", "ASSIGNMENT", assignmentId,
+                    "SUCCESS", "FILTERED_EXPORT");
                 return csv.toString();
             } catch (SQLException error) { throw database(error); }
         }
@@ -1031,6 +1111,198 @@ public final class SqlTeacherCloudServer {
             return "status=" + (filter.status() == null ? "ALL" : filter.status().name())
                 + ";from=" + (filter.from() == null ? "" : filter.from())
                 + ";to=" + (filter.to() == null ? "" : filter.to());
+        }
+
+        AdminHealthSummary adminHealth(AuthenticatedUser actor) {
+            requireAdmin(actor);
+            try (Connection connection = open()) {
+                return new AdminHealthSummary(
+                    count(connection, "select count(*) from users where disabled=0"),
+                    count(connection, "select count(*) from users where disabled<>0"),
+                    count(connection, "select count(*) from access_tokens where revoked_at is null and expires_at>'"
+                        + Instant.now() + "'"),
+                    count(connection, "select count(*) from refresh_tokens where revoked_at is null and expires_at>'"
+                        + Instant.now() + "'"),
+                    count(connection, "select count(*) from class_assignments"),
+                    count(connection, "select count(*) from assignment_submissions"),
+                    Instant.now()
+                );
+            } catch (SQLException error) { throw database(error); }
+        }
+
+        List<AdminUserSummary> adminUsers(AuthenticatedUser actor) {
+            requireAdmin(actor);
+            List<AdminUserSummary> users = new ArrayList<>();
+            try (Connection connection = open(); PreparedStatement statement = connection.prepareStatement(
+                "select id,email,display_name,disabled,created_at from users order by created_at,id")) {
+                try (ResultSet rows = statement.executeQuery()) {
+                    while (rows.next()) users.add(adminUser(connection, rows));
+                }
+                return List.copyOf(users);
+            } catch (SQLException error) { throw database(error); }
+        }
+
+        AdminUserSummary setUserDisabled(AuthenticatedUser actor, String userId, boolean disabled,
+                                         String reasonCode) {
+            requireAdmin(actor);
+            String reason = validateReasonCode(reasonCode);
+            try (Connection connection = open()) {
+                connection.setAutoCommit(false);
+                AdminUserSummary target = adminUser(connection, userId);
+                if (disabled && target.roles().contains(UserRole.ADMIN) && !target.disabled()
+                    && activeAdminCount(connection) <= 1) {
+                    audit(connection, actor.id(), "ADMIN_USER_DISABLE", "USER", userId, "DENIED",
+                        "LAST_ADMIN_PROTECTED");
+                    connection.commit();
+                    throw new AdminOperationRejectedException(
+                        "LAST_ADMIN_PROTECTED", "The final active administrator cannot be disabled");
+                }
+                try (PreparedStatement update = connection.prepareStatement(
+                    "update users set disabled=? where id=?")) {
+                    update.setInt(1, disabled ? 1 : 0);
+                    update.setString(2, userId);
+                    update.executeUpdate();
+                }
+                if (disabled) revokeAllSessions(connection, userId);
+                audit(connection, actor.id(), disabled ? "ADMIN_USER_DISABLE" : "ADMIN_USER_RESTORE",
+                    "USER", userId, "SUCCESS", reason);
+                connection.commit();
+                return adminUser(connection, userId);
+            } catch (SQLException error) { throw database(error); }
+        }
+
+        void revokeUserSessions(AuthenticatedUser actor, String userId, String reasonCode) {
+            requireAdmin(actor);
+            String reason = validateReasonCode(reasonCode);
+            try (Connection connection = open()) {
+                connection.setAutoCommit(false);
+                adminUser(connection, userId);
+                revokeAllSessions(connection, userId);
+                audit(connection, actor.id(), "ADMIN_SESSION_REVOKE_ALL", "USER", userId, "SUCCESS", reason);
+                connection.commit();
+            } catch (SQLException error) { throw database(error); }
+        }
+
+        AdminAuditPage adminAudit(AuthenticatedUser actor, String action, Instant from, Instant to,
+                                  int page, int pageSize) {
+            requireAdmin(actor);
+            if (action != null && !action.isBlank() && !action.matches("[A-Z0-9_]{3,80}")) {
+                throw new IllegalArgumentException("action is invalid");
+            }
+            if (from != null && to != null && from.isAfter(to)) {
+                throw new IllegalArgumentException("from must not be after to");
+            }
+            if (page < 0 || pageSize < 1 || pageSize > 200) {
+                throw new IllegalArgumentException("Invalid audit pagination");
+            }
+            StringBuilder where = new StringBuilder(" where 1=1");
+            List<String> parameters = new ArrayList<>();
+            if (action != null && !action.isBlank()) { where.append(" and action=?"); parameters.add(action); }
+            if (from != null) { where.append(" and created_at>=?"); parameters.add(from.toString()); }
+            if (to != null) { where.append(" and created_at<=?"); parameters.add(to.toString()); }
+            try (Connection connection = open()) {
+                int totalRows;
+                try (PreparedStatement count = connection.prepareStatement(
+                    "select count(*) from admin_audit" + where)) {
+                    bind(count, parameters);
+                    try (ResultSet row = count.executeQuery()) { totalRows = row.getInt(1); }
+                }
+                List<AdminAuditEntry> entries = new ArrayList<>();
+                try (PreparedStatement statement = connection.prepareStatement(
+                    "select id,actor_user_id,action,target_type,target_id,result,reason_code,correlation_id,created_at "
+                        + "from admin_audit" + where + " order by created_at desc,id desc limit ? offset ?")) {
+                    int parameter = bind(statement, parameters);
+                    statement.setInt(parameter++, pageSize);
+                    statement.setLong(parameter, (long) page * pageSize);
+                    try (ResultSet rows = statement.executeQuery()) {
+                        while (rows.next()) entries.add(new AdminAuditEntry(
+                            rows.getString("id"), rows.getString("actor_user_id"), rows.getString("action"),
+                            rows.getString("target_type"), rows.getString("target_id"), rows.getString("result"),
+                            rows.getString("reason_code"), rows.getString("correlation_id"),
+                            Instant.parse(rows.getString("created_at"))
+                        ));
+                    }
+                }
+                return new AdminAuditPage(entries, page, pageSize, totalRows);
+            } catch (SQLException error) { throw database(error); }
+        }
+
+        private int count(Connection connection, String sql) throws SQLException {
+            try (Statement statement = connection.createStatement(); ResultSet row = statement.executeQuery(sql)) {
+                return row.getInt(1);
+            }
+        }
+
+        private AdminUserSummary adminUser(Connection connection, String userId) throws SQLException {
+            try (PreparedStatement statement = connection.prepareStatement(
+                "select id,email,display_name,disabled,created_at from users where id=?")) {
+                statement.setString(1, userId);
+                try (ResultSet row = statement.executeQuery()) {
+                    if (!row.next()) throw new IllegalArgumentException("User was not found");
+                    return adminUser(connection, row);
+                }
+            }
+        }
+
+        private AdminUserSummary adminUser(Connection connection, ResultSet row) throws SQLException {
+            Set<UserRole> roles = new java.util.HashSet<>();
+            try (PreparedStatement roleQuery = connection.prepareStatement(
+                "select role from user_roles where user_id=? order by role")) {
+                roleQuery.setString(1, row.getString("id"));
+                try (ResultSet roleRows = roleQuery.executeQuery()) {
+                    while (roleRows.next()) roles.add(UserRole.valueOf(roleRows.getString("role")));
+                }
+            }
+            return new AdminUserSummary(row.getString("id"), row.getString("email"), row.getString("display_name"),
+                roles, row.getInt("disabled") != 0, Instant.parse(row.getString("created_at")));
+        }
+
+        private int activeAdminCount(Connection connection) throws SQLException {
+            return count(connection, "select count(*) from users u join user_roles r on r.user_id=u.id "
+                + "where u.disabled=0 and r.role='ADMIN'");
+        }
+
+        private void revokeAllSessions(Connection connection, String userId) throws SQLException {
+            Instant now = Instant.now();
+            for (String table : List.of("access_tokens", "refresh_tokens")) {
+                try (PreparedStatement statement = connection.prepareStatement(
+                    "update " + table + " set revoked_at=? where user_id=? and revoked_at is null")) {
+                    statement.setString(1, now.toString());
+                    statement.setString(2, userId);
+                    statement.executeUpdate();
+                }
+            }
+        }
+
+        private String validateReasonCode(String reasonCode) {
+            if (reasonCode == null || !reasonCode.matches("[A-Z0-9_]{3,64}")) {
+                throw new IllegalArgumentException("reasonCode must contain only A-Z, 0-9, or underscore");
+            }
+            return reasonCode;
+        }
+
+        private void audit(Connection connection, String actorUserId, String action, String targetType,
+                           String targetId, String result, String reasonCode) throws SQLException {
+            try (PreparedStatement statement = connection.prepareStatement(
+                "insert into admin_audit(id,actor_user_id,action,target_type,target_id,result,reason_code,"
+                    + "correlation_id,created_at) values(?,?,?,?,?,?,?,?,?)")) {
+                statement.setString(1, UUID.randomUUID().toString());
+                statement.setString(2, actorUserId);
+                statement.setString(3, action);
+                statement.setString(4, targetType);
+                statement.setString(5, targetId);
+                statement.setString(6, result);
+                statement.setString(7, reasonCode);
+                statement.setString(8, UUID.randomUUID().toString());
+                statement.setString(9, Instant.now().toString());
+                statement.executeUpdate();
+            }
+        }
+
+        private int bind(PreparedStatement statement, List<String> parameters) throws SQLException {
+            int index = 1;
+            for (String parameter : parameters) statement.setString(index++, parameter);
+            return index;
         }
         com.sqlteacher.application.collaboration.ClassLearningSummary classLearningSummary(AuthenticatedUser actor,String classroomId){requireTeacher(actor,classroomId);int students=0;int active=0;int events=0;int success=0;try(Connection c=open();PreparedStatement s=c.prepareStatement("select m.user_id,e.payload_json from classroom_members m left join sync_events e on e.user_id=m.user_id where m.classroom_id=? and m.role='STUDENT'")){s.setString(1,classroomId);java.util.Set<String> seenStudents=new java.util.HashSet<>();java.util.Set<String> activeStudents=new java.util.HashSet<>();try(ResultSet r=s.executeQuery()){while(r.next()){String userId=r.getString(1);seenStudents.add(userId);String payload=r.getString(2);if(payload==null)continue;events++;activeStudents.add(userId);try{if(JSON.readTree(payload).path("successful").asBoolean(false))success++;}catch(IOException ignored){}}}students=seenStudents.size();active=activeStudents.size();}catch(SQLException e){throw database(e);}return new com.sqlteacher.application.collaboration.ClassLearningSummary(classroomId,students,active,events,success,Instant.now());}
         String exportClassLearningCsv(AuthenticatedUser actor,String classroomId){requireTeacher(actor,classroomId);StringBuilder csv=new StringBuilder("\uFEFFstudent_email,event_type,occurred_at,successful\r\n");int rows=0;try(Connection c=open();PreparedStatement s=c.prepareStatement("select u.email,e.event_type,e.occurred_at,e.payload_json from classroom_members m join users u on u.id=m.user_id join sync_events e on e.user_id=m.user_id where m.classroom_id=? and m.role='STUDENT' order by e.occurred_at")){s.setString(1,classroomId);try(ResultSet r=s.executeQuery()){while(r.next()){boolean successful=false;try{successful=JSON.readTree(r.getString(4)).path("successful").asBoolean(false);}catch(IOException ignored){}csv.append(csvCell(r.getString(1))).append(',').append(csvCell(r.getString(2))).append(',').append(csvCell(r.getString(3))).append(',').append(successful).append("\r\n");rows++;}}try(PreparedStatement audit=c.prepareStatement("insert into export_audit(id,user_id,classroom_id,row_count,created_at) values(?,?,?,?,?)")){audit.setString(1,UUID.randomUUID().toString());audit.setString(2,actor.id());audit.setString(3,classroomId);audit.setInt(4,rows);audit.setString(5,Instant.now().toString());audit.executeUpdate();}}catch(SQLException e){throw database(e);}return csv.toString();}
@@ -1136,6 +1408,9 @@ public final class SqlTeacherCloudServer {
         private void requireTeacher(AuthenticatedUser actor,String classId){if(actor.hasRole(UserRole.ADMIN))return;try(Connection c=open();PreparedStatement s=c.prepareStatement("select 1 from classroom_members where classroom_id=? and user_id=? and role='TEACHER'")){s.setString(1,classId);s.setString(2,actor.id());try(ResultSet r=s.executeQuery()){if(!r.next())throw new SecurityException("not classroom teacher");}}catch(SQLException e){throw database(e);}}
         private boolean isTeacher(AuthenticatedUser actor,String classId){if(actor.hasRole(UserRole.ADMIN))return true;try(Connection c=open();PreparedStatement s=c.prepareStatement("select 1 from classroom_members where classroom_id=? and user_id=? and role='TEACHER'")){s.setString(1,classId);s.setString(2,actor.id());try(ResultSet r=s.executeQuery()){return r.next();}}catch(SQLException e){throw database(e);}}
         private void requireMember(AuthenticatedUser actor,String classId){if(actor.hasRole(UserRole.ADMIN))return;try(Connection c=open();PreparedStatement s=c.prepareStatement("select 1 from classroom_members where classroom_id=? and user_id=?")){s.setString(1,classId);s.setString(2,actor.id());try(ResultSet r=s.executeQuery()){if(!r.next())throw new SecurityException("not classroom member");}}catch(SQLException e){throw database(e);}}
+        private void requireAdmin(AuthenticatedUser actor) {
+            if (!actor.hasRole(UserRole.ADMIN)) throw new SecurityException("administrator role required");
+        }
         private void requireStudent(AuthenticatedUser actor, String classId) {
             try (Connection connection = open(); PreparedStatement statement = connection.prepareStatement(
                 "select 1 from classroom_members where classroom_id=? and user_id=? and role='STUDENT'")) {
@@ -1184,6 +1459,10 @@ public final class SqlTeacherCloudServer {
                     + "attempt_number integer not null,status text not null check(status in ('PASSED','FAILED')),"
                     + "result_hash text not null,error_code text,client_completed_at text,submitted_at text not null,"
                     + "unique(user_id,operation_id),unique(assignment_id,user_id,attempt_number))");
+                statement.executeUpdate("create table if not exists admin_audit(id text primary key,"
+                    + "actor_user_id text references users(id),action text not null,target_type text not null,"
+                    + "target_id text,result text not null,reason_code text,correlation_id text not null,"
+                    + "created_at text not null)");
                 statement.executeUpdate("create table if not exists export_audit(id text primary key,"
                     + "user_id text not null references users(id),classroom_id text not null references classrooms(id),"
                     + "row_count integer not null,created_at text not null,assignment_id text,"
@@ -1207,6 +1486,8 @@ public final class SqlTeacherCloudServer {
                     + "on class_assignments(classroom_id,status,created_at desc)");
                 statement.executeUpdate("create index if not exists idx_submissions_assignment_user "
                     + "on assignment_submissions(assignment_id,user_id,submitted_at)");
+                statement.executeUpdate("create index if not exists idx_admin_audit_action_time "
+                    + "on admin_audit(action,created_at desc)");
             }
         }
         private void addColumnIfMissing(Statement statement,String table,String definition)throws SQLException{try{statement.executeUpdate("alter table "+table+" add column "+definition);}catch(SQLException error){if(!error.getMessage().toLowerCase(Locale.ROOT).contains("duplicate column"))throw error;}}

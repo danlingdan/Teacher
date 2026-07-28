@@ -333,6 +333,69 @@ class SqlTeacherCloudServerTest {
         }
     }
 
+    @Test
+    void shouldEnforceAuditedAdministratorAccountOperations() throws Exception {
+        Path database = start();
+        JsonNode admin = register("admin-ops@example.edu", "Operations Admin");
+        JsonNode user = register("managed-user@example.edu", "Managed User");
+        promoteAdmin(database, admin.at("/user/id").asText());
+        String adminToken = admin.get("accessToken").asText();
+        String userToken = user.get("accessToken").asText();
+        String userId = user.at("/user/id").asText();
+
+        JsonNode health = JSON.readTree(getText("admin/health", adminToken));
+        assertEquals(2, health.get("activeUsers").asInt());
+        assertEquals(0, health.get("disabledUsers").asInt());
+        assertTrue(health.get("activeAccessSessions").asInt() >= 2);
+        assertEquals(403, getStatus("admin/health", userToken));
+        assertEquals(2, JSON.readTree(getText("admin/users", adminToken)).get("users").size());
+
+        JsonNode disabled = post("admin/users/" + userId + "/disable", adminToken,
+            "{\"reasonCode\":\"POLICY_VIOLATION\"}");
+        assertTrue(disabled.get("disabled").asBoolean());
+        assertEquals(403, getStatus("classes", userToken));
+        assertEquals(401, postStatus("auth/login", null,
+            "{\"email\":\"managed-user@example.edu\",\"password\":\"strong-password-123\"}"));
+
+        JsonNode restored = post("admin/users/" + userId + "/restore", adminToken,
+            "{\"reasonCode\":\"REVIEW_COMPLETE\"}");
+        assertTrue(!restored.get("disabled").asBoolean());
+        JsonNode relogged = post("auth/login", null,
+            "{\"email\":\"managed-user@example.edu\",\"password\":\"strong-password-123\"}");
+        post("admin/users/" + userId + "/revoke-sessions", adminToken,
+            "{\"reasonCode\":\"SECURITY_RESET\"}");
+        assertEquals(403, getStatus("classes", relogged.get("accessToken").asText()));
+        assertEquals(401, postStatus("auth/refresh", null, JSON.writeValueAsString(java.util.Map.of(
+            "refreshToken", relogged.get("refreshToken").asText()))));
+
+        HttpResponse<String> lastAdmin = send("POST", "admin/users/" + admin.at("/user/id").asText()
+            + "/disable", adminToken, "{\"reasonCode\":\"TEST_LAST_ADMIN\"}");
+        assertEquals(409, lastAdmin.statusCode());
+        assertEquals("LAST_ADMIN_PROTECTED", JSON.readTree(lastAdmin.body()).get("code").asText());
+
+        JsonNode classroom = post("classes", adminToken, "{\"name\":\"Audited class\"}");
+        JsonNode assignment = post("classes/" + classroom.get("id").asText() + "/assignments", adminToken,
+            "{\"exerciseId\":\"audit-task\",\"title\":\"Audited task\",\"status\":\"DRAFT\"}");
+        getText("classes/" + classroom.get("id").asText() + "/assignments/" + assignment.get("id").asText()
+            + "/analytics/export?page=0&pageSize=50", adminToken);
+
+        JsonNode disableAudit = JSON.readTree(getText(
+            "admin/audit?action=ADMIN_USER_DISABLE&page=0&pageSize=50", adminToken));
+        assertTrue(disableAudit.get("totalRows").asInt() >= 2);
+        assertTrue(disableAudit.toString().contains("POLICY_VIOLATION"));
+        assertTrue(disableAudit.toString().contains("LAST_ADMIN_PROTECTED"));
+        JsonNode authAudit = JSON.readTree(getText(
+            "admin/audit?action=AUTH_LOGIN&page=0&pageSize=50", adminToken));
+        assertTrue(authAudit.get("totalRows").asInt() >= 2);
+        assertTrue(!authAudit.toString().toLowerCase(java.util.Locale.ROOT).contains("password"));
+        JsonNode taskAudit = JSON.readTree(getText(
+            "admin/audit?action=ASSIGNMENT_CREATE&page=0&pageSize=50", adminToken));
+        assertEquals(1, taskAudit.get("totalRows").asInt());
+        JsonNode exportAudit = JSON.readTree(getText(
+            "admin/audit?action=ASSIGNMENT_ANALYTICS_EXPORT&page=0&pageSize=50", adminToken));
+        assertEquals(1, exportAudit.get("totalRows").asInt());
+    }
+
     private Path start() throws Exception {
         Path database = directory.resolve("cloud.db");
         server = new SqlTeacherCloudServer(database, 0);
@@ -359,6 +422,15 @@ class SqlTeacherCloudServerTest {
         try (var connection = DriverManager.getConnection("jdbc:sqlite:" + database);
              var statement = connection.prepareStatement(
                  "insert or ignore into user_roles(user_id,role) values(?, 'TEACHER')")) {
+            statement.setString(1, userId);
+            statement.executeUpdate();
+        }
+    }
+
+    private void promoteAdmin(Path database, String userId) throws Exception {
+        try (var connection = DriverManager.getConnection("jdbc:sqlite:" + database);
+             var statement = connection.prepareStatement(
+                 "insert or ignore into user_roles(user_id,role) values(?, 'ADMIN')")) {
             statement.setString(1, userId);
             statement.executeUpdate();
         }

@@ -87,6 +87,28 @@ public interface CloudApiClient {
         throw new UnsupportedOperationException("Assignment analytics are unavailable");
     }
 
+    default AdminHealthSummary getAdminHealth(String accessToken) {
+        throw new UnsupportedOperationException("Administrator operations are unavailable");
+    }
+
+    default List<AdminUserSummary> listAdminUsers(String accessToken) {
+        throw new UnsupportedOperationException("Administrator operations are unavailable");
+    }
+
+    default AdminUserSummary setUserDisabled(String accessToken, String userId, boolean disabled,
+                                             String reasonCode) {
+        throw new UnsupportedOperationException("Administrator operations are unavailable");
+    }
+
+    default void revokeUserSessions(String accessToken, String userId, String reasonCode) {
+        throw new UnsupportedOperationException("Administrator operations are unavailable");
+    }
+
+    default AdminAuditPage getAdminAudit(String accessToken, String action, Instant from, Instant to,
+                                         int page, int pageSize) {
+        throw new UnsupportedOperationException("Administrator operations are unavailable");
+    }
+
     ClassLearningSummary getClassLearningSummary(String accessToken, String classroomId);
 
     String exportClassLearningCsv(String accessToken, String classroomId);
