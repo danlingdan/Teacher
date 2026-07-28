@@ -6,6 +6,7 @@ docs/copyright/generated/
 !**/src/main/**/target/
 !**/src/test/**/target/
 .kotlin
+.workbuddy/
 
 ### IntelliJ IDEA ###
 .idea/modules.xml
