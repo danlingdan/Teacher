@@ -329,7 +329,8 @@ public final class CloudCenterController {
         ClassAssignment assignment = assignments.get(index);
         run("正在更新任务…", () -> {
             var current = currentSession();
-            api.updateAssignment(current.accessToken(), selectedClass.id(), assignment.id(), title, dueAt);
+            api.updateAssignment(current.accessToken(), selectedClass.id(), assignment.id(), title,
+                assignment.description(), dueAt, assignment.version());
             List<ClassAssignment> refreshed = api.listAssignments(current.accessToken(), selectedClass.id());
             Platform.runLater(() -> {
                 applyAssignments(selectedClass.id(), refreshed);
@@ -349,7 +350,8 @@ public final class CloudCenterController {
         ClassAssignment assignment = assignments.get(index);
         run("正在更新任务状态…", () -> {
             var current = currentSession();
-            api.changeAssignmentStatus(current.accessToken(), selectedClass.id(), assignment.id(), status);
+            api.changeAssignmentStatus(current.accessToken(), selectedClass.id(), assignment.id(), status,
+                assignment.version());
             List<ClassAssignment> refreshed = api.listAssignments(current.accessToken(), selectedClass.id());
             Platform.runLater(() -> {
                 applyAssignments(selectedClass.id(), refreshed);

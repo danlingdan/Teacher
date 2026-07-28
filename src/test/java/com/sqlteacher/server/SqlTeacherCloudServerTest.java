@@ -61,15 +61,104 @@ class SqlTeacherCloudServerTest {
                 "dueAt", Instant.now().plusSeconds(3600).toString())));
 
         JsonNode closed = post("classes/" + classroomId + "/assignments/" + assignment.get("id").asText()
-            + "/status", teacherToken, "{\"status\":\"CLOSED\"}");
+            + "/status", teacherToken, JSON.writeValueAsString(java.util.Map.of(
+                "status", "CLOSED", "expectedVersion", assignment.get("version").asLong())));
         JsonNode archived = post("classes/" + classroomId + "/assignments/" + assignment.get("id").asText()
-            + "/status", teacherToken, "{\"status\":\"ARCHIVED\"}");
+            + "/status", teacherToken, JSON.writeValueAsString(java.util.Map.of(
+                "status", "ARCHIVED", "expectedVersion", closed.get("version").asLong())));
 
         assertEquals("CLOSED", closed.get("status").asText());
         assertEquals("ARCHIVED", archived.get("status").asText());
         assertEquals(403, getStatus("classes/" + classroomId + "/analytics", student.get("accessToken").asText()));
         String csv = getText("classes/" + classroomId + "/analytics/export", teacherToken);
         assertTrue(csv.startsWith("\uFEFFstudent_email,event_type,occurred_at,successful"));
+    }
+
+    @Test
+    void shouldCreateCopyFilterAndProtectVersionedAssignmentDrafts() throws Exception {
+        Path database = start();
+        JsonNode teacher = register("draft-teacher@example.edu", "Draft Teacher");
+        JsonNode student = register("draft-student@example.edu", "Draft Student");
+        promoteTeacher(database, teacher.at("/user/id").asText());
+        String teacherToken = teacher.get("accessToken").asText();
+        String studentToken = student.get("accessToken").asText();
+        String classroomId = post("classes", teacherToken, "{\"name\":\"Versioned tasks\"}")
+            .get("id").asText();
+        post("classes/" + classroomId + "/members", teacherToken,
+            JSON.writeValueAsString(java.util.Map.of(
+                "email", "draft-student@example.edu", "role", "STUDENT")));
+
+        JsonNode draft = post("classes/" + classroomId + "/assignments", teacherToken,
+            JSON.writeValueAsString(java.util.Map.of(
+                "exerciseId", "select-versioned", "title", "Draft task", "description", "Initial notes",
+                "status", "DRAFT", "dueAt", Instant.now().plusSeconds(7_200).toString())));
+
+        assertEquals("DRAFT", draft.get("status").asText());
+        assertEquals(1, draft.get("version").asLong());
+        assertTrue(draft.get("publishedAt").isNull());
+        assertEquals(0, JSON.readTree(getText("classes/" + classroomId + "/assignments", studentToken))
+            .get("assignments").size());
+
+        String assignmentPath = "classes/" + classroomId + "/assignments/" + draft.get("id").asText();
+        JsonNode updated = post(assignmentPath + "/details", teacherToken,
+            JSON.writeValueAsString(java.util.Map.of(
+                "title", "Updated draft", "description", "Updated notes",
+                "dueAt", Instant.now().plusSeconds(10_800).toString(), "expectedVersion", 1)));
+        assertEquals(2, updated.get("version").asLong());
+        assertEquals("Updated notes", updated.get("description").asText());
+
+        HttpResponse<String> conflict = send("POST", assignmentPath + "/details", teacherToken,
+            JSON.writeValueAsString(java.util.Map.of(
+                "title", "Stale update", "description", "Must not win",
+                "dueAt", Instant.now().plusSeconds(10_800).toString(), "expectedVersion", 1)));
+        assertEquals(409, conflict.statusCode());
+        JsonNode conflictBody = JSON.readTree(conflict.body());
+        assertEquals("ASSIGNMENT_VERSION_CONFLICT", conflictBody.get("code").asText());
+        assertEquals(2, conflictBody.at("/latest/version").asLong());
+
+        JsonNode copy = post(assignmentPath + "/copy", teacherToken, "{\"expectedVersion\":2}");
+        assertEquals("DRAFT", copy.get("status").asText());
+        assertEquals(draft.get("id").asText(), copy.get("copiedFromAssignmentId").asText());
+        assertEquals(1, copy.get("version").asLong());
+
+        JsonNode published = post("classes/" + classroomId + "/assignments/" + copy.get("id").asText()
+            + "/status", teacherToken, "{\"status\":\"PUBLISHED\",\"expectedVersion\":1}");
+        assertEquals("PUBLISHED", published.get("status").asText());
+        assertEquals(2, published.get("version").asLong());
+        assertTrue(!published.get("publishedAt").isNull());
+
+        JsonNode drafts = JSON.readTree(getText(
+            "classes/" + classroomId + "/assignments?status=DRAFT", teacherToken));
+        assertEquals(1, drafts.get("assignments").size());
+    }
+
+    @Test
+    void shouldUpgradeLegacyAssignmentsWithoutLosingPublishedState() throws Exception {
+        Path database = directory.resolve("legacy-cloud.db");
+        String createdAt = "2026-07-22T00:00:00Z";
+        try (var connection = DriverManager.getConnection("jdbc:sqlite:" + database);
+             var statement = connection.createStatement()) {
+            statement.executeUpdate("create table class_assignments(id text primary key,classroom_id text not null,"
+                + "exercise_id text not null,title text not null,created_at text not null,status text not null,"
+                + "due_at text,updated_at text not null)");
+            statement.executeUpdate("insert into class_assignments(id,classroom_id,exercise_id,title,created_at,"
+                + "status,due_at,updated_at) values('legacy-task','legacy-class','select-1','Legacy task','"
+                + createdAt + "','PUBLISHED',null,'" + createdAt + "')");
+        }
+
+        server = new SqlTeacherCloudServer(database, 0);
+        server.start();
+
+        try (var connection = DriverManager.getConnection("jdbc:sqlite:" + database);
+             var statement = connection.prepareStatement(
+                 "select description,published_at,copied_from_assignment_id,version from class_assignments where id='legacy-task'");
+             var row = statement.executeQuery()) {
+            assertTrue(row.next());
+            assertEquals("", row.getString("description"));
+            assertEquals(createdAt, row.getString("published_at"));
+            assertEquals(null, row.getString("copied_from_assignment_id"));
+            assertEquals(1, row.getLong("version"));
+        }
     }
 
     private Path start() throws Exception {

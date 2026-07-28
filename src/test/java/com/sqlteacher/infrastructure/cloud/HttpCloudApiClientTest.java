@@ -67,6 +67,21 @@ class HttpCloudApiClientTest {
     }
 
     @Test
+    void shouldSendDraftAndVersionedAssignmentRequests() {
+        client.createAssignmentDraft("teacher-token", "class-1", "select-1", "草稿任务", "课堂说明",
+            Instant.parse("2026-08-01T00:00:00Z"));
+
+        assertEquals("DRAFT", requestBody.get("status").asText());
+        assertEquals("课堂说明", requestBody.get("description").asText());
+
+        client.changeAssignmentStatus("teacher-token", "class-1", "assignment-1",
+            com.sqlteacher.application.collaboration.AssignmentStatus.PUBLISHED, 7);
+
+        assertEquals("PUBLISHED", requestBody.get("status").asText());
+        assertEquals(7, requestBody.get("expectedVersion").asLong());
+    }
+
+    @Test
     void shouldAllowHttpsAndLoopbackHttpEndpointsOnly() {
         assertDoesNotThrow(() -> new HttpCloudApiClient(URI.create("https://api.example.edu")));
         assertDoesNotThrow(() -> new HttpCloudApiClient(URI.create("http://localhost:18080")));

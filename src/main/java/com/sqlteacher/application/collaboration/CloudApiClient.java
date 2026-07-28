@@ -31,12 +31,38 @@ public interface CloudApiClient {
         return createAssignment(accessToken, classroomId, exerciseId, title);
     }
 
+    default ClassAssignment createAssignmentDraft(String accessToken, String classroomId, String exerciseId,
+                                                   String title, String description, Instant dueAt) {
+        throw new UnsupportedOperationException("Assignment drafts are unavailable");
+    }
+
+    default ClassAssignment copyAssignment(String accessToken, String classroomId, String assignmentId,
+                                           long expectedVersion) {
+        throw new UnsupportedOperationException("Assignment copying is unavailable");
+    }
+
     ClassAssignment changeAssignmentStatus(String accessToken, String classroomId, String assignmentId, AssignmentStatus status);
+
+    default ClassAssignment changeAssignmentStatus(String accessToken, String classroomId, String assignmentId,
+                                                    AssignmentStatus status, long expectedVersion) {
+        throw new UnsupportedOperationException("Versioned assignment updates are unavailable");
+    }
 
     ClassAssignment setAssignmentDueAt(String accessToken, String classroomId, String assignmentId, Instant dueAt);
 
+    default ClassAssignment setAssignmentDueAt(String accessToken, String classroomId, String assignmentId,
+                                               Instant dueAt, long expectedVersion) {
+        throw new UnsupportedOperationException("Versioned assignment updates are unavailable");
+    }
+
     ClassAssignment updateAssignment(String accessToken, String classroomId, String assignmentId,
                                      String title, Instant dueAt);
+
+    default ClassAssignment updateAssignment(String accessToken, String classroomId, String assignmentId,
+                                             String title, String description, Instant dueAt,
+                                             long expectedVersion) {
+        throw new UnsupportedOperationException("Versioned assignment updates are unavailable");
+    }
 
     List<ClassAssignment> listAssignments(String accessToken, String classroomId);
 

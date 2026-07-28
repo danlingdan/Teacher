@@ -87,13 +87,28 @@ public final class HttpCloudApiClient implements CloudApiClient {
     }
 
     @Override public ClassAssignment createAssignment(String token,String classroomId,String exerciseId,String title){return createAssignment(token,classroomId,exerciseId,title,null);}
-    @Override public ClassAssignment createAssignment(String token,String classroomId,String exerciseId,String title,Instant dueAt){Map<String,String> body=new java.util.LinkedHashMap<>();body.put("exerciseId",exerciseId);body.put("title",title);if(dueAt!=null)body.put("dueAt",dueAt.toString());return request("classes/"+classroomId+"/assignments","POST",body,token,ClassAssignment.class);}
-    @Override public ClassAssignment changeAssignmentStatus(String token,String classroomId,String assignmentId,AssignmentStatus status){return request("classes/"+classroomId+"/assignments/"+assignmentId+"/status","POST",Map.of("status",status.name()),token,ClassAssignment.class);}
-    @Override public ClassAssignment setAssignmentDueAt(String token,String classroomId,String assignmentId,Instant dueAt){return request("classes/"+classroomId+"/assignments/"+assignmentId+"/due","POST",Map.of("dueAt",dueAt.toString()),token,ClassAssignment.class);}
-    @Override public ClassAssignment updateAssignment(String token,String classroomId,String assignmentId,String title,Instant dueAt){Map<String,String> body=new java.util.LinkedHashMap<>();body.put("title",title);if(dueAt!=null)body.put("dueAt",dueAt.toString());return request("classes/"+classroomId+"/assignments/"+assignmentId+"/details","POST",body,token,ClassAssignment.class);}
+    @Override public ClassAssignment createAssignment(String token,String classroomId,String exerciseId,String title,Instant dueAt){Map<String,String> body=assignmentBody(exerciseId,title,"",dueAt);body.put("status",AssignmentStatus.PUBLISHED.name());return request("classes/"+classroomId+"/assignments","POST",body,token,ClassAssignment.class);}
+    @Override public ClassAssignment createAssignmentDraft(String token,String classroomId,String exerciseId,String title,String description,Instant dueAt){Map<String,String> body=assignmentBody(exerciseId,title,description,dueAt);body.put("status",AssignmentStatus.DRAFT.name());return request("classes/"+classroomId+"/assignments","POST",body,token,ClassAssignment.class);}
+    @Override public ClassAssignment copyAssignment(String token,String classroomId,String assignmentId,long expectedVersion){return request("classes/"+classroomId+"/assignments/"+assignmentId+"/copy","POST",Map.of("expectedVersion",Long.toString(expectedVersion)),token,ClassAssignment.class);}
+    @Override public ClassAssignment changeAssignmentStatus(String token,String classroomId,String assignmentId,AssignmentStatus status){return changeAssignmentStatus(token,classroomId,assignmentId,status,1);}
+    @Override public ClassAssignment changeAssignmentStatus(String token,String classroomId,String assignmentId,AssignmentStatus status,long expectedVersion){return request("classes/"+classroomId+"/assignments/"+assignmentId+"/status","POST",Map.of("status",status.name(),"expectedVersion",Long.toString(expectedVersion)),token,ClassAssignment.class);}
+    @Override public ClassAssignment setAssignmentDueAt(String token,String classroomId,String assignmentId,Instant dueAt){return setAssignmentDueAt(token,classroomId,assignmentId,dueAt,1);}
+    @Override public ClassAssignment setAssignmentDueAt(String token,String classroomId,String assignmentId,Instant dueAt,long expectedVersion){return request("classes/"+classroomId+"/assignments/"+assignmentId+"/due","POST",Map.of("dueAt",dueAt.toString(),"expectedVersion",Long.toString(expectedVersion)),token,ClassAssignment.class);}
+    @Override public ClassAssignment updateAssignment(String token,String classroomId,String assignmentId,String title,Instant dueAt){return updateAssignment(token,classroomId,assignmentId,title,"",dueAt,1);}
+    @Override public ClassAssignment updateAssignment(String token,String classroomId,String assignmentId,String title,String description,Instant dueAt,long expectedVersion){Map<String,String> body=assignmentBody(null,title,description,dueAt);body.put("expectedVersion",Long.toString(expectedVersion));return request("classes/"+classroomId+"/assignments/"+assignmentId+"/details","POST",body,token,ClassAssignment.class);}
     @Override public List<ClassAssignment> listAssignments(String token,String classroomId){Map<String,List<ClassAssignment>> result=request("classes/"+classroomId+"/assignments","GET",null,token,new TypeReference<Map<String,List<ClassAssignment>>>(){});return result.getOrDefault("assignments",List.of());}
     @Override public ClassLearningSummary getClassLearningSummary(String token,String classroomId){return request("classes/"+classroomId+"/analytics","GET",null,token,ClassLearningSummary.class);}
     @Override public String exportClassLearningCsv(String token,String classroomId){return send("classes/"+classroomId+"/analytics/export","GET",null,token);}
+
+    private static Map<String, String> assignmentBody(String exerciseId, String title, String description,
+                                                      Instant dueAt) {
+        Map<String, String> body = new java.util.LinkedHashMap<>();
+        if (exerciseId != null) body.put("exerciseId", exerciseId);
+        body.put("title", title);
+        body.put("description", description == null ? "" : description);
+        if (dueAt != null) body.put("dueAt", dueAt.toString());
+        return body;
+    }
 
     @Override
     public int uploadSyncItems(String accessToken, List<CloudSyncItem> items) {

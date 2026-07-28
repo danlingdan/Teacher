@@ -3,6 +3,8 @@ package com.sqlteacher.server;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sqlteacher.application.collaboration.AuthenticatedUser;
+import com.sqlteacher.application.collaboration.AssignmentStatus;
+import com.sqlteacher.application.collaboration.AssignmentVersionConflictException;
 import com.sqlteacher.application.collaboration.ClassroomService;
 import com.sqlteacher.application.collaboration.CloudAuthenticationService;
 import com.sqlteacher.application.collaboration.CloudSyncItem;
@@ -159,11 +161,15 @@ public final class SqlTeacherCloudServer {
             }
             if (segments.length == 6 && "assignments".equals(segments[5])) {
                 if ("GET".equals(exchange.getRequestMethod())) {
-                    respond(exchange,200,Map.of("assignments",store.listAssignments(actor,segments[4])));return;
+                    String requestedStatus = queryValue(exchange.getRequestURI().getRawQuery(), "status");
+                    AssignmentStatus statusFilter = requestedStatus == null ? null : assignmentStatus(requestedStatus, null);
+                    respond(exchange,200,Map.of("assignments",store.listAssignments(actor,segments[4],statusFilter)));return;
                 }
                 if ("POST".equals(exchange.getRequestMethod())) {
                     Map<String,String> body=request(exchange);
-                    respond(exchange,201,store.createAssignment(actor,segments[4],body.get("exerciseId"),body.get("title"),instantOrNull(body.get("dueAt"))));return;
+                    AssignmentStatus status = assignmentStatus(body.get("status"), AssignmentStatus.PUBLISHED);
+                    respond(exchange,201,store.createAssignment(actor,segments[4],body.get("exerciseId"),body.get("title"),
+                        body.get("description"),instantOrNull(body.get("dueAt")),status));return;
                 }
             }
             if (segments.length == 6 && "analytics".equals(segments[5]) && "GET".equals(exchange.getRequestMethod())) {
@@ -175,27 +181,38 @@ public final class SqlTeacherCloudServer {
                 respondCsv(exchange, store.exportClassLearningCsv(actor, segments[4]));
                 return;
             }
+            if (segments.length == 8 && "assignments".equals(segments[5]) && "copy".equals(segments[7])
+                && "POST".equals(exchange.getRequestMethod())) {
+                Map<String, String> body = request(exchange);
+                respond(exchange, 201, store.copyAssignment(actor, segments[4], segments[6],
+                    positiveLong(body, "expectedVersion")));
+                return;
+            }
             if (segments.length == 8 && "assignments".equals(segments[5]) && "status".equals(segments[7])
                 && "POST".equals(exchange.getRequestMethod())) {
                 Map<String, String> body = request(exchange);
                 respond(exchange, 200, store.changeAssignmentStatus(actor, segments[4], segments[6],
-                    com.sqlteacher.application.collaboration.AssignmentStatus.valueOf(body.get("status").toUpperCase(Locale.ROOT))));
+                    assignmentStatus(body.get("status"), null), positiveLong(body, "expectedVersion")));
                 return;
             }
             if (segments.length == 8 && "assignments".equals(segments[5]) && "due".equals(segments[7])
                 && "POST".equals(exchange.getRequestMethod())) {
                 Map<String, String> body = request(exchange);
-                respond(exchange, 200, store.setAssignmentDueAt(actor, segments[4], segments[6], instantOrNull(body.get("dueAt"))));
+                respond(exchange, 200, store.setAssignmentDueAt(actor, segments[4], segments[6],
+                    instantOrNull(body.get("dueAt")), positiveLong(body, "expectedVersion")));
                 return;
             }
             if (segments.length == 8 && "assignments".equals(segments[5]) && "details".equals(segments[7])
                 && "POST".equals(exchange.getRequestMethod())) {
                 Map<String, String> body = request(exchange);
                 respond(exchange, 200, store.updateAssignment(actor, segments[4], segments[6], body.get("title"),
-                    instantOrNull(body.get("dueAt"))));
+                    body.get("description"), instantOrNull(body.get("dueAt")), positiveLong(body, "expectedVersion")));
                 return;
             }
             respond(exchange, 404, errorResponse("NOT_FOUND", "API endpoint was not found."));
+        } catch (AssignmentVersionConflictException error) {
+            respond(exchange, 409, Map.of("code", "ASSIGNMENT_VERSION_CONFLICT", "message", error.getMessage(),
+                "latest", error.latest()));
         } catch (SecurityException error) { respond(exchange, 403, errorResponse("FORBIDDEN", "You do not have access to this resource.")); }
         catch (IllegalArgumentException error) { respond(exchange, 400, errorResponse("INVALID_REQUEST", error.getMessage())); }
         catch (RuntimeException error) { error.printStackTrace(); respond(exchange, 500, errorResponse("SERVER_ERROR", "Classroom operation failed.")); }
@@ -234,9 +251,40 @@ public final class SqlTeacherCloudServer {
         return defaultValue;
     }
 
+    private static String queryValue(String query, String name) {
+        if (query == null || query.isBlank()) return null;
+        for (String pair : query.split("&")) {
+            String[] parts = pair.split("=", 2);
+            if (parts.length == 2 && name.equals(parts[0])) return parts[1];
+        }
+        return null;
+    }
+
     private static Instant instantOrNull(String value) {
         if (value == null || value.isBlank()) return null;
         return Instant.parse(value);
+    }
+
+    private static AssignmentStatus assignmentStatus(String value, AssignmentStatus defaultValue) {
+        if (value == null || value.isBlank()) {
+            if (defaultValue != null) return defaultValue;
+            throw new IllegalArgumentException("status must not be blank");
+        }
+        try {
+            return AssignmentStatus.valueOf(value.toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException error) {
+            throw new IllegalArgumentException("status is invalid");
+        }
+    }
+
+    private static long positiveLong(Map<String, String> body, String name) {
+        try {
+            long value = Long.parseLong(body.getOrDefault(name, ""));
+            if (value < 1) throw new NumberFormatException();
+            return value;
+        } catch (NumberFormatException error) {
+            throw new IllegalArgumentException(name + " must be a positive integer");
+        }
     }
 
     private static Map<String, String> request(HttpExchange exchange) throws IOException {
@@ -294,6 +342,8 @@ public final class SqlTeacherCloudServer {
     }
 
     private static final class CloudStore implements CloudAuthenticationService, ClassroomService {
+        private static final String ASSIGNMENT_COLUMNS = "id,exercise_id,title,description,created_at,status,"
+            + "due_at,updated_at,published_at,copied_from_assignment_id,version";
         private final Path database;
         private final SecureRandom random = new SecureRandom();
 
@@ -465,18 +515,251 @@ public final class SqlTeacherCloudServer {
             return List.copyOf(items);
         }
 
-        ClassAssignment createAssignment(AuthenticatedUser actor,String classroomId,String exerciseId,String title,Instant dueAt){requireTeacher(actor,classroomId);if(exerciseId==null||exerciseId.isBlank()||title==null||title.isBlank())throw new IllegalArgumentException("exerciseId and title must not be blank");String id=UUID.randomUUID().toString();Instant now=Instant.now();if(dueAt!=null&&dueAt.isBefore(now))throw new IllegalArgumentException("dueAt must be in the future");try(Connection c=open();PreparedStatement s=c.prepareStatement("insert into class_assignments(id,classroom_id,exercise_id,title,created_at,status,due_at,updated_at) values(?,?,?,?,?,'PUBLISHED',?,?)")){s.setString(1,id);s.setString(2,classroomId);s.setString(3,exerciseId.trim());s.setString(4,title.trim());s.setString(5,now.toString());s.setString(6,dueAt==null?null:dueAt.toString());s.setString(7,now.toString());s.executeUpdate();return new ClassAssignment(id,classroomId,exerciseId.trim(),title.trim(),now,com.sqlteacher.application.collaboration.AssignmentStatus.PUBLISHED,dueAt,now);}catch(SQLException e){throw database(e);}}
-        ClassAssignment setAssignmentDueAt(AuthenticatedUser actor,String classroomId,String assignmentId,Instant dueAt){requireTeacher(actor,classroomId);if(dueAt==null||!dueAt.isAfter(Instant.now()))throw new IllegalArgumentException("dueAt must be in the future");try(Connection c=open();PreparedStatement s=c.prepareStatement("update class_assignments set due_at=?,updated_at=? where id=? and classroom_id=?")){s.setString(1,dueAt.toString());s.setString(2,Instant.now().toString());s.setString(3,assignmentId);s.setString(4,classroomId);if(s.executeUpdate()!=1)throw new IllegalArgumentException("Assignment was not found");return assignment(c,classroomId,assignmentId);}catch(SQLException e){throw database(e);}}
-        ClassAssignment changeAssignmentStatus(AuthenticatedUser actor,String classroomId,String assignmentId,com.sqlteacher.application.collaboration.AssignmentStatus status){requireTeacher(actor,classroomId);Instant now=Instant.now();try(Connection c=open()){ClassAssignment current=assignment(c,classroomId,assignmentId);if(!validTransition(current.status(),status))throw new IllegalArgumentException("Assignment status transition is not allowed");try(PreparedStatement s=c.prepareStatement("update class_assignments set status=?,updated_at=? where id=? and classroom_id=?")){s.setString(1,status.name());s.setString(2,now.toString());s.setString(3,assignmentId);s.setString(4,classroomId);s.executeUpdate();}return assignment(c,classroomId,assignmentId);}catch(SQLException e){throw database(e);}}
-        ClassAssignment updateAssignment(AuthenticatedUser actor,String classroomId,String assignmentId,String title,Instant dueAt){requireTeacher(actor,classroomId);if(title==null||title.isBlank()||title.length()>160)throw new IllegalArgumentException("title must be 1 to 160 characters");if(dueAt!=null&&!dueAt.isAfter(Instant.now()))throw new IllegalArgumentException("dueAt must be in the future");try(Connection c=open()){ClassAssignment current=assignment(c,classroomId,assignmentId);if(current.status()==com.sqlteacher.application.collaboration.AssignmentStatus.ARCHIVED)throw new IllegalArgumentException("Archived assignments cannot be edited");try(PreparedStatement s=c.prepareStatement("update class_assignments set title=?,due_at=?,updated_at=? where id=? and classroom_id=?")){s.setString(1,title.trim());s.setString(2,dueAt==null?null:dueAt.toString());s.setString(3,Instant.now().toString());s.setString(4,assignmentId);s.setString(5,classroomId);s.executeUpdate();}return assignment(c,classroomId,assignmentId);}catch(SQLException e){throw database(e);}}
-        private boolean validTransition(com.sqlteacher.application.collaboration.AssignmentStatus from,com.sqlteacher.application.collaboration.AssignmentStatus to){if(from==to)return true;return switch(from){case DRAFT->to==com.sqlteacher.application.collaboration.AssignmentStatus.PUBLISHED||to==com.sqlteacher.application.collaboration.AssignmentStatus.WITHDRAWN;case PUBLISHED->to==com.sqlteacher.application.collaboration.AssignmentStatus.CLOSED||to==com.sqlteacher.application.collaboration.AssignmentStatus.WITHDRAWN;case CLOSED,WITHDRAWN->to==com.sqlteacher.application.collaboration.AssignmentStatus.ARCHIVED;case ARCHIVED->false;};}
-        List<ClassAssignment> listAssignments(AuthenticatedUser actor,String classroomId){requireMember(actor,classroomId);closeExpiredAssignments(classroomId);List<ClassAssignment> result=new ArrayList<>();boolean teacher=actor.hasRole(UserRole.ADMIN)||isTeacher(actor,classroomId);String sql=teacher?"select id,exercise_id,title,created_at,status,due_at,updated_at from class_assignments where classroom_id=? order by created_at desc":"select id,exercise_id,title,created_at,status,due_at,updated_at from class_assignments where classroom_id=? and status in ('PUBLISHED','CLOSED') order by created_at desc";try(Connection c=open();PreparedStatement s=c.prepareStatement(sql)){s.setString(1,classroomId);try(ResultSet r=s.executeQuery()){while(r.next())result.add(assignment(r,classroomId));}return List.copyOf(result);}catch(SQLException e){throw database(e);}}
-        private void closeExpiredAssignments(String classroomId){Instant now=Instant.now();try(Connection c=open();PreparedStatement s=c.prepareStatement("update class_assignments set status='CLOSED',updated_at=? where classroom_id=? and status='PUBLISHED' and due_at is not null and due_at<=?")){s.setString(1,now.toString());s.setString(2,classroomId);s.setString(3,now.toString());s.executeUpdate();}catch(SQLException e){throw database(e);}}
+        ClassAssignment createAssignment(AuthenticatedUser actor, String classroomId, String exerciseId, String title,
+                                         String description, Instant dueAt, AssignmentStatus status) {
+            requireTeacher(actor, classroomId);
+            validateAssignmentDetails(exerciseId, title, description, dueAt);
+            if (status != AssignmentStatus.DRAFT && status != AssignmentStatus.PUBLISHED) {
+                throw new IllegalArgumentException("New assignments must be DRAFT or PUBLISHED");
+            }
+            String id = UUID.randomUUID().toString();
+            Instant now = Instant.now();
+            Instant publishedAt = status == AssignmentStatus.PUBLISHED ? now : null;
+            try (Connection connection = open(); PreparedStatement statement = connection.prepareStatement(
+                "insert into class_assignments(id,classroom_id,exercise_id,title,description,created_at,status,"
+                    + "due_at,published_at,copied_from_assignment_id,version,updated_at) values(?,?,?,?,?,?,?,?,?,?,1,?)")) {
+                statement.setString(1, id);
+                statement.setString(2, classroomId);
+                statement.setString(3, exerciseId.trim());
+                statement.setString(4, title.trim());
+                statement.setString(5, normalizeDescription(description));
+                statement.setString(6, now.toString());
+                statement.setString(7, status.name());
+                statement.setString(8, dueAt == null ? null : dueAt.toString());
+                statement.setString(9, publishedAt == null ? null : publishedAt.toString());
+                statement.setString(10, null);
+                statement.setString(11, now.toString());
+                statement.executeUpdate();
+                return assignment(connection, classroomId, id);
+            } catch (SQLException error) { throw database(error); }
+        }
+
+        ClassAssignment copyAssignment(AuthenticatedUser actor, String classroomId, String assignmentId,
+                                       long expectedVersion) {
+            requireTeacher(actor, classroomId);
+            try (Connection connection = open()) {
+                ClassAssignment source = assignment(connection, classroomId, assignmentId);
+                requireVersion(source, expectedVersion);
+                String id = UUID.randomUUID().toString();
+                Instant now = Instant.now();
+                Instant copiedDueAt = source.dueAt() != null && source.dueAt().isAfter(now) ? source.dueAt() : null;
+                String copiedTitle = source.title().length() <= 153 ? source.title() + " (copy)" : source.title();
+                try (PreparedStatement statement = connection.prepareStatement(
+                    "insert into class_assignments(id,classroom_id,exercise_id,title,description,created_at,status,"
+                        + "due_at,published_at,copied_from_assignment_id,version,updated_at) "
+                        + "values(?,?,?,?,?,?,'DRAFT',?,null,?,1,?)")) {
+                    statement.setString(1, id);
+                    statement.setString(2, classroomId);
+                    statement.setString(3, source.exerciseId());
+                    statement.setString(4, copiedTitle);
+                    statement.setString(5, source.description());
+                    statement.setString(6, now.toString());
+                    statement.setString(7, copiedDueAt == null ? null : copiedDueAt.toString());
+                    statement.setString(8, source.id());
+                    statement.setString(9, now.toString());
+                    statement.executeUpdate();
+                }
+                return assignment(connection, classroomId, id);
+            } catch (SQLException error) { throw database(error); }
+        }
+
+        ClassAssignment setAssignmentDueAt(AuthenticatedUser actor, String classroomId, String assignmentId,
+                                           Instant dueAt, long expectedVersion) {
+            requireTeacher(actor, classroomId);
+            if (dueAt == null || !dueAt.isAfter(Instant.now())) {
+                throw new IllegalArgumentException("dueAt must be in the future");
+            }
+            try (Connection connection = open()) {
+                ClassAssignment current = assignment(connection, classroomId, assignmentId);
+                requireEditable(current);
+                requireVersion(current, expectedVersion);
+                Instant now = Instant.now();
+                try (PreparedStatement statement = connection.prepareStatement(
+                    "update class_assignments set due_at=?,updated_at=?,version=version+1 "
+                        + "where id=? and classroom_id=? and version=?")) {
+                    statement.setString(1, dueAt.toString());
+                    statement.setString(2, now.toString());
+                    statement.setString(3, assignmentId);
+                    statement.setString(4, classroomId);
+                    statement.setLong(5, expectedVersion);
+                    requireUpdated(statement, connection, classroomId, assignmentId);
+                }
+                return assignment(connection, classroomId, assignmentId);
+            } catch (SQLException error) { throw database(error); }
+        }
+
+        ClassAssignment changeAssignmentStatus(AuthenticatedUser actor, String classroomId, String assignmentId,
+                                                AssignmentStatus status, long expectedVersion) {
+            requireTeacher(actor, classroomId);
+            if (status == null) throw new IllegalArgumentException("status must not be null");
+            Instant now = Instant.now();
+            try (Connection connection = open()) {
+                ClassAssignment current = assignment(connection, classroomId, assignmentId);
+                requireVersion(current, expectedVersion);
+                if (!validTransition(current.status(), status)) {
+                    throw new IllegalArgumentException("Assignment status transition is not allowed");
+                }
+                String publishedAt = status == AssignmentStatus.PUBLISHED && current.publishedAt() == null
+                    ? now.toString() : current.publishedAt() == null ? null : current.publishedAt().toString();
+                try (PreparedStatement statement = connection.prepareStatement(
+                    "update class_assignments set status=?,published_at=?,updated_at=?,version=version+1 "
+                        + "where id=? and classroom_id=? and version=?")) {
+                    statement.setString(1, status.name());
+                    statement.setString(2, publishedAt);
+                    statement.setString(3, now.toString());
+                    statement.setString(4, assignmentId);
+                    statement.setString(5, classroomId);
+                    statement.setLong(6, expectedVersion);
+                    requireUpdated(statement, connection, classroomId, assignmentId);
+                }
+                return assignment(connection, classroomId, assignmentId);
+            } catch (SQLException error) { throw database(error); }
+        }
+
+        ClassAssignment updateAssignment(AuthenticatedUser actor, String classroomId, String assignmentId,
+                                         String title, String description, Instant dueAt, long expectedVersion) {
+            requireTeacher(actor, classroomId);
+            validateAssignmentDetails("existing", title, description, dueAt);
+            try (Connection connection = open()) {
+                ClassAssignment current = assignment(connection, classroomId, assignmentId);
+                requireEditable(current);
+                requireVersion(current, expectedVersion);
+                try (PreparedStatement statement = connection.prepareStatement(
+                    "update class_assignments set title=?,description=?,due_at=?,updated_at=?,version=version+1 "
+                        + "where id=? and classroom_id=? and version=?")) {
+                    statement.setString(1, title.trim());
+                    statement.setString(2, normalizeDescription(description));
+                    statement.setString(3, dueAt == null ? null : dueAt.toString());
+                    statement.setString(4, Instant.now().toString());
+                    statement.setString(5, assignmentId);
+                    statement.setString(6, classroomId);
+                    statement.setLong(7, expectedVersion);
+                    requireUpdated(statement, connection, classroomId, assignmentId);
+                }
+                return assignment(connection, classroomId, assignmentId);
+            } catch (SQLException error) { throw database(error); }
+        }
+
+        private boolean validTransition(AssignmentStatus from, AssignmentStatus to) {
+            if (from == to) return true;
+            return switch (from) {
+                case DRAFT -> to == AssignmentStatus.PUBLISHED || to == AssignmentStatus.WITHDRAWN;
+                case PUBLISHED -> to == AssignmentStatus.CLOSED || to == AssignmentStatus.WITHDRAWN;
+                case CLOSED, WITHDRAWN -> to == AssignmentStatus.ARCHIVED;
+                case ARCHIVED -> false;
+            };
+        }
+
+        List<ClassAssignment> listAssignments(AuthenticatedUser actor, String classroomId,
+                                              AssignmentStatus statusFilter) {
+            requireMember(actor, classroomId);
+            closeExpiredAssignments(classroomId);
+            List<ClassAssignment> result = new ArrayList<>();
+            boolean teacher = actor.hasRole(UserRole.ADMIN) || isTeacher(actor, classroomId);
+            if (!teacher && statusFilter != null && statusFilter != AssignmentStatus.PUBLISHED
+                && statusFilter != AssignmentStatus.CLOSED) {
+                throw new SecurityException("Students cannot view unpublished assignments");
+            }
+            StringBuilder sql = new StringBuilder("select ").append(ASSIGNMENT_COLUMNS)
+                .append(" from class_assignments where classroom_id=?");
+            if (!teacher) sql.append(" and status in ('PUBLISHED','CLOSED')");
+            if (statusFilter != null) sql.append(" and status=?");
+            sql.append(" order by created_at desc");
+            try (Connection connection = open(); PreparedStatement statement = connection.prepareStatement(sql.toString())) {
+                statement.setString(1, classroomId);
+                if (statusFilter != null) statement.setString(2, statusFilter.name());
+                try (ResultSet rows = statement.executeQuery()) {
+                    while (rows.next()) result.add(assignment(rows, classroomId));
+                }
+                return List.copyOf(result);
+            } catch (SQLException error) { throw database(error); }
+        }
+
+        private void closeExpiredAssignments(String classroomId) {
+            Instant now = Instant.now();
+            try (Connection connection = open(); PreparedStatement statement = connection.prepareStatement(
+                "update class_assignments set status='CLOSED',updated_at=?,version=version+1 "
+                    + "where classroom_id=? and status='PUBLISHED' and due_at is not null and due_at<=?")) {
+                statement.setString(1, now.toString());
+                statement.setString(2, classroomId);
+                statement.setString(3, now.toString());
+                statement.executeUpdate();
+            } catch (SQLException error) { throw database(error); }
+        }
         com.sqlteacher.application.collaboration.ClassLearningSummary classLearningSummary(AuthenticatedUser actor,String classroomId){requireTeacher(actor,classroomId);int students=0;int active=0;int events=0;int success=0;try(Connection c=open();PreparedStatement s=c.prepareStatement("select m.user_id,e.payload_json from classroom_members m left join sync_events e on e.user_id=m.user_id where m.classroom_id=? and m.role='STUDENT'")){s.setString(1,classroomId);java.util.Set<String> seenStudents=new java.util.HashSet<>();java.util.Set<String> activeStudents=new java.util.HashSet<>();try(ResultSet r=s.executeQuery()){while(r.next()){String userId=r.getString(1);seenStudents.add(userId);String payload=r.getString(2);if(payload==null)continue;events++;activeStudents.add(userId);try{if(JSON.readTree(payload).path("successful").asBoolean(false))success++;}catch(IOException ignored){}}}students=seenStudents.size();active=activeStudents.size();}catch(SQLException e){throw database(e);}return new com.sqlteacher.application.collaboration.ClassLearningSummary(classroomId,students,active,events,success,Instant.now());}
         String exportClassLearningCsv(AuthenticatedUser actor,String classroomId){requireTeacher(actor,classroomId);StringBuilder csv=new StringBuilder("\uFEFFstudent_email,event_type,occurred_at,successful\r\n");int rows=0;try(Connection c=open();PreparedStatement s=c.prepareStatement("select u.email,e.event_type,e.occurred_at,e.payload_json from classroom_members m join users u on u.id=m.user_id join sync_events e on e.user_id=m.user_id where m.classroom_id=? and m.role='STUDENT' order by e.occurred_at")){s.setString(1,classroomId);try(ResultSet r=s.executeQuery()){while(r.next()){boolean successful=false;try{successful=JSON.readTree(r.getString(4)).path("successful").asBoolean(false);}catch(IOException ignored){}csv.append(csvCell(r.getString(1))).append(',').append(csvCell(r.getString(2))).append(',').append(csvCell(r.getString(3))).append(',').append(successful).append("\r\n");rows++;}}try(PreparedStatement audit=c.prepareStatement("insert into export_audit(id,user_id,classroom_id,row_count,created_at) values(?,?,?,?,?)")){audit.setString(1,UUID.randomUUID().toString());audit.setString(2,actor.id());audit.setString(3,classroomId);audit.setInt(4,rows);audit.setString(5,Instant.now().toString());audit.executeUpdate();}}catch(SQLException e){throw database(e);}return csv.toString();}
         private String csvCell(String value){String normalized=value==null?"":value;if(!normalized.isEmpty()&&"=+-@".indexOf(normalized.charAt(0))>=0)normalized="'"+normalized;return "\""+normalized.replace("\"","\"\"")+"\"";}
-        private ClassAssignment assignment(Connection c,String classroomId,String assignmentId)throws SQLException{try(PreparedStatement s=c.prepareStatement("select id,exercise_id,title,created_at,status,due_at,updated_at from class_assignments where id=? and classroom_id=?")){s.setString(1,assignmentId);s.setString(2,classroomId);try(ResultSet r=s.executeQuery()){if(!r.next())throw new IllegalArgumentException("Assignment was not found");return assignment(r,classroomId);}}}
-        private ClassAssignment assignment(ResultSet r,String classroomId)throws SQLException{String due=r.getString("due_at");return new ClassAssignment(r.getString("id"),classroomId,r.getString("exercise_id"),r.getString("title"),Instant.parse(r.getString("created_at")),com.sqlteacher.application.collaboration.AssignmentStatus.valueOf(r.getString("status")),due==null?null:Instant.parse(due),Instant.parse(r.getString("updated_at")));}
+        private ClassAssignment assignment(Connection connection, String classroomId, String assignmentId)
+            throws SQLException {
+            try (PreparedStatement statement = connection.prepareStatement(
+                "select " + ASSIGNMENT_COLUMNS + " from class_assignments where id=? and classroom_id=?")) {
+                statement.setString(1, assignmentId);
+                statement.setString(2, classroomId);
+                try (ResultSet row = statement.executeQuery()) {
+                    if (!row.next()) throw new IllegalArgumentException("Assignment was not found");
+                    return assignment(row, classroomId);
+                }
+            }
+        }
+
+        private ClassAssignment assignment(ResultSet row, String classroomId) throws SQLException {
+            String dueAt = row.getString("due_at");
+            String publishedAt = row.getString("published_at");
+            return new ClassAssignment(
+                row.getString("id"), classroomId, row.getString("exercise_id"), row.getString("title"),
+                Instant.parse(row.getString("created_at")), AssignmentStatus.valueOf(row.getString("status")),
+                dueAt == null ? null : Instant.parse(dueAt), Instant.parse(row.getString("updated_at")),
+                row.getString("description"), publishedAt == null ? null : Instant.parse(publishedAt),
+                row.getString("copied_from_assignment_id"), row.getLong("version")
+            );
+        }
+
+        private void validateAssignmentDetails(String exerciseId, String title, String description, Instant dueAt) {
+            if (exerciseId == null || exerciseId.isBlank()) {
+                throw new IllegalArgumentException("exerciseId must not be blank");
+            }
+            if (title == null || title.isBlank() || title.length() > 160) {
+                throw new IllegalArgumentException("title must be 1 to 160 characters");
+            }
+            if (description != null && description.length() > 2_000) {
+                throw new IllegalArgumentException("description must contain at most 2000 characters");
+            }
+            if (dueAt != null && !dueAt.isAfter(Instant.now())) {
+                throw new IllegalArgumentException("dueAt must be in the future");
+            }
+        }
+
+        private String normalizeDescription(String description) {
+            return description == null ? "" : description.trim();
+        }
+
+        private void requireEditable(ClassAssignment assignment) {
+            if (assignment.status() == AssignmentStatus.ARCHIVED) {
+                throw new IllegalArgumentException("Archived assignments cannot be edited");
+            }
+        }
+
+        private void requireVersion(ClassAssignment assignment, long expectedVersion) {
+            if (expectedVersion < 1) throw new IllegalArgumentException("expectedVersion must be positive");
+            if (assignment.version() != expectedVersion) throw new AssignmentVersionConflictException(assignment);
+        }
+
+        private void requireUpdated(PreparedStatement statement, Connection connection, String classroomId,
+                                    String assignmentId) throws SQLException {
+            if (statement.executeUpdate() != 1) {
+                throw new AssignmentVersionConflictException(assignment(connection, classroomId, assignmentId));
+            }
+        }
 
         private AuthenticatedUser authenticateData(String token) {
             try (Connection connection = open(); PreparedStatement statement = connection.prepareStatement("select user_id from access_tokens where token_hash=? and expires_at>? and revoked_at is null")) {
@@ -518,7 +801,49 @@ public final class SqlTeacherCloudServer {
         private boolean isTeacher(AuthenticatedUser actor,String classId){if(actor.hasRole(UserRole.ADMIN))return true;try(Connection c=open();PreparedStatement s=c.prepareStatement("select 1 from classroom_members where classroom_id=? and user_id=? and role='TEACHER'")){s.setString(1,classId);s.setString(2,actor.id());try(ResultSet r=s.executeQuery()){return r.next();}}catch(SQLException e){throw database(e);}}
         private void requireMember(AuthenticatedUser actor,String classId){if(actor.hasRole(UserRole.ADMIN))return;try(Connection c=open();PreparedStatement s=c.prepareStatement("select 1 from classroom_members where classroom_id=? and user_id=?")){s.setString(1,classId);s.setString(2,actor.id());try(ResultSet r=s.executeQuery()){if(!r.next())throw new SecurityException("not classroom member");}}catch(SQLException e){throw database(e);}}
         private Connection open() throws SQLException { return DriverManager.getConnection("jdbc:sqlite:"+database); }
-        private void initialize() throws SQLException { try(Connection c=open(); Statement s=c.createStatement()){s.executeUpdate("pragma foreign_keys=on");s.executeUpdate("create table if not exists users(id text primary key,email text not null unique,display_name text not null,password_hash blob not null,password_salt blob not null,disabled integer not null default 0,created_at text not null)");s.executeUpdate("create table if not exists user_roles(user_id text not null references users(id),role text not null check(role in ('ADMIN','TEACHER','STUDENT')),primary key(user_id,role))");s.executeUpdate("create table if not exists access_tokens(token_hash blob primary key,user_id text not null references users(id),expires_at text not null,created_at text not null,revoked_at text)");s.executeUpdate("create table if not exists refresh_tokens(token_hash blob primary key,user_id text not null references users(id),expires_at text not null,created_at text not null,revoked_at text)");s.executeUpdate("create table if not exists classrooms(id text primary key,name text not null,created_at text not null)");s.executeUpdate("create table if not exists classroom_members(classroom_id text not null references classrooms(id),user_id text not null references users(id),role text not null check(role in ('TEACHER','STUDENT')),primary key(classroom_id,user_id))");s.executeUpdate("create table if not exists class_assignments(id text primary key,classroom_id text not null references classrooms(id),exercise_id text not null,title text not null,created_at text not null,status text not null default 'PUBLISHED',due_at text,updated_at text not null)");s.executeUpdate("create table if not exists sync_events(version integer primary key autoincrement,user_id text not null references users(id),event_id text not null,event_type text not null,payload_json text not null,occurred_at text not null,unique(user_id,event_id))");s.executeUpdate("create table if not exists export_audit(id text primary key,user_id text not null references users(id),classroom_id text not null references classrooms(id),row_count integer not null,created_at text not null)");addColumnIfMissing(s,"class_assignments","status text not null default 'PUBLISHED'");addColumnIfMissing(s,"class_assignments","due_at text");addColumnIfMissing(s,"class_assignments","updated_at text");s.executeUpdate("update class_assignments set updated_at=created_at where updated_at is null");} }
+        private void initialize() throws SQLException {
+            try (Connection connection = open(); Statement statement = connection.createStatement()) {
+                statement.executeUpdate("pragma foreign_keys=on");
+                statement.executeUpdate("create table if not exists users(id text primary key,email text not null unique,"
+                    + "display_name text not null,password_hash blob not null,password_salt blob not null,"
+                    + "disabled integer not null default 0,created_at text not null)");
+                statement.executeUpdate("create table if not exists user_roles(user_id text not null references users(id),"
+                    + "role text not null check(role in ('ADMIN','TEACHER','STUDENT')),primary key(user_id,role))");
+                statement.executeUpdate("create table if not exists access_tokens(token_hash blob primary key,"
+                    + "user_id text not null references users(id),expires_at text not null,created_at text not null,revoked_at text)");
+                statement.executeUpdate("create table if not exists refresh_tokens(token_hash blob primary key,"
+                    + "user_id text not null references users(id),expires_at text not null,created_at text not null,revoked_at text)");
+                statement.executeUpdate("create table if not exists classrooms(id text primary key,name text not null,created_at text not null)");
+                statement.executeUpdate("create table if not exists classroom_members(classroom_id text not null references classrooms(id),"
+                    + "user_id text not null references users(id),role text not null check(role in ('TEACHER','STUDENT')),"
+                    + "primary key(classroom_id,user_id))");
+                statement.executeUpdate("create table if not exists class_assignments(id text primary key,"
+                    + "classroom_id text not null references classrooms(id),exercise_id text not null,title text not null,"
+                    + "description text not null default '',created_at text not null,status text not null default 'PUBLISHED',"
+                    + "due_at text,published_at text,copied_from_assignment_id text,version integer not null default 1,"
+                    + "updated_at text not null)");
+                statement.executeUpdate("create table if not exists sync_events(version integer primary key autoincrement,"
+                    + "user_id text not null references users(id),event_id text not null,event_type text not null,"
+                    + "payload_json text not null,occurred_at text not null,unique(user_id,event_id))");
+                statement.executeUpdate("create table if not exists export_audit(id text primary key,"
+                    + "user_id text not null references users(id),classroom_id text not null references classrooms(id),"
+                    + "row_count integer not null,created_at text not null)");
+                addColumnIfMissing(statement, "class_assignments", "status text not null default 'PUBLISHED'");
+                addColumnIfMissing(statement, "class_assignments", "due_at text");
+                addColumnIfMissing(statement, "class_assignments", "updated_at text");
+                addColumnIfMissing(statement, "class_assignments", "description text not null default ''");
+                addColumnIfMissing(statement, "class_assignments", "published_at text");
+                addColumnIfMissing(statement, "class_assignments", "copied_from_assignment_id text");
+                addColumnIfMissing(statement, "class_assignments", "version integer not null default 1");
+                statement.executeUpdate("update class_assignments set updated_at=created_at where updated_at is null");
+                statement.executeUpdate("update class_assignments set description='' where description is null");
+                statement.executeUpdate("update class_assignments set version=1 where version is null or version<1");
+                statement.executeUpdate("update class_assignments set published_at=created_at "
+                    + "where published_at is null and status<>'DRAFT'");
+                statement.executeUpdate("create index if not exists idx_assignments_class_status "
+                    + "on class_assignments(classroom_id,status,created_at desc)");
+            }
+        }
         private void addColumnIfMissing(Statement statement,String table,String definition)throws SQLException{try{statement.executeUpdate("alter table "+table+" add column "+definition);}catch(SQLException error){if(!error.getMessage().toLowerCase(Locale.ROOT).contains("duplicate column"))throw error;}}
         private byte[] bytes(int count){byte[] value=new byte[count];random.nextBytes(value);return value;} private byte[] hash(char[] password,byte[] salt){try{KeySpec spec=new PBEKeySpec(password,salt,PBKDF2_ITERATIONS,HASH_BITS);return SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256").generateSecret(spec).getEncoded();}catch(GeneralSecurityException e){throw new IllegalStateException("Password hashing unavailable",e);}} private byte[] tokenHash(String token){try{return java.security.MessageDigest.getInstance("SHA-256").digest(token.getBytes(StandardCharsets.UTF_8));}catch(GeneralSecurityException e){throw new IllegalStateException(e);}} private static boolean constantTimeEquals(byte[] a,byte[] b){return java.security.MessageDigest.isEqual(a,b);} private static String validateEmail(String e){if(e==null||!e.matches("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$")||e.length()>254)throw new IllegalArgumentException("email must be valid");return e.trim().toLowerCase(Locale.ROOT);} private static void validatePassword(char[] p){if(p==null||p.length<12||p.length>128)throw new IllegalArgumentException("password must contain 12 to 128 characters");} private static IllegalStateException database(SQLException e){return new IllegalStateException("Cloud database operation failed",e);} private static CloudAuthenticationService.Session toSession(SessionData s){return new CloudAuthenticationService.Session(s.token(),s.expiresAt(),s.user(),s.refreshToken());}
     }
