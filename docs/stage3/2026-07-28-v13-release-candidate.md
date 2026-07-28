@@ -10,7 +10,7 @@
 
 | 门禁 | 命令/检查 | 结果 |
 |---|---|---|
-| 全量自动化 | `mvn test` | 261 项通过，0 失败、0 错误 |
+| 全量自动化 | 干净标签源码执行 `mvn test` | 260 项通过，0 失败、0 错误 |
 | Stage 0 | `TechnologyVerificationApp` | Java、JavaFX、SQLite、MySQL、MariaDB 通过 |
 | Stage 1 | `StageOneVerificationApp` | Spring、app.db、demo.db 通过 |
 | 本地 AI | Stage 0/1 Ollama 探测 | 未运行，按设计降级为警告，不阻断非 AI 功能 |
