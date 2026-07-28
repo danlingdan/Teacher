@@ -12,6 +12,12 @@ import com.sqlteacher.application.collaboration.UserRole;
 import com.sqlteacher.application.collaboration.DesktopAccessProfile;
 import com.sqlteacher.application.collaboration.AssignmentDeliveryService;
 import com.sqlteacher.application.collaboration.AssignmentTaskContext;
+import com.sqlteacher.application.collaboration.AssignmentAnalyticsFilter;
+import com.sqlteacher.application.collaboration.AssignmentAnalyticsReport;
+import com.sqlteacher.application.collaboration.AdminUserSummary;
+import com.sqlteacher.application.collaboration.RetentionCategory;
+import com.sqlteacher.application.collaboration.RetentionPreview;
+import com.sqlteacher.application.collaboration.RetentionJob;
 import com.sqlteacher.desktop.DesktopExecutors;
 import javafx.application.Platform;
 import javafx.fxml.FXML;
@@ -75,11 +81,25 @@ public final class CloudCenterController {
     @FXML private ComboBox<UserRole> memberRoleCombo;
     @FXML private TextField assignmentExerciseField;
     @FXML private TextField assignmentTitleField;
+    @FXML private TextField assignmentDescriptionField;
     @FXML private TextField assignmentDueAtField;
     @FXML private ListView<String> assignmentList;
+    @FXML private Label assignmentAnalyticsLabel;
+    @FXML private VBox adminOperationsPane;
+    @FXML private Label adminHealthLabel;
+    @FXML private ListView<String> adminUserList;
+    @FXML private ListView<String> adminAuditList;
+    @FXML private TextField adminReasonField;
+    @FXML private ComboBox<RetentionCategory> retentionCategoryCombo;
+    @FXML private TextField retentionCutoffField;
+    @FXML private TextField retentionBackupField;
+    @FXML private Label retentionStatusLabel;
 
     private List<ClassroomService.Classroom> classrooms = List.of();
     private List<ClassAssignment> assignments = List.of();
+    private List<AdminUserSummary> adminUsers = List.of();
+    private RetentionPreview retentionPreview;
+    private RetentionJob retentionJob;
     private boolean applyingClassSelection;
     private final Runnable switchIdentityAction;
     private final DesktopAccessProfile accessProfile;
@@ -121,6 +141,8 @@ public final class CloudCenterController {
             }
         });
         memberRoleCombo.setValue(UserRole.STUDENT);
+        retentionCategoryCombo.getItems().setAll(RetentionCategory.values());
+        retentionCategoryCombo.setValue(RetentionCategory.SYNC_EVENTS);
         classList.setPlaceholder(new Label("暂无班级，先创建一个教学班级"));
         assignmentList.setPlaceholder(new Label("选择班级后查看已发布任务"));
         classList.getSelectionModel().selectedIndexProperty().addListener((observable, oldValue, newValue) -> {
@@ -132,6 +154,7 @@ public final class CloudCenterController {
             if (index >= 0 && index < assignments.size()) {
                 ClassAssignment selected = assignments.get(index);
                 assignmentTitleField.setText(selected.title());
+                assignmentDescriptionField.setText(selected.description());
                 assignmentDueAtField.setText(selected.dueAt() == null ? "" : selected.dueAt().toString());
             }
         });
@@ -148,6 +171,9 @@ public final class CloudCenterController {
         studentAssignmentPane.setManaged(!canManageClass);
         exportClassRecordsButton.setVisible(canManageClass);
         exportClassRecordsButton.setManaged(canManageClass);
+        boolean administrator = accessProfile.kind() == DesktopAccessProfile.Kind.ADMIN;
+        adminOperationsPane.setVisible(administrator);
+        adminOperationsPane.setManaged(administrator);
         updateSessionState();
     }
 
@@ -273,6 +299,129 @@ public final class CloudCenterController {
     }
 
     @FXML
+    private void onRefreshAdminOperations() {
+        requireAdministrator();
+        run("正在加载管理员运维摘要…", () -> {
+            String token = currentSession().accessToken();
+            var health = api.getAdminHealth(token);
+            List<AdminUserSummary> users = api.listAdminUsers(token);
+            var audit = api.getAdminAudit(token, null, null, null, 0, 50);
+            Platform.runLater(() -> {
+                adminUsers = List.copyOf(users);
+                adminHealthLabel.setText("启用账号 " + health.activeUsers() + " · 禁用 " + health.disabledUsers()
+                    + " · 有效访问会话 " + health.activeAccessSessions() + " · 任务 " + health.assignments()
+                    + " · 提交 " + health.submissions());
+                adminUserList.getItems().setAll(users.stream().map(user -> user.displayName() + " · " + user.email()
+                    + " · " + (user.disabled() ? "已禁用" : "启用") + " · " + user.roles()).toList());
+                adminAuditList.getItems().setAll(audit.entries().stream().map(entry -> entry.createdAt() + " · "
+                    + entry.action() + " · " + entry.result() + " · " + entry.reasonCode()).toList());
+                showStatus("管理员运维数据已刷新", Status.SUCCESS);
+            });
+        });
+    }
+
+    @FXML private void onDisableAdminUser() { changeAdminUser(true); }
+
+    @FXML private void onRestoreAdminUser() { changeAdminUser(false); }
+
+    @FXML
+    private void onRevokeAdminUserSessions() {
+        requireAdministrator();
+        AdminUserSummary user = selectedAdminUser();
+        String reason = required(adminReasonField, "请输入受控原因码");
+        if (user == null || reason == null) {
+            if (user == null) showStatus("请先选择账号", Status.ERROR);
+            return;
+        }
+        run("正在撤销账号会话…", () -> {
+            api.revokeUserSessions(currentSession().accessToken(), user.id(), reason);
+            Platform.runLater(() -> {
+                adminReasonField.clear();
+                showStatus("该账号的全部云端会话已撤销", Status.SUCCESS);
+            });
+        });
+    }
+
+    private void changeAdminUser(boolean disabled) {
+        requireAdministrator();
+        AdminUserSummary user = selectedAdminUser();
+        String reason = required(adminReasonField, "请输入受控原因码");
+        if (user == null || reason == null) {
+            if (user == null) showStatus("请先选择账号", Status.ERROR);
+            return;
+        }
+        run(disabled ? "正在禁用账号…" : "正在恢复账号…", () -> {
+            api.setUserDisabled(currentSession().accessToken(), user.id(), disabled, reason);
+            Platform.runLater(() -> {
+                adminReasonField.clear();
+                showStatus(disabled ? "账号已禁用且会话已撤销" : "账号已恢复，需重新登录", Status.SUCCESS);
+                onRefreshAdminOperations();
+            });
+        });
+    }
+
+    @FXML
+    private void onPreviewRetention() {
+        requireAdministrator();
+        RetentionCategory category = retentionCategoryCombo.getValue();
+        Instant cutoff;
+        try {
+            cutoff = Instant.parse(required(retentionCutoffField, "请输入保留截止时间"));
+        } catch (RuntimeException error) {
+            showStatus("保留截止时间必须是 ISO-8601 格式", Status.ERROR);
+            return;
+        }
+        run("正在预览清理影响…", () -> {
+            RetentionPreview preview = api.previewRetention(currentSession().accessToken(), category, cutoff);
+            Platform.runLater(() -> {
+                retentionPreview = preview;
+                retentionStatusLabel.setText("预览 " + preview.id() + " · 影响 " + preview.affectedRows()
+                    + " 行 · 确认有效至 " + preview.expiresAt());
+                showStatus("清理预览已生成，请核对影响范围", Status.SUCCESS);
+            });
+        });
+    }
+
+    @FXML
+    private void onExecuteRetention() {
+        requireAdministrator();
+        if (retentionPreview == null) {
+            showStatus("请先生成清理预览", Status.ERROR);
+            return;
+        }
+        String backupReference = required(retentionBackupField, "请输入已验证的外部备份引用");
+        if (backupReference == null) return;
+        run("正在创建安全快照并执行清理…", () -> {
+            RetentionJob job = api.executeRetention(currentSession().accessToken(), retentionPreview.id(),
+                retentionPreview.confirmationToken(), backupReference);
+            Platform.runLater(() -> {
+                retentionJob = job;
+                retentionPreview = null;
+                retentionStatusLabel.setText("作业 " + job.id() + " · " + job.status()
+                    + " · 已处理 " + job.affectedRows() + " 行");
+                showStatus("清理完成，归档仍可恢复", Status.SUCCESS);
+            });
+        });
+    }
+
+    @FXML
+    private void onRestoreRetention() {
+        requireAdministrator();
+        if (retentionJob == null || !"COMPLETED".equals(retentionJob.status())) {
+            showStatus("当前没有可恢复的已完成清理作业", Status.ERROR);
+            return;
+        }
+        run("正在恢复归档数据…", () -> {
+            RetentionJob restored = api.restoreRetention(currentSession().accessToken(), retentionJob.id());
+            Platform.runLater(() -> {
+                retentionJob = restored;
+                retentionStatusLabel.setText("作业 " + restored.id() + " · 已恢复");
+                showStatus("归档数据已恢复", Status.SUCCESS);
+            });
+        });
+    }
+
+    @FXML
     private void onAddMember() {
         requireClassManager();
         var selected = selectedClass();
@@ -296,6 +445,35 @@ public final class CloudCenterController {
 
     @FXML
     private void onCreateAssignment() {
+        createAssignment(false);
+    }
+
+    @FXML
+    private void onSaveAssignmentDraft() {
+        createAssignment(true);
+    }
+
+    @FXML
+    private void onCopyAssignment() {
+        requireClassManager();
+        var selectedClass = selectedClass();
+        ClassAssignment assignment = selectedAssignment();
+        if (selectedClass == null || assignment == null) {
+            showStatus("请先选择要复制的任务", Status.ERROR);
+            return;
+        }
+        run("正在复制任务…", () -> {
+            var current = currentSession();
+            api.copyAssignment(current.accessToken(), selectedClass.id(), assignment.id(), assignment.version());
+            List<ClassAssignment> refreshed = api.listAssignments(current.accessToken(), selectedClass.id());
+            Platform.runLater(() -> {
+                applyAssignments(selectedClass.id(), refreshed);
+                showStatus("任务已复制为草稿", Status.SUCCESS);
+            });
+        });
+    }
+
+    private void createAssignment(boolean draft) {
         requireClassManager();
         var selected = selectedClass();
         if (selected == null) {
@@ -307,24 +485,79 @@ public final class CloudCenterController {
         if (exerciseId == null || title == null) return;
         Instant dueAt;
         try {
-            String dueAtText = assignmentDueAtField.getText() == null ? "" : assignmentDueAtField.getText().trim();
-            dueAt = dueAtText.isEmpty() ? null : Instant.parse(dueAtText);
+            String value = assignmentDueAtField.getText() == null ? "" : assignmentDueAtField.getText().trim();
+            dueAt = value.isEmpty() ? null : Instant.parse(value);
         } catch (RuntimeException error) {
             showStatus("截止时间请使用 ISO-8601 格式，例如 2026-12-31T15:00:00Z", Status.ERROR);
             assignmentDueAtField.requestFocus();
             return;
         }
-        run("正在发布班级任务…", () -> {
+        String description = assignmentDescriptionField.getText() == null ? "" : assignmentDescriptionField.getText().trim();
+        run(draft ? "正在保存任务草稿…" : "正在发布班级任务…", () -> {
             var current = currentSession();
-            api.createAssignment(current.accessToken(), selected.id(), exerciseId, title, dueAt);
-            List<ClassAssignment> assignments = api.listAssignments(current.accessToken(), selected.id());
+            ClassAssignment created = api.createAssignmentDraft(current.accessToken(), selected.id(), exerciseId,
+                title, description, dueAt);
+            if (!draft) api.changeAssignmentStatus(current.accessToken(), selected.id(), created.id(),
+                AssignmentStatus.PUBLISHED, created.version());
+            List<ClassAssignment> refreshed = api.listAssignments(current.accessToken(), selected.id());
             Platform.runLater(() -> {
-                applyAssignments(selected.id(), assignments);
+                applyAssignments(selected.id(), refreshed);
                 assignmentExerciseField.clear();
                 assignmentTitleField.clear();
+                assignmentDescriptionField.clear();
                 assignmentDueAtField.clear();
-                showStatus("任务“" + title + "”已发布", Status.SUCCESS);
+                showStatus(draft ? "任务草稿已保存" : "任务已发布", Status.SUCCESS);
             });
+        });
+    }
+
+    @FXML
+    private void onRefreshAssignmentAnalytics() {
+        requireClassManager();
+        var selectedClass = selectedClass();
+        var assignment = selectedAssignment();
+        if (selectedClass == null || assignment == null) {
+            showStatus("请先选择一个班级任务", Status.ERROR);
+            return;
+        }
+        run("正在加载任务学情…", () -> {
+            AssignmentAnalyticsReport report = api.getAssignmentAnalytics(currentSession().accessToken(),
+                selectedClass.id(), assignment.id(), AssignmentAnalyticsFilter.firstPage());
+            Platform.runLater(() -> {
+                assignmentAnalyticsLabel.setText("学生 " + report.totalStudents() + " 人 · 已提交 "
+                    + report.submittedStudents() + " 人 · 已通过 " + report.passedStudents()
+                    + " 人 · 尝试 " + report.totalAttempts() + " 次 · 完成率 "
+                    + Math.round(report.completionRate() * 100) + "% · 通过率 "
+                    + Math.round(report.passRate() * 100) + "%");
+                showStatus("任务学情已刷新", Status.SUCCESS);
+            });
+        });
+    }
+
+    @FXML
+    private void onExportAssignmentAnalytics() {
+        requireClassManager();
+        var selectedClass = selectedClass();
+        var assignment = selectedAssignment();
+        if (selectedClass == null || assignment == null) {
+            showStatus("请先选择一个班级任务", Status.ERROR);
+            return;
+        }
+        FileChooser chooser = new FileChooser();
+        chooser.setTitle("导出任务学情");
+        chooser.setInitialFileName("SQLTeacher-" + assignment.title().replaceAll("[\\/:*?\"<>|]", "_") + "-学情.csv");
+        chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("CSV 文件", "*.csv"));
+        var selectedFile = chooser.showSaveDialog(assignmentAnalyticsLabel.getScene().getWindow());
+        if (selectedFile == null) return;
+        run("正在导出任务学情…", () -> {
+            String csv = api.exportAssignmentAnalyticsCsv(currentSession().accessToken(), selectedClass.id(),
+                assignment.id(), AssignmentAnalyticsFilter.firstPage());
+            try {
+                Files.writeString(selectedFile.toPath(), csv, StandardCharsets.UTF_8);
+            } catch (java.io.IOException error) {
+                throw new IllegalStateException("无法写入任务学情 CSV", error);
+            }
+            Platform.runLater(() -> showStatus("任务学情已导出", Status.SUCCESS));
         });
     }
 
@@ -363,10 +596,12 @@ public final class CloudCenterController {
             return;
         }
         ClassAssignment assignment = assignments.get(index);
+        String description = assignmentDescriptionField.getText() == null
+            ? "" : assignmentDescriptionField.getText().trim();
         run("正在更新任务…", () -> {
             var current = currentSession();
             api.updateAssignment(current.accessToken(), selectedClass.id(), assignment.id(), title,
-                assignment.description(), dueAt, assignment.version());
+                description, dueAt, assignment.version());
             List<ClassAssignment> refreshed = api.listAssignments(current.accessToken(), selectedClass.id());
             Platform.runLater(() -> {
                 applyAssignments(selectedClass.id(), refreshed);
@@ -500,6 +735,16 @@ public final class CloudCenterController {
         return index >= 0 && index < classrooms.size() ? classrooms.get(index) : null;
     }
 
+    private ClassAssignment selectedAssignment() {
+        int index = assignmentList.getSelectionModel().getSelectedIndex();
+        return index >= 0 && index < assignments.size() ? assignments.get(index) : null;
+    }
+
+    private AdminUserSummary selectedAdminUser() {
+        int index = adminUserList.getSelectionModel().getSelectedIndex();
+        return index >= 0 && index < adminUsers.size() ? adminUsers.get(index) : null;
+    }
+
     private String selectedClassId() {
         var selected = selectedClass();
         return selected == null ? null : selected.id();
@@ -537,6 +782,12 @@ public final class CloudCenterController {
 
     private void requireClassManager() {
         if (!canManageClass()) throw new SecurityException("当前身份不能管理班级或发布任务");
+    }
+
+    private void requireAdministrator() {
+        if (accessProfile.kind() != DesktopAccessProfile.Kind.ADMIN) {
+            throw new SecurityException("当前身份不是管理员");
+        }
     }
 
     private CloudAuthenticationService.Session currentSession() {
