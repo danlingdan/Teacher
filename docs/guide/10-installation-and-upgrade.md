@@ -1,8 +1,8 @@
-# SQLTeacher v1.4 Windows 安装、升级与卸载
+# SQLTeacher v1.5 Windows 安装、升级与卸载
 
 ## 安装
 
-运行 `SQLTeacher-1.4.0.exe`，选择当前用户安装目录并完成安装。默认程序目录为 `%LOCALAPPDATA%\SQLTeacher-App`，与 `%LOCALAPPDATA%\SQLTeacher` 用户数据目录严格分离。安装器包含 Java 21 运行时，可创建开始菜单和桌面快捷方式。安装包尚未代码签名，Windows 可能显示来源提示；请只使用正式发布的文件并核对 SHA-256。
+运行 `SQLTeacher-1.5.0.exe`，选择当前用户安装目录并完成安装。默认程序目录为 `%LOCALAPPDATA%\SQLTeacher-App`，与 `%LOCALAPPDATA%\SQLTeacher` 用户数据目录严格分离。安装器包含 Java 21 运行时，可创建开始菜单和桌面快捷方式。安装包尚未代码签名，Windows 可能显示来源提示；请只使用正式发布的文件并核对 SHA-256。
 
 ## 升级
 
@@ -13,7 +13,7 @@
 3. 在需要迁移时先创建自动备份。
 4. 事务执行迁移；失败时尝试恢复升级前备份并停止启动。
 
-升级前仍建议在“设置与数据”手动备份。
+升级前仍建议由管理员在“设置 → 版本、备份与恢复”手动备份。v1.5 的主题、字体与密度偏好保存在当前 Windows 用户配置中，不包含令牌或数据库密码。
 
 ## 卸载与数据保留
 
@@ -35,4 +35,4 @@
 .\packaging\package-stage1.ps1 -CloudBaseUrl https://api.example.edu
 ```
 
-推送与 `pom.xml` 版本完全一致的标签（例如 `v1.4.0`）后，`.github/workflows/release.yml` 会在 GitHub Windows Runner 上自动测试、打包、保存工作流产物，并在三项发布资产上传完成后公开 GitHub Release。
+推送与 `pom.xml` 版本完全一致的标签（例如 `v1.5.0`）后，`.github/workflows/release.yml` 会在 GitHub Windows Runner 上自动测试、打包、保存工作流产物，并在三项发布资产上传完成后公开 GitHub Release。

@@ -17,6 +17,7 @@ class DesktopFxmlResourceTest {
         assertWellFormed("/fxml/ai-assistant.fxml");
         assertWellFormed("/fxml/connection-settings.fxml");
         assertWellFormed("/fxml/settings.fxml");
+        assertWellFormed("/fxml/appearance-settings.fxml");
         assertWellFormed("/fxml/data-maintenance.fxml");
         assertWellFormed("/fxml/student-exercise.fxml");
         assertWellFormed("/fxml/exercise-management.fxml");

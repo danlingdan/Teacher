@@ -26,14 +26,14 @@
         <HBox spacing="8" alignment="CENTER_LEFT">
             <Label text="应用备份" styleClass="card-title"/>
             <Region HBox.hgrow="ALWAYS"/>
-            <Button text="刷新" onAction="#onRefreshBackups" styleClass="refresh-button"/>
-            <Button text="立即备份" onAction="#onCreateBackup" styleClass="sql-execute-button"/>
+            <Button fx:id="refreshBackupsButton" text="刷新" onAction="#onRefreshBackups" styleClass="refresh-button"/>
+            <Button fx:id="createBackupButton" text="立即备份" onAction="#onCreateBackup" styleClass="sql-execute-button"/>
         </HBox>
         <Label text="备份包含应用数据库与演示数据库，恢复前会进行 SQLite 完整性检查。" wrapText="true" styleClass="page-subtitle"/>
         <ListView fx:id="backupList" prefHeight="240" VBox.vgrow="ALWAYS" styleClass="connection-list"/>
         <HBox spacing="8" alignment="CENTER_RIGHT">
-            <Button text="恢复内置演示库" onAction="#onRestoreDemo" styleClass="refresh-button"/>
-            <Button text="恢复所选备份" onAction="#onRestoreBackup" styleClass="danger-button"/>
+            <Button fx:id="restoreDemoButton" text="恢复内置演示库" onAction="#onRestoreDemo" styleClass="refresh-button"/>
+            <Button fx:id="restoreBackupButton" text="恢复所选备份" onAction="#onRestoreBackup" styleClass="danger-button"/>
         </HBox>
         <Label fx:id="maintenanceStatusLabel" text="请选择操作。" wrapText="true" styleClass="sql-result-hint"/>
     </VBox>

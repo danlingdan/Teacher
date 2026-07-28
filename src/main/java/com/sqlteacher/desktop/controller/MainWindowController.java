@@ -29,6 +29,9 @@ import com.sqlteacher.application.metadata.DatabaseMetadataService;
 import com.sqlteacher.application.nl2sql.Nl2SqlSafetyService;
 import com.sqlteacher.application.risk.SqlRiskAnalysisService;
 import com.sqlteacher.desktop.GlobalLoading;
+import com.sqlteacher.desktop.appearance.UiIcon;
+import com.sqlteacher.desktop.appearance.UiIcons;
+import com.sqlteacher.desktop.appearance.UiPreferencesService;
 import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.Node;
@@ -37,6 +40,7 @@ import javafx.scene.control.ButtonBase;
 import javafx.scene.control.Label;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.StackPane;
+import javafx.scene.layout.VBox;
 import javafx.scene.Scene;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyCodeCombination;
@@ -129,6 +133,7 @@ public final class MainWindowController {
     private final DesktopAccessProfile accessProfile;
     private final FeedbackDraftEnhancer feedbackDraftEnhancer;
     private final TeachingContentCache teachingContentCache;
+    private final UiPreferencesService uiPreferences;
     private final Runnable switchIdentityAction;
 
     /**
@@ -172,6 +177,11 @@ public final class MainWindowController {
     private Button teachingContentNavButton;
     @FXML
     private Label identityLabel;
+    @FXML private VBox learningNavGroup;
+    @FXML private VBox teachingNavGroup;
+    @FXML private VBox toolsNavGroup;
+    @FXML private VBox systemNavGroup;
+    @FXML private Label teachingNavGroupTitle;
 
     /** 右侧页面容器，导航切换时替换其中的内容节点。 */
     @FXML
@@ -246,6 +256,7 @@ public final class MainWindowController {
                                 NetworkAiSettingsService networkAiSettingsService,
                                 FeedbackDraftEnhancer feedbackDraftEnhancer,
                                 TeachingContentCache teachingContentCache,
+                                UiPreferencesService uiPreferences,
                                 DesktopAccessProfile accessProfile,
                                 Runnable switchIdentityAction) {
         this.sqlExecutionService = Objects.requireNonNull(sqlExecutionService, "sqlExecutionService must not be null");
@@ -276,6 +287,7 @@ public final class MainWindowController {
         this.networkAiSettingsService = Objects.requireNonNull(networkAiSettingsService);
         this.feedbackDraftEnhancer = Objects.requireNonNull(feedbackDraftEnhancer);
         this.teachingContentCache = Objects.requireNonNull(teachingContentCache);
+        this.uiPreferences = Objects.requireNonNull(uiPreferences);
         this.accessProfile = Objects.requireNonNull(accessProfile, "accessProfile must not be null");
         this.switchIdentityAction = Objects.requireNonNull(switchIdentityAction, "switchIdentityAction must not be null");
         this.fillSqlCallback = sql -> {
@@ -294,12 +306,22 @@ public final class MainWindowController {
     @FXML
     private void initialize() {
         GlobalLoading.initialize(loadingOverlay, loadingText);
+        decorateNavigation();
         applyAccessPolicy();
         onNavigateHome();
     }
 
     private void applyAccessPolicy() {
         identityLabel.setText(accessProfile.displayName() + " · " + accessProfile.roleLabel());
+        if (accessProfile.kind() == DesktopAccessProfile.Kind.STUDENT) {
+            teachingNavGroupTitle.setText("课程与反馈");
+            teachingContentNavButton.setText("学习反馈");
+            cloudCenterNavButton.setText("我的班级");
+            UiIcons.decorate(teachingContentNavButton, UiIcon.BOOK, "学习反馈");
+            UiIcons.decorate(cloudCenterNavButton, UiIcon.CLOUD, "我的班级");
+        } else if (accessProfile.kind() == DesktopAccessProfile.Kind.GUEST) {
+            teachingNavGroupTitle.setText("课程");
+        }
         applyCapability(homeNavButton, DesktopCapability.HOME);
         applyCapability(sqlPracticeNavButton, DesktopCapability.SQL_PRACTICE);
         applyCapability(studentExerciseNavButton, DesktopCapability.STUDENT_EXERCISE);
@@ -311,6 +333,31 @@ public final class MainWindowController {
         applyCapability(settingsNavButton, DesktopCapability.SETTINGS);
         applyCapability(cloudCenterNavButton, DesktopCapability.CLOUD_CENTER);
         applyCapability(teachingContentNavButton, DesktopCapability.TEACHING_CONTENT);
+        updateGroupVisibility(learningNavGroup, homeNavButton, studentExerciseNavButton, knowledgeCenterNavButton);
+        updateGroupVisibility(teachingNavGroup, teachingContentNavButton, exerciseManagementNavButton,
+            exerciseProgressNavButton, cloudCenterNavButton);
+        updateGroupVisibility(toolsNavGroup, sqlPracticeNavButton, aiAssistantNavButton, tableSchemaNavButton);
+        updateGroupVisibility(systemNavGroup, settingsNavButton);
+    }
+
+    private void decorateNavigation() {
+        UiIcons.decorate(homeNavButton, UiIcon.HOME, "首页");
+        UiIcons.decorate(studentExerciseNavButton, UiIcon.PRACTICE, "我的练习");
+        UiIcons.decorate(knowledgeCenterNavButton, UiIcon.BOOK, "课程知识");
+        UiIcons.decorate(teachingContentNavButton, UiIcon.LIBRARY, "教学工作台");
+        UiIcons.decorate(exerciseManagementNavButton, UiIcon.PRACTICE, "题库管理");
+        UiIcons.decorate(exerciseProgressNavButton, UiIcon.CHART, "学情看板");
+        UiIcons.decorate(cloudCenterNavButton, UiIcon.CLOUD, "云端班级");
+        UiIcons.decorate(sqlPracticeNavButton, UiIcon.CODE, "自由 SQL");
+        UiIcons.decorate(aiAssistantNavButton, UiIcon.SPARK, "AI 助手");
+        UiIcons.decorate(tableSchemaNavButton, UiIcon.TABLE, "表结构");
+        UiIcons.decorate(settingsNavButton, UiIcon.SETTINGS, "设置");
+    }
+
+    private static void updateGroupVisibility(VBox group, Button... buttons) {
+        boolean visible = java.util.Arrays.stream(buttons).anyMatch(Button::isVisible);
+        group.setVisible(visible);
+        group.setManaged(visible);
     }
 
     private void applyCapability(Button button, DesktopCapability capability) {
@@ -646,7 +693,9 @@ public final class MainWindowController {
                         applicationExceptionMapper,
                         databaseCredentialSession,
                         applicationBackupService,
-                        configuration
+                        configuration,
+                        accessProfile,
+                        uiPreferences
                     );
                 }
                 throw new IllegalStateException("Unexpected controller type for settings: " + type);

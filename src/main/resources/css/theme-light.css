@@ -1,0 +1,133 @@
+/* SQLTeacher v1.5 light theme overrides. Keep semantic selectors here; business pages must not set colors. */
+.root, .main-window, .home-page, .sql-practice-page, .exercise-page, .knowledge-page,
+.cloud-center-page, .connection-settings-page, .settings-section, .page-scroll,
+.page-scroll > .viewport, .connection-form-scroll, .connection-form-scroll > .viewport {
+    -fx-background-color: #f4f7fb;
+}
+.app-sidebar {
+    -fx-background-color: #ffffff;
+    -fx-border-color: transparent #dce3ef transparent transparent;
+}
+.brand-title, .page-title, .intro-title { -fx-text-fill: #172033; }
+.sidebar-caption, .nav-group-title, .page-subtitle, .card-subtitle, .model-status { -fx-text-fill: #64748b; }
+.app-sidebar .nav-button { -fx-text-fill: #44516a; }
+.app-sidebar .nav-button:hover { -fx-background-color: #eef2ff; -fx-text-fill: #26324a; }
+.app-sidebar .nav-button.selected { -fx-text-fill: white; }
+.identity-card { -fx-background-color: #f7f9fd; -fx-border-color: #dce3ef; }
+.identity-pill { -fx-text-fill: #4f46b8; -fx-background-color: #eeecff; -fx-border-color: #d8d3ff; }
+.identity-switch-button { -fx-text-fill: #536179; -fx-border-color: #cbd5e1; }
+.identity-switch-button:hover { -fx-background-color: #eef2f7; -fx-text-fill: #172033; }
+.ui-icon-shape { -fx-fill: #64748b; }
+.nav-button.selected .ui-icon-shape { -fx-fill: white; }
+
+.login-gate {
+    -fx-background-color:
+        radial-gradient(center 15% 10%, radius 55%, rgba(91, 110, 245, 0.10), transparent),
+        linear-gradient(to bottom right, #f7f9fd, #eef3fa 55%, #f8faff);
+}
+.login-brand-name, .login-hero-title { -fx-text-fill: #172033; }
+.login-hero-copy { -fx-text-fill: #526078; }
+.login-feature { -fx-text-fill: #334155; }
+.login-guest-note {
+    -fx-background-color: rgba(255, 255, 255, 0.78);
+    -fx-border-color: #dce3ef;
+    -fx-text-fill: #526078;
+}
+.login-card {
+    -fx-background-color:
+        linear-gradient(to bottom, rgba(159, 122, 234, 0.06), transparent 35%),
+        #ffffff;
+    -fx-border-color: #d8d3ff;
+    -fx-effect: dropshadow(gaussian, rgba(30, 41, 59, 0.16), 24, 0.04, 0, 9);
+}
+.login-card-title { -fx-text-fill: #172033; }
+.login-card-subtitle { -fx-text-fill: #64748b; }
+.login-field-label { -fx-text-fill: #44516a; }
+.login-card .text-field,
+.login-card .password-field {
+    -fx-background-color: #f8fafc;
+    -fx-text-fill: #172033;
+    -fx-prompt-text-fill: #8793a8;
+    -fx-border-color: #cbd5e1;
+}
+.login-secondary-button {
+    -fx-background-color: #eeecff;
+    -fx-border-color: #c9c3ff;
+    -fx-text-fill: #4338ca;
+}
+.login-secondary-button:hover { -fx-background-color: #e3e0ff; }
+.login-guest-button {
+    -fx-border-color: #cbd5e1;
+    -fx-text-fill: #526078;
+}
+.login-guest-button:hover { -fx-background-color: #eef2f7; -fx-text-fill: #172033; }
+.login-status-info { -fx-background-color: #eef2ff; -fx-border-color: #c7d2fe; }
+.login-status-error { -fx-background-color: #fff1f2; -fx-border-color: #fecdd3; }
+.login-status .label { -fx-text-fill: #334155; }
+.login-or-label, .login-policy-note { -fx-text-fill: #64748b; }
+.login-card .separator .line { -fx-border-color: #dce3ef; }
+
+.panel-card, .home-card, .settings-grid, .appearance-preview, .offline-card,
+.connection-card, .analytics-card, .cloud-card, .cloud-sync-card {
+    -fx-background-color: #ffffff;
+    -fx-border-color: #dce3ef;
+}
+.card-title, .section-title, .form-label, .label { -fx-text-fill: #253047; }
+.page-subtitle, .card-description, .offline-message { -fx-text-fill: #64748b; }
+.settings-section .label,
+.settings-section .page-title,
+.settings-section .section-title,
+.settings-section .card-title { -fx-text-fill: #253047; }
+.settings-section .page-subtitle { -fx-text-fill: #64748b; }
+.settings-section .form-label { -fx-text-fill: #526078; }
+.settings-section .status-info { -fx-text-fill: #334e9e; }
+.settings-section .status-success { -fx-text-fill: #16734a; }
+.settings-section .status-error { -fx-text-fill: #b4232f; }
+.text-field, .password-field, .text-area, .combo-box, .list-view, .table-view, .tree-view {
+    -fx-background-color: #ffffff;
+    -fx-control-inner-background: #ffffff;
+    -fx-text-fill: #172033;
+    -fx-prompt-text-fill: #8793a8;
+    -fx-border-color: #cbd5e1;
+}
+.settings-section .combo-box {
+    -fx-background-color: #ffffff;
+    -fx-border-color: #cbd5e1;
+}
+.settings-section .combo-box .list-cell {
+    -fx-background-color: transparent;
+    -fx-text-fill: #172033;
+}
+.text-area .content { -fx-background-color: #ffffff; }
+.list-cell, .table-row-cell, .tree-cell { -fx-background-color: #ffffff; -fx-text-fill: #253047; }
+.list-cell:filled:selected, .table-row-cell:filled:selected, .tree-cell:filled:selected {
+    -fx-background-color: #e7e9ff;
+    -fx-text-fill: #312e81;
+}
+.combo-box-popup .list-view {
+    -fx-background-color: #ffffff;
+    -fx-border-color: #cfd6e4;
+}
+.combo-box-popup .list-cell {
+    -fx-background-color: #ffffff;
+    -fx-text-fill: #253047;
+}
+.combo-box-popup .list-cell:filled:hover,
+.combo-box-popup .list-cell:filled:selected {
+    -fx-background-color: #e7e9ff;
+    -fx-text-fill: #312e81;
+}
+.table-view .column-header, .table-view .column-header-background { -fx-background-color: #e9edff; }
+.table-view .column-header .label { -fx-text-fill: #3730a3; }
+.tab-pane .tab-header-area .tab-header-background { -fx-background-color: #eef2f7; }
+.tab-pane .tab { -fx-background-color: #e5eaf2; }
+.tab-pane .tab:selected { -fx-background-color: #ffffff; }
+.tab-pane .tab .tab-label { -fx-text-fill: #526078; }
+.tab-pane .tab:selected .tab-label { -fx-text-fill: #4338ca; }
+.sql-editor, .sql-preview, .risk-sql-area { -fx-font-family: "Cascadia Mono", "Consolas", monospace; }
+.loading-overlay { -fx-background-color: rgba(244,247,251,0.78); }
+.loading-text { -fx-text-fill: #253047; }
+.status-info, .sql-result-hint { -fx-text-fill: #334e9e; }
+.status-success { -fx-text-fill: #16734a; }
+.status-error, .sql-error-hint { -fx-text-fill: #b4232f; }
+.separator .line { -fx-border-color: #dce3ef; }

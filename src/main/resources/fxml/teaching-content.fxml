@@ -1,156 +1,152 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
 <?import javafx.geometry.Insets?>
-<?import javafx.scene.control.Button?>
-<?import javafx.scene.control.ComboBox?>
-<?import javafx.scene.control.Label?>
-<?import javafx.scene.control.ListView?>
-<?import javafx.scene.control.ScrollPane?>
-<?import javafx.scene.control.Separator?>
-<?import javafx.scene.control.TextArea?>
-<?import javafx.scene.control.TextField?>
-<?import javafx.scene.layout.FlowPane?>
-<?import javafx.scene.layout.HBox?>
-<?import javafx.scene.layout.VBox?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
 
-<ScrollPane xmlns="http://javafx.com/javafx" xmlns:fx="http://javafx.com/fxml"
+<BorderPane xmlns="http://javafx.com/javafx" xmlns:fx="http://javafx.com/fxml"
             fx:controller="com.sqlteacher.desktop.controller.TeachingContentController"
-            fitToWidth="true" hbarPolicy="NEVER" styleClass="page-scroll">
-    <content>
-        <VBox spacing="16" styleClass="page-content">
-            <padding><Insets top="22" right="24" bottom="28" left="24"/></padding>
-            <children>
-                <HBox alignment="CENTER_LEFT" spacing="12">
-                    <children>
-                        <VBox spacing="4" HBox.hgrow="ALWAYS">
-                            <children>
-                                <Label text="课程协作与学习反馈" styleClass="page-title"/>
-                                <Label text="共享题库版本、任务快照、教师反馈、薄弱点建议与站内通知" styleClass="page-subtitle"/>
-                            </children>
-                        </VBox>
-                        <Button text="刷新全部" onAction="#onRefresh" styleClass="secondary-button"/>
-                    </children>
-                </HBox>
-                <Label fx:id="statusLabel" text="正在加载…" wrapText="true" styleClass="status-info"/>
-
-                <VBox fx:id="teacherPane" spacing="14">
-                    <children>
-                        <VBox spacing="10" styleClass="panel-card">
-                            <children>
-                                <Label text="课程、章节与知识点" styleClass="section-title"/>
-                                <FlowPane hgap="10" vgap="10">
-                                    <children>
+            styleClass="teaching-workbench">
+    <top>
+        <VBox spacing="8" styleClass="student-workflow-header">
+            <HBox alignment="CENTER_LEFT" spacing="12">
+                <VBox spacing="4" HBox.hgrow="ALWAYS">
+                    <Label text="教学工作台" styleClass="page-title"/>
+                    <Label text="沿课程内容、题目任务、学生反馈和通知连续完成教学操作" styleClass="page-subtitle"/>
+                </VBox>
+                <Button text="刷新工作台" onAction="#onRefresh" styleClass="secondary-button"/>
+            </HBox>
+            <Label fx:id="statusLabel" text="正在加载…" wrapText="true" styleClass="status-info"/>
+        </VBox>
+    </top>
+    <center>
+        <TabPane fx:id="workspaceTabs" tabClosingPolicy="UNAVAILABLE" styleClass="teaching-tabs">
+            <tabs>
+                <Tab fx:id="teacherTab" text="课程、题目与任务">
+                    <ScrollPane fitToWidth="true" hbarPolicy="NEVER" styleClass="page-scroll">
+                        <content>
+                            <VBox fx:id="teacherPane" spacing="14" styleClass="page-content">
+                                <padding><Insets top="18" right="22" bottom="24" left="22"/></padding>
+                                <VBox spacing="10" styleClass="panel-card">
+                                    <Label text="1. 选择或维护课程上下文" styleClass="section-title"/>
+                                    <FlowPane hgap="10" vgap="10">
                                         <TextField fx:id="courseNameField" promptText="课程名称" prefWidth="220"/>
-                                        <TextArea fx:id="courseDescriptionField" promptText="课程说明" prefWidth="360" prefRowCount="2" wrapText="true"/>
+                                        <TextArea fx:id="courseDescriptionField" promptText="课程说明" prefWidth="340" prefRowCount="2" wrapText="true"/>
                                         <Button text="创建课程" onAction="#onCreateCourse" styleClass="primary-button"/>
-                                        <Button text="保存所选课程" onAction="#onSaveCourse" styleClass="secondary-button"/>
-                                        <Button text="停用/恢复课程" onAction="#onToggleCourseStatus" styleClass="secondary-button"/>
+                                        <Button text="保存课程" onAction="#onSaveCourse" styleClass="secondary-button"/>
+                                        <Button text="停用/恢复" onAction="#onToggleCourseStatus" styleClass="secondary-button"/>
                                         <Button text="导入 JSON" onAction="#onImportCourse" styleClass="secondary-button"/>
-                                        <Button text="导出所选课程" onAction="#onExportCourse" styleClass="secondary-button"/>
-                                    </children>
-                                </FlowPane>
-                                <ListView fx:id="courseList" prefHeight="120"/>
-                                <FlowPane hgap="10" vgap="10">
-                                    <children>
+                                        <Button text="导出课程" onAction="#onExportCourse" styleClass="secondary-button"/>
+                                    </FlowPane>
+                                    <ListView fx:id="courseList" prefHeight="112"/>
+                                    <Separator/>
+                                    <Label text="章节" styleClass="card-title"/>
+                                    <FlowPane hgap="10" vgap="10">
                                         <TextField fx:id="sectionNameField" promptText="章节名称" prefWidth="220"/>
                                         <TextField fx:id="sectionOrderField" promptText="排序" prefWidth="90"/>
-                                        <Button text="添加章节" onAction="#onCreateSection" styleClass="secondary-button"/>
-                                        <Button text="更新章节" onAction="#onUpdateSection" styleClass="secondary-button"/>
+                                        <Button text="添加" onAction="#onCreateSection" styleClass="primary-button"/>
+                                        <Button text="更新" onAction="#onUpdateSection" styleClass="secondary-button"/>
                                         <Button text="停用/恢复" onAction="#onToggleSectionStatus" styleClass="secondary-button"/>
-                                    </children>
-                                </FlowPane>
-                                <ListView fx:id="sectionList" prefHeight="100"/>
-                                <FlowPane hgap="10" vgap="10">
-                                    <children>
+                                    </FlowPane>
+                                    <ListView fx:id="sectionList" prefHeight="96"/>
+                                    <Label text="知识点" styleClass="card-title"/>
+                                    <FlowPane hgap="10" vgap="10">
                                         <TextField fx:id="knowledgePointNameField" promptText="知识点名称" prefWidth="220"/>
                                         <TextField fx:id="knowledgePointOrderField" promptText="排序" prefWidth="90"/>
-                                        <TextArea fx:id="knowledgePointDescriptionField" promptText="知识点说明" prefWidth="360" prefRowCount="2" wrapText="true"/>
-                                        <Button text="添加知识点" onAction="#onCreateKnowledgePoint" styleClass="secondary-button"/>
-                                        <Button text="更新知识点" onAction="#onUpdateKnowledgePoint" styleClass="secondary-button"/>
+                                        <TextArea fx:id="knowledgePointDescriptionField" promptText="知识点说明" prefWidth="340" prefRowCount="2" wrapText="true"/>
+                                        <Button text="添加" onAction="#onCreateKnowledgePoint" styleClass="primary-button"/>
+                                        <Button text="更新" onAction="#onUpdateKnowledgePoint" styleClass="secondary-button"/>
                                         <Button text="停用/恢复" onAction="#onToggleKnowledgePointStatus" styleClass="secondary-button"/>
-                                    </children>
-                                </FlowPane>
-                                <ListView fx:id="knowledgePointList" prefHeight="110"/>
-                            </children>
-                        </VBox>
+                                    </FlowPane>
+                                    <ListView fx:id="knowledgePointList" prefHeight="104"/>
+                                </VBox>
 
-                        <VBox spacing="10" styleClass="panel-card">
-                            <children>
-                                <Label text="发布不可变题目版本" styleClass="section-title"/>
-                                <FlowPane hgap="10" vgap="10">
-                                    <children>
-                                        <TextField fx:id="localExerciseIdField" promptText="本地题目 ID（可选）" prefWidth="220"/>
-                                        <TextField fx:id="exerciseTitleField" promptText="题目标题" prefWidth="260"/>
-                                        <TextField fx:id="datasetVersionField" promptText="数据集版本" prefWidth="180"/>
-                                        <TextField fx:id="evaluationRuleField" promptText="评测规则，如 RESULT_SET" prefWidth="220"/>
-                                    </children>
-                                </FlowPane>
-                                <TextArea fx:id="exercisePromptField" promptText="题目说明" prefRowCount="3" wrapText="true"/>
-                                <Button text="发布新版本" onAction="#onPublishExercise" styleClass="primary-button" maxWidth="180"/>
-                                <Button text="停用/恢复所选题目" onAction="#onToggleExerciseStatus" styleClass="secondary-button" maxWidth="220"/>
-                                <ListView fx:id="exerciseList" prefHeight="130"/>
-                            </children>
-                        </VBox>
+                                <VBox spacing="10" styleClass="panel-card">
+                                    <Label text="2. 发布不可变题目版本" styleClass="section-title"/>
+                                    <Label text="先选择上方课程与知识点；已发布版本不会被后续编辑覆盖。" styleClass="page-subtitle"/>
+                                    <FlowPane hgap="10" vgap="10">
+                                        <TextField fx:id="localExerciseIdField" promptText="本地题目 ID（可选）" prefWidth="210"/>
+                                        <TextField fx:id="exerciseTitleField" promptText="题目标题" prefWidth="250"/>
+                                        <TextField fx:id="datasetVersionField" promptText="数据集版本" prefWidth="170"/>
+                                        <TextField fx:id="evaluationRuleField" promptText="评测规则，如 RESULT_SET" prefWidth="210"/>
+                                    </FlowPane>
+                                    <TextArea fx:id="exercisePromptField" promptText="题目说明" prefRowCount="3" wrapText="true"/>
+                                    <HBox spacing="10" alignment="CENTER_RIGHT">
+                                        <Button text="停用/恢复所选题目" onAction="#onToggleExerciseStatus" styleClass="secondary-button"/>
+                                        <Button text="发布新版本" onAction="#onPublishExercise" styleClass="primary-button"/>
+                                    </HBox>
+                                    <ListView fx:id="exerciseList" prefHeight="126"/>
+                                </VBox>
 
-                        <VBox spacing="10" styleClass="panel-card">
-                            <children>
-                                <Label text="从题目版本创建任务快照" styleClass="section-title"/>
-                                <FlowPane hgap="10" vgap="10">
-                                    <children>
+                                <VBox spacing="10" styleClass="panel-card">
+                                    <Label text="3. 从所选题目发布任务快照" styleClass="section-title"/>
+                                    <FlowPane hgap="10" vgap="10">
                                         <TextField fx:id="assignmentTitleField" promptText="任务标题" prefWidth="250"/>
                                         <TextField fx:id="assignmentDueAtField" promptText="截止时间（ISO-8601，可选）" prefWidth="280"/>
-                                        <Button text="发布快照任务" onAction="#onCreateAssignmentSnapshot" styleClass="primary-button"/>
-                                    </children>
-                                </FlowPane>
-                            </children>
-                        </VBox>
-                    </children>
-                </VBox>
+                                        <Button text="核对并发布任务" onAction="#onCreateAssignmentSnapshot" styleClass="primary-button"/>
+                                    </FlowPane>
+                                </VBox>
+                            </VBox>
+                        </content>
+                    </ScrollPane>
+                </Tab>
 
-                <VBox spacing="10" styleClass="panel-card">
-                    <children>
-                        <Label text="教师反馈与薄弱点建议" styleClass="section-title"/>
-                        <Label text="学生输入班级 ID 即可查看本人数据；教师查询学生时还需填写学生 ID。" wrapText="true" styleClass="page-subtitle"/>
-                        <FlowPane hgap="10" vgap="10">
-                            <children>
-                                <TextField fx:id="classroomIdField" promptText="班级 ID" prefWidth="260"/>
-                                <TextField fx:id="assignmentIdField" promptText="任务 ID（查看反馈时填写）" prefWidth="280"/>
-                                <TextField fx:id="studentIdField" promptText="学生 ID（教师查询时填写）" prefWidth="280"/>
-                                <Button text="刷新反馈与建议" onAction="#onRefreshLearning" styleClass="secondary-button"/>
-                            </children>
-                        </FlowPane>
-                        <ListView fx:id="masteryList" prefHeight="120"/>
-                        <Separator/>
-                        <ListView fx:id="feedbackList" prefHeight="110"/>
-                        <VBox fx:id="feedbackEditorPane" spacing="10">
-                            <children>
-                                <FlowPane hgap="10" vgap="10">
-                                    <children>
+                <Tab text="反馈与学习建议">
+                    <ScrollPane fitToWidth="true" hbarPolicy="NEVER" styleClass="page-scroll">
+                        <content>
+                            <VBox spacing="14" styleClass="page-content">
+                                <padding><Insets top="18" right="22" bottom="24" left="22"/></padding>
+                                <VBox spacing="10" styleClass="panel-card">
+                                    <Label text="筛选学生学习证据" styleClass="section-title"/>
+                                    <Label text="学生填写班级与任务查看本人反馈；教师查询学生时填写学生 ID。筛选条件在页面切换后保留。"
+                                           wrapText="true" styleClass="page-subtitle"/>
+                                    <FlowPane hgap="10" vgap="10">
+                                        <TextField fx:id="classroomIdField" promptText="班级 ID" prefWidth="250"/>
+                                        <TextField fx:id="assignmentIdField" promptText="任务 ID" prefWidth="270"/>
+                                        <TextField fx:id="studentIdField" promptText="学生 ID（教师）" prefWidth="270"/>
+                                        <Button text="刷新反馈与建议" onAction="#onRefreshLearning" styleClass="primary-button"/>
+                                    </FlowPane>
+                                </VBox>
+                                <SplitPane dividerPositions="0.46" VBox.vgrow="ALWAYS">
+                                    <VBox spacing="8" styleClass="panel-card">
+                                        <Label text="知识点掌握度与建议" styleClass="card-title"/>
+                                        <ListView fx:id="masteryList" prefHeight="250" VBox.vgrow="ALWAYS"/>
+                                    </VBox>
+                                    <VBox spacing="8" styleClass="panel-card">
+                                        <Label text="反馈记录" styleClass="card-title"/>
+                                        <ListView fx:id="feedbackList" prefHeight="190" VBox.vgrow="ALWAYS"/>
+                                    </VBox>
+                                </SplitPane>
+                                <VBox fx:id="feedbackEditorPane" spacing="10" styleClass="panel-card">
+                                    <Label text="编辑教师反馈" styleClass="section-title"/>
+                                    <FlowPane hgap="10" vgap="10">
                                         <TextField fx:id="submissionIdField" promptText="提交 ID" prefWidth="300"/>
                                         <ComboBox fx:id="feedbackStatusCombo" prefWidth="180"/>
                                         <Button text="生成安全草稿" onAction="#onDraftFeedback" styleClass="secondary-button"/>
-                                        <Button text="保存反馈" onAction="#onSaveFeedback" styleClass="primary-button"/>
-                                    </children>
-                                </FlowPane>
-                                <TextArea fx:id="feedbackCommentField" promptText="教师反馈（发布前必须人工确认）" prefRowCount="3" wrapText="true"/>
-                            </children>
-                        </VBox>
-                    </children>
-                </VBox>
+                                        <Button text="人工确认并保存" onAction="#onSaveFeedback" styleClass="primary-button"/>
+                                    </FlowPane>
+                                    <TextArea fx:id="feedbackCommentField" promptText="教师反馈（发布前必须人工确认）" prefRowCount="4" wrapText="true"/>
+                                </VBox>
+                            </VBox>
+                        </content>
+                    </ScrollPane>
+                </Tab>
 
-                <VBox spacing="10" styleClass="panel-card">
-                    <children>
+                <Tab text="通知中心">
+                    <VBox spacing="12" styleClass="page-content">
+                        <padding><Insets top="18" right="22" bottom="24" left="22"/></padding>
                         <HBox alignment="CENTER_LEFT" spacing="10">
-                            <children>
-                                <Label text="站内通知" styleClass="section-title" HBox.hgrow="ALWAYS"/>
-                                <Button text="刷新通知" onAction="#onRefreshNotifications" styleClass="secondary-button"/>
-                                <Button fx:id="markReadButton" text="标记已读" onAction="#onMarkNotificationRead" disable="true" styleClass="secondary-button"/>
-                            </children>
+                            <VBox spacing="4" HBox.hgrow="ALWAYS">
+                                <Label text="站内通知" styleClass="section-title"/>
+                                <Label text="任务、截止、提交和新反馈通知；资源权限变化后会自动隐藏。" styleClass="page-subtitle"/>
+                            </VBox>
+                            <Button text="刷新通知" onAction="#onRefreshNotifications" styleClass="secondary-button"/>
+                            <Button fx:id="markReadButton" text="标记已读" onAction="#onMarkNotificationRead" disable="true" styleClass="primary-button"/>
                         </HBox>
-                        <ListView fx:id="notificationList" prefHeight="190"/>
-                    </children>
-                </VBox>
-            </children>
-        </VBox>
-    </content>
-</ScrollPane>
+                        <ListView fx:id="notificationList" VBox.vgrow="ALWAYS"/>
+                    </VBox>
+                </Tab>
+            </tabs>
+        </TabPane>
+    </center>
+</BorderPane>

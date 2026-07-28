@@ -1,5 +1,7 @@
 package com.sqlteacher.desktop.controller;
 
+import com.sqlteacher.desktop.appearance.UiIcon;
+import com.sqlteacher.desktop.appearance.UiIcons;
 import javafx.fxml.FXML;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
@@ -32,6 +34,12 @@ public final class SqlRiskConfirmDialogController {
     private Button confirmButton;
 
     private Runnable onConfirm;
+
+    @FXML
+    private void initialize() {
+        riskTitleLabel.setGraphic(UiIcons.create(UiIcon.WARNING, 24));
+        riskTitleLabel.setAccessibleText("高危 SQL 操作确认");
+    }
 
     /**
      * 设置弹窗内容。

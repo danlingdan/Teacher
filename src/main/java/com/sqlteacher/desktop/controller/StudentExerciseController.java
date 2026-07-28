@@ -23,12 +23,15 @@ import javafx.scene.control.ListView;
 import javafx.scene.control.TableColumn;
 import javafx.scene.control.TableView;
 import javafx.scene.control.TextArea;
+import javafx.scene.input.KeyCode;
+import javafx.scene.input.KeyEvent;
 
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public final class StudentExerciseController {
     private final ExerciseCatalogService catalogService;
@@ -52,6 +55,7 @@ public final class StudentExerciseController {
 
     private ExerciseSession session;
     private AssignmentTaskContext assignmentTask;
+    private final AtomicBoolean running = new AtomicBoolean();
 
     public StudentExerciseController(
         ExerciseCatalogService catalogService,
@@ -84,6 +88,7 @@ public final class StudentExerciseController {
             (ignored, oldValue, selected) -> showSelection(selected)
         );
         setSessionActions(false);
+        sqlArea.addEventFilter(KeyEvent.KEY_PRESSED, this::handleEditorShortcut);
         refreshCatalog();
     }
 
@@ -270,21 +275,38 @@ public final class StudentExerciseController {
     }
 
     private <T> void runAsync(String message, Supplier<T> task, Consumer<T> success) {
+        if (!running.compareAndSet(false, true)) {
+            showStatus("当前操作仍在进行，请稍候。", false);
+            return;
+        }
         GlobalLoading.show(message);
         DesktopExecutors.background().execute(() -> {
             try {
                 T result = task.get();
                 Platform.runLater(() -> {
+                    running.set(false);
                     GlobalLoading.hide();
                     success.accept(result);
                 });
             } catch (Throwable error) {
                 Platform.runLater(() -> {
+                    running.set(false);
                     GlobalLoading.hide();
                     showStatus(exceptionMapper.map(error).userMessage(), true);
                 });
             }
         });
+    }
+
+    private void handleEditorShortcut(KeyEvent event) {
+        if (event.getCode() == KeyCode.ENTER && event.isControlDown()) {
+            if (event.isShiftDown()) onSubmit();
+            else onRun();
+            event.consume();
+        } else if (event.getCode() == KeyCode.F1) {
+            onHint();
+            event.consume();
+        }
     }
 
     private void showStatus(String message, boolean error) {

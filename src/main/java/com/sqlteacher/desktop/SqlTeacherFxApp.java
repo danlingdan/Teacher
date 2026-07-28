@@ -29,6 +29,7 @@ import com.sqlteacher.application.nl2sql.Nl2SqlSafetyService;
 import com.sqlteacher.application.risk.SqlRiskAnalysisService;
 import com.sqlteacher.desktop.controller.MainWindowController;
 import com.sqlteacher.desktop.controller.LoginGateController;
+import com.sqlteacher.desktop.appearance.UiPreferencesService;
 import com.sqlteacher.infrastructure.spring.SqlTeacherApplicationConfig;
 import com.sqlteacher.infrastructure.cloud.InMemoryLearningEventOwnerContext;
 import javafx.application.Application;
@@ -92,6 +93,7 @@ public final class SqlTeacherFxApp extends Application {
     private FeedbackDraftEnhancer feedbackDraftEnhancer;
     private TeachingContentCache teachingContentCache;
     private InMemoryLearningEventOwnerContext learningEventOwnerContext;
+    private UiPreferencesService uiPreferencesService;
 
     /**
      * JavaFX 在非 Application Thread 上调用本方法，数据库初始化不会阻塞界面线程。
@@ -128,6 +130,7 @@ public final class SqlTeacherFxApp extends Application {
             feedbackDraftEnhancer = context.getBean(FeedbackDraftEnhancer.class);
             teachingContentCache = context.getBean(TeachingContentCache.class);
             learningEventOwnerContext = context.getBean(InMemoryLearningEventOwnerContext.class);
+            uiPreferencesService = UiPreferencesService.shared();
             applicationContext = context;
         } catch (RuntimeException error) {
             context.close();
@@ -148,7 +151,8 @@ public final class SqlTeacherFxApp extends Application {
             || applicationBackupService == null || configuration == null
             || cloudApiClient == null || cloudSessionService == null || cloudLearningSyncService == null
             || assignmentDeliveryService == null
-            || networkAiSettingsService == null || learningEventOwnerContext == null) {
+            || networkAiSettingsService == null || learningEventOwnerContext == null
+            || uiPreferencesService == null) {
             throw new IllegalStateException("Services are unavailable because application initialization did not complete");
         }
 
@@ -228,6 +232,7 @@ public final class SqlTeacherFxApp extends Application {
                     networkAiSettingsService,
                     feedbackDraftEnhancer,
                     teachingContentCache,
+                    uiPreferencesService,
                     accessProfile,
                     () -> switchToLogin(stage)
                 );
@@ -243,6 +248,7 @@ public final class SqlTeacherFxApp extends Application {
             stage.setMinHeight(600.0);
             stage.setScene(scene);
             stage.centerOnScreen();
+            stage.show();
         } catch (IOException error) {
             throw new IllegalStateException("Failed to load " + MAIN_WINDOW_FXML, error);
         }
@@ -261,11 +267,9 @@ public final class SqlTeacherFxApp extends Application {
         showLoginGate(stage);
     }
 
-    private static Scene themedScene(Parent root, double width, double height) {
+    private Scene themedScene(Parent root, double width, double height) {
         Scene scene = new Scene(root, width, height);
-        URL css = SqlTeacherFxApp.class.getResource("/css/app.css");
-        if (css != null) scene.getStylesheets().add(css.toExternalForm());
-        scene.setFill(javafx.scene.paint.Color.web("#141c30"));
+        uiPreferencesService.apply(scene);
         return scene;
     }
 
@@ -302,6 +306,7 @@ public final class SqlTeacherFxApp extends Application {
         cloudLearningSyncService = null;
         networkAiSettingsService = null;
         learningEventOwnerContext = null;
+        uiPreferencesService = null;
     }
 
     public static void main(String[] args) {

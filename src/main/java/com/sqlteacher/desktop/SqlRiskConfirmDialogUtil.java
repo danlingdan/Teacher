@@ -1,6 +1,7 @@
 package com.sqlteacher.desktop;
 
 import com.sqlteacher.desktop.controller.SqlRiskConfirmDialogController;
+import com.sqlteacher.desktop.appearance.UiPreferencesService;
 import javafx.application.Platform;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.Parent;
@@ -254,7 +255,9 @@ public final class SqlRiskConfirmDialogUtil {
 
                 Stage dialog = new Stage();
                 dialog.setTitle("高危SQL操作确认");
-                dialog.setScene(new Scene(root));
+                Scene scene = new Scene(root);
+                UiPreferencesService.shared().apply(scene);
+                dialog.setScene(scene);
                 dialog.initModality(Modality.APPLICATION_MODAL);
                 if (owner != null) {
                     dialog.initOwner(owner);

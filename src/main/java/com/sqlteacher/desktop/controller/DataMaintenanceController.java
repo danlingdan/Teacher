@@ -10,6 +10,7 @@ import javafx.collections.FXCollections;
 import javafx.fxml.FXML;
 import javafx.scene.control.Alert;
 import javafx.scene.control.ButtonType;
+import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.ListCell;
 import javafx.scene.control.ListView;
@@ -25,17 +26,24 @@ public final class DataMaintenanceController {
 
     private final ApplicationBackupService backupService;
     private final SqlTeacherConfiguration configuration;
+    private final boolean maintenanceAllowed;
 
     @FXML private Label versionLabel;
     @FXML private Label dataDirectoryLabel;
     @FXML private Label maintenanceStatusLabel;
     @FXML private ListView<BackupSnapshot> backupList;
+    @FXML private Button refreshBackupsButton;
+    @FXML private Button createBackupButton;
+    @FXML private Button restoreDemoButton;
+    @FXML private Button restoreBackupButton;
 
     public DataMaintenanceController(
             ApplicationBackupService backupService,
-            SqlTeacherConfiguration configuration) {
+            SqlTeacherConfiguration configuration,
+            boolean maintenanceAllowed) {
         this.backupService = Objects.requireNonNull(backupService);
         this.configuration = Objects.requireNonNull(configuration);
+        this.maintenanceAllowed = maintenanceAllowed;
     }
 
     @FXML
@@ -55,7 +63,18 @@ public final class DataMaintenanceController {
                 }
             }
         });
-        refreshBackups();
+        if (maintenanceAllowed) {
+            refreshBackups();
+        } else {
+            String reason = "仅管理员可以备份或恢复整台设备的数据。版本信息仍可查看。";
+            backupList.setDisable(true);
+            backupList.setPlaceholder(new Label(reason));
+            refreshBackupsButton.setDisable(true);
+            createBackupButton.setDisable(true);
+            restoreDemoButton.setDisable(true);
+            restoreBackupButton.setDisable(true);
+            maintenanceStatusLabel.setText(reason);
+        }
     }
 
     @FXML

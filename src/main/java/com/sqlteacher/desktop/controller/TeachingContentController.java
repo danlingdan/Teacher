@@ -24,6 +24,8 @@ import javafx.scene.control.Label;
 import javafx.scene.control.ListView;
 import javafx.scene.control.TextArea;
 import javafx.scene.control.TextField;
+import javafx.scene.control.Tab;
+import javafx.scene.control.TabPane;
 import javafx.scene.layout.VBox;
 import javafx.stage.FileChooser;
 
@@ -44,6 +46,8 @@ public final class TeachingContentController {
     private final AtomicBoolean running = new AtomicBoolean();
 
     @FXML private Label statusLabel;
+    @FXML private TabPane workspaceTabs;
+    @FXML private Tab teacherTab;
     @FXML private VBox teacherPane;
     @FXML private VBox feedbackEditorPane;
     @FXML private TextField courseNameField;
@@ -95,8 +99,7 @@ public final class TeachingContentController {
     @FXML
     private void initialize() {
         boolean teacher = isTeacher();
-        teacherPane.setVisible(teacher);
-        teacherPane.setManaged(teacher);
+        if (!teacher) workspaceTabs.getTabs().remove(teacherTab);
         feedbackEditorPane.setVisible(teacher);
         feedbackEditorPane.setManaged(teacher);
         feedbackStatusCombo.getItems().setAll(FeedbackStatus.values());

@@ -17,7 +17,10 @@ class DesktopAccessProfileTest {
         assertTrue(guest.can(DesktopCapability.STUDENT_EXERCISE));
         assertFalse(guest.can(DesktopCapability.CLOUD_CENTER));
         assertFalse(guest.can(DesktopCapability.EXERCISE_MANAGEMENT));
-        assertFalse(guest.can(DesktopCapability.SETTINGS));
+        assertTrue(guest.can(DesktopCapability.SETTINGS));
+        assertTrue(guest.canConfigure(DesktopSettingPermission.APPEARANCE));
+        assertTrue(guest.canConfigure(DesktopSettingPermission.LOCAL_CONNECTIONS));
+        assertFalse(guest.canConfigure(DesktopSettingPermission.LOCAL_DATA_MAINTENANCE));
     }
 
     @Test
@@ -28,6 +31,8 @@ class DesktopAccessProfileTest {
         assertTrue(profile.can(DesktopCapability.KNOWLEDGE_CENTER));
         assertFalse(profile.can(DesktopCapability.EXERCISE_MANAGEMENT));
         assertFalse(profile.can(DesktopCapability.EXERCISE_PROGRESS));
+        assertTrue(profile.can(DesktopCapability.SETTINGS));
+        assertFalse(profile.canConfigure(DesktopSettingPermission.TEACHING_DEFAULTS));
     }
 
     @Test
@@ -37,8 +42,12 @@ class DesktopAccessProfileTest {
 
         assertTrue(teacher.can(DesktopCapability.EXERCISE_MANAGEMENT));
         assertTrue(teacher.can(DesktopCapability.EXERCISE_PROGRESS));
+        assertTrue(teacher.canConfigure(DesktopSettingPermission.TEACHING_DEFAULTS));
+        assertFalse(teacher.canConfigure(DesktopSettingPermission.LOCAL_DATA_MAINTENANCE));
         assertTrue(admin.can(DesktopCapability.SETTINGS));
         assertTrue(admin.can(DesktopCapability.CLOUD_CENTER));
+        assertTrue(admin.canConfigure(DesktopSettingPermission.LOCAL_DATA_MAINTENANCE));
+        assertTrue(admin.canConfigure(DesktopSettingPermission.CLOUD_OPERATIONS));
     }
 
     private static DesktopAccessProfile profile(UserRole role) {

@@ -1,162 +1,72 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<!--
-  主窗口布局（浅色主题 · 顶部横向全局导航 · 全局 Loading 遮罩）。
-
-  布局改造（任务十）：
-    - 舍弃原左侧窄侧边栏，改为顶部横向全局导航栏（top-nav），复刻参考截图顶部导航形态。
-    - 根节点改为 StackPane：内层 BorderPane 承载原有导航 + 页面容器；
-      顶层为全局 Loading 遮罩（loadingOverlay），默认隐藏，由 GlobalLoading 统一控制。
-    - 顶部导航栏（HBox）自左至右：品牌 Logo 小方块（brand-logo）+ 品牌文字「SQL Teacher」，
-      横向排布导航菜单（当前「SQL 练习」「表结构」），中部弹性留白（spacer）把
-      右侧「设置」占位按钮推到最右（后续配置入口，暂禁用占位）。
-    - <center> StackPane（pageContainer）承载被内嵌的 SqlPractice.fxml / TableSchemaView.fxml；
-      导航点击切换其内容，子页面始终作为主窗口内的内嵌区域呈现，绝不独立弹窗。
-
-  注入 / 路由（沿用任务九，不变）：
-    - fx:controller 绑定 MainWindowController；由 SqlTeacherFxApp 通过 setControllerFactory
-      构造注入服务，再向下注入各子页面控制器。
-    - 保留业务 fx:id：sqlPracticeNavButton / tableSchemaNavButton（导航按钮）、
-      pageContainer（页面插槽）、loadingOverlay / loadingText（全局遮罩）。
-
-  约束：
-    - 样式全部引用全局 css/app.css 中的样式类，无内联 style，无独立 css 文件。
--->
-
-<?import java.net.URL?>
 <?import javafx.geometry.Insets?>
 <?import javafx.scene.control.Button?>
 <?import javafx.scene.control.Label?>
 <?import javafx.scene.control.ProgressIndicator?>
 <?import javafx.scene.control.ScrollPane?>
 <?import javafx.scene.layout.BorderPane?>
-<?import javafx.scene.layout.HBox?>
 <?import javafx.scene.layout.Region?>
 <?import javafx.scene.layout.StackPane?>
 <?import javafx.scene.layout.VBox?>
 
-<StackPane xmlns="http://javafx.com/javafx"
-           xmlns:fx="http://javafx.com/fxml"
+<StackPane xmlns="http://javafx.com/javafx" xmlns:fx="http://javafx.com/fxml"
            fx:controller="com.sqlteacher.desktop.controller.MainWindowController"
            styleClass="main-window">
-
-    <!-- 全局样式表（相对 fxml 目录定位到 css/app.css），必须放在根节点上才能作用于根节点本身。 -->
-    <stylesheets>
-        <URL value="@../css/app.css"/>
-    </stylesheets>
-
-    <!-- 主内容层：原有 BorderPane 内嵌导航栏与页面容器。 -->
-    <BorderPane fx:id="mainContainer"
-                minWidth="800.0" minHeight="600.0"
-                maxWidth="Infinity" maxHeight="Infinity">
-
-        <!-- 顶部：横向全局导航栏。BorderPane.margin 让导航条四周浮起，圆角得以显现。 -->
-        <top>
-            <ScrollPane fitToHeight="true" hbarPolicy="AS_NEEDED" vbarPolicy="NEVER" styleClass="top-nav-scroll">
-                <BorderPane.margin>
-                    <Insets top="16.0" right="18.0" bottom="6.0" left="18.0"/>
-                </BorderPane.margin>
-                <content>
-                <HBox styleClass="top-nav" alignment="CENTER_LEFT" spacing="10.0">
-                    <children>
-                    <!-- 品牌 Logo 小方块（纯 CSS 渐变装饰） + 品牌文字 -->
-                    <Region styleClass="brand-logo"/>
-                    <Label styleClass="brand-title" text="SQL Teacher"/>
-
-                    <!-- 品牌与菜单之间的小间隔 -->
-                    <Region minWidth="18.0"/>
-
-                    <!-- 导航菜单：选中态由 Controller 追加 selected 高亮 -->
-                    <Button fx:id="homeNavButton"
-                            styleClass="nav-button"
-                            text="首页"
-                            onAction="#onNavigateHome"/>
-
-                    <Button fx:id="sqlPracticeNavButton"
-                            styleClass="nav-button"
-                            text="自由 SQL"
-                            onAction="#onNavigateSqlPractice"/>
-
-                    <Button fx:id="studentExerciseNavButton"
-                            styleClass="nav-button"
-                            text="闯关练习"
-                            onAction="#onNavigateStudentExercise"/>
-
-                    <Button fx:id="exerciseManagementNavButton"
-                            styleClass="nav-button"
-                            text="教师题库"
-                            onAction="#onNavigateExerciseManagement"/>
-
-                    <Button fx:id="exerciseProgressNavButton"
-                            styleClass="nav-button"
-                            text="教师看板"
-                            onAction="#onNavigateExerciseProgress"/>
-
-                    <Button fx:id="knowledgeCenterNavButton"
-                            styleClass="nav-button"
-                            text="课程知识"
-                            onAction="#onNavigateKnowledgeCenter"/>
-
-                    <Button fx:id="aiAssistantNavButton"
-                            styleClass="nav-button"
-                            text="AI助手"
-                            onAction="#onNavigateAiAssistant"/>
-
-                    <Button fx:id="tableSchemaNavButton"
-                            styleClass="nav-button"
-                            text="表结构"
-                            onAction="#onNavigateTableSchema"/>
-
-                    <Button fx:id="settingsNavButton"
-                            styleClass="nav-button"
-                            text="设置与数据"
-                            onAction="#onNavigateSettings"/>
-
-                    <Button fx:id="cloudCenterNavButton"
-                            styleClass="nav-button"
-                            text="云端教学"
-                            onAction="#onNavigateCloudCenter"/>
-
-                    <Button fx:id="teachingContentNavButton"
-                            styleClass="nav-button"
-                            text="课程协作"
-                            onAction="#onNavigateTeachingContent"/>
-
-                    <!-- 弹性留白：把右侧按钮推到最右端 -->
-                    <Region HBox.hgrow="ALWAYS"/>
-
-                    <Label fx:id="identityLabel" text="访客" styleClass="identity-pill"/>
-                    <Button fx:id="switchIdentityButton"
-                            text="切换身份"
-                            onAction="#onSwitchIdentity"
-                            styleClass="identity-switch-button"/>
-                    </children>
-                </HBox>
-                </content>
-            </ScrollPane>
-        </top>
-
-        <!-- 中部：页面容器，导航切换时替换其中的内容节点（内嵌各子页面 FXML） -->
+    <BorderPane fx:id="mainContainer" minWidth="900" minHeight="600">
+        <left>
+            <VBox styleClass="app-sidebar" minWidth="224" prefWidth="224" maxWidth="224" spacing="12">
+                <padding><Insets top="18" right="14" bottom="16" left="14"/></padding>
+                <VBox spacing="2" styleClass="sidebar-brand">
+                    <Label text="SQLTeacher" styleClass="brand-title"/>
+                    <Label text="数据库教学工作台" styleClass="sidebar-caption"/>
+                </VBox>
+                <ScrollPane fitToWidth="true" hbarPolicy="NEVER" vbarPolicy="AS_NEEDED"
+                            styleClass="sidebar-scroll" VBox.vgrow="ALWAYS">
+                    <content>
+                        <VBox spacing="14">
+                            <VBox fx:id="learningNavGroup" spacing="4" styleClass="nav-group">
+                                <Label text="学习" styleClass="nav-group-title"/>
+                                <Button fx:id="homeNavButton" text="首页" onAction="#onNavigateHome" maxWidth="Infinity" styleClass="nav-button"/>
+                                <Button fx:id="studentExerciseNavButton" text="我的练习" onAction="#onNavigateStudentExercise" maxWidth="Infinity" styleClass="nav-button"/>
+                                <Button fx:id="knowledgeCenterNavButton" text="课程知识" onAction="#onNavigateKnowledgeCenter" maxWidth="Infinity" styleClass="nav-button"/>
+                            </VBox>
+                            <VBox fx:id="teachingNavGroup" spacing="4" styleClass="nav-group">
+                                <Label fx:id="teachingNavGroupTitle" text="教学" styleClass="nav-group-title"/>
+                                <Button fx:id="teachingContentNavButton" text="教学工作台" onAction="#onNavigateTeachingContent" maxWidth="Infinity" styleClass="nav-button"/>
+                                <Button fx:id="exerciseManagementNavButton" text="题库管理" onAction="#onNavigateExerciseManagement" maxWidth="Infinity" styleClass="nav-button"/>
+                                <Button fx:id="exerciseProgressNavButton" text="学情看板" onAction="#onNavigateExerciseProgress" maxWidth="Infinity" styleClass="nav-button"/>
+                                <Button fx:id="cloudCenterNavButton" text="云端班级" onAction="#onNavigateCloudCenter" maxWidth="Infinity" styleClass="nav-button"/>
+                            </VBox>
+                            <VBox fx:id="toolsNavGroup" spacing="4" styleClass="nav-group">
+                                <Label text="SQL 工具" styleClass="nav-group-title"/>
+                                <Button fx:id="sqlPracticeNavButton" text="自由 SQL" onAction="#onNavigateSqlPractice" maxWidth="Infinity" styleClass="nav-button"/>
+                                <Button fx:id="aiAssistantNavButton" text="AI 助手" onAction="#onNavigateAiAssistant" maxWidth="Infinity" styleClass="nav-button"/>
+                                <Button fx:id="tableSchemaNavButton" text="表结构" onAction="#onNavigateTableSchema" maxWidth="Infinity" styleClass="nav-button"/>
+                            </VBox>
+                            <VBox fx:id="systemNavGroup" spacing="4" styleClass="nav-group">
+                                <Label text="系统" styleClass="nav-group-title"/>
+                                <Button fx:id="settingsNavButton" text="设置" onAction="#onNavigateSettings" maxWidth="Infinity" styleClass="nav-button"/>
+                            </VBox>
+                        </VBox>
+                    </content>
+                </ScrollPane>
+                <VBox spacing="8" styleClass="identity-card">
+                    <Label fx:id="identityLabel" text="访客" styleClass="identity-pill" wrapText="true"/>
+                    <Button fx:id="switchIdentityButton" text="切换身份" onAction="#onSwitchIdentity"
+                            maxWidth="Infinity" styleClass="identity-switch-button"/>
+                </VBox>
+            </VBox>
+        </left>
         <center>
             <StackPane fx:id="pageContainer" styleClass="page-container"/>
         </center>
-
     </BorderPane>
 
-    <!-- 全局 Loading 遮罩层：覆盖整个主窗口，默认隐藏，由 GlobalLoading 统一控制显示/隐藏。 -->
-    <StackPane fx:id="loadingOverlay"
-               styleClass="loading-overlay"
-               visible="false"
-               managed="false">
-        <children>
-            <VBox alignment="CENTER" spacing="14.0">
-                <children>
-                    <ProgressIndicator styleClass="loading-spinner"/>
-                    <Label fx:id="loadingText"
-                           styleClass="loading-text"
-                           text="加载中…"/>
-                </children>
-            </VBox>
-        </children>
+    <StackPane fx:id="loadingOverlay" styleClass="loading-overlay" visible="false" managed="false">
+        <VBox alignment="CENTER" spacing="14">
+            <ProgressIndicator styleClass="loading-spinner"/>
+            <Label fx:id="loadingText" styleClass="loading-text" text="加载中…"/>
+        </VBox>
     </StackPane>
 </StackPane>

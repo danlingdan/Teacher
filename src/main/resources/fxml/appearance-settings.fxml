@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.CheckBox?>
+<?import javafx.scene.control.ComboBox?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.layout.ColumnConstraints?>
+<?import javafx.scene.layout.GridPane?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.Region?>
+<?import javafx.scene.layout.VBox?>
+
+<VBox xmlns="http://javafx.com/javafx" xmlns:fx="http://javafx.com/fxml"
+      fx:controller="com.sqlteacher.desktop.controller.AppearanceSettingsController"
+      spacing="18" styleClass="settings-section">
+    <padding><Insets top="24" right="28" bottom="24" left="28"/></padding>
+    <Label text="外观与易用性" styleClass="page-title"/>
+    <Label text="这些偏好仅保存在当前设备，不包含账号令牌、数据库密码或教学数据。"
+           wrapText="true" styleClass="page-subtitle"/>
+    <GridPane hgap="18" vgap="16" styleClass="settings-grid">
+        <columnConstraints>
+            <ColumnConstraints minWidth="120" halignment="RIGHT"/>
+            <ColumnConstraints minWidth="260" hgrow="ALWAYS"/>
+        </columnConstraints>
+        <Label text="主题" styleClass="form-label"/>
+        <ComboBox fx:id="themeCombo" maxWidth="Infinity" GridPane.columnIndex="1"/>
+        <Label text="界面字体" GridPane.rowIndex="1" styleClass="form-label"/>
+        <ComboBox fx:id="fontCombo" maxWidth="Infinity" GridPane.columnIndex="1" GridPane.rowIndex="1"/>
+        <Label text="界面密度" GridPane.rowIndex="2" styleClass="form-label"/>
+        <ComboBox fx:id="densityCombo" maxWidth="Infinity" GridPane.columnIndex="1" GridPane.rowIndex="2"/>
+        <Label text="动态效果" GridPane.rowIndex="3" styleClass="form-label"/>
+        <CheckBox fx:id="reducedMotionCheck" text="减少非必要动态效果" GridPane.columnIndex="1" GridPane.rowIndex="3"/>
+    </GridPane>
+    <VBox spacing="6" styleClass="appearance-preview">
+        <Label text="字体与颜色预览" styleClass="section-title"/>
+        <Label text="SQLTeacher 课程教学 · SELECT name FROM student;" wrapText="true"/>
+        <Label text="正文、数字 12345 与 SQL 代码应在当前背景下保持清晰。" styleClass="page-subtitle"/>
+    </VBox>
+    <HBox alignment="CENTER_RIGHT" spacing="10">
+        <Label fx:id="statusLabel" text="切换后点击应用。" styleClass="status-info" HBox.hgrow="ALWAYS"/>
+        <Region HBox.hgrow="ALWAYS"/>
+        <Button text="恢复推荐" onAction="#onReset" styleClass="secondary-button"/>
+        <Button text="应用外观" onAction="#onApply" styleClass="primary-button"/>
+    </HBox>
+</VBox>

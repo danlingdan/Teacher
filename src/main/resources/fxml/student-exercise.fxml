@@ -8,10 +8,12 @@
             fx:controller="com.sqlteacher.desktop.controller.StudentExerciseController"
             styleClass="exercise-page">
     <top>
-        <VBox spacing="6" styleClass="title-area">
+        <VBox spacing="8" styleClass="student-workflow-header">
             <padding><Insets top="20" right="24" bottom="14" left="24"/></padding>
             <Label text="闯关练习" styleClass="page-title"/>
             <Label text="在隔离数据集上运行并提交 SQL；评测无需 AI，也不会展示参考答案。" styleClass="page-subtitle"/>
+            <Label text="操作顺序：选择题目 → 开始练习 → 运行检查 → 提交评测。快捷键：Ctrl+Enter 运行，Ctrl+Shift+Enter 提交，F1 获取提示。"
+                   wrapText="true" styleClass="workflow-hint"/>
         </VBox>
     </top>
     <center>
@@ -38,8 +40,8 @@
                         <Region HBox.hgrow="ALWAYS"/>
                         <Button fx:id="resetButton" text="重置数据" onAction="#onReset" styleClass="refresh-button"/>
                         <Button fx:id="hintButton" text="提示" onAction="#onHint" styleClass="refresh-button"/>
-                        <Button fx:id="runButton" text="运行" onAction="#onRun" styleClass="refresh-button"/>
-                        <Button fx:id="submitButton" text="提交评测" onAction="#onSubmit" styleClass="sql-execute-button"/>
+                        <Button fx:id="runButton" text="运行查询" onAction="#onRun" styleClass="secondary-button"/>
+                        <Button fx:id="submitButton" text="提交评测" onAction="#onSubmit" defaultButton="true" styleClass="sql-execute-button"/>
                     </HBox>
                     <TextArea fx:id="sqlArea" prefRowCount="5" styleClass="sql-editor" VBox.vgrow="NEVER"/>
                     <SplitPane orientation="VERTICAL" dividerPositions="0.62" VBox.vgrow="ALWAYS" styleClass="exercise-result-split">

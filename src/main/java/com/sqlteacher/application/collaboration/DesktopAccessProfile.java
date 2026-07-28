@@ -18,7 +18,8 @@ public record DesktopAccessProfile(
         DesktopCapability.SQL_PRACTICE,
         DesktopCapability.STUDENT_EXERCISE,
         DesktopCapability.AI_ASSISTANT,
-        DesktopCapability.TABLE_SCHEMA
+        DesktopCapability.TABLE_SCHEMA,
+        DesktopCapability.SETTINGS
     ));
 
     private static final Set<DesktopCapability> STUDENT_CAPABILITIES = union(
@@ -79,6 +80,15 @@ public record DesktopAccessProfile(
 
     public boolean isGuest() {
         return kind == Kind.GUEST;
+    }
+
+    public boolean canConfigure(DesktopSettingPermission permission) {
+        Objects.requireNonNull(permission, "permission must not be null");
+        return switch (permission) {
+            case APPEARANCE, LOCAL_CONNECTIONS -> true;
+            case TEACHING_DEFAULTS -> kind == Kind.TEACHER || kind == Kind.ADMIN;
+            case LOCAL_DATA_MAINTENANCE, CLOUD_OPERATIONS -> kind == Kind.ADMIN;
+        };
     }
 
     public String roleLabel() {

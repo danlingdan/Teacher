@@ -1698,3 +1698,113 @@
     -fx-focus-color: #a78bfa;
     -fx-faint-focus-color: rgba(167,139,250,0.28);
 }
+
+/* =====================================================================
+ * v1.5 application shell, typography, icons, focus and settings center
+ * ===================================================================== */
+.font-modern { -fx-font-family: "Microsoft YaHei UI", "Microsoft YaHei", "Segoe UI", sans-serif; }
+.font-system { -fx-font-family: "Segoe UI Variable", "Segoe UI", "Microsoft YaHei UI", sans-serif; }
+.font-classic { -fx-font-family: "Microsoft YaHei", "SimHei", "Segoe UI", sans-serif; }
+
+.app-sidebar {
+    -fx-background-color: #0d1526;
+    -fx-border-color: transparent rgba(120, 145, 200, 0.16) transparent transparent;
+    -fx-border-width: 0 1 0 0;
+}
+.sidebar-brand { -fx-padding: 0 8 8 8; }
+.sidebar-caption { -fx-text-fill: #74819c; -fx-font-size: 11px; }
+.sidebar-scroll, .sidebar-scroll > .viewport { -fx-background-color: transparent; }
+.sidebar-scroll .scroll-bar:vertical { -fx-pref-width: 7; }
+.nav-group-title {
+    -fx-text-fill: #687690;
+    -fx-font-size: 11px;
+    -fx-font-weight: bold;
+    -fx-padding: 5 10 3 10;
+}
+.app-sidebar .nav-button {
+    -fx-alignment: CENTER_LEFT;
+    -fx-graphic-text-gap: 12;
+    -fx-padding: 9 12 9 12;
+    -fx-background-color: transparent;
+    -fx-text-fill: #b9c4da;
+}
+.app-sidebar .nav-button:hover { -fx-background-color: rgba(255,255,255,0.07); }
+.app-sidebar .nav-button.selected {
+    -fx-background-color: linear-gradient(to right, rgba(85,104,245,0.92), rgba(112,82,235,0.88));
+    -fx-text-fill: white;
+}
+.identity-card {
+    -fx-padding: 12;
+    -fx-background-color: rgba(255,255,255,0.035);
+    -fx-background-radius: 12;
+    -fx-border-color: rgba(120,145,200,0.14);
+    -fx-border-radius: 12;
+}
+.ui-icon-shape { -fx-fill: #91a0bd; }
+.nav-button:hover .ui-icon-shape { -fx-fill: #e8edfa; }
+.nav-button.selected .ui-icon-shape { -fx-fill: white; }
+
+.settings-section { -fx-background-color: #141c30; }
+.settings-section .label { -fx-text-fill: #d8e0ef; }
+.settings-section .page-subtitle { -fx-text-fill: #8f9bb5; }
+.settings-section .form-label { -fx-text-fill: #b9c4d8; }
+.settings-section .status-info { -fx-text-fill: #aeb8ce; }
+.settings-section .status-success { -fx-text-fill: #86efac; }
+.settings-section .status-error { -fx-text-fill: #fda4af; }
+.settings-section .combo-box {
+    -fx-background-color: #212c44;
+    -fx-border-color: rgba(120,145,200,0.28);
+    -fx-border-radius: 8;
+    -fx-background-radius: 8;
+}
+.settings-section .combo-box .list-cell { -fx-background-color: transparent; -fx-text-fill: #e6ecf8; }
+.combo-box-popup .list-view {
+    -fx-background-color: #172035;
+    -fx-border-color: rgba(120, 145, 200, 0.28);
+    -fx-border-radius: 6;
+    -fx-background-radius: 6;
+}
+.combo-box-popup .list-cell {
+    -fx-background-color: #172035;
+    -fx-text-fill: #e6ecf8;
+    -fx-padding: 8 12;
+}
+.combo-box-popup .list-cell:filled:hover,
+.combo-box-popup .list-cell:filled:selected {
+    -fx-background-color: #33477a;
+    -fx-text-fill: #ffffff;
+}
+.tab-pane .tab-header-area .tab-header-background { -fx-background-color: #0f1627; }
+.tab-pane .tab { -fx-background-color: #1b253d; -fx-border-color: rgba(120,145,200,0.16); }
+.tab-pane .tab:selected { -fx-background-color: #273354; }
+.tab-pane .tab .tab-label { -fx-text-fill: #aeb8ce; }
+.tab-pane .tab:selected .tab-label { -fx-text-fill: #ffffff; -fx-font-weight: bold; }
+.tab-pane .tab-content-area { -fx-background-color: #141c30; }
+.settings-grid, .appearance-preview {
+    -fx-padding: 18;
+    -fx-background-color: #1b253d;
+    -fx-background-radius: 12;
+    -fx-border-color: rgba(120,145,200,0.18);
+    -fx-border-radius: 12;
+}
+.restricted-setting { -fx-padding: 44; }
+
+.button:focused, .text-field:focused, .password-field:focused, .text-area:focused,
+.combo-box:focused, .list-view:focused, .table-view:focused, .tab-pane:focused {
+    -fx-focus-color: #8b7cff;
+    -fx-faint-focus-color: rgba(139,124,255,0.34);
+}
+
+.density-compact .button { -fx-padding: 6 11 6 11; }
+.density-compact .text-field, .density-compact .password-field, .density-compact .combo-box { -fx-pref-height: 32; }
+.density-compact .panel-card { -fx-padding: 12; }
+
+.student-workflow-header { -fx-padding: 18 24 12 24; }
+.workflow-hint {
+    -fx-padding: 6 10 6 10;
+    -fx-background-color: rgba(109,93,252,0.10);
+    -fx-background-radius: 8;
+    -fx-text-fill: #aeb8ce;
+    -fx-font-size: 12px;
+}
+.teaching-tabs { -fx-tab-min-width: 128; }

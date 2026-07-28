@@ -1,12 +1,26 @@
 package com.sqlteacher.desktop.controller;
 
+import com.sqlteacher.desktop.appearance.UiIcon;
+import com.sqlteacher.desktop.appearance.UiIcons;
 import javafx.fxml.FXML;
+import javafx.scene.control.Label;
 
 public final class HomeController {
+
+    @FXML private Label sqlIcon;
+    @FXML private Label aiIcon;
+    @FXML private Label schemaIcon;
 
     private Runnable onNavigateAiAssistant;
     private Runnable onNavigateSqlPractice;
     private Runnable onNavigateTableSchema;
+
+    @FXML
+    private void initialize() {
+        sqlIcon.setGraphic(UiIcons.create(UiIcon.CODE, 30));
+        aiIcon.setGraphic(UiIcons.create(UiIcon.SPARK, 30));
+        schemaIcon.setGraphic(UiIcons.create(UiIcon.TABLE, 30));
+    }
 
     public void setOnNavigateAiAssistant(Runnable onNavigateAiAssistant) {
         this.onNavigateAiAssistant = onNavigateAiAssistant;

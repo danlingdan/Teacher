@@ -7,6 +7,8 @@ import com.sqlteacher.application.execution.SqlExecutionService;
 import com.sqlteacher.application.metadata.DatabaseMetadataService;
 import com.sqlteacher.desktop.DesktopExecutors;
 import com.sqlteacher.desktop.GlobalLoading;
+import com.sqlteacher.desktop.appearance.UiIcon;
+import com.sqlteacher.desktop.appearance.UiIcons;
 import com.sqlteacher.desktop.viewmodel.ColumnMetaViewModel;
 import com.sqlteacher.desktop.viewmodel.DesktopConnections;
 import com.sqlteacher.desktop.viewmodel.SqlExecutionViewModel;
@@ -46,8 +48,8 @@ import java.util.function.Consumer;
  * <p><b>树形结构</b>：
  * <ul>
  *   <li>数据库根节点：当前选中的数据库连接；</li>
- *   <li>表节点：{@code 📊 表名}；</li>
- *   <li>字段节点：{@code 📋 字段名 · 类型 [PK] [NOT NULL]}，主键字段使用 🔑 图标。</li>
+ *   <li>表节点：独立矢量表格图标与纯文本表名；</li>
+ *   <li>字段节点：独立矢量列/主键图标与 {@code 字段名 · 类型 [PK] [NOT NULL]}。</li>
  * </ul>
  *
  * <p><b>懒加载</b>：根节点初始带一个占位子节点；用户展开根节点时后台请求元数据，
@@ -87,12 +89,6 @@ public final class TableSchemaController {
 
     /** 错误弹窗标题。 */
     private static final String ERROR_ALERT_TITLE = "加载失败";
-
-    /** 节点图标。 */
-    private static final String ICON_DATABASE = "🗄";
-    private static final String ICON_TABLE = "📊";
-    private static final String ICON_COLUMN = "📋";
-    private static final String ICON_PRIMARY_KEY = "🔑";
 
     /** 应用层表元数据服务接口。 */
     private final DatabaseMetadataService metadataService;
@@ -337,7 +333,7 @@ public final class TableSchemaController {
 
     /** 创建数据库根节点，带有一个占位子节点用于触发懒加载。 */
     private TreeItem<String> createDatabaseRootItem() {
-        TreeItem<String> root = new TreeItem<>(withIcon(ICON_DATABASE, ROOT_LABEL));
+        TreeItem<String> root = new TreeItem<>(ROOT_LABEL, UiIcons.create(UiIcon.DATABASE, 16));
         root.setExpanded(false);
         root.getChildren().add(createLoadingPlaceholderItem());
         return root;
@@ -345,7 +341,7 @@ public final class TableSchemaController {
 
     /** 创建懒加载占位子节点。 */
     private TreeItem<String> createLoadingPlaceholderItem() {
-        return new TreeItem<>(withIcon("", LOADING_CHILD_LABEL));
+        return new TreeItem<>(LOADING_CHILD_LABEL);
     }
 
     /** 创建表节点，并预先把字段数据缓存到控制器字段中供展开时渲染。 */
@@ -353,7 +349,7 @@ public final class TableSchemaController {
         String tableName = table.name();
         tableColumnCache.put(tableName, table.columns());
 
-        TreeItem<String> tableItem = new TreeItem<>(withIcon(ICON_TABLE, tableName));
+        TreeItem<String> tableItem = new TreeItem<>(tableName, UiIcons.create(UiIcon.TABLE, 16));
         tableItem.getChildren().add(createLoadingPlaceholderItem());
 
         // 表节点展开时：如果子节点仍是占位，则从缓存取出字段列表并渲染。
@@ -370,10 +366,8 @@ public final class TableSchemaController {
     private void renderColumns(TreeItem<String> tableItem, List<ColumnMetaViewModel> columns) {
         tableItem.getChildren().clear();
         for (ColumnMetaViewModel column : columns) {
-            String icon = column.primaryKey() ? ICON_PRIMARY_KEY : ICON_COLUMN;
-            String label = withIcon(icon, formatColumn(column));
-            TreeItem<String> columnItem = new TreeItem<>(label);
-            columnItem.setGraphic(null);
+            UiIcon icon = column.primaryKey() ? UiIcon.KEY : UiIcon.COLUMN;
+            TreeItem<String> columnItem = new TreeItem<>(formatColumn(column), UiIcons.create(icon, 15));
             tableItem.getChildren().add(columnItem);
         }
     }
@@ -403,24 +397,9 @@ public final class TableSchemaController {
         return sb.toString();
     }
 
-    /** 在文本前追加图标与间隔。 */
-    private static String withIcon(String icon, String text) {
-        if (icon == null || icon.isBlank()) {
-            return text;
-        }
-        return icon + " " + text;
-    }
-
-    /** 去掉图标前缀，提取纯文本（用于从表节点文本还原表名）。 */
+    /** Tree values are plain text; graphics are separate SVG nodes. */
     private static String stripIcon(String value) {
-        if (value == null || value.isBlank()) {
-            return "";
-        }
-        int firstSpace = value.indexOf(' ');
-        if (firstSpace < 0 || firstSpace == value.length() - 1) {
-            return value;
-        }
-        return value.substring(firstSpace + 1);
+        return value == null ? "" : value.trim();
     }
 
     /** LOADING 渲染：树形区展示加载占位。 */
