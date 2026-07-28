@@ -17,6 +17,7 @@ import java.time.Instant;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class HttpCloudApiClientTest {
     private static final ObjectMapper JSON = new ObjectMapper();
@@ -30,12 +31,19 @@ class HttpCloudApiClientTest {
         "resultHash":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",\
         "submittedAt":"2026-07-28T00:00:00Z"}
         """;
+    private static final String ANALYTICS_JSON = """
+        {"classroomId":"class-1","assignmentId":"assignment-1","totalStudents":1,\
+        "submittedStudents":1,"passedStudents":1,"totalAttempts":1,"completionRate":1.0,"passRate":1.0,\
+        "commonErrors":[],"rows":[],"page":0,"pageSize":50,"totalRows":1,\
+        "generatedAt":"2026-07-28T00:00:00Z"}
+        """;
 
     private HttpServer server;
     private HttpCloudApiClient client;
     private String requestMethod;
     private String authorization;
     private JsonNode requestBody;
+    private String requestQuery;
 
     @BeforeEach
     void startServer() throws IOException {
@@ -100,6 +108,18 @@ class HttpCloudApiClientTest {
     }
 
     @Test
+    void shouldEncodeAssignmentAnalyticsFilter() {
+        var report = client.getAssignmentAnalytics("teacher-token", "class-1", "assignment-1",
+            new com.sqlteacher.application.collaboration.AssignmentAnalyticsFilter(
+                com.sqlteacher.application.collaboration.AssignmentStudentStatus.FAILED,
+                Instant.parse("2026-07-01T00:00:00Z"), Instant.parse("2026-07-31T00:00:00Z"), 0, 50));
+
+        assertTrue(requestQuery.contains("status=FAILED"));
+        assertTrue(requestQuery.contains("from=2026-07-01T00%3A00%3A00Z"));
+        assertEquals(1, report.totalRows());
+    }
+
+    @Test
     void shouldAllowHttpsAndLoopbackHttpEndpointsOnly() {
         assertDoesNotThrow(() -> new HttpCloudApiClient(URI.create("https://api.example.edu")));
         assertDoesNotThrow(() -> new HttpCloudApiClient(URI.create("http://localhost:18080")));
@@ -109,11 +129,13 @@ class HttpCloudApiClientTest {
 
     private void assignments(HttpExchange exchange) throws IOException {
         requestMethod = exchange.getRequestMethod();
+        requestQuery = exchange.getRequestURI().getRawQuery();
         authorization = exchange.getRequestHeaders().getFirst("Authorization");
         byte[] requestBytes = exchange.getRequestBody().readAllBytes();
         requestBody = requestBytes.length == 0 ? null : JSON.readTree(requestBytes);
         boolean submissionRequest = exchange.getRequestURI().getPath().endsWith("/submissions");
-        String response = submissionRequest
+        boolean analyticsRequest = exchange.getRequestURI().getPath().endsWith("/analytics");
+        String response = analyticsRequest ? ANALYTICS_JSON : submissionRequest
             ? ("GET".equals(requestMethod) ? "{\"submissions\":[" + SUBMISSION_JSON + "]}" : SUBMISSION_JSON)
             : ("GET".equals(requestMethod) ? "{\"assignments\":[" + ASSIGNMENT_JSON + "]}" : ASSIGNMENT_JSON);
         byte[] responseBytes = response.getBytes(StandardCharsets.UTF_8);

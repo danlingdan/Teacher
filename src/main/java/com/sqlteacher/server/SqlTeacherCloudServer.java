@@ -5,6 +5,11 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.sqlteacher.application.collaboration.AuthenticatedUser;
 import com.sqlteacher.application.collaboration.AssignmentStatus;
+import com.sqlteacher.application.collaboration.AssignmentAnalyticsFilter;
+import com.sqlteacher.application.collaboration.AssignmentAnalyticsReport;
+import com.sqlteacher.application.collaboration.AssignmentAnalyticsRow;
+import com.sqlteacher.application.collaboration.AssignmentErrorCount;
+import com.sqlteacher.application.collaboration.AssignmentStudentStatus;
 import com.sqlteacher.application.collaboration.AssignmentSubmission;
 import com.sqlteacher.application.collaboration.AssignmentSubmissionRequest;
 import com.sqlteacher.application.collaboration.AssignmentSubmissionRejectedException;
@@ -21,6 +26,7 @@ import com.sun.net.httpserver.HttpServer;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
+import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -211,6 +217,18 @@ public final class SqlTeacherCloudServer {
                     return;
                 }
             }
+            if (segments.length == 8 && "assignments".equals(segments[5]) && "analytics".equals(segments[7])
+                && "GET".equals(exchange.getRequestMethod())) {
+                respond(exchange, 200, store.assignmentAnalytics(actor, segments[4], segments[6],
+                    analyticsFilter(exchange)));
+                return;
+            }
+            if (segments.length == 9 && "assignments".equals(segments[5]) && "analytics".equals(segments[7])
+                && "export".equals(segments[8]) && "GET".equals(exchange.getRequestMethod())) {
+                respondCsv(exchange, store.exportAssignmentAnalyticsCsv(actor, segments[4], segments[6],
+                    analyticsFilter(exchange)), "assignment-analytics.csv");
+                return;
+            }
             if (segments.length == 8 && "assignments".equals(segments[5]) && "status".equals(segments[7])
                 && "POST".equals(exchange.getRequestMethod())) {
                 Map<String, String> body = request(exchange);
@@ -282,9 +300,31 @@ public final class SqlTeacherCloudServer {
         if (query == null || query.isBlank()) return null;
         for (String pair : query.split("&")) {
             String[] parts = pair.split("=", 2);
-            if (parts.length == 2 && name.equals(parts[0])) return parts[1];
+            if (parts.length == 2 && name.equals(parts[0])) {
+                return URLDecoder.decode(parts[1], StandardCharsets.UTF_8);
+            }
         }
         return null;
+    }
+
+    private static AssignmentAnalyticsFilter analyticsFilter(HttpExchange exchange) {
+        String query = exchange.getRequestURI().getRawQuery();
+        String statusValue = queryValue(query, "status");
+        AssignmentStudentStatus status = null;
+        if (statusValue != null && !statusValue.isBlank()) {
+            try {
+                status = AssignmentStudentStatus.valueOf(statusValue.toUpperCase(Locale.ROOT));
+            } catch (IllegalArgumentException error) {
+                throw new IllegalArgumentException("status is invalid");
+            }
+        }
+        long page = queryLong(query, "page", 0);
+        long pageSize = queryLong(query, "pageSize", 50);
+        if (page > Integer.MAX_VALUE || pageSize > Integer.MAX_VALUE) {
+            throw new IllegalArgumentException("Pagination value is too large");
+        }
+        return new AssignmentAnalyticsFilter(status, instantOrNull(queryValue(query, "from")),
+            instantOrNull(queryValue(query, "to")), (int) page, (int) pageSize);
     }
 
     private static Instant instantOrNull(String value) {
@@ -359,9 +399,13 @@ public final class SqlTeacherCloudServer {
     }
 
     private static void respondCsv(HttpExchange exchange, String csv) throws IOException {
+        respondCsv(exchange, csv, "class-learning-records.csv");
+    }
+
+    private static void respondCsv(HttpExchange exchange, String csv, String filename) throws IOException {
         byte[] bytes = csv.getBytes(StandardCharsets.UTF_8);
         exchange.getResponseHeaders().set("Content-Type", "text/csv; charset=utf-8");
-        exchange.getResponseHeaders().set("Content-Disposition", "attachment; filename=class-learning-records.csv");
+        exchange.getResponseHeaders().set("Content-Disposition", "attachment; filename=" + filename);
         exchange.getResponseHeaders().set("Cache-Control", "no-store");
         exchange.sendResponseHeaders(200, bytes.length);
         exchange.getResponseBody().write(bytes);
@@ -848,6 +892,146 @@ public final class SqlTeacherCloudServer {
                 Instant.parse(row.getString("submitted_at"))
             );
         }
+
+        AssignmentAnalyticsReport assignmentAnalytics(AuthenticatedUser actor, String classroomId,
+                                                       String assignmentId, AssignmentAnalyticsFilter filter) {
+            requireTeacher(actor, classroomId);
+            AssignmentAnalyticsFilter applied = filter == null ? AssignmentAnalyticsFilter.firstPage() : filter;
+            try (Connection connection = open()) {
+                assignment(connection, classroomId, assignmentId);
+                List<AssignmentAnalyticsRow> allRows = assignmentAnalyticsRows(
+                    connection, classroomId, assignmentId, applied);
+                List<AssignmentAnalyticsRow> filteredRows = allRows.stream()
+                    .filter(row -> matchesStatus(row, applied.status())).toList();
+                int submittedStudents = (int) allRows.stream().filter(row -> row.attemptCount() > 0).count();
+                int passedStudents = (int) allRows.stream().filter(row -> row.passedAttempts() > 0).count();
+                int totalAttempts = allRows.stream().mapToInt(AssignmentAnalyticsRow::attemptCount).sum();
+                long offsetValue = (long) applied.page() * applied.pageSize();
+                int fromIndex = (int) Math.min(offsetValue, filteredRows.size());
+                int toIndex = Math.min(fromIndex + applied.pageSize(), filteredRows.size());
+                return new AssignmentAnalyticsReport(
+                    classroomId, assignmentId, allRows.size(), submittedStudents, passedStudents, totalAttempts,
+                    rate(submittedStudents, allRows.size()), rate(passedStudents, submittedStudents),
+                    commonErrors(connection, classroomId, assignmentId, applied),
+                    filteredRows.subList(fromIndex, toIndex), applied.page(), applied.pageSize(), filteredRows.size(),
+                    Instant.now()
+                );
+            } catch (SQLException error) { throw database(error); }
+        }
+
+        String exportAssignmentAnalyticsCsv(AuthenticatedUser actor, String classroomId, String assignmentId,
+                                            AssignmentAnalyticsFilter filter) {
+            requireTeacher(actor, classroomId);
+            AssignmentAnalyticsFilter applied = filter == null ? AssignmentAnalyticsFilter.firstPage() : filter;
+            try (Connection connection = open()) {
+                assignment(connection, classroomId, assignmentId);
+                List<AssignmentAnalyticsRow> rows = assignmentAnalyticsRows(connection, classroomId, assignmentId, applied)
+                    .stream().filter(row -> matchesStatus(row, applied.status())).toList();
+                StringBuilder csv = new StringBuilder(
+                    "\uFEFFstudent_email,display_name,status,attempt_count,passed_attempts,last_submitted_at\r\n");
+                for (AssignmentAnalyticsRow row : rows) {
+                    csv.append(csvCell(row.email())).append(',').append(csvCell(row.displayName())).append(',')
+                        .append(row.status().name()).append(',').append(row.attemptCount()).append(',')
+                        .append(row.passedAttempts()).append(',')
+                        .append(row.lastSubmittedAt() == null ? "" : row.lastSubmittedAt()).append("\r\n");
+                }
+                try (PreparedStatement audit = connection.prepareStatement(
+                    "insert into export_audit(id,user_id,classroom_id,row_count,created_at,assignment_id,"
+                        + "export_type,filter_summary) values(?,?,?,?,?,?,?,?)")) {
+                    audit.setString(1, UUID.randomUUID().toString());
+                    audit.setString(2, actor.id());
+                    audit.setString(3, classroomId);
+                    audit.setInt(4, rows.size());
+                    audit.setString(5, Instant.now().toString());
+                    audit.setString(6, assignmentId);
+                    audit.setString(7, "ASSIGNMENT_ANALYTICS");
+                    audit.setString(8, analyticsFilterSummary(applied));
+                    audit.executeUpdate();
+                }
+                return csv.toString();
+            } catch (SQLException error) { throw database(error); }
+        }
+
+        private List<AssignmentAnalyticsRow> assignmentAnalyticsRows(Connection connection, String classroomId,
+                                                                     String assignmentId,
+                                                                     AssignmentAnalyticsFilter filter)
+            throws SQLException {
+            StringBuilder sql = new StringBuilder(
+                "select u.id,u.email,u.display_name,count(s.id) attempt_count,"
+                    + "coalesce(sum(case when s.status='PASSED' then 1 else 0 end),0) passed_attempts,"
+                    + "max(s.submitted_at) last_submitted_at from classroom_members m "
+                    + "join users u on u.id=m.user_id left join assignment_submissions s "
+                    + "on s.assignment_id=? and s.user_id=m.user_id");
+            if (filter.from() != null) sql.append(" and s.submitted_at>=?");
+            if (filter.to() != null) sql.append(" and s.submitted_at<=?");
+            sql.append(" where m.classroom_id=? and m.role='STUDENT' "
+                + "group by u.id,u.email,u.display_name order by u.email");
+            List<AssignmentAnalyticsRow> rows = new ArrayList<>();
+            try (PreparedStatement statement = connection.prepareStatement(sql.toString())) {
+                int parameter = 1;
+                statement.setString(parameter++, assignmentId);
+                if (filter.from() != null) statement.setString(parameter++, filter.from().toString());
+                if (filter.to() != null) statement.setString(parameter++, filter.to().toString());
+                statement.setString(parameter, classroomId);
+                try (ResultSet result = statement.executeQuery()) {
+                    while (result.next()) {
+                        int attempts = result.getInt("attempt_count");
+                        int passedAttempts = result.getInt("passed_attempts");
+                        String lastSubmittedAt = result.getString("last_submitted_at");
+                        AssignmentStudentStatus status = attempts == 0 ? AssignmentStudentStatus.NOT_SUBMITTED
+                            : passedAttempts > 0 ? AssignmentStudentStatus.PASSED : AssignmentStudentStatus.FAILED;
+                        rows.add(new AssignmentAnalyticsRow(
+                            result.getString("id"), result.getString("email"), result.getString("display_name"),
+                            status, attempts, passedAttempts,
+                            lastSubmittedAt == null ? null : Instant.parse(lastSubmittedAt)
+                        ));
+                    }
+                }
+            }
+            return List.copyOf(rows);
+        }
+
+        private List<AssignmentErrorCount> commonErrors(Connection connection, String classroomId,
+                                                        String assignmentId, AssignmentAnalyticsFilter filter)
+            throws SQLException {
+            StringBuilder sql = new StringBuilder(
+                "select s.error_code,count(*) error_count from assignment_submissions s "
+                    + "join classroom_members m on m.classroom_id=s.classroom_id and m.user_id=s.user_id "
+                    + "where s.classroom_id=? and s.assignment_id=? and s.status='FAILED' and s.error_code is not null");
+            if (filter.from() != null) sql.append(" and s.submitted_at>=?");
+            if (filter.to() != null) sql.append(" and s.submitted_at<=?");
+            sql.append(" group by s.error_code order by error_count desc,s.error_code limit 10");
+            List<AssignmentErrorCount> result = new ArrayList<>();
+            try (PreparedStatement statement = connection.prepareStatement(sql.toString())) {
+                int parameter = 1;
+                statement.setString(parameter++, classroomId);
+                statement.setString(parameter++, assignmentId);
+                if (filter.from() != null) statement.setString(parameter++, filter.from().toString());
+                if (filter.to() != null) statement.setString(parameter, filter.to().toString());
+                try (ResultSet rows = statement.executeQuery()) {
+                    while (rows.next()) {
+                        result.add(new AssignmentErrorCount(rows.getString("error_code"), rows.getInt("error_count")));
+                    }
+                }
+            }
+            return List.copyOf(result);
+        }
+
+        private boolean matchesStatus(AssignmentAnalyticsRow row, AssignmentStudentStatus filter) {
+            if (filter == null) return true;
+            if (filter == AssignmentStudentStatus.SUBMITTED) return row.attemptCount() > 0;
+            return row.status() == filter;
+        }
+
+        private double rate(int numerator, int denominator) {
+            return denominator == 0 ? 0.0 : (double) numerator / denominator;
+        }
+
+        private String analyticsFilterSummary(AssignmentAnalyticsFilter filter) {
+            return "status=" + (filter.status() == null ? "ALL" : filter.status().name())
+                + ";from=" + (filter.from() == null ? "" : filter.from())
+                + ";to=" + (filter.to() == null ? "" : filter.to());
+        }
         com.sqlteacher.application.collaboration.ClassLearningSummary classLearningSummary(AuthenticatedUser actor,String classroomId){requireTeacher(actor,classroomId);int students=0;int active=0;int events=0;int success=0;try(Connection c=open();PreparedStatement s=c.prepareStatement("select m.user_id,e.payload_json from classroom_members m left join sync_events e on e.user_id=m.user_id where m.classroom_id=? and m.role='STUDENT'")){s.setString(1,classroomId);java.util.Set<String> seenStudents=new java.util.HashSet<>();java.util.Set<String> activeStudents=new java.util.HashSet<>();try(ResultSet r=s.executeQuery()){while(r.next()){String userId=r.getString(1);seenStudents.add(userId);String payload=r.getString(2);if(payload==null)continue;events++;activeStudents.add(userId);try{if(JSON.readTree(payload).path("successful").asBoolean(false))success++;}catch(IOException ignored){}}}students=seenStudents.size();active=activeStudents.size();}catch(SQLException e){throw database(e);}return new com.sqlteacher.application.collaboration.ClassLearningSummary(classroomId,students,active,events,success,Instant.now());}
         String exportClassLearningCsv(AuthenticatedUser actor,String classroomId){requireTeacher(actor,classroomId);StringBuilder csv=new StringBuilder("\uFEFFstudent_email,event_type,occurred_at,successful\r\n");int rows=0;try(Connection c=open();PreparedStatement s=c.prepareStatement("select u.email,e.event_type,e.occurred_at,e.payload_json from classroom_members m join users u on u.id=m.user_id join sync_events e on e.user_id=m.user_id where m.classroom_id=? and m.role='STUDENT' order by e.occurred_at")){s.setString(1,classroomId);try(ResultSet r=s.executeQuery()){while(r.next()){boolean successful=false;try{successful=JSON.readTree(r.getString(4)).path("successful").asBoolean(false);}catch(IOException ignored){}csv.append(csvCell(r.getString(1))).append(',').append(csvCell(r.getString(2))).append(',').append(csvCell(r.getString(3))).append(',').append(successful).append("\r\n");rows++;}}try(PreparedStatement audit=c.prepareStatement("insert into export_audit(id,user_id,classroom_id,row_count,created_at) values(?,?,?,?,?)")){audit.setString(1,UUID.randomUUID().toString());audit.setString(2,actor.id());audit.setString(3,classroomId);audit.setInt(4,rows);audit.setString(5,Instant.now().toString());audit.executeUpdate();}}catch(SQLException e){throw database(e);}return csv.toString();}
         private String csvCell(String value){String normalized=value==null?"":value;if(!normalized.isEmpty()&&"=+-@".indexOf(normalized.charAt(0))>=0)normalized="'"+normalized;return "\""+normalized.replace("\"","\"\"")+"\"";}
@@ -1002,7 +1186,8 @@ public final class SqlTeacherCloudServer {
                     + "unique(user_id,operation_id),unique(assignment_id,user_id,attempt_number))");
                 statement.executeUpdate("create table if not exists export_audit(id text primary key,"
                     + "user_id text not null references users(id),classroom_id text not null references classrooms(id),"
-                    + "row_count integer not null,created_at text not null)");
+                    + "row_count integer not null,created_at text not null,assignment_id text,"
+                    + "export_type text not null default 'CLASS_ANALYTICS',filter_summary text)");
                 addColumnIfMissing(statement, "class_assignments", "status text not null default 'PUBLISHED'");
                 addColumnIfMissing(statement, "class_assignments", "due_at text");
                 addColumnIfMissing(statement, "class_assignments", "updated_at text");
@@ -1010,6 +1195,9 @@ public final class SqlTeacherCloudServer {
                 addColumnIfMissing(statement, "class_assignments", "published_at text");
                 addColumnIfMissing(statement, "class_assignments", "copied_from_assignment_id text");
                 addColumnIfMissing(statement, "class_assignments", "version integer not null default 1");
+                addColumnIfMissing(statement, "export_audit", "assignment_id text");
+                addColumnIfMissing(statement, "export_audit", "export_type text not null default 'CLASS_ANALYTICS'");
+                addColumnIfMissing(statement, "export_audit", "filter_summary text");
                 statement.executeUpdate("update class_assignments set updated_at=created_at where updated_at is null");
                 statement.executeUpdate("update class_assignments set description='' where description is null");
                 statement.executeUpdate("update class_assignments set version=1 where version is null or version<1");

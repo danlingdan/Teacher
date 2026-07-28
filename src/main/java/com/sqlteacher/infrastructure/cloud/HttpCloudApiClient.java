@@ -5,6 +5,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.sqlteacher.application.collaboration.AuthenticatedUser;
 import com.sqlteacher.application.collaboration.AssignmentStatus;
+import com.sqlteacher.application.collaboration.AssignmentAnalyticsFilter;
+import com.sqlteacher.application.collaboration.AssignmentAnalyticsReport;
 import com.sqlteacher.application.collaboration.AssignmentSubmission;
 import com.sqlteacher.application.collaboration.AssignmentSubmissionRequest;
 import com.sqlteacher.application.collaboration.ClassroomService;
@@ -19,6 +21,7 @@ import java.io.IOException;
 import java.net.URI;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
+import java.net.URLEncoder;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
@@ -103,6 +106,8 @@ public final class HttpCloudApiClient implements CloudApiClient {
     @Override public List<ClassAssignment> listAssignments(String token,String classroomId){Map<String,List<ClassAssignment>> result=request("classes/"+classroomId+"/assignments","GET",null,token,new TypeReference<Map<String,List<ClassAssignment>>>(){});return result.getOrDefault("assignments",List.of());}
     @Override public AssignmentSubmission submitAssignment(String token,String classroomId,String assignmentId,AssignmentSubmissionRequest submission){return request("classes/"+classroomId+"/assignments/"+assignmentId+"/submissions","POST",submission,token,AssignmentSubmission.class);}
     @Override public List<AssignmentSubmission> listOwnAssignmentSubmissions(String token,String classroomId,String assignmentId){Map<String,List<AssignmentSubmission>> result=request("classes/"+classroomId+"/assignments/"+assignmentId+"/submissions","GET",null,token,new TypeReference<Map<String,List<AssignmentSubmission>>>(){});return result.getOrDefault("submissions",List.of());}
+    @Override public AssignmentAnalyticsReport getAssignmentAnalytics(String token,String classroomId,String assignmentId,AssignmentAnalyticsFilter filter){return request("classes/"+classroomId+"/assignments/"+assignmentId+"/analytics"+analyticsQuery(filter),"GET",null,token,AssignmentAnalyticsReport.class);}
+    @Override public String exportAssignmentAnalyticsCsv(String token,String classroomId,String assignmentId,AssignmentAnalyticsFilter filter){return send("classes/"+classroomId+"/assignments/"+assignmentId+"/analytics/export"+analyticsQuery(filter),"GET",null,token);}
     @Override public ClassLearningSummary getClassLearningSummary(String token,String classroomId){return request("classes/"+classroomId+"/analytics","GET",null,token,ClassLearningSummary.class);}
     @Override public String exportClassLearningCsv(String token,String classroomId){return send("classes/"+classroomId+"/analytics/export","GET",null,token);}
 
@@ -114,6 +119,20 @@ public final class HttpCloudApiClient implements CloudApiClient {
         body.put("description", description == null ? "" : description);
         if (dueAt != null) body.put("dueAt", dueAt.toString());
         return body;
+    }
+
+    private static String analyticsQuery(AssignmentAnalyticsFilter filter) {
+        AssignmentAnalyticsFilter value = filter == null ? AssignmentAnalyticsFilter.firstPage() : filter;
+        Map<String, String> parameters = new java.util.LinkedHashMap<>();
+        if (value.status() != null) parameters.put("status", value.status().name());
+        if (value.from() != null) parameters.put("from", value.from().toString());
+        if (value.to() != null) parameters.put("to", value.to().toString());
+        parameters.put("page", Integer.toString(value.page()));
+        parameters.put("pageSize", Integer.toString(value.pageSize()));
+        return "?" + parameters.entrySet().stream()
+            .map(entry -> URLEncoder.encode(entry.getKey(), StandardCharsets.UTF_8) + "="
+                + URLEncoder.encode(entry.getValue(), StandardCharsets.UTF_8))
+            .collect(java.util.stream.Collectors.joining("&"));
     }
 
     @Override

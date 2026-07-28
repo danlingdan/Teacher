@@ -76,6 +76,17 @@ public interface CloudApiClient {
         throw new UnsupportedOperationException("Assignment submissions are unavailable");
     }
 
+    default AssignmentAnalyticsReport getAssignmentAnalytics(String accessToken, String classroomId,
+                                                              String assignmentId,
+                                                              AssignmentAnalyticsFilter filter) {
+        throw new UnsupportedOperationException("Assignment analytics are unavailable");
+    }
+
+    default String exportAssignmentAnalyticsCsv(String accessToken, String classroomId, String assignmentId,
+                                                AssignmentAnalyticsFilter filter) {
+        throw new UnsupportedOperationException("Assignment analytics are unavailable");
+    }
+
     ClassLearningSummary getClassLearningSummary(String accessToken, String classroomId);
 
     String exportClassLearningCsv(String accessToken, String classroomId);

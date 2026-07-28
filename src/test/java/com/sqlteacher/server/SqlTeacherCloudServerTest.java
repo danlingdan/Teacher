@@ -256,6 +256,83 @@ class SqlTeacherCloudServerTest {
         assertEquals("ASSIGNMENT_CLOSED", JSON.readTree(lateSubmission.body()).get("code").asText());
     }
 
+    @Test
+    void shouldReportPageAndExportAssignmentAnalyticsWithOneFilterScope() throws Exception {
+        Path database = start();
+        JsonNode teacher = register("analytics-teacher@example.edu", "Analytics Teacher");
+        JsonNode otherTeacher = register("analytics-other@example.edu", "Other Teacher");
+        JsonNode passedStudent = register("analytics-passed@example.edu", "Passed Student");
+        JsonNode failedStudent = register("analytics-failed@example.edu", "Failed Student");
+        register("analytics-missing@example.edu", "=FORMULA");
+        promoteTeacher(database, teacher.at("/user/id").asText());
+        promoteTeacher(database, otherTeacher.at("/user/id").asText());
+        String teacherToken = teacher.get("accessToken").asText();
+        String classroomId = post("classes", teacherToken, "{\"name\":\"Analytics class\"}")
+            .get("id").asText();
+        for (String email : java.util.List.of(
+            "analytics-passed@example.edu", "analytics-failed@example.edu", "analytics-missing@example.edu")) {
+            post("classes/" + classroomId + "/members", teacherToken,
+                JSON.writeValueAsString(java.util.Map.of("email", email, "role", "STUDENT")));
+        }
+        JsonNode assignment = post("classes/" + classroomId + "/assignments", teacherToken,
+            "{\"exerciseId\":\"analytics-task\",\"title\":\"Analytics task\",\"status\":\"PUBLISHED\"}");
+        String assignmentBase = "classes/" + classroomId + "/assignments/" + assignment.get("id").asText();
+        post(assignmentBase + "/submissions", passedStudent.get("accessToken").asText(), submissionJson(
+            "analytics-op-1", false, "1", "RESULT_MISMATCH"));
+        post(assignmentBase + "/submissions", passedStudent.get("accessToken").asText(), submissionJson(
+            "analytics-op-2", true, "2", null));
+        post(assignmentBase + "/submissions", failedStudent.get("accessToken").asText(), submissionJson(
+            "analytics-op-3", false, "3", "RESULT_MISMATCH"));
+
+        JsonNode report = JSON.readTree(getText(assignmentBase + "/analytics?page=0&pageSize=2", teacherToken));
+        assertEquals(3, report.get("totalStudents").asInt());
+        assertEquals(2, report.get("submittedStudents").asInt());
+        assertEquals(1, report.get("passedStudents").asInt());
+        assertEquals(3, report.get("totalAttempts").asInt());
+        assertEquals(2.0 / 3.0, report.get("completionRate").asDouble(), 0.0001);
+        assertEquals(0.5, report.get("passRate").asDouble(), 0.0001);
+        assertEquals(3, report.get("totalRows").asInt());
+        assertEquals(2, report.get("rows").size());
+        assertEquals("RESULT_MISMATCH", report.at("/commonErrors/0/errorCode").asText());
+        assertEquals(2, report.at("/commonErrors/0/count").asInt());
+        JsonNode secondPage = JSON.readTree(getText(
+            assignmentBase + "/analytics?page=1&pageSize=2", teacherToken));
+        assertEquals(1, secondPage.get("rows").size());
+        assertEquals(3, secondPage.get("totalRows").asInt());
+
+        JsonNode futureWindow = JSON.readTree(getText(assignmentBase
+            + "/analytics?from=2099-01-01T00:00:00Z&page=0&pageSize=50", teacherToken));
+        assertEquals(0, futureWindow.get("submittedStudents").asInt());
+        assertEquals(0, futureWindow.get("totalAttempts").asInt());
+
+        JsonNode failed = JSON.readTree(getText(
+            assignmentBase + "/analytics?status=FAILED&page=0&pageSize=50", teacherToken));
+        assertEquals(1, failed.get("totalRows").asInt());
+        assertEquals("analytics-failed@example.edu", failed.at("/rows/0/email").asText());
+        String failedCsv = getText(assignmentBase + "/analytics/export?status=FAILED&page=0&pageSize=50",
+            teacherToken);
+        assertTrue(failedCsv.contains("analytics-failed@example.edu"));
+        assertTrue(!failedCsv.contains("analytics-passed@example.edu"));
+
+        String missingCsv = getText(
+            assignmentBase + "/analytics/export?status=NOT_SUBMITTED&page=0&pageSize=50", teacherToken);
+        assertTrue(missingCsv.contains("\"'=FORMULA\""));
+        assertEquals(403, getStatus(assignmentBase + "/analytics", passedStudent.get("accessToken").asText()));
+        assertEquals(403, getStatus(assignmentBase + "/analytics", otherTeacher.get("accessToken").asText()));
+
+        try (var connection = DriverManager.getConnection("jdbc:sqlite:" + database);
+             var statement = connection.prepareStatement(
+                 "select assignment_id,export_type,filter_summary,row_count from export_audit "
+                     + "where export_type='ASSIGNMENT_ANALYTICS' order by created_at desc limit 1");
+             var audit = statement.executeQuery()) {
+            assertTrue(audit.next());
+            assertEquals(assignment.get("id").asText(), audit.getString("assignment_id"));
+            assertEquals("ASSIGNMENT_ANALYTICS", audit.getString("export_type"));
+            assertTrue(audit.getString("filter_summary").contains("status=NOT_SUBMITTED"));
+            assertEquals(1, audit.getInt("row_count"));
+        }
+    }
+
     private Path start() throws Exception {
         Path database = directory.resolve("cloud.db");
         server = new SqlTeacherCloudServer(database, 0);
@@ -266,6 +343,16 @@ class SqlTeacherCloudServerTest {
     private JsonNode register(String email, String name) throws Exception {
         return post("auth/register", null, JSON.writeValueAsString(java.util.Map.of(
             "email", email, "displayName", name, "password", "strong-password-123")));
+    }
+
+    private String submissionJson(String operationId, boolean passed, String hashCharacter, String errorCode)
+        throws Exception {
+        java.util.Map<String, Object> body = new java.util.LinkedHashMap<>();
+        body.put("operationId", operationId);
+        body.put("passed", passed);
+        body.put("resultHash", hashCharacter.repeat(64));
+        if (errorCode != null) body.put("errorCode", errorCode);
+        return JSON.writeValueAsString(body);
     }
 
     private void promoteTeacher(Path database, String userId) throws Exception {
