@@ -1,0 +1,11 @@
+[Unit]
+Description=Run SQLTeacher Cloud backup daily
+
+[Timer]
+OnCalendar=*-*-* 03:15:00
+RandomizedDelaySec=30min
+Persistent=true
+Unit=sqlteacher-backup.service
+
+[Install]
+WantedBy=timers.target

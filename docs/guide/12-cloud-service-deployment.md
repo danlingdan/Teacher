@@ -80,6 +80,40 @@ ss -lntp | grep 18080
 certbot renew --dry-run
 ```
 
+将每日备份安装为 systemd 定时任务。定时器默认每天 03:15 执行，并加入最多 30 分钟的随机延迟；`Persistent=true` 会在服务器错过执行时间后补跑：
+
+```bash
+install -m 0644 packaging/cloud/sqlteacher-backup.service /etc/systemd/system/sqlteacher-backup.service
+install -m 0644 packaging/cloud/sqlteacher-backup.timer /etc/systemd/system/sqlteacher-backup.timer
+systemctl daemon-reload
+systemctl enable --now sqlteacher-backup.timer
+systemctl start sqlteacher-backup.service
+systemctl status sqlteacher-backup.service --no-pager
+systemctl list-timers sqlteacher-backup.timer --no-pager
+```
+
+备份失败时 `sqlteacher-backup.service` 会进入失败状态并写入 journal。告警系统应监控该 unit，以及 `certbot.service` 的失败状态；告警接收地址或令牌只放在服务器受限配置或云监控中，不写入仓库。
+
+安装每小时运维探针。探针会验证本机与公网 HTTPS 健康端点、Nginx 配置、Certbot 与备份定时器、证书至少剩余 30 天，以及最近 36 小时内存在通过完整性检查的 SQLite 备份：
+
+```bash
+install -o root -g root -m 0755 packaging/cloud/check-cloud-operations.sh /opt/sqlteacher/current/bin/check-cloud-operations.sh
+install -m 0644 packaging/cloud/sqlteacher-operations-check.service /etc/systemd/system/sqlteacher-operations-check.service
+install -m 0644 packaging/cloud/sqlteacher-operations-check.timer /etc/systemd/system/sqlteacher-operations-check.timer
+systemctl daemon-reload
+systemctl enable --now sqlteacher-operations-check.timer
+systemctl start sqlteacher-operations-check.service
+systemctl status sqlteacher-operations-check.service --no-pager
+```
+
+将云监控或外部告警订阅到以下任一失败信号：
+
+- `sqlteacher-operations-check.service` 非零退出；
+- `sqlteacher-backup.service` 非零退出；
+- `certbot.service` 非零退出。
+
+探针默认阈值可通过 systemd unit 的环境变量覆盖：`SQLTEACHER_MIN_CERTIFICATE_SECONDS` 和 `SQLTEACHER_MAX_BACKUP_AGE_SECONDS`。
+
 恢复前必须选定 `/opt/sqlteacher/backups/` 下的备份文件。脚本会停止服务、保留恢复前副本、校验并恢复数据库，再启动服务及检查本机健康端点：
 
 ```bash

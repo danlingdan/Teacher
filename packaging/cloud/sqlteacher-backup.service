@@ -1,0 +1,20 @@
+[Unit]
+Description=SQLTeacher Cloud SQLite Backup
+Documentation=file:/opt/sqlteacher/current/bin/backup-cloud.sh
+After=local-fs.target
+ConditionPathExists=/opt/sqlteacher/current/bin/backup-cloud.sh
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+ExecStart=/opt/sqlteacher/current/bin/backup-cloud.sh
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/opt/sqlteacher/data /opt/sqlteacher/backups
+UMask=0027
+TimeoutStartSec=5min
