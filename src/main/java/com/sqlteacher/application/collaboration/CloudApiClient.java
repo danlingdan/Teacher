@@ -109,6 +109,19 @@ public interface CloudApiClient {
         throw new UnsupportedOperationException("Administrator operations are unavailable");
     }
 
+    default RetentionPreview previewRetention(String accessToken, RetentionCategory category, Instant cutoff) {
+        throw new UnsupportedOperationException("Retention operations are unavailable");
+    }
+
+    default RetentionJob executeRetention(String accessToken, String previewId, String confirmationToken,
+                                          String backupReference) {
+        throw new UnsupportedOperationException("Retention operations are unavailable");
+    }
+
+    default RetentionJob restoreRetention(String accessToken, String jobId) {
+        throw new UnsupportedOperationException("Retention operations are unavailable");
+    }
+
     ClassLearningSummary getClassLearningSummary(String accessToken, String classroomId);
 
     String exportClassLearningCsv(String accessToken, String classroomId);

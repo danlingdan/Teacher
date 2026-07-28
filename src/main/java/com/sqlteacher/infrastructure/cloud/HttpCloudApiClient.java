@@ -7,6 +7,9 @@ import com.sqlteacher.application.collaboration.AuthenticatedUser;
 import com.sqlteacher.application.collaboration.AdminAuditPage;
 import com.sqlteacher.application.collaboration.AdminHealthSummary;
 import com.sqlteacher.application.collaboration.AdminUserSummary;
+import com.sqlteacher.application.collaboration.RetentionCategory;
+import com.sqlteacher.application.collaboration.RetentionJob;
+import com.sqlteacher.application.collaboration.RetentionPreview;
 import com.sqlteacher.application.collaboration.AssignmentStatus;
 import com.sqlteacher.application.collaboration.AssignmentAnalyticsFilter;
 import com.sqlteacher.application.collaboration.AssignmentAnalyticsReport;
@@ -138,6 +141,29 @@ public final class HttpCloudApiClient implements CloudApiClient {
     public AdminAuditPage getAdminAudit(String token, String action, Instant from, Instant to, int page, int pageSize) {
         return request("admin/audit" + adminAuditQuery(action, from, to, page, pageSize),
             "GET", null, token, AdminAuditPage.class);
+    }
+
+    @Override
+    public RetentionPreview previewRetention(String token, RetentionCategory category, Instant cutoff) {
+        return request("admin/retention/preview", "POST", Map.of(
+            "category", category.name(), "cutoff", cutoff.toString()), token, RetentionPreview.class);
+    }
+
+    @Override
+    public RetentionJob executeRetention(String token, String previewId, String confirmationToken,
+                                         String backupReference) {
+        return request("admin/retention/execute", "POST", Map.of(
+            "previewId", previewId, "confirmationToken", confirmationToken,
+            "backupReference", backupReference), token, RetentionJob.class);
+    }
+
+    @Override
+    public RetentionJob restoreRetention(String token, String jobId) {
+        if (jobId == null || !jobId.matches("[a-fA-F0-9-]{36}")) {
+            throw new IllegalArgumentException("jobId must be a UUID");
+        }
+        return request("admin/retention/" + jobId + "/restore", "POST", Map.of(),
+            token, RetentionJob.class);
     }
     @Override public ClassLearningSummary getClassLearningSummary(String token,String classroomId){return request("classes/"+classroomId+"/analytics","GET",null,token,ClassLearningSummary.class);}
     @Override public String exportClassLearningCsv(String token,String classroomId){return send("classes/"+classroomId+"/analytics/export","GET",null,token);}

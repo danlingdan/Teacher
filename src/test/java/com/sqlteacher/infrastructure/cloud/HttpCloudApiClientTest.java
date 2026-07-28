@@ -48,6 +48,7 @@ class HttpCloudApiClientTest {
     private String authorization;
     private JsonNode requestBody;
     private String requestQuery;
+    private String requestPath;
 
     @BeforeEach
     void startServer() throws IOException {
@@ -146,6 +147,27 @@ class HttpCloudApiClientTest {
     }
 
     @Test
+    void shouldSendRetentionConfirmationAndBackupReference() {
+        var preview = client.previewRetention("admin-token",
+            com.sqlteacher.application.collaboration.RetentionCategory.SYNC_EVENTS,
+            Instant.parse("2026-07-01T00:00:00Z"));
+
+        assertEquals("SYNC_EVENTS", requestBody.get("category").asText());
+        assertEquals(2, preview.affectedRows());
+
+        var completed = client.executeRetention("admin-token", preview.id(), preview.confirmationToken(),
+            "cloud-20260728.db");
+
+        assertEquals("cloud-20260728.db", requestBody.get("backupReference").asText());
+        assertEquals("COMPLETED", completed.status());
+
+        var restored = client.restoreRetention("admin-token", completed.id());
+
+        assertTrue(requestPath.endsWith("/restore"));
+        assertEquals("RESTORED", restored.status());
+    }
+
+    @Test
     void shouldAllowHttpsAndLoopbackHttpEndpointsOnly() {
         assertDoesNotThrow(() -> new HttpCloudApiClient(URI.create("https://api.example.edu")));
         assertDoesNotThrow(() -> new HttpCloudApiClient(URI.create("http://localhost:18080")));
@@ -173,13 +195,24 @@ class HttpCloudApiClientTest {
 
     private void admin(HttpExchange exchange) throws IOException {
         requestMethod = exchange.getRequestMethod();
+        requestPath = exchange.getRequestURI().getPath();
         requestQuery = exchange.getRequestURI().getRawQuery();
         authorization = exchange.getRequestHeaders().getFirst("Authorization");
         byte[] requestBytes = exchange.getRequestBody().readAllBytes();
         requestBody = requestBytes.length == 0 ? null : JSON.readTree(requestBytes);
         String path = exchange.getRequestURI().getPath();
         String response;
-        if (path.endsWith("/health")) {
+        if (path.endsWith("/retention/preview")) {
+            response = """
+                {"id":"11111111-1111-1111-1111-111111111111","category":"SYNC_EVENTS",
+                "cutoff":"2026-07-01T00:00:00Z","affectedRows":2,"expiresAt":"2026-07-28T00:15:00Z",
+                "confirmationToken":"confirm-token"}
+                """;
+        } else if (path.endsWith("/retention/execute")) {
+            response = retentionJobJson("COMPLETED", null);
+        } else if (path.endsWith("/restore")) {
+            response = retentionJobJson("RESTORED", "2026-07-28T00:10:00Z");
+        } else if (path.endsWith("/health")) {
             response = """
                 {"activeUsers":3,"disabledUsers":1,"activeAccessSessions":2,"activeRefreshSessions":2,
                 "assignments":4,"submissions":5,"generatedAt":"2026-07-28T00:00:00Z"}
@@ -199,5 +232,13 @@ class HttpCloudApiClientTest {
         exchange.sendResponseHeaders(200, responseBytes.length);
         exchange.getResponseBody().write(responseBytes);
         exchange.close();
+    }
+
+    private String retentionJobJson(String status, String restoredAt) {
+        return "{\"id\":\"11111111-1111-1111-1111-111111111111\",\"category\":\"SYNC_EVENTS\","
+            + "\"cutoff\":\"2026-07-01T00:00:00Z\",\"previewRows\":2,\"affectedRows\":2,"
+            + "\"status\":\"" + status + "\",\"backupReference\":\"cloud-20260728.db\","
+            + "\"createdAt\":\"2026-07-28T00:00:00Z\",\"executedAt\":\"2026-07-28T00:05:00Z\","
+            + "\"restoredAt\":" + (restoredAt == null ? "null" : "\"" + restoredAt + "\"") + "}";
     }
 }

@@ -396,6 +396,57 @@ class SqlTeacherCloudServerTest {
         assertEquals(1, exportAudit.get("totalRows").asInt());
     }
 
+    @Test
+    void shouldPreviewArchiveRestoreAndBlockChangedRetentionScope() throws Exception {
+        Path database = start();
+        JsonNode admin = register("retention-admin@example.edu", "Retention Admin");
+        promoteAdmin(database, admin.at("/user/id").asText());
+        String adminToken = admin.get("accessToken").asText();
+        String userId = admin.at("/user/id").asText();
+        insertSyncEvent(database, userId, "old-event", "2025-01-01T00:00:00Z");
+        insertSyncEvent(database, userId, "new-event", "2026-07-28T00:00:00Z");
+
+        JsonNode preview = post("admin/retention/preview", adminToken,
+            "{\"category\":\"SYNC_EVENTS\",\"cutoff\":\"2025-07-01T00:00:00Z\"}");
+
+        assertEquals(1, preview.get("affectedRows").asInt());
+        assertEquals(409, postStatus("admin/retention/execute", adminToken,
+            JSON.writeValueAsString(java.util.Map.of(
+                "previewId", preview.get("id").asText(), "confirmationToken", "wrong-token",
+                "backupReference", "cloud-20260728.db"))));
+
+        JsonNode job = post("admin/retention/execute", adminToken,
+            JSON.writeValueAsString(java.util.Map.of(
+                "previewId", preview.get("id").asText(),
+                "confirmationToken", preview.get("confirmationToken").asText(),
+                "backupReference", "cloud-20260728.db")));
+
+        assertEquals("COMPLETED", job.get("status").asText());
+        assertEquals(1, job.get("affectedRows").asInt());
+        assertEquals(1, tableCount(database, "sync_events"));
+        assertEquals(1, tableCount(database, "retention_archive"));
+        assertTrue(java.nio.file.Files.exists(database.getParent().resolve("retention-backups")
+            .resolve("retention-" + job.get("id").asText() + ".db")));
+
+        JsonNode restored = post("admin/retention/" + job.get("id").asText() + "/restore",
+            adminToken, "{}");
+
+        assertEquals("RESTORED", restored.get("status").asText());
+        assertEquals(2, tableCount(database, "sync_events"));
+
+        JsonNode changedPreview = post("admin/retention/preview", adminToken,
+            "{\"category\":\"SYNC_EVENTS\",\"cutoff\":\"2025-07-01T00:00:00Z\"}");
+        insertSyncEvent(database, userId, "concurrent-old-event", "2025-02-01T00:00:00Z");
+        HttpResponse<String> changed = send("POST", "admin/retention/execute", adminToken,
+            JSON.writeValueAsString(java.util.Map.of(
+                "previewId", changedPreview.get("id").asText(),
+                "confirmationToken", changedPreview.get("confirmationToken").asText(),
+                "backupReference", "cloud-20260728.db")));
+        assertEquals(409, changed.statusCode());
+        assertEquals("RETENTION_SCOPE_CHANGED", JSON.readTree(changed.body()).get("code").asText());
+        assertEquals(3, tableCount(database, "sync_events"));
+    }
+
     private Path start() throws Exception {
         Path database = directory.resolve("cloud.db");
         server = new SqlTeacherCloudServer(database, 0);
@@ -433,6 +484,27 @@ class SqlTeacherCloudServerTest {
                  "insert or ignore into user_roles(user_id,role) values(?, 'ADMIN')")) {
             statement.setString(1, userId);
             statement.executeUpdate();
+        }
+    }
+
+    private void insertSyncEvent(Path database, String userId, String eventId, String occurredAt) throws Exception {
+        try (var connection = DriverManager.getConnection("jdbc:sqlite:" + database);
+             var statement = connection.prepareStatement(
+                 "insert into sync_events(user_id,event_id,event_type,payload_json,occurred_at) values(?,?,?,?,?)")) {
+            statement.setString(1, userId);
+            statement.setString(2, eventId);
+            statement.setString(3, "PRACTICE_COMPLETED");
+            statement.setString(4, "{\"successful\":true}");
+            statement.setString(5, occurredAt);
+            statement.executeUpdate();
+        }
+    }
+
+    private int tableCount(Path database, String table) throws Exception {
+        try (var connection = DriverManager.getConnection("jdbc:sqlite:" + database);
+             var statement = connection.createStatement();
+             var row = statement.executeQuery("select count(*) from " + table)) {
+            return row.getInt(1);
         }
     }
 

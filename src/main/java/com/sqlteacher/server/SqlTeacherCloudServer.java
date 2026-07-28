@@ -25,6 +25,9 @@ import com.sqlteacher.application.collaboration.ClassroomService;
 import com.sqlteacher.application.collaboration.CloudAuthenticationService;
 import com.sqlteacher.application.collaboration.CloudSyncItem;
 import com.sqlteacher.application.collaboration.ClassAssignment;
+import com.sqlteacher.application.collaboration.RetentionCategory;
+import com.sqlteacher.application.collaboration.RetentionJob;
+import com.sqlteacher.application.collaboration.RetentionPreview;
 import com.sqlteacher.application.collaboration.UserRole;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
@@ -333,6 +336,25 @@ public final class SqlTeacherCloudServer {
                 respond(exchange, 200, store.adminAudit(actor, queryValue(query, "action"),
                     instantOrNull(queryValue(query, "from")), instantOrNull(queryValue(query, "to")),
                     (int) page, (int) pageSize));
+                return;
+            }
+            if (segments.length == 6 && "retention".equals(segments[4])
+                && "preview".equals(segments[5]) && "POST".equals(exchange.getRequestMethod())) {
+                Map<String, String> body = request(exchange);
+                respond(exchange, 200, store.previewRetention(actor,
+                    RetentionCategory.valueOf(body.get("category")), Instant.parse(body.get("cutoff"))));
+                return;
+            }
+            if (segments.length == 6 && "retention".equals(segments[4])
+                && "execute".equals(segments[5]) && "POST".equals(exchange.getRequestMethod())) {
+                Map<String, String> body = request(exchange);
+                respond(exchange, 200, store.executeRetention(actor, body.get("previewId"),
+                    body.get("confirmationToken"), body.get("backupReference")));
+                return;
+            }
+            if (segments.length == 7 && "retention".equals(segments[4])
+                && "restore".equals(segments[6]) && "POST".equals(exchange.getRequestMethod())) {
+                respond(exchange, 200, store.restoreRetention(actor, segments[5]));
                 return;
             }
             respond(exchange, 404, errorResponse("NOT_FOUND", "API endpoint was not found."));
@@ -1233,6 +1255,302 @@ public final class SqlTeacherCloudServer {
             }
         }
 
+        RetentionPreview previewRetention(AuthenticatedUser actor, RetentionCategory category, Instant cutoff) {
+            requireAdmin(actor);
+            if (category == null || cutoff == null) {
+                throw new IllegalArgumentException("Retention category and cutoff are required");
+            }
+            int minimumDays = minimumRetentionDays(category);
+            if (cutoff.isAfter(Instant.now().minus(minimumDays, ChronoUnit.DAYS))) {
+                throw new IllegalArgumentException(
+                    "Retention cutoff must preserve at least " + minimumDays + " days for " + category);
+            }
+            RetentionSpec spec = retentionSpec(category);
+            String id = UUID.randomUUID().toString();
+            String confirmationToken = Base64.getUrlEncoder().withoutPadding().encodeToString(bytes(24));
+            Instant now = Instant.now();
+            Instant expiresAt = now.plus(15, ChronoUnit.MINUTES);
+            try (Connection connection = open()) {
+                int affectedRows = retentionCount(connection, spec, cutoff);
+                try (PreparedStatement statement = connection.prepareStatement(
+                    "insert into retention_jobs(id,category,cutoff,preview_count,affected_count,status,"
+                        + "confirmation_hash,expires_at,created_at,actor_user_id) values(?,?,?,?,0,'PREVIEWED',?,?,?,?)")) {
+                    statement.setString(1, id);
+                    statement.setString(2, category.name());
+                    statement.setString(3, cutoff.toString());
+                    statement.setInt(4, affectedRows);
+                    statement.setBytes(5, tokenHash(confirmationToken));
+                    statement.setString(6, expiresAt.toString());
+                    statement.setString(7, now.toString());
+                    statement.setString(8, actor.id());
+                    statement.executeUpdate();
+                }
+                audit(connection, actor.id(), "ADMIN_RETENTION_PREVIEW", "RETENTION_JOB", id,
+                    "SUCCESS", category.name());
+                return new RetentionPreview(id, category, cutoff, affectedRows, expiresAt, confirmationToken);
+            } catch (SQLException error) { throw database(error); }
+        }
+
+        RetentionJob executeRetention(AuthenticatedUser actor, String previewId, String confirmationToken,
+                                      String backupReference) {
+            requireAdmin(actor);
+            validateUuid(previewId, "previewId");
+            if (confirmationToken == null || confirmationToken.isBlank()) {
+                throw new IllegalArgumentException("confirmationToken is required");
+            }
+            if (backupReference == null || !backupReference.matches("[A-Za-z0-9._:/-]{3,200}")) {
+                throw new IllegalArgumentException("A valid backupReference is required");
+            }
+            try (Connection validation = open()) {
+                RetentionJobState state = retentionJobState(validation, previewId);
+                if (!"PREVIEWED".equals(state.status()) || Instant.now().isAfter(state.expiresAt())
+                    || !constantTimeEquals(state.confirmationHash(), tokenHash(confirmationToken))) {
+                    audit(validation, actor.id(), "ADMIN_RETENTION_EXECUTE", "RETENTION_JOB", previewId,
+                        "DENIED", "INVALID_OR_EXPIRED_CONFIRMATION");
+                    throw new AdminOperationRejectedException("RETENTION_CONFIRMATION_INVALID",
+                        "Retention preview confirmation is invalid or expired");
+                }
+            } catch (SQLException error) { throw database(error); }
+            String safetyBackup = createRetentionBackup(previewId);
+            try (Connection connection = open()) {
+                connection.setAutoCommit(false);
+                RetentionJobState state = retentionJobState(connection, previewId);
+                if (!"PREVIEWED".equals(state.status()) || Instant.now().isAfter(state.expiresAt())
+                    || !constantTimeEquals(state.confirmationHash(), tokenHash(confirmationToken))) {
+                    audit(connection, actor.id(), "ADMIN_RETENTION_EXECUTE", "RETENTION_JOB", previewId,
+                        "DENIED", "INVALID_OR_EXPIRED_CONFIRMATION");
+                    connection.commit();
+                    throw new AdminOperationRejectedException("RETENTION_CONFIRMATION_INVALID",
+                        "Retention preview confirmation is invalid or expired");
+                }
+                try (PreparedStatement lock = connection.prepareStatement(
+                    "update retention_jobs set status='EXECUTING' where id=? and status='PREVIEWED'")) {
+                    lock.setString(1, previewId);
+                    if (lock.executeUpdate() != 1) throw new SQLException("Retention job state changed concurrently");
+                }
+                RetentionSpec spec = retentionSpec(state.category());
+                int currentRows = retentionCount(connection, spec, state.cutoff());
+                if (currentRows != state.previewRows()) {
+                    try (PreparedStatement update = connection.prepareStatement(
+                        "update retention_jobs set status='BLOCKED' where id=?")) {
+                        update.setString(1, previewId);
+                        update.executeUpdate();
+                    }
+                    audit(connection, actor.id(), "ADMIN_RETENTION_EXECUTE", "RETENTION_JOB", previewId,
+                        "DENIED", "SCOPE_CHANGED");
+                    connection.commit();
+                    throw new AdminOperationRejectedException("RETENTION_SCOPE_CHANGED",
+                        "Retention scope changed after preview; create a new preview");
+                }
+                int archivedRows = archiveRetentionRows(connection, previewId, spec, state.cutoff());
+                int deletedRows = deleteRetentionRows(connection, spec, state.cutoff());
+                if (archivedRows != currentRows || deletedRows != currentRows) {
+                    throw new SQLException("Retention archive and delete counts did not match preview");
+                }
+                Instant executedAt = Instant.now();
+                try (PreparedStatement update = connection.prepareStatement(
+                    "update retention_jobs set status='COMPLETED',affected_count=?,backup_reference=?,safety_backup=?,"
+                        + "executed_at=? "
+                        + "where id=?")) {
+                    update.setInt(1, deletedRows);
+                    update.setString(2, backupReference);
+                    update.setString(3, safetyBackup);
+                    update.setString(4, executedAt.toString());
+                    update.setString(5, previewId);
+                    update.executeUpdate();
+                }
+                audit(connection, actor.id(), "ADMIN_RETENTION_EXECUTE", "RETENTION_JOB", previewId,
+                    "SUCCESS", state.category().name());
+                connection.commit();
+                return retentionJob(connection, previewId);
+            } catch (SQLException error) { throw database(error); }
+        }
+
+        private String createRetentionBackup(String jobId) {
+            Path backupDirectory = database.getParent().resolve("retention-backups");
+            Path backup = backupDirectory.resolve("retention-" + jobId + ".db").toAbsolutePath().normalize();
+            try {
+                Files.createDirectories(backupDirectory);
+                String escapedPath = backup.toString().replace("'", "''");
+                try (Connection source = open(); Statement statement = source.createStatement()) {
+                    statement.executeUpdate("vacuum into '" + escapedPath + "'");
+                }
+                try (Connection verification = DriverManager.getConnection("jdbc:sqlite:" + backup);
+                     Statement statement = verification.createStatement();
+                     ResultSet result = statement.executeQuery("pragma integrity_check")) {
+                    if (!result.next() || !"ok".equalsIgnoreCase(result.getString(1))) {
+                        throw new SQLException("Retention safety backup failed integrity verification");
+                    }
+                }
+                return backup.getFileName().toString();
+            } catch (IOException | SQLException error) {
+                throw new AdminOperationRejectedException("RETENTION_BACKUP_FAILED",
+                    "Retention safety backup could not be created and verified");
+            }
+        }
+
+        RetentionJob restoreRetention(AuthenticatedUser actor, String jobId) {
+            requireAdmin(actor);
+            validateUuid(jobId, "jobId");
+            try (Connection connection = open()) {
+                connection.setAutoCommit(false);
+                RetentionJobState state = retentionJobState(connection, jobId);
+                if (!"COMPLETED".equals(state.status())) {
+                    audit(connection, actor.id(), "ADMIN_RETENTION_RESTORE", "RETENTION_JOB", jobId,
+                        "DENIED", "JOB_NOT_RESTORABLE");
+                    connection.commit();
+                    throw new AdminOperationRejectedException("RETENTION_NOT_RESTORABLE",
+                        "Only a completed retention job can be restored");
+                }
+                int restored = restoreRetentionRows(connection, jobId, retentionSpec(state.category()));
+                if (restored != state.affectedRows()) {
+                    throw new SQLException("Restored row count did not match the completed job");
+                }
+                Instant restoredAt = Instant.now();
+                try (PreparedStatement update = connection.prepareStatement(
+                    "update retention_jobs set status='RESTORED',restored_at=? where id=?")) {
+                    update.setString(1, restoredAt.toString());
+                    update.setString(2, jobId);
+                    update.executeUpdate();
+                }
+                audit(connection, actor.id(), "ADMIN_RETENTION_RESTORE", "RETENTION_JOB", jobId,
+                    "SUCCESS", state.category().name());
+                connection.commit();
+                return retentionJob(connection, jobId);
+            } catch (SQLException error) { throw database(error); }
+        }
+
+        private int retentionCount(Connection connection, RetentionSpec spec, Instant cutoff) throws SQLException {
+            try (PreparedStatement statement = connection.prepareStatement(
+                "select count(*) from " + spec.table() + " where " + spec.timeColumn() + "<?")) {
+                statement.setString(1, cutoff.toString());
+                try (ResultSet row = statement.executeQuery()) { return row.getInt(1); }
+            }
+        }
+
+        private int archiveRetentionRows(Connection connection, String jobId, RetentionSpec spec, Instant cutoff)
+            throws SQLException {
+            String columns = String.join(",", spec.columns());
+            int archived = 0;
+            try (PreparedStatement select = connection.prepareStatement(
+                "select " + columns + " from " + spec.table() + " where " + spec.timeColumn() + "<?");
+                 PreparedStatement insert = connection.prepareStatement(
+                     "insert into retention_archive(job_id,category,row_key,payload_json,archived_at) values(?,?,?,?,?)")) {
+                select.setString(1, cutoff.toString());
+                try (ResultSet rows = select.executeQuery()) {
+                    while (rows.next()) {
+                        Map<String, Object> payload = new LinkedHashMap<>();
+                        for (String column : spec.columns()) payload.put(column, rows.getObject(column));
+                        insert.setString(1, jobId);
+                        insert.setString(2, spec.category().name());
+                        insert.setString(3, String.valueOf(rows.getObject(spec.keyColumn())));
+                        insert.setString(4, JSON.writeValueAsString(payload));
+                        insert.setString(5, Instant.now().toString());
+                        insert.addBatch();
+                        archived++;
+                    }
+                } catch (IOException error) { throw new SQLException("Could not archive retention payload", error); }
+                insert.executeBatch();
+            }
+            return archived;
+        }
+
+        private int deleteRetentionRows(Connection connection, RetentionSpec spec, Instant cutoff) throws SQLException {
+            try (PreparedStatement statement = connection.prepareStatement(
+                "delete from " + spec.table() + " where " + spec.timeColumn() + "<?")) {
+                statement.setString(1, cutoff.toString());
+                return statement.executeUpdate();
+            }
+        }
+
+        private int restoreRetentionRows(Connection connection, String jobId, RetentionSpec spec) throws SQLException {
+            String columns = String.join(",", spec.columns());
+            String placeholders = String.join(",", java.util.Collections.nCopies(spec.columns().size(), "?"));
+            int restored = 0;
+            try (PreparedStatement archive = connection.prepareStatement(
+                "select payload_json from retention_archive where job_id=? order by row_key");
+                 PreparedStatement insert = connection.prepareStatement(
+                     "insert into " + spec.table() + "(" + columns + ") values(" + placeholders + ")")) {
+                archive.setString(1, jobId);
+                try (ResultSet rows = archive.executeQuery()) {
+                    while (rows.next()) {
+                        Map<String, Object> payload;
+                        try {
+                            payload = JSON.readValue(rows.getString(1), new TypeReference<Map<String, Object>>() { });
+                        } catch (IOException error) {
+                            throw new SQLException("Could not read retention archive payload", error);
+                        }
+                        int index = 1;
+                        for (String column : spec.columns()) insert.setObject(index++, payload.get(column));
+                        insert.addBatch();
+                        restored++;
+                    }
+                }
+                insert.executeBatch();
+            }
+            return restored;
+        }
+
+        private RetentionJobState retentionJobState(Connection connection, String id) throws SQLException {
+            try (PreparedStatement statement = connection.prepareStatement(
+                "select category,cutoff,preview_count,affected_count,status,confirmation_hash,expires_at "
+                    + "from retention_jobs where id=?")) {
+                statement.setString(1, id);
+                try (ResultSet row = statement.executeQuery()) {
+                    if (!row.next()) throw new IllegalArgumentException("Retention job was not found");
+                    return new RetentionJobState(RetentionCategory.valueOf(row.getString("category")),
+                        Instant.parse(row.getString("cutoff")), row.getInt("preview_count"),
+                        row.getInt("affected_count"), row.getString("status"),
+                        row.getBytes("confirmation_hash"), Instant.parse(row.getString("expires_at")));
+                }
+            }
+        }
+
+        private RetentionJob retentionJob(Connection connection, String id) throws SQLException {
+            try (PreparedStatement statement = connection.prepareStatement(
+                "select category,cutoff,preview_count,affected_count,status,backup_reference,created_at,executed_at,"
+                    + "restored_at from retention_jobs where id=?")) {
+                statement.setString(1, id);
+                try (ResultSet row = statement.executeQuery()) {
+                    if (!row.next()) throw new IllegalArgumentException("Retention job was not found");
+                    return new RetentionJob(id, RetentionCategory.valueOf(row.getString("category")),
+                        Instant.parse(row.getString("cutoff")), row.getInt("preview_count"),
+                        row.getInt("affected_count"), row.getString("status"), row.getString("backup_reference"),
+                        Instant.parse(row.getString("created_at")), instantOrNull(row.getString("executed_at")),
+                        instantOrNull(row.getString("restored_at")));
+                }
+            }
+        }
+
+        private RetentionSpec retentionSpec(RetentionCategory category) {
+            return switch (category) {
+                case SYNC_EVENTS -> new RetentionSpec(category, "sync_events", "version", "occurred_at",
+                    List.of("version", "user_id", "event_id", "event_type", "payload_json", "occurred_at"));
+                case ASSIGNMENT_SUBMISSIONS -> new RetentionSpec(category, "assignment_submissions", "id",
+                    "submitted_at", List.of("id", "operation_id", "classroom_id", "assignment_id", "user_id",
+                    "attempt_number", "status", "result_hash", "error_code", "client_completed_at", "submitted_at"));
+                case ADMIN_AUDIT -> new RetentionSpec(category, "admin_audit", "id", "created_at",
+                    List.of("id", "actor_user_id", "action", "target_type", "target_id", "result", "reason_code",
+                        "correlation_id", "created_at"));
+                case EXPORT_AUDIT -> new RetentionSpec(category, "export_audit", "id", "created_at",
+                    List.of("id", "user_id", "classroom_id", "row_count", "created_at", "assignment_id",
+                        "export_type", "filter_summary"));
+            };
+        }
+
+        private int minimumRetentionDays(RetentionCategory category) {
+            return switch (category) {
+                case SYNC_EVENTS -> 180;
+                case ASSIGNMENT_SUBMISSIONS, ADMIN_AUDIT, EXPORT_AUDIT -> 365;
+            };
+        }
+
+        private void validateUuid(String value, String name) {
+            if (value == null || !value.matches("[a-fA-F0-9-]{36}")) {
+                throw new IllegalArgumentException(name + " must be a UUID");
+            }
+        }
+
         private AdminUserSummary adminUser(Connection connection, String userId) throws SQLException {
             try (PreparedStatement statement = connection.prepareStatement(
                 "select id,email,display_name,disabled,created_at from users where id=?")) {
@@ -1467,6 +1785,14 @@ public final class SqlTeacherCloudServer {
                     + "user_id text not null references users(id),classroom_id text not null references classrooms(id),"
                     + "row_count integer not null,created_at text not null,assignment_id text,"
                     + "export_type text not null default 'CLASS_ANALYTICS',filter_summary text)");
+                statement.executeUpdate("create table if not exists retention_jobs(id text primary key,"
+                    + "category text not null,cutoff text not null,preview_count integer not null,"
+                    + "affected_count integer not null default 0,status text not null,confirmation_hash blob not null,"
+                    + "expires_at text not null,backup_reference text,safety_backup text,created_at text not null,executed_at text,"
+                    + "restored_at text,actor_user_id text not null references users(id))");
+                statement.executeUpdate("create table if not exists retention_archive(job_id text not null "
+                    + "references retention_jobs(id),category text not null,row_key text not null,payload_json text not null,"
+                    + "archived_at text not null,primary key(job_id,row_key))");
                 addColumnIfMissing(statement, "class_assignments", "status text not null default 'PUBLISHED'");
                 addColumnIfMissing(statement, "class_assignments", "due_at text");
                 addColumnIfMissing(statement, "class_assignments", "updated_at text");
@@ -1477,6 +1803,7 @@ public final class SqlTeacherCloudServer {
                 addColumnIfMissing(statement, "export_audit", "assignment_id text");
                 addColumnIfMissing(statement, "export_audit", "export_type text not null default 'CLASS_ANALYTICS'");
                 addColumnIfMissing(statement, "export_audit", "filter_summary text");
+                addColumnIfMissing(statement, "retention_jobs", "safety_backup text");
                 statement.executeUpdate("update class_assignments set updated_at=created_at where updated_at is null");
                 statement.executeUpdate("update class_assignments set description='' where description is null");
                 statement.executeUpdate("update class_assignments set version=1 where version is null or version<1");
@@ -1488,10 +1815,17 @@ public final class SqlTeacherCloudServer {
                     + "on assignment_submissions(assignment_id,user_id,submitted_at)");
                 statement.executeUpdate("create index if not exists idx_admin_audit_action_time "
                     + "on admin_audit(action,created_at desc)");
+                statement.executeUpdate("create index if not exists idx_retention_jobs_created "
+                    + "on retention_jobs(created_at desc)");
             }
         }
         private void addColumnIfMissing(Statement statement,String table,String definition)throws SQLException{try{statement.executeUpdate("alter table "+table+" add column "+definition);}catch(SQLException error){if(!error.getMessage().toLowerCase(Locale.ROOT).contains("duplicate column"))throw error;}}
         private byte[] bytes(int count){byte[] value=new byte[count];random.nextBytes(value);return value;} private byte[] hash(char[] password,byte[] salt){try{KeySpec spec=new PBEKeySpec(password,salt,PBKDF2_ITERATIONS,HASH_BITS);return SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256").generateSecret(spec).getEncoded();}catch(GeneralSecurityException e){throw new IllegalStateException("Password hashing unavailable",e);}} private byte[] tokenHash(String token){try{return java.security.MessageDigest.getInstance("SHA-256").digest(token.getBytes(StandardCharsets.UTF_8));}catch(GeneralSecurityException e){throw new IllegalStateException(e);}} private static boolean constantTimeEquals(byte[] a,byte[] b){return java.security.MessageDigest.isEqual(a,b);} private static String validateEmail(String e){if(e==null||!e.matches("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$")||e.length()>254)throw new IllegalArgumentException("email must be valid");return e.trim().toLowerCase(Locale.ROOT);} private static void validatePassword(char[] p){if(p==null||p.length<12||p.length>128)throw new IllegalArgumentException("password must contain 12 to 128 characters");} private static IllegalStateException database(SQLException e){return new IllegalStateException("Cloud database operation failed",e);} private static CloudAuthenticationService.Session toSession(SessionData s){return new CloudAuthenticationService.Session(s.token(),s.expiresAt(),s.user(),s.refreshToken());}
+        private record RetentionSpec(RetentionCategory category, String table, String keyColumn,
+                                     String timeColumn, List<String> columns) { }
+        private record RetentionJobState(RetentionCategory category, Instant cutoff, int previewRows,
+                                         int affectedRows, String status, byte[] confirmationHash,
+                                         Instant expiresAt) { }
     }
     private record SessionData(String token, Instant expiresAt, AuthenticatedUser user, String refreshToken) { }
 }
