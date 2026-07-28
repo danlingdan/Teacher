@@ -20,6 +20,8 @@ import com.sqlteacher.application.collaboration.CloudSessionService;
 import com.sqlteacher.application.collaboration.CloudLearningSyncService;
 import com.sqlteacher.application.collaboration.DesktopAccessProfile;
 import com.sqlteacher.application.collaboration.DesktopCapability;
+import com.sqlteacher.application.collaboration.AssignmentDeliveryService;
+import com.sqlteacher.application.collaboration.AssignmentTaskContext;
 import com.sqlteacher.application.ai.NetworkAiSettingsService;
 import com.sqlteacher.application.metadata.DatabaseMetadataService;
 import com.sqlteacher.application.nl2sql.Nl2SqlSafetyService;
@@ -119,6 +121,7 @@ public final class MainWindowController {
     private final CloudApiClient cloudApiClient;
     private final CloudSessionService cloudSessionService;
     private final CloudLearningSyncService cloudLearningSyncService;
+    private final AssignmentDeliveryService assignmentDeliveryService;
     private final NetworkAiSettingsService networkAiSettingsService;
     private final DesktopAccessProfile accessProfile;
     private final Runnable switchIdentityAction;
@@ -196,6 +199,7 @@ public final class MainWindowController {
     private Node homePage;
     private Node settingsPage;
     private Node studentExercisePage;
+    private StudentExerciseController studentExerciseController;
     private Node exerciseManagementPage;
     private Node exerciseProgressPage;
     private Node knowledgeCenterPage;
@@ -230,6 +234,7 @@ public final class MainWindowController {
                                 CloudApiClient cloudApiClient,
                                 CloudSessionService cloudSessionService,
                                 CloudLearningSyncService cloudLearningSyncService,
+                                AssignmentDeliveryService assignmentDeliveryService,
                                 NetworkAiSettingsService networkAiSettingsService,
                                 DesktopAccessProfile accessProfile,
                                 Runnable switchIdentityAction) {
@@ -257,6 +262,7 @@ public final class MainWindowController {
         this.cloudApiClient = Objects.requireNonNull(cloudApiClient);
         this.cloudSessionService = Objects.requireNonNull(cloudSessionService);
         this.cloudLearningSyncService = Objects.requireNonNull(cloudLearningSyncService);
+        this.assignmentDeliveryService = Objects.requireNonNull(assignmentDeliveryService);
         this.networkAiSettingsService = Objects.requireNonNull(networkAiSettingsService);
         this.accessProfile = Objects.requireNonNull(accessProfile, "accessProfile must not be null");
         this.switchIdentityAction = Objects.requireNonNull(switchIdentityAction, "switchIdentityAction must not be null");
@@ -641,9 +647,10 @@ public final class MainWindowController {
             FXMLLoader loader = new FXMLLoader(fxml);
             loader.setControllerFactory(type -> {
                 if (type == StudentExerciseController.class) {
-                    return new StudentExerciseController(
-                        exerciseCatalogService, exercisePracticeService, applicationExceptionMapper
-                    );
+                    studentExerciseController = new StudentExerciseController(
+                        exerciseCatalogService, exercisePracticeService, applicationExceptionMapper,
+                        assignmentDeliveryService);
+                    return studentExerciseController;
                 }
                 throw new IllegalStateException("Unexpected controller type for student exercise: " + type);
             });
@@ -732,8 +739,10 @@ public final class MainWindowController {
                         cloudSessionService,
                         cloudLearningSyncService,
                         networkAiSettingsService,
+                        assignmentDeliveryService,
                         accessProfile,
-                        switchIdentityAction
+                        switchIdentityAction,
+                        this::openAssignment
                     );
                 }
                 throw new IllegalStateException("Unexpected controller type for cloud center: " + type);
@@ -745,6 +754,14 @@ public final class MainWindowController {
             }
         }
         return cloudCenterPage;
+    }
+
+    private void openAssignment(AssignmentTaskContext task) {
+        requireCapability(DesktopCapability.STUDENT_EXERCISE);
+        Node page = studentExercisePage();
+        studentExerciseController.openAssignment(task);
+        selectNav(studentExerciseNavButton);
+        showPage(page);
     }
 
     /**

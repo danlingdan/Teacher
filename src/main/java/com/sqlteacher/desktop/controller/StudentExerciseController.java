@@ -8,6 +8,9 @@ import com.sqlteacher.application.exercise.ExerciseHint;
 import com.sqlteacher.application.exercise.ExercisePracticeService;
 import com.sqlteacher.application.exercise.ExerciseSession;
 import com.sqlteacher.application.exercise.ExerciseSummary;
+import com.sqlteacher.application.collaboration.AssignmentDeliveryResult;
+import com.sqlteacher.application.collaboration.AssignmentDeliveryService;
+import com.sqlteacher.application.collaboration.AssignmentTaskContext;
 import com.sqlteacher.desktop.DesktopExecutors;
 import com.sqlteacher.desktop.GlobalLoading;
 import javafx.application.Platform;
@@ -31,6 +34,7 @@ public final class StudentExerciseController {
     private final ExerciseCatalogService catalogService;
     private final ExercisePracticeService practiceService;
     private final ApplicationExceptionMapper exceptionMapper;
+    private final AssignmentDeliveryService assignmentDeliveryService;
 
     @FXML private ListView<ExerciseSummary> exerciseList;
     @FXML private Label titleLabel;
@@ -47,15 +51,23 @@ public final class StudentExerciseController {
     @FXML private Button resetButton;
 
     private ExerciseSession session;
+    private AssignmentTaskContext assignmentTask;
 
     public StudentExerciseController(
         ExerciseCatalogService catalogService,
         ExercisePracticeService practiceService,
-        ApplicationExceptionMapper exceptionMapper
+        ApplicationExceptionMapper exceptionMapper,
+        AssignmentDeliveryService assignmentDeliveryService
     ) {
         this.catalogService = Objects.requireNonNull(catalogService);
         this.practiceService = Objects.requireNonNull(practiceService);
         this.exceptionMapper = Objects.requireNonNull(exceptionMapper);
+        this.assignmentDeliveryService = Objects.requireNonNull(assignmentDeliveryService);
+    }
+
+    public void openAssignment(AssignmentTaskContext task) {
+        assignmentTask = Objects.requireNonNull(task);
+        if (!exerciseList.getItems().isEmpty()) activateAssignment();
     }
 
     @FXML
@@ -168,6 +180,13 @@ public final class StudentExerciseController {
                 : attempt.execution().message(),
             !attempt.execution().success() || (submitted && !passed)
         );
+        if (submitted && assignmentTask != null && attempt.evaluation() != null) {
+            String errorCode = attempt.evaluation().errorCode();
+            runAsync("正在提交班级任务结果…", () -> assignmentDeliveryService.deliver(
+                assignmentTask.classroomId(), assignmentTask.assignment().id(), passed,
+                errorCode == null || errorCode.isBlank() ? null : errorCode, attempt.occurredAt()),
+                this::showDeliveryResult);
+        }
     }
 
     private void showResult(SqlExecutionResult result) {
@@ -203,10 +222,35 @@ public final class StudentExerciseController {
     private void refreshCatalog() {
         runAsync("正在加载练习题…", catalogService::listAvailableExercises, exercises -> {
             exerciseList.getItems().setAll(exercises);
-            if (!exercises.isEmpty() && exerciseList.getSelectionModel().isEmpty()) {
+            if (assignmentTask != null) {
+                activateAssignment();
+            } else if (!exercises.isEmpty() && exerciseList.getSelectionModel().isEmpty()) {
                 exerciseList.getSelectionModel().selectFirst();
             }
         });
+    }
+
+    private void activateAssignment() {
+        ExerciseSummary exercise = exerciseList.getItems().stream()
+            .filter(item -> item.id().equals(assignmentTask.assignment().exerciseId()))
+            .findFirst()
+            .orElse(null);
+        if (exercise == null) {
+            showStatus("任务关联的本地题目不存在或未启用：" + assignmentTask.assignment().exerciseId(), true);
+            return;
+        }
+        exerciseList.getSelectionModel().select(exercise);
+        showStatus("已打开班级任务“" + assignmentTask.assignment().title() + "”，开始后将使用隔离数据集。", false);
+        onStart();
+    }
+
+    private void showDeliveryResult(AssignmentDeliveryResult result) {
+        switch (result.status()) {
+            case PASSED -> showStatus("任务结果已提交并通过，尝试次数：" + result.attemptNumber(), false);
+            case SUBMITTED -> showStatus("任务结果已提交，请查看评测反馈。", false);
+            case QUEUED -> showStatus("当前无法连接云端，结果已安全保存为待同步任务。", false);
+            case REJECTED -> showStatus("云端拒绝了本次任务提交，请刷新任务状态并检查截止时间。", true);
+        }
     }
 
     private boolean requireSession() {

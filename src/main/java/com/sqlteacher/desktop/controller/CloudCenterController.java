@@ -10,6 +10,8 @@ import com.sqlteacher.application.collaboration.CloudLearningSyncService;
 import com.sqlteacher.application.collaboration.CloudSessionService;
 import com.sqlteacher.application.collaboration.UserRole;
 import com.sqlteacher.application.collaboration.DesktopAccessProfile;
+import com.sqlteacher.application.collaboration.AssignmentDeliveryService;
+import com.sqlteacher.application.collaboration.AssignmentTaskContext;
 import com.sqlteacher.desktop.DesktopExecutors;
 import javafx.application.Platform;
 import javafx.fxml.FXML;
@@ -34,6 +36,7 @@ import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Consumer;
 
 /** Cloud login and classroom management view; all API work stays off the FX thread. */
 public final class CloudCenterController {
@@ -43,6 +46,8 @@ public final class CloudCenterController {
     private final CloudSessionService session;
     private final CloudLearningSyncService sync;
     private final NetworkAiSettingsService networkAiSettings;
+    private final AssignmentDeliveryService assignmentDeliveryService;
+    private final Consumer<AssignmentTaskContext> openAssignmentAction;
     private final AtomicInteger activeOperations = new AtomicInteger();
 
     @FXML private TextField classNameField;
@@ -57,6 +62,8 @@ public final class CloudCenterController {
     @FXML private VBox memberManagementPane;
     @FXML private FlowPane assignmentCreationPane;
     @FXML private HBox assignmentLifecyclePane;
+    @FXML private HBox studentAssignmentPane;
+    @FXML private Label submissionQueueLabel;
     @FXML private ProgressIndicator busyIndicator;
     @FXML private Button logoutButton;
     @FXML private Button exportClassRecordsButton;
@@ -82,18 +89,22 @@ public final class CloudCenterController {
         CloudSessionService session,
         CloudLearningSyncService sync,
         NetworkAiSettingsService networkAiSettings,
+        AssignmentDeliveryService assignmentDeliveryService,
         DesktopAccessProfile accessProfile,
-        Runnable switchIdentityAction
+        Runnable switchIdentityAction,
+        Consumer<AssignmentTaskContext> openAssignmentAction
     ) {
         this.api = api;
         this.session = session;
         this.sync = sync;
         this.networkAiSettings = networkAiSettings;
+        this.assignmentDeliveryService = java.util.Objects.requireNonNull(assignmentDeliveryService);
         this.accessProfile = java.util.Objects.requireNonNull(accessProfile, "accessProfile must not be null");
         this.switchIdentityAction = java.util.Objects.requireNonNull(
             switchIdentityAction,
             "switchIdentityAction must not be null"
         );
+        this.openAssignmentAction = java.util.Objects.requireNonNull(openAssignmentAction);
     }
 
     @FXML
@@ -133,6 +144,8 @@ public final class CloudCenterController {
         assignmentCreationPane.setManaged(canManageClass);
         assignmentLifecyclePane.setVisible(canManageClass);
         assignmentLifecyclePane.setManaged(canManageClass);
+        studentAssignmentPane.setVisible(!canManageClass);
+        studentAssignmentPane.setManaged(!canManageClass);
         exportClassRecordsButton.setVisible(canManageClass);
         exportClassRecordsButton.setManaged(canManageClass);
         updateSessionState();
@@ -173,11 +186,34 @@ public final class CloudCenterController {
     private void onSync() {
         run("正在同步学习记录…", () -> {
             var result = sync.synchronize();
+            var retry = assignmentDeliveryService.retryPending();
             Platform.runLater(() -> showStatus(
-                "同步完成：上传 " + result.uploaded() + " 条，下载 " + result.downloaded() + " 条",
+                "同步完成：学习记录上传 " + result.uploaded() + " 条，下载 " + result.downloaded()
+                    + " 条；任务结果补交 " + retry.delivered() + " 条，剩余 " + retry.remaining() + " 条"
+                    + (retry.rejected() == 0 ? "" : "，被服务端拒绝 " + retry.rejected() + " 条"),
                 Status.SUCCESS
             ));
         });
+    }
+
+    @FXML
+    private void onOpenAssignment() {
+        var selectedClass = selectedClass();
+        int index = assignmentList.getSelectionModel().getSelectedIndex();
+        if (selectedClass == null || index < 0 || index >= assignments.size()) {
+            showStatus("请先选择一个班级任务", Status.ERROR);
+            return;
+        }
+        ClassAssignment assignment = assignments.get(index);
+        if (assignment.status() != AssignmentStatus.PUBLISHED) {
+            showStatus("只有已发布任务可以开始练习", Status.ERROR);
+            return;
+        }
+        if (assignment.dueAt() != null && !Instant.now().isBefore(assignment.dueAt())) {
+            showStatus("任务已截止，只能查看历史提交", Status.ERROR);
+            return;
+        }
+        openAssignmentAction.accept(new AssignmentTaskContext(selectedClass.id(), assignment));
     }
 
     @FXML
@@ -423,6 +459,20 @@ public final class CloudCenterController {
         assignmentList.setPlaceholder(new Label(classroomId == null
             ? "选择班级后查看已发布任务"
             : "这个班级还没有发布任务"));
+        updateSubmissionQueueLabel();
+    }
+
+    private void updateSubmissionQueueLabel() {
+        if (canManageClass()) {
+            submissionQueueLabel.setText("教师账号不产生本地任务提交队列");
+            return;
+        }
+        try {
+            int pending = assignmentDeliveryService.pendingCount();
+            submissionQueueLabel.setText(pending == 0 ? "没有待同步的任务结果" : "待同步任务结果：" + pending + " 条");
+        } catch (RuntimeException error) {
+            submissionQueueLabel.setText("待登录后读取任务提交队列");
+        }
     }
 
     private void applyClassAnalytics(com.sqlteacher.application.collaboration.ClassLearningSummary summary) {

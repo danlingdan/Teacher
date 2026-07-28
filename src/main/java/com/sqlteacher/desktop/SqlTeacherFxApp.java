@@ -20,6 +20,7 @@ import com.sqlteacher.application.collaboration.CloudApiClient;
 import com.sqlteacher.application.collaboration.CloudSessionService;
 import com.sqlteacher.application.collaboration.CloudLearningSyncService;
 import com.sqlteacher.application.collaboration.DesktopAccessProfile;
+import com.sqlteacher.application.collaboration.AssignmentDeliveryService;
 import com.sqlteacher.application.ai.NetworkAiSettingsService;
 import com.sqlteacher.application.metadata.DatabaseMetadataService;
 import com.sqlteacher.application.nl2sql.Nl2SqlSafetyService;
@@ -84,6 +85,7 @@ public final class SqlTeacherFxApp extends Application {
     private CloudApiClient cloudApiClient;
     private CloudSessionService cloudSessionService;
     private CloudLearningSyncService cloudLearningSyncService;
+    private AssignmentDeliveryService assignmentDeliveryService;
     private NetworkAiSettingsService networkAiSettingsService;
     private InMemoryLearningEventOwnerContext learningEventOwnerContext;
 
@@ -117,6 +119,7 @@ public final class SqlTeacherFxApp extends Application {
             cloudApiClient = context.getBean(CloudApiClient.class);
             cloudSessionService = context.getBean(CloudSessionService.class);
             cloudLearningSyncService = context.getBean(CloudLearningSyncService.class);
+            assignmentDeliveryService = context.getBean(AssignmentDeliveryService.class);
             networkAiSettingsService = context.getBean(NetworkAiSettingsService.class);
             learningEventOwnerContext = context.getBean(InMemoryLearningEventOwnerContext.class);
             applicationContext = context;
@@ -138,6 +141,7 @@ public final class SqlTeacherFxApp extends Application {
             || knowledgeDocumentService == null || knowledgeSearchService == null
             || applicationBackupService == null || configuration == null
             || cloudApiClient == null || cloudSessionService == null || cloudLearningSyncService == null
+            || assignmentDeliveryService == null
             || networkAiSettingsService == null || learningEventOwnerContext == null) {
             throw new IllegalStateException("Services are unavailable because application initialization did not complete");
         }
@@ -214,6 +218,7 @@ public final class SqlTeacherFxApp extends Application {
                     cloudApiClient,
                     cloudSessionService,
                     cloudLearningSyncService,
+                    assignmentDeliveryService,
                     networkAiSettingsService,
                     accessProfile,
                     () -> switchToLogin(stage)

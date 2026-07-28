@@ -138,6 +138,12 @@
                                                         <Button text="归档所选任务" onAction="#onArchiveAssignment" styleClass="compact-button, secondary-button"/>
                                                     </children>
                                                 </HBox>
+                                                <HBox fx:id="studentAssignmentPane" spacing="8" alignment="CENTER_LEFT">
+                                                    <children>
+                                                        <Button text="开始所选任务" onAction="#onOpenAssignment" styleClass="primary-button"/>
+                                                        <Label text="将在本地隔离数据集完成确定性评测" styleClass="cloud-helper-text"/>
+                                                    </children>
+                                                </HBox>
                                                 <ListView fx:id="assignmentList" VBox.vgrow="ALWAYS" minHeight="170" styleClass="cloud-list"/>
                                             </children>
                                         </VBox>
@@ -152,6 +158,7 @@
                                     <children>
                                         <Label text="学习记录同步" styleClass="card-title"/>
                                         <Label text="上传本机未同步事件，并下载此账号在其他设备产生的新记录" wrapText="true" styleClass="cloud-helper-text"/>
+                                        <Label fx:id="submissionQueueLabel" text="登录后读取待同步任务" wrapText="true" styleClass="cloud-helper-text"/>
                                     </children>
                                 </VBox>
                                 <Button fx:id="syncButton" text="立即同步" onAction="#onSync" styleClass="primary-button, cloud-sync-button"/>

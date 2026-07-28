@@ -201,6 +201,34 @@ final class SqliteSchemaMigrator {
                     """,
                 "create index knowledge_chunks_document_order on knowledge_chunks(document_id, chunk_index)"
             )
+        ),
+        new Migration(
+            5,
+            "Create account-isolated assignment submission queue",
+            List.of(
+                """
+                    create table assignment_submission_queue (
+                        operation_id text primary key,
+                        account_id text not null,
+                        classroom_id text not null,
+                        assignment_id text not null,
+                        passed integer not null check (passed in (0, 1)),
+                        result_hash text not null,
+                        error_code text,
+                        client_completed_at text not null,
+                        status text not null check (status in ('QUEUED', 'DELIVERED', 'REJECTED')),
+                        retry_count integer not null default 0 check (retry_count >= 0),
+                        next_retry_at text not null,
+                        last_error_type text,
+                        created_at text not null,
+                        updated_at text not null
+                    )
+                    """,
+                """
+                    create index assignment_submission_queue_account_status_retry
+                    on assignment_submission_queue(account_id, status, next_retry_at)
+                    """
+            )
         )
     );
 

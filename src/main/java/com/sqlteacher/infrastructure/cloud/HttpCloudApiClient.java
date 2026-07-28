@@ -10,6 +10,7 @@ import com.sqlteacher.application.collaboration.AdminUserSummary;
 import com.sqlteacher.application.collaboration.RetentionCategory;
 import com.sqlteacher.application.collaboration.RetentionJob;
 import com.sqlteacher.application.collaboration.RetentionPreview;
+import com.sqlteacher.application.collaboration.CloudApiRequestException;
 import com.sqlteacher.application.collaboration.AssignmentStatus;
 import com.sqlteacher.application.collaboration.AssignmentAnalyticsFilter;
 import com.sqlteacher.application.collaboration.AssignmentAnalyticsReport;
@@ -240,7 +241,18 @@ public final class HttpCloudApiClient implements CloudApiClient {
             if (payload == null) builder.method(method, HttpRequest.BodyPublishers.noBody());
             else builder.header("Content-Type", "application/json").method(method, HttpRequest.BodyPublishers.ofString(json.writeValueAsString(payload), StandardCharsets.UTF_8));
             HttpResponse<String> response = client.send(builder.build(), HttpResponse.BodyHandlers.ofString());
-            if (response.statusCode() < 200 || response.statusCode() >= 300) throw new IllegalStateException("Cloud API request failed (HTTP " + response.statusCode() + ")");
+            if (response.statusCode() < 200 || response.statusCode() >= 300) {
+                String code = "CLOUD_REQUEST_FAILED";
+                String message = "Cloud API request failed (HTTP " + response.statusCode() + ")";
+                try {
+                    var error = json.readTree(response.body());
+                    if (error.hasNonNull("code")) code = error.get("code").asText();
+                    if (error.hasNonNull("message")) message = error.get("message").asText();
+                } catch (IOException ignored) {
+                    // Keep the safe generic message when the error response is malformed.
+                }
+                throw new CloudApiRequestException(response.statusCode(), code, message);
+            }
             return response.body();
         } catch (IOException error) { throw new IllegalStateException("Cloud API is unavailable", error); }
         catch (InterruptedException error) { Thread.currentThread().interrupt(); throw new IllegalStateException("Cloud API request was interrupted", error); }

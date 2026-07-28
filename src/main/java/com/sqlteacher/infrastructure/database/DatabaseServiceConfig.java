@@ -20,9 +20,14 @@ import com.sqlteacher.application.maintenance.ApplicationBackupService;
 import com.sqlteacher.application.metadata.DatabaseMetadataService;
 import com.sqlteacher.application.risk.SqlRiskAnalysisService;
 import com.sqlteacher.application.config.SqlTeacherConfiguration;
+import com.sqlteacher.application.collaboration.AssignmentDeliveryService;
+import com.sqlteacher.application.collaboration.CloudApiClient;
+import com.sqlteacher.application.collaboration.CloudSessionService;
+import com.sqlteacher.infrastructure.cloud.JdbcAssignmentDeliveryService;
 import com.sqlteacher.infrastructure.cloud.InMemoryLearningEventOwnerContext;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.beans.factory.ObjectProvider;
 
 import java.time.Duration;
 
@@ -172,5 +177,39 @@ public class DatabaseServiceConfig {
     @Bean
     public ApplicationBackupService applicationBackupService(SqlTeacherConfiguration configuration) {
         return new SqliteApplicationBackupService(configuration);
+    }
+
+    @Bean
+    public AssignmentDeliveryService assignmentDeliveryService(ObjectProvider<CloudApiClient> apiProvider,
+                                                               ObjectProvider<CloudSessionService> sessionProvider,
+                                                               SqlTeacherConfiguration configuration) {
+        return new AssignmentDeliveryService() {
+            @Override
+            public com.sqlteacher.application.collaboration.AssignmentDeliveryResult deliver(
+                    String classroomId, String assignmentId, boolean passed, String errorCode,
+                    java.time.Instant completedAt) {
+                return delegate().deliver(classroomId, assignmentId, passed, errorCode, completedAt);
+            }
+
+            @Override
+            public RetrySummary retryPending() {
+                return delegate().retryPending();
+            }
+
+            @Override
+            public int pendingCount() {
+                return delegate().pendingCount();
+            }
+
+            private AssignmentDeliveryService delegate() {
+                CloudApiClient api = apiProvider.getIfAvailable();
+                CloudSessionService sessions = sessionProvider.getIfAvailable();
+                if (api == null || sessions == null) {
+                    throw new IllegalStateException("Cloud assignment delivery is unavailable in this runtime");
+                }
+                return new JdbcAssignmentDeliveryService(
+                    api, sessions, configuration.database().appDatabasePath());
+            }
+        };
     }
 }
