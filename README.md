@@ -1,6 +1,6 @@
 # SQLTeacher
 
-SQLTeacher 是一款面向数据库课程教学与 SQL 练习的本地优先 Java 桌面应用。`v1.2.1` 提供正式 HTTPS 云服务、安全会话恢复、可靠学习记录同步、教学任务生命周期、班级统计与审计导出，同时保留完整离线教学闭环。
+SQLTeacher 是一款面向数据库课程教学与 SQL 练习的本地优先 Java 桌面应用。`v1.3.0` 补齐任务草稿与并发控制、学生确定性提交与离线队列、任务学情、管理员审计和可恢复数据清理，同时保留完整离线教学闭环。
 
 ## 当前功能
 
@@ -60,7 +60,7 @@ mvn -q compile exec:java "-Dexec.mainClass=com.sqlteacher.StageOneVerificationAp
 target\installer\SQLTeacher
 ```
 
-脚本会生成 `SQLTeacher-1.2.1.exe` 正式安装器、便携 app-image 和 `SQLTeacher-1.2.1-windows-x64.zip`。WiX 3.14.1 在首次打包时下载到 `target/tools` 并校验 SHA-256，不进入 Git。推送与 Maven 版本一致的 `vX.Y.Z` 标签后，GitHub Actions 会自动测试、打包并发布这些文件。
+脚本会生成 `SQLTeacher-1.3.0.exe` 正式安装器、便携 app-image 和 `SQLTeacher-1.3.0-windows-x64.zip`。WiX 3.14.1 在首次打包时下载到 `target/tools` 并校验 SHA-256，不进入 Git。推送与 Maven 版本一致的 `vX.Y.Z` 标签后，GitHub Actions 会自动测试、打包并发布这些文件。
 
 ## 项目结构
 
@@ -77,11 +77,12 @@ docs                                         架构、计划、验收与软著�
 
 ## 当前边界
 
-`v1.2.1` 的云端功能仍是可选增强；服务器或网络 AI 不可用时，SQLite 练习、确定性评测和本地知识检索仍可使用。正式 Windows 包内置 `https://api.sqlteacher.tech`；客户端拒绝非回环 HTTP 地址，正式教学数据只能经域名与 HTTPS 传输。
+`v1.3.0` 的云端功能仍是可选增强；服务器或网络 AI 不可用时，SQLite 练习、确定性评测和本地知识检索仍可使用，任务结果会进入当前账号隔离的本地队列。正式 Windows 包内置 `https://api.sqlteacher.tech`；客户端拒绝非回环 HTTP 地址，正式教学数据只能经域名与 HTTPS 传输。
 
 ## 版本
 
 - `v1.2.1`：修复 Windows 正式包未写入云端地址的问题，并加入基于版本标签的 GitHub Actions 自动发布。
+- `v1.3.0`：新增完整任务提交闭环、任务学情、管理员运维、数据保留恢复和自动化证书/备份检查。
 - `v1.2.0`：正式 HTTPS、安全会话持久化、同步重试与诊断、任务生命周期、班级统计导出和云端备份恢复。
 - `v1.1.0`：账号登录、多教师/学生班级、学习事件同步、云端教学页和用户自带 API 的网络 AI。
 - `v1.0.0`：正式 Windows 安装器、应用图标、版本与数据页、备份恢复、升级保护、键盘和低分辨率适配，以及完整交付文档。
