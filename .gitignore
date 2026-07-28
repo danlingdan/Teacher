@@ -1,5 +1,6 @@
 target/
 app-data/
+docs/copyright/generated/
 .secrets/
 !.mvn/wrapper/maven-wrapper.jar
 !**/src/main/**/target/

@@ -27,8 +27,14 @@ import org.springframework.context.annotation.AnnotationConfigApplicationContext
 
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class SqlTeacherApplicationConfigTest {
+    @Test
+    void shouldUseProductionCloudApiByDefault() {
+        assertEquals("https://api.sqlteacher.tech", SqlTeacherApplicationConfig.DEFAULT_CLOUD_BASE_URL);
+    }
+
     @Test
     void shouldCreateStageOneApplicationBeans() {
         try (AnnotationConfigApplicationContext context =

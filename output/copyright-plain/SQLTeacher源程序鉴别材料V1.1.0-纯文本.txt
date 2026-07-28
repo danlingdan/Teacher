@@ -1,0 +1,3000 @@
+// FILE: src\main\java\com\sqlteacher\application\ai\AiAvailability.java
+package com.sqlteacher.application.ai;
+
+public enum AiAvailability {
+    AVAILABLE,
+    UNAVAILABLE
+}
+// FILE: src\main\java\com\sqlteacher\application\ai\AiCompletionRequest.java
+package com.sqlteacher.application.ai;
+
+import java.time.Duration;
+import java.util.Objects;
+
+public record AiCompletionRequest(
+    String model,
+    String prompt,
+    Duration timeout
+) {
+    public AiCompletionRequest {
+        Objects.requireNonNull(model, "model must not be null");
+        Objects.requireNonNull(prompt, "prompt must not be null");
+        Objects.requireNonNull(timeout, "timeout must not be null");
+        if (model.isBlank()) {
+            throw new IllegalArgumentException("model must not be blank");
+        }
+        if (prompt.isBlank()) {
+            throw new IllegalArgumentException("prompt must not be blank");
+        }
+        if (timeout.isZero() || timeout.isNegative()) {
+            throw new IllegalArgumentException("timeout must be positive");
+        }
+    }
+}
+// FILE: src\main\java\com\sqlteacher\application\ai\AiCompletionResult.java
+package com.sqlteacher.application.ai;
+
+import java.util.Objects;
+
+public final class AiCompletionResult {
+    private final boolean success;
+    private final String content;
+    private final String errorMessage;
+    private final String model;
+
+    private AiCompletionResult(boolean success, String content, String errorMessage, String model) {
+        this.success = success;
+        this.content = content;
+        this.errorMessage = errorMessage;
+        this.model = model;
+    }
+
+    public static AiCompletionResult success(String content, String model) {
+        Objects.requireNonNull(content, "content must not be null");
+        Objects.requireNonNull(model, "model must not be null");
+        return new AiCompletionResult(true, content, null, model);
+    }
+
+    public static AiCompletionResult failure(String errorMessage, String model) {
+        Objects.requireNonNull(errorMessage, "errorMessage must not be null");
+        Objects.requireNonNull(model, "model must not be null");
+        return new AiCompletionResult(false, null, errorMessage, model);
+    }
+
+    public boolean success() {
+        return success;
+    }
+
+    public String content() {
+        return content;
+    }
+
+    public String errorMessage() {
+        return errorMessage;
+    }
+
+    public String model() {
+        return model;
+    }
+}
+// FILE: src\main\java\com\sqlteacher\application\ai\AiModelProvider.java
+package com.sqlteacher.application.ai;
+
+@FunctionalInterface
+public interface AiModelProvider {
+    AiCompletionResult complete(AiCompletionRequest request);
+
+    default String preferredModel() { return ""; }
+}
+// FILE: src\main\java\com\sqlteacher\application\ai\AiModelSelection.java
+package com.sqlteacher.application.ai;
+
+import java.util.List;
+
+/** Snapshot of the locally installed AI models and the model selected for new requests. */
+public record AiModelSelection(
+    List<String> installedModels,
+    String selectedModel,
+    String message
+) {
+    public AiModelSelection {
+        installedModels = installedModels == null ? List.of() : List.copyOf(installedModels);
+        selectedModel = selectedModel == null ? "" : selectedModel.strip();
+        message = message == null ? "" : message;
+        if (!selectedModel.isEmpty() && !installedModels.contains(selectedModel)) {
+            throw new IllegalArgumentException("selectedModel must be installed");
+        }
+    }
+
+    public boolean hasSelection() {
+        return !selectedModel.isEmpty();
+    }
+}
+// FILE: src\main\java\com\sqlteacher\application\ai\AiModelSelectionService.java
+package com.sqlteacher.application.ai;
+
+import java.util.List;
+
+/** Discovers locally installed models and controls which model is used for future AI requests. */
+public interface AiModelSelectionService {
+    AiModelSelection refresh();
+
+    AiModelSelection current();
+
+    AiModelSelection select(String model);
+
+    static AiModelSelectionService fixed(String model) {
+        AiModelSelection selection = new AiModelSelection(List.of(model), model, "Fixed model");
+        return new AiModelSelectionService() {
+            @Override
+            public AiModelSelection refresh() {
+                return selection;
+            }
+
+            @Override
+            public AiModelSelection current() {
+                return selection;
+            }
+
+            @Override
+            public AiModelSelection select(String selectedModel) {
+                if (!model.equals(selectedModel)) {
+                    throw new IllegalArgumentException("model is not installed: " + selectedModel);
+                }
+                return selection;
+            }
+        };
+    }
+}
+// FILE: src\main\java\com\sqlteacher\application\ai\AiStatus.java
+package com.sqlteacher.application.ai;
+
+public record AiStatus(
+    AiAvailability status,
+    String provider,
+    String endpoint,
+    int modelCount,
+    String message
+) {
+    public boolean available() {
+        return status == AiAvailability.AVAILABLE;
+    }
+}
+// FILE: src\main\java\com\sqlteacher\application\ai\AiStatusService.java
+package com.sqlteacher.application.ai;
+
+public interface AiStatusService {
+    AiStatus checkStatus();
+}
+// FILE: src\main\java\com\sqlteacher\application\ai\NetworkAiSettingsService.java
+package com.sqlteacher.application.ai;
+
+import java.net.URI;
+import java.util.Optional;
+
+public interface NetworkAiSettingsService {
+    void configure(URI endpoint, String model, char[] apiKey);
+    Optional<OpenAiCompatibleConfiguration> current();
+    void clear();
+}
+// FILE: src\main\java\com\sqlteacher\application\ai\OpenAiCompatibleConfiguration.java
+package com.sqlteacher.application.ai;
+
+import java.net.URI;
+import java.util.Objects;
+import java.util.Arrays;
+
+/**
+ * 用户自带密钥的 OpenAI-compatible 网络模型配置。
+ * API Key 仅用于一次请求，调用方不得持久化、同步或记录该值。
+ */
+public record OpenAiCompatibleConfiguration(URI endpoint, String model, char[] apiKey) {
+    public OpenAiCompatibleConfiguration {
+        Objects.requireNonNull(endpoint, "endpoint must not be null");
+        Objects.requireNonNull(model, "model must not be null");
+        Objects.requireNonNull(apiKey, "apiKey must not be null");
+        if (!"https".equalsIgnoreCase(endpoint.getScheme())) {
+            throw new IllegalArgumentException("Network AI endpoint must use HTTPS");
+        }
+        if (model.isBlank() || apiKey.length == 0) {
+            throw new IllegalArgumentException("model and apiKey must not be blank");
+        }
+        apiKey = apiKey.clone();
+    }
+
+    @Override
+    public char[] apiKey() {
+        return apiKey.clone();
+    }
+
+    public void destroy() { Arrays.fill(apiKey, '\0'); }
+}
+// FILE: src\main\java\com\sqlteacher\application\analytics\AnalyticsCsvExport.java
+package com.sqlteacher.application.analytics;
+
+import java.time.Instant;
+
+public record AnalyticsCsvExport(String fileName, String utf8Content, Instant generatedAt) {
+    public AnalyticsCsvExport {
+        if (fileName == null || fileName.isBlank() || utf8Content == null || generatedAt == null) {
+            throw new IllegalArgumentException("CSV export values must not be null or blank");
+        }
+    }
+}
+// FILE: src\main\java\com\sqlteacher\application\analytics\AnalyticsFilter.java
+package com.sqlteacher.application.analytics;
+
+import java.time.Instant;
+
+public record AnalyticsFilter(
+    Instant startInclusive,
+    Instant endExclusive,
+    String exerciseId,
+    String knowledgePoint,
+    String errorCode
+) {
+    public AnalyticsFilter {
+        if (startInclusive != null && endExclusive != null && !startInclusive.isBefore(endExclusive)) {
+            throw new IllegalArgumentException("startInclusive must be before endExclusive");
+        }
+        exerciseId = normalize(exerciseId);
+        knowledgePoint = normalize(knowledgePoint);
+        errorCode = normalize(errorCode);
+    }
+
+    public static AnalyticsFilter all() {
+        return new AnalyticsFilter(null, null, null, null, null);
+    }
+
+    private static String normalize(String value) {
+        return value == null || value.isBlank() ? null : value.trim();
+    }
+}
+// FILE: src\main\java\com\sqlteacher\application\analytics\AnalyticsOverview.java
+package com.sqlteacher.application.analytics;
+
+import java.time.Duration;
+
+public record AnalyticsOverview(
+    int sessions,
+    int attempts,
+    int submissions,
+    int passedSubmissions,
+    double passRate,
+    double averageAttemptsPerCompletedExercise,
+    Duration averageSubmissionDuration,
+    int completedExercises,
+    int totalExercises,
+    double completionRate
+) {
+    public AnalyticsOverview {
+        if (sessions < 0 || attempts < 0 || submissions < 0 || passedSubmissions < 0
+            || completedExercises < 0 || totalExercises < 0) {
+            throw new IllegalArgumentException("analytics counts must not be negative");
+        }
+        if (passRate < 0 || passRate > 1 || completionRate < 0 || completionRate > 1
+            || averageAttemptsPerCompletedExercise < 0) {
+            throw new IllegalArgumentException("analytics rates must be within their valid range");
+        }
+        if (averageSubmissionDuration == null || averageSubmissionDuration.isNegative()) {
+            throw new IllegalArgumentException("averageSubmissionDuration must not be negative");
+        }
+    }
+}
+// FILE: src\main\java\com\sqlteacher\application\analytics\ErrorAnalytics.java
+package com.sqlteacher.application.analytics;
+
+public record ErrorAnalytics(String errorCode, int count) {
+    public ErrorAnalytics {
+        if (errorCode == null || errorCode.isBlank() || count < 1) {
+            throw new IllegalArgumentException("error analytics values are invalid");
+        }
+    }
+}
+// FILE: src\main\java\com\sqlteacher\application\analytics\ExerciseAnalyticsRow.java
+package com.sqlteacher.application.analytics;
+
+import java.time.Instant;
+import java.util.Optional;
+
+public record ExerciseAnalyticsRow(
+    String exerciseId,
+    String title,
+    String knowledgePoint,
+    int attempts,
+    int submissions,
+    int passedSubmissions,
+    int failedSubmissions,
+    double passRate,
+    boolean completed,
+    Instant lastAttemptAt
+) {
+    public ExerciseAnalyticsRow {
+        if (exerciseId == null || exerciseId.isBlank() || title == null || title.isBlank()
+            || knowledgePoint == null || knowledgePoint.isBlank()) {
+            throw new IllegalArgumentException("exercise analytics identity must not be blank");
+        }
+        if (attempts < 0 || submissions < 0 || passedSubmissions < 0 || failedSubmissions < 0
+            || passRate < 0 || passRate > 1) {
+            throw new IllegalArgumentException("exercise analytics values are invalid");
+        }
+    }
+
+    public Optional<Instant> lastAttempt() {
+        return Optional.ofNullable(lastAttemptAt);
+    }
+}
+// FILE: src\main\java\com\sqlteacher\application\analytics\KnowledgePointAnalytics.java
+package com.sqlteacher.application.analytics;
+
+public record KnowledgePointAnalytics(
+    String knowledgePoint,
+    int attempts,
+    int failedSubmissions,
+    int completedExercises,
+    int totalExercises,
+    double weaknessRate
+) {
+    public KnowledgePointAnalytics {
+        if (knowledgePoint == null || knowledgePoint.isBlank() || attempts < 0 || failedSubmissions < 0
+            || completedExercises < 0 || totalExercises < 0 || weaknessRate < 0 || weaknessRate > 1) {
+            throw new IllegalArgumentException("knowledge-point analytics values are invalid");
+        }
+    }
+}
+// FILE: src\main\java\com\sqlteacher\application\analytics\LearningAnalyticsReport.java
+package com.sqlteacher.application.analytics;
+
+import java.time.Instant;
+import java.util.List;
+import java.util.Objects;
+
+public record LearningAnalyticsReport(
+    AnalyticsFilter filter,
+    Instant generatedAt,
+    AnalyticsOverview overview,
+    List<ExerciseAnalyticsRow> exercises,
+    List<ErrorAnalytics> commonErrors,
+    List<KnowledgePointAnalytics> knowledgePoints
+) {
+    public LearningAnalyticsReport {
+        Objects.requireNonNull(filter);
+        Objects.requireNonNull(generatedAt);
+        Objects.requireNonNull(overview);
+        exercises = List.copyOf(exercises);
+        commonErrors = List.copyOf(commonErrors);
+        knowledgePoints = List.copyOf(knowledgePoints);
+    }
+}
+// FILE: src\main\java\com\sqlteacher\application\analytics\LearningAnalyticsService.java
+package com.sqlteacher.application.analytics;
+
+public interface LearningAnalyticsService {
+    LearningAnalyticsReport analyze(AnalyticsFilter filter);
+
+    AnalyticsCsvExport exportCsv(AnalyticsFilter filter);
+}
+// FILE: src\main\java\com\sqlteacher\application\collaboration\AuthenticatedUser.java
+package com.sqlteacher.application.collaboration;
+
+import java.util.Objects;
+import java.util.Set;
+
+public record AuthenticatedUser(String id, String email, String displayName, Set<UserRole> roles) {
+    public AuthenticatedUser {
+        if (id == null || id.isBlank() || email == null || email.isBlank() || displayName == null || displayName.isBlank()) {
+            throw new IllegalArgumentException("User fields must not be blank");
+        }
+        roles = Set.copyOf(Objects.requireNonNull(roles, "roles must not be null"));
+    }
+
+    public boolean hasRole(UserRole role) {
+        return roles.contains(Objects.requireNonNull(role, "role must not be null"));
+    }
+}
+// FILE: src\main\java\com\sqlteacher\application\collaboration\ClassAssignment.java
+package com.sqlteacher.application.collaboration;
+
+import java.time.Instant;
+
+public record ClassAssignment(String id,String classroomId,String exerciseId,String title,Instant createdAt) {
+    public ClassAssignment {
+        if(id==null||id.isBlank()||classroomId==null||classroomId.isBlank()||exerciseId==null||exerciseId.isBlank()||title==null||title.isBlank())throw new IllegalArgumentException("Assignment fields must not be blank");
+        if(createdAt==null)throw new IllegalArgumentException("createdAt must not be null");
+    }
+}
+// FILE: src\main\java\com\sqlteacher\application\collaboration\ClassroomService.java
+package com.sqlteacher.application.collaboration;
+
+import java.time.Instant;
+import java.util.List;
+import java.util.Objects;
+
+public interface ClassroomService {
+    Classroom create(AuthenticatedUser actor, String name);
+
+    Classroom addMember(AuthenticatedUser actor, String classroomId, String userId, UserRole role);
+
+    List<Classroom> listVisibleTo(AuthenticatedUser actor);
+
+    record Classroom(String id, String name, Instant createdAt, List<Member> members) {
+        public Classroom {
+            if (id == null || id.isBlank() || name == null || name.isBlank()) {
+                throw new IllegalArgumentException("Classroom fields must not be blank");
+            }
+            Objects.requireNonNull(createdAt, "createdAt must not be null");
+            members = List.copyOf(Objects.requireNonNull(members, "members must not be null"));
+        }
+    }
+
+    record Member(String userId, UserRole role) {
+        public Member {
+            if (userId == null || userId.isBlank()) {
+                throw new IllegalArgumentException("userId must not be blank");
+            }
+            Objects.requireNonNull(role, "role must not be null");
+            if (role == UserRole.ADMIN) {
+                throw new IllegalArgumentException("ADMIN is not a classroom membership role");
+            }
+        }
+    }
+}
+// FILE: src\main\java\com\sqlteacher\application\collaboration\CloudApiClient.java
+package com.sqlteacher.application.collaboration;
+
+import java.util.List;
+
+/** Desktop boundary for the authenticated SQLTeacher cloud API. */
+public interface CloudApiClient {
+    CloudAuthenticationService.Session login(String email, char[] password);
+
+    CloudAuthenticationService.Session register(String email, String displayName, char[] password);
+
+    void logout(String accessToken);
+
+    List<ClassroomService.Classroom> listClasses(String accessToken);
+
+    ClassroomService.Classroom createClass(String accessToken, String name);
+
+    ClassroomService.Classroom addClassMember(String accessToken, String classroomId, String email, UserRole role);
+
+    ClassAssignment createAssignment(String accessToken, String classroomId, String exerciseId, String title);
+
+    List<ClassAssignment> listAssignments(String accessToken, String classroomId);
+
+    int uploadSyncItems(String accessToken, List<CloudSyncItem> items);
+
+    List<CloudSyncItem> downloadSyncItems(String accessToken, long afterVersion);
+}
+// FILE: src\main\java\com\sqlteacher\application\collaboration\CloudAuthenticationService.java
+package com.sqlteacher.application.collaboration;
+
+import java.time.Instant;
+import java.util.Objects;
+
+/** Boundary used by clients and the cloud server; raw passwords never leave this use case. */
+public interface CloudAuthenticationService {
+    Session register(String email, String displayName, char[] password);
+
+    Session login(String email, char[] password);
+
+    AuthenticatedUser authenticate(String accessToken);
+
+    void logout(String accessToken);
+
+    record Session(String accessToken, Instant expiresAt, AuthenticatedUser user) {
+        public Session {
+            if (accessToken == null || accessToken.isBlank()) {
+                throw new IllegalArgumentException("accessToken must not be blank");
+            }
+            Objects.requireNonNull(expiresAt, "expiresAt must not be null");
+            Objects.requireNonNull(user, "user must not be null");
+        }
+    }
+}
+// FILE: src\main\java\com\sqlteacher\application\collaboration\CloudLearningSyncService.java
+package com.sqlteacher.application.collaboration;
+
+public interface CloudLearningSyncService {
+    SyncResult synchronize();
+
+    record SyncResult(int uploaded, int downloaded, long cursor) { }
+}
+// FILE: src\main\java\com\sqlteacher\application\collaboration\CloudSessionService.java
+package com.sqlteacher.application.collaboration;
+
+import java.util.Optional;
+
+/** The desktop keeps only the active session in memory; no token is persisted to app.db. */
+public interface CloudSessionService {
+    Optional<CloudAuthenticationService.Session> current();
+
+    void signIn(CloudAuthenticationService.Session session);
+
+    void signOut();
+}
+// FILE: src\main\java\com\sqlteacher\application\collaboration\CloudSyncItem.java
+package com.sqlteacher.application.collaboration;
+
+import java.time.Instant;
+import java.util.Objects;
+
+/** A user-scoped, idempotent learning record transferred to the cloud. */
+public record CloudSyncItem(String id, String type, String payloadJson, Instant occurredAt, long version) {
+    public CloudSyncItem {
+        if (id == null || id.isBlank() || type == null || type.isBlank()) {
+            throw new IllegalArgumentException("Sync item id and type must not be blank");
+        }
+        Objects.requireNonNull(payloadJson, "payloadJson must not be null");
+        Objects.requireNonNull(occurredAt, "occurredAt must not be null");
+        if (version < 0) throw new IllegalArgumentException("version must not be negative");
+    }
+}
+// FILE: src\main\java\com\sqlteacher\application\collaboration\DesktopAccessProfile.java
+package com.sqlteacher.application.collaboration;
+
+import java.util.EnumSet;
+import java.util.Objects;
+import java.util.Set;
+
+/** Effective desktop identity and its least-privilege navigation capabilities. */
+public record DesktopAccessProfile(
+    Kind kind,
+    String userId,
+    String displayName,
+    String email,
+    Set<UserRole> serverRoles,
+    Set<DesktopCapability> capabilities
+) {
+    private static final Set<DesktopCapability> GUEST_CAPABILITIES = Set.copyOf(EnumSet.of(
+        DesktopCapability.HOME,
+        DesktopCapability.SQL_PRACTICE,
+        DesktopCapability.STUDENT_EXERCISE,
+        DesktopCapability.AI_ASSISTANT,
+        DesktopCapability.TABLE_SCHEMA
+    ));
+
+    private static final Set<DesktopCapability> STUDENT_CAPABILITIES = union(
+        GUEST_CAPABILITIES,
+        DesktopCapability.KNOWLEDGE_CENTER,
+        DesktopCapability.CLOUD_CENTER
+    );
+
+    private static final Set<DesktopCapability> TEACHER_CAPABILITIES = union(
+        STUDENT_CAPABILITIES,
+        DesktopCapability.EXERCISE_MANAGEMENT,
+        DesktopCapability.EXERCISE_PROGRESS,
+        DesktopCapability.SETTINGS
+    );
+
+    private static final Set<DesktopCapability> ADMIN_CAPABILITIES = Set.copyOf(
+        EnumSet.allOf(DesktopCapability.class)
+    );
+
+    public DesktopAccessProfile {
+        kind = Objects.requireNonNull(kind, "kind must not be null");
+        displayName = requireText(displayName, "displayName");
+        userId = userId == null ? "" : userId;
+        email = email == null ? "" : email;
+        serverRoles = Set.copyOf(Objects.requireNonNull(serverRoles, "serverRoles must not be null"));
+        capabilities = Set.copyOf(Objects.requireNonNull(capabilities, "capabilities must not be null"));
+        if (kind != Kind.GUEST && (userId.isBlank() || email.isBlank())) {
+            throw new IllegalArgumentException("Authenticated identity requires userId and email");
+        }
+    }
+
+    public static DesktopAccessProfile guest() {
+        return new DesktopAccessProfile(Kind.GUEST, "", "访客", "", Set.of(), GUEST_CAPABILITIES);
+    }
+
+    public static DesktopAccessProfile from(CloudAuthenticationService.Session session) {
+        Objects.requireNonNull(session, "session must not be null");
+        AuthenticatedUser user = session.user();
+        Kind kind;
+        Set<DesktopCapability> capabilities;
+        if (user.hasRole(UserRole.ADMIN)) {
+            kind = Kind.ADMIN;
+            capabilities = ADMIN_CAPABILITIES;
+        } else if (user.hasRole(UserRole.TEACHER)) {
+            kind = Kind.TEACHER;
+            capabilities = TEACHER_CAPABILITIES;
+        } else {
+            kind = Kind.STUDENT;
+            capabilities = STUDENT_CAPABILITIES;
+        }
+        return new DesktopAccessProfile(kind, user.id(), user.displayName(), user.email(), user.roles(), capabilities);
+    }
+
+    public boolean can(DesktopCapability capability) {
+        return capabilities.contains(Objects.requireNonNull(capability, "capability must not be null"));
+    }
+
+    public boolean isGuest() {
+        return kind == Kind.GUEST;
+    }
+
+    public String roleLabel() {
+        return switch (kind) {
+            case GUEST -> "访客";
+            case STUDENT -> "学生";
+            case TEACHER -> "教师";
+            case ADMIN -> "管理员";
+        };
+    }
+
+    private static Set<DesktopCapability> union(
+        Set<DesktopCapability> base,
+        DesktopCapability... additions
+    ) {
+        EnumSet<DesktopCapability> result = EnumSet.copyOf(base);
+        result.addAll(Set.of(additions));
+        return Set.copyOf(result);
+    }
+
+    private static String requireText(String value, String name) {
+        if (value == null || value.isBlank()) throw new IllegalArgumentException(name + " must not be blank");
+        return value.trim();
+    }
+
+    public enum Kind {
+        GUEST,
+        STUDENT,
+        TEACHER,
+        ADMIN
+    }
+}
+// FILE: src\main\java\com\sqlteacher\application\collaboration\DesktopCapability.java
+package com.sqlteacher.application.collaboration;
+
+/** User-visible desktop modules controlled by the authenticated application identity. */
+public enum DesktopCapability {
+    HOME,
+    SQL_PRACTICE,
+    STUDENT_EXERCISE,
+    EXERCISE_MANAGEMENT,
+    EXERCISE_PROGRESS,
+    KNOWLEDGE_CENTER,
+    AI_ASSISTANT,
+    TABLE_SCHEMA,
+    SETTINGS,
+    CLOUD_CENTER
+}
+// FILE: src\main\java\com\sqlteacher\application\collaboration\UserRole.java
+package com.sqlteacher.application.collaboration;
+
+public enum UserRole {
+    ADMIN,
+    TEACHER,
+    STUDENT
+}
+// FILE: src\main\java\com\sqlteacher\application\config\AiConfiguration.java
+package com.sqlteacher.application.config;
+
+import java.net.URI;
+import java.time.Duration;
+import java.util.Objects;
+
+public record AiConfiguration(
+    URI ollamaBaseUrl,
+    Duration healthTimeout,
+    Duration generateTimeout,
+    String defaultModel
+) {
+    public AiConfiguration {
+        Objects.requireNonNull(ollamaBaseUrl, "ollamaBaseUrl must not be null");
+        Objects.requireNonNull(healthTimeout, "healthTimeout must not be null");
+        Objects.requireNonNull(generateTimeout, "generateTimeout must not be null");
+        Objects.requireNonNull(defaultModel, "defaultModel must not be null");
+        if (healthTimeout.isZero() || healthTimeout.isNegative()) {
+            throw new IllegalArgumentException("healthTimeout must be positive");
+        }
+        if (generateTimeout.isZero() || generateTimeout.isNegative()) {
+            throw new IllegalArgumentException("generateTimeout must be positive");
+        }
+        if (defaultModel.isBlank()) {
+            throw new IllegalArgumentException("defaultModel must not be blank");
+        }
+    }
+
+    public URI tagsEndpoint() {
+        return ollamaBaseUrl.resolve("/api/tags");
+    }
+
+    public URI generateEndpoint() {
+        return ollamaBaseUrl.resolve("/api/generate");
+    }
+}
+// FILE: src\main\java\com\sqlteacher\application\config\AppConfigurationService.java
+package com.sqlteacher.application.config;
+
+public interface AppConfigurationService {
+    SqlTeacherConfiguration current();
+}
+// FILE: src\main\java\com\sqlteacher\application\config\ApplicationVersion.java
+package com.sqlteacher.application.config;
+
+public final class ApplicationVersion {
+    private static final String DEVELOPMENT_VERSION = "development";
+
+    private ApplicationVersion() {
+    }
+
+    public static String current() {
+        String implementationVersion = ApplicationVersion.class.getPackage().getImplementationVersion();
+        return implementationVersion == null || implementationVersion.isBlank()
+            ? DEVELOPMENT_VERSION
+            : implementationVersion;
+    }
+}
+// FILE: src\main\java\com\sqlteacher\application\config\DatabaseConfiguration.java
+package com.sqlteacher.application.config;
+
+import java.nio.file.Path;
+import java.util.Objects;
+
+public record DatabaseConfiguration(
+    Path appDatabasePath,
+    Path demoDatabasePath
+) {
+    public DatabaseConfiguration {
+        Objects.requireNonNull(appDatabasePath, "appDatabasePath must not be null");
+        Objects.requireNonNull(demoDatabasePath, "demoDatabasePath must not be null");
+    }
+}
+// FILE: src\main\java\com\sqlteacher\application\config\SqlTeacherConfiguration.java
+package com.sqlteacher.application.config;
+
+import java.nio.file.Path;
+import java.util.Objects;
+
+public record SqlTeacherConfiguration(
+    String appName,
+    Path dataDirectory,
+    DatabaseConfiguration database,
+    AiConfiguration ai
+) {
+    public SqlTeacherConfiguration {
+        if (appName == null || appName.isBlank()) {
+            throw new IllegalArgumentException("appName must not be blank");
+        }
+        Objects.requireNonNull(dataDirectory, "dataDirectory must not be null");
+        Objects.requireNonNull(database, "database must not be null");
+        Objects.requireNonNull(ai, "ai must not be null");
+    }
+}
+// FILE: src\main\java\com\sqlteacher\application\connection\ConnectionManagementService.java
+package com.sqlteacher.application.connection;
+
+import java.util.List;
+import java.util.Optional;
+
+/** Manages non-sensitive connection profiles and the connection selected for application use cases. */
+public interface ConnectionManagementService {
+    List<DatabaseConnectionProfile> listProfiles();
+
+    Optional<DatabaseConnectionProfile> findProfile(String connectionId);
+
+    DatabaseConnectionProfile saveProfile(DatabaseConnectionProfile profile);
+
+    void removeProfile(String connectionId);
+
+    Optional<DatabaseConnectionProfile> currentProfile();
+
+    DatabaseConnectionProfile selectProfile(String connectionId);
+}
+// FILE: src\main\java\com\sqlteacher\application\connection\DatabaseConnectionProfile.java
+package com.sqlteacher.application.connection;
+
+import java.util.Objects;
+import java.util.regex.Pattern;
+
+public record DatabaseConnectionProfile(
+    String id,
+    String displayName,
+    DatabaseConnectionTarget target,
+    boolean readOnly,
+    boolean enabled,
+    boolean builtIn
+) {
+    private static final Pattern ID_PATTERN = Pattern.compile("[a-z0-9][a-z0-9._-]{0,63}");
+
+    public DatabaseConnectionProfile {
+        id = requireText(id, "id");
+        if (!ID_PATTERN.matcher(id).matches()) {
+            throw new IllegalArgumentException(
+                "id must contain 1-64 lowercase letters, digits, dots, underscores or hyphens"
+            );
+        }
+        displayName = requireText(displayName, "displayName");
+        Objects.requireNonNull(target, "target must not be null");
+    }
+
+    public DatabaseDialect dialect() {
+        return target.dialect();
+    }
+
+    private static String requireText(String value, String fieldName) {
+        Objects.requireNonNull(value, fieldName + " must not be null");
+        String normalized = value.trim();
+        if (normalized.isEmpty()) {
+            throw new IllegalArgumentException(fieldName + " must not be blank");
+        }
+        return normalized;
+    }
+}
+// FILE: src\main\java\com\sqlteacher\application\connection\DatabaseConnectionTarget.java
+package com.sqlteacher.application.connection;
+
+public sealed interface DatabaseConnectionTarget
+    permits SqliteConnectionTarget, ServerConnectionTarget {
+
+    DatabaseDialect dialect();
+}
+// FILE: src\main\java\com\sqlteacher\application\connection\DatabaseConnectionTestResult.java
+package com.sqlteacher.application.connection;
+
+import java.time.Duration;
+import java.util.Objects;
+
+public record DatabaseConnectionTestResult(
+    boolean successful,
+    String message,
+    String databaseProduct,
+    String databaseVersion,
+    Duration elapsed
+) {
+    public DatabaseConnectionTestResult {
+        message = requireText(message, "message");
+        databaseProduct = Objects.requireNonNull(databaseProduct, "databaseProduct must not be null").trim();
+        databaseVersion = Objects.requireNonNull(databaseVersion, "databaseVersion must not be null").trim();
+        Objects.requireNonNull(elapsed, "elapsed must not be null");
+        if (elapsed.isNegative()) {
+            throw new IllegalArgumentException("elapsed must not be negative");
+        }
+    }
+
+    private static String requireText(String value, String fieldName) {
+        Objects.requireNonNull(value, fieldName + " must not be null");
+        String normalized = value.trim();
+        if (normalized.isEmpty()) {
+            throw new IllegalArgumentException(fieldName + " must not be blank");
+        }
+        return normalized;
+    }
+}
+// FILE: src\main\java\com\sqlteacher\application\connection\DatabaseConnectionTestService.java
+package com.sqlteacher.application.connection;
+
+/** Tests a connection without exposing JDBC details to desktop callers. */
+public interface DatabaseConnectionTestService {
+    /**
+     * Tests the supplied profile with a transient password.
+     *
+     * <p>The implementation must not retain, log, or include the password in its result. The caller owns the
+     * array and should clear it after this method returns.</p>
+     */
+    DatabaseConnectionTestResult testConnection(DatabaseConnectionProfile profile, char[] password);
+}
+// FILE: src\main\java\com\sqlteacher\application\connection\DatabaseCredentialSession.java
+package com.sqlteacher.application.connection;
+
+import java.util.Optional;
+
+/** Holds database passwords in memory for the current application process only. */
+public interface DatabaseCredentialSession extends AutoCloseable {
+    void remember(String connectionId, char[] password);
+
+    Optional<char[]> passwordFor(String connectionId);
+
+    void forget(String connectionId);
+
+    @Override
+    void close();
+}
+// FILE: src\main\java\com\sqlteacher\application\connection\DatabaseDialect.java
+package com.sqlteacher.application.connection;
+
+public enum DatabaseDialect {
+    SQLITE,
+    MYSQL,
+    MARIADB
+}
+// FILE: src\main\java\com\sqlteacher\application\connection\ServerConnectionTarget.java
+package com.sqlteacher.application.connection;
+
+import java.util.Objects;
+
+public record ServerConnectionTarget(
+    DatabaseDialect dialect,
+    String host,
+    int port,
+    String databaseName,
+    String username
+) implements DatabaseConnectionTarget {
+    public ServerConnectionTarget {
+        Objects.requireNonNull(dialect, "dialect must not be null");
+        if (dialect == DatabaseDialect.SQLITE) {
+            throw new IllegalArgumentException("Server connection target requires MySQL or MariaDB dialect");
+        }
+        host = requireText(host, "host");
+        if (port < 1 || port > 65_535) {
+            throw new IllegalArgumentException("port must be between 1 and 65535");
+        }
+        databaseName = requireText(databaseName, "databaseName");
+        username = requireText(username, "username");
+    }
+
+    private static String requireText(String value, String fieldName) {
+        Objects.requireNonNull(value, fieldName + " must not be null");
+        String normalized = value.trim();
+        if (normalized.isEmpty()) {
+            throw new IllegalArgumentException(fieldName + " must not be blank");
+        }
+        return normalized;
+    }
+}
+// FILE: src\main\java\com\sqlteacher\application\connection\SqliteConnectionTarget.java
+package com.sqlteacher.application.connection;
+
+import java.nio.file.Path;
+import java.util.Objects;
+
+public record SqliteConnectionTarget(Path databasePath) implements DatabaseConnectionTarget {
+    public SqliteConnectionTarget {
+        Objects.requireNonNull(databasePath, "databasePath must not be null");
+        databasePath = databasePath.normalize();
+    }
+
+    @Override
+    public DatabaseDialect dialect() {
+        return DatabaseDialect.SQLITE;
+    }
+}
+// FILE: src\main\java\com\sqlteacher\application\database\DatabaseInitializationResult.java
+package com.sqlteacher.application.database;
+
+import java.nio.file.Path;
+
+public record DatabaseInitializationResult(
+    Path appDatabasePath,
+    Path demoDatabasePath,
+    boolean appDatabaseCreated,
+    boolean demoDatabaseCreated
+) {
+}
+// FILE: src\main\java\com\sqlteacher\application\database\DatabaseInitializationService.java
+package com.sqlteacher.application.database;
+
+public interface DatabaseInitializationService {
+    DatabaseInitializationResult initialize();
+}
+// FILE: src\main\java\com\sqlteacher\application\error\ApplicationError.java
+package com.sqlteacher.application.error;
+
+import java.util.Objects;
+
+public record ApplicationError(
+    String code,
+    ApplicationErrorType type,
+    String userMessage,
+    boolean retryable
+) {
+    public ApplicationError {
+        if (code == null || code.isBlank()) {
+            throw new IllegalArgumentException("code must not be blank");
+        }
+        Objects.requireNonNull(type, "type must not be null");
+        if (userMessage == null || userMessage.isBlank()) {
+            throw new IllegalArgumentException("userMessage must not be blank");
+        }
+    }
+}
+// FILE: src\main\java\com\sqlteacher\application\error\ApplicationErrorType.java
+package com.sqlteacher.application.error;
+
+public enum ApplicationErrorType {
+    VALIDATION,
+    APPLICATION,
+    UNEXPECTED
+}
+// FILE: src\main\java\com\sqlteacher\application\error\ApplicationExceptionMapper.java
+package com.sqlteacher.application.error;
+
+public interface ApplicationExceptionMapper {
+    ApplicationError map(Throwable throwable);
+}
+// FILE: src\main\java\com\sqlteacher\application\error\DefaultApplicationExceptionMapper.java
+package com.sqlteacher.application.error;
+
+import com.sqlteacher.domain.SqlTeacherException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.util.Map;
+import java.util.Objects;
+
+public final class DefaultApplicationExceptionMapper implements ApplicationExceptionMapper {
+    private static final Logger log = LoggerFactory.getLogger(DefaultApplicationExceptionMapper.class);
+    private static final Map<String, ErrorPresentation> PRESENTATIONS = Map.ofEntries(
+        Map.entry("CONFIG_NOT_FOUND", presentation("找不到应用配置，请重新安装或联系教师。", false)),
+        Map.entry("CONFIG_LOAD_FAILED", presentation("应用配置读取失败，请重启后重试。", true)),
+        Map.entry("CONFIG_INVALID", presentation("应用配置无效，请联系教师检查配置。", false)),
+        Map.entry("SQLITE_INIT_FAILED", presentation("演示数据库初始化失败，请检查数据目录是否可写。", true)),
+        Map.entry("CONNECTION_PROFILE_FAILED", presentation("数据库连接配置读取或保存失败，请重试。", true)),
+        Map.entry("DATABASE_CONNECTION_NOT_FOUND", presentation("找不到所选数据库连接，请在设置页重新选择。", false)),
+        Map.entry("DATABASE_CONNECTION_DISABLED", presentation("所选数据库连接已禁用，请在设置页启用或切换连接。", false)),
+        Map.entry("DATABASE_CREDENTIALS_REQUIRED", presentation("服务器连接缺少临时凭据，请先在设置页测试连接。", false)),
+        Map.entry("DATABASE_AUTHENTICATION_FAILED", presentation("数据库身份验证失败，请检查用户名和临时密码。", false)),
+        Map.entry("DATABASE_PERMISSION_DENIED", presentation("数据库账号权限不足，请联系管理员配置只读查询权限。", false)),
+        Map.entry("DATABASE_CONNECTION_TIMEOUT", presentation("数据库连接超时，请检查网络、地址和服务状态。", true)),
+        Map.entry("DATABASE_CONNECTION_FAILED", presentation("无法连接数据库，请检查地址、端口和服务状态。", true)),
+        Map.entry("EXTERNAL_CONNECTION_READ_ONLY_REQUIRED", presentation("外部数据库连接必须启用只读模式。", false)),
+        Map.entry("DATABASE_METADATA_FAILED", presentation("表结构读取失败，请检查数据库连接后重试。", true)),
+        Map.entry("SQL_BLOCKED", presentation("SQL 被安全规则拦截，请检查是否包含危险操作或多条语句。", false)),
+        Map.entry("SQL_READ_ONLY_CONNECTION", presentation("当前数据库连接为只读模式，只允许执行 SELECT 查询。", false)),
+        Map.entry("MOCK_SQL_BLOCKED", presentation("SQL 被安全规则拦截，请检查是否包含危险操作或多条语句。", false)),
+        Map.entry("SQL_CONFIRMATION_REQUIRED", presentation("该 SQL 可能修改数据，确认风险后才能执行。", false)),
+        Map.entry("SQL_EXECUTION_FAILED", presentation("SQL 执行失败，请检查语法、表名和字段名后重试。", true))
+    );
+
+    @Override
+    public ApplicationError map(Throwable throwable) {
+        Objects.requireNonNull(throwable, "throwable must not be null");
+
+        if (throwable instanceof SqlTeacherException exception) {
+            String code = hasText(exception.errorCode()) ? exception.errorCode() : "APPLICATION_ERROR";
+            ErrorPresentation presentation = PRESENTATIONS.get(code);
+            String userMessage = presentation != null
+                ? presentation.userMessage()
+                : "操作未能完成，请重试或联系教师。";
+            boolean retryable = presentation != null && presentation.retryable();
+            log.warn(
+                "Application operation failed, code={}, exceptionType={}",
+                code,
+                exception.getClass().getSimpleName()
+            );
+            return new ApplicationError(
+                code,
+                ApplicationErrorType.APPLICATION,
+                userMessage,
+                retryable
+            );
+        }
+        if (throwable instanceof IllegalArgumentException) {
+            log.warn(
+                "Application request validation failed, exceptionType={}",
+                throwable.getClass().getSimpleName()
+            );
+            return new ApplicationError(
+                "INVALID_REQUEST",
+                ApplicationErrorType.VALIDATION,
+                "输入内容无效，请检查后重试。",
+                false
+            );
+        }
+
+        log.error(
+            "Unexpected application failure, exceptionType={}",
+            throwable.getClass().getSimpleName()
+        );
+        return new ApplicationError(
+            "UNEXPECTED_ERROR",
+            ApplicationErrorType.UNEXPECTED,
+            "操作失败，请重试；如果仍然失败，请联系教师。",
+            true
+        );
+    }
+
+    private static boolean hasText(String value) {
+        return value != null && !value.isBlank();
+    }
+
+    private static ErrorPresentation presentation(String userMessage, boolean retryable) {
+        return new ErrorPresentation(userMessage, retryable);
+    }
+
+    private record ErrorPresentation(String userMessage, boolean retryable) {
+    }
+}
+// FILE: src\main\java\com\sqlteacher\application\event\DefaultLearningEventService.java
+package com.sqlteacher.application.event;
+
+import com.sqlteacher.application.risk.SqlRiskLevel;
+
+import java.time.Clock;
+import java.time.Duration;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.Objects;
+
+public final class DefaultLearningEventService implements LearningEventService {
+    private final LearningEventRecorder recorder;
+    private final Clock clock;
+    private final LearningEventOwnerProvider ownerProvider;
+
+    public DefaultLearningEventService(LearningEventRecorder recorder) {
+        this(recorder, Clock.systemUTC(), () -> LearningEventOwnerProvider.GUEST_OWNER);
+    }
+
+    public DefaultLearningEventService(
+        LearningEventRecorder recorder,
+        LearningEventOwnerProvider ownerProvider
+    ) {
+        this(recorder, Clock.systemUTC(), ownerProvider);
+    }
+
+    DefaultLearningEventService(LearningEventRecorder recorder, Clock clock) {
+        this(recorder, clock, () -> LearningEventOwnerProvider.GUEST_OWNER);
+    }
+
+    DefaultLearningEventService(
+        LearningEventRecorder recorder,
+        Clock clock,
+        LearningEventOwnerProvider ownerProvider
+    ) {
+        this.recorder = Objects.requireNonNull(recorder, "recorder must not be null");
+        this.clock = Objects.requireNonNull(clock, "clock must not be null");
+        this.ownerProvider = Objects.requireNonNull(ownerProvider, "ownerProvider must not be null");
+    }
+
+    @Override
+    public void recordSqlExecution(
+        String connectionId,
+        boolean successful,
+        String statementType,
+        Duration duration,
+        int resultCount,
+        String errorCode
+    ) {
+        validateConnectionId(connectionId);
+        validateText(statementType, "statementType");
+        Objects.requireNonNull(duration, "duration must not be null");
+        if (duration.isNegative()) {
+            throw new IllegalArgumentException("duration must not be negative");
+        }
+        if (resultCount < 0) {
+            throw new IllegalArgumentException("resultCount must not be negative");
+        }
+
+        Map<String, String> attributes = new LinkedHashMap<>();
+        attributes.put("statementType", statementType);
+        attributes.put("durationMs", Long.toString(duration.toMillis()));
+        attributes.put("resultCount", Integer.toString(resultCount));
+        putIfPresent(attributes, "errorCode", errorCode);
+        record(LearningEventType.SQL_EXECUTION, connectionId, successful, attributes);
+    }
+
+    @Override
+    public void recordSqlRiskBlocked(
+        String connectionId,
+        String statementType,
+        SqlRiskLevel riskLevel,
+        boolean multiStatement
+    ) {
+        validateConnectionId(connectionId);
+        validateText(statementType, "statementType");
+        Objects.requireNonNull(riskLevel, "riskLevel must not be null");
+
+        record(
+            LearningEventType.SQL_RISK_BLOCKED,
+            connectionId,
+            false,
+            Map.of(
+                "statementType", statementType,
+                "riskLevel", riskLevel.name(),
+                "multiStatement", Boolean.toString(multiStatement)
+            )
+        );
+    }
+
+    @Override
+    public void recordAiGeneration(
+        String connectionId,
+        boolean successful,
+        String model,
+        String promptVersion,
+        String errorCode
+    ) {
+        validateConnectionId(connectionId);
+        validateText(model, "model");
+        validateText(promptVersion, "promptVersion");
+
+        Map<String, String> attributes = new LinkedHashMap<>();
+        attributes.put("model", model);
+        attributes.put("promptVersion", promptVersion);
+        putIfPresent(attributes, "errorCode", errorCode);
+        record(
+            successful ? LearningEventType.AI_SQL_GENERATED : LearningEventType.AI_GENERATION_FAILED,
+            connectionId,
+            successful,
+            attributes
+        );
+    }
+
+    @Override
+    public void recordExerciseAttempt(
+        String exerciseId,
+        String status,
+        boolean successful,
+        Duration duration,
+        String errorCode
+    ) {
+        validateText(exerciseId, "exerciseId");
+        validateText(status, "status");
+        Objects.requireNonNull(duration, "duration must not be null");
+        if (duration.isNegative()) {
+            throw new IllegalArgumentException("duration must not be negative");
+        }
+        Map<String, String> attributes = new LinkedHashMap<>();
+        attributes.put("exerciseId", exerciseId);
+        attributes.put("status", status);
+        attributes.put("durationMs", Long.toString(duration.toMillis()));
+        putIfPresent(attributes, "errorCode", errorCode);
+        LearningEventType type = switch (status) {
+            case "PASSED" -> LearningEventType.EXERCISE_PASSED;
+            case "FAILED" -> LearningEventType.EXERCISE_FAILED;
+            default -> LearningEventType.EXERCISE_ATTEMPT;
+        };
+        record(type, "exercise", successful, attributes);
+    }
+
+    @Override
+    public void recordExerciseHint(String exerciseId, int hintLevel) {
+        validateText(exerciseId, "exerciseId");
+        if (hintLevel < 1) {
+            throw new IllegalArgumentException("hintLevel must be positive");
+        }
+        record(
+            LearningEventType.EXERCISE_HINT_USED,
+            "exercise",
+            true,
+            Map.of("exerciseId", exerciseId, "hintLevel", Integer.toString(hintLevel))
+        );
+    }
+
+    @Override
+    public void recordKnowledgeSearch(int queryLength, int resultCount) {
+        if (queryLength < 1 || resultCount < 0) {
+            throw new IllegalArgumentException("knowledge search metrics are invalid");
+        }
+        record(
+            LearningEventType.KNOWLEDGE_SEARCHED,
+            "knowledge",
+            true,
+            Map.of("queryLength", Integer.toString(queryLength), "resultCount", Integer.toString(resultCount))
+        );
+    }
+
+    private void record(
+        LearningEventType type,
+        String connectionId,
+        boolean successful,
+        Map<String, String> attributes
+    ) {
+        Map<String, String> ownedAttributes = new LinkedHashMap<>(attributes);
+        ownedAttributes.put(LearningEventOwnerProvider.OWNER_ATTRIBUTE, ownerProvider.currentOwnerId());
+        recorder.record(new LearningEvent(type, clock.instant(), connectionId, successful, ownedAttributes));
+    }
+
+    private static void validateConnectionId(String connectionId) {
+        validateText(connectionId, "connectionId");
+    }
+
+    private static void validateText(String value, String name) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalArgumentException(name + " must not be blank");
+        }
+    }
+
+    private static void putIfPresent(Map<String, String> attributes, String name, String value) {
+        if (value != null && !value.isBlank()) {
+            attributes.put(name, value);
+        }
+    }
+}
+// FILE: src\main\java\com\sqlteacher\application\event\LearningEvent.java
+package com.sqlteacher.application.event;
+
+import java.time.Instant;
+import java.util.Map;
+import java.util.Objects;
+
+public record LearningEvent(
+    LearningEventType type,
+    Instant occurredAt,
+    String connectionId,
+    boolean successful,
+    Map<String, String> attributes
+) {
+    public LearningEvent {
+        Objects.requireNonNull(type, "type must not be null");
+        Objects.requireNonNull(occurredAt, "occurredAt must not be null");
+        if (connectionId == null || connectionId.isBlank()) {
+            throw new IllegalArgumentException("connectionId must not be blank");
+        }
+        Objects.requireNonNull(attributes, "attributes must not be null");
+        attributes = Map.copyOf(attributes);
+    }
+}
+// FILE: src\main\java\com\sqlteacher\application\event\LearningEventOwnerProvider.java
+package com.sqlteacher.application.event;
+
+/** Supplies the local identity that owns newly recorded learning events. */
+@FunctionalInterface
+public interface LearningEventOwnerProvider {
+    String OWNER_ATTRIBUTE = "_desktop_owner_id";
+    String GUEST_OWNER = "guest";
+
+    String currentOwnerId();
+}
+// FILE: src\main\java\com\sqlteacher\application\event\LearningEventQueryService.java
+package com.sqlteacher.application.event;
+
+import java.time.Instant;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+
+/**
+ * Query service for learning events to support analytics and debugging.
+ */
+public interface LearningEventQueryService {
+
+    /**
+     * Query events by type within a time range.
+     *
+     * @param type the event type to filter by
+     * @param start the start of the time range (inclusive), or null for no lower bound
+     * @param end the end of the time range (inclusive), or null for no upper bound
+     * @return list of matching events, never null
+     */
+    List<QueriedLearningEvent> queryEventsByType(LearningEventType type, Instant start, Instant end);
+
+    /**
+     * Query events by connection ID within a time range.
+     *
+     * @param connectionId the connection ID to filter by
+     * @param start the start of the time range (inclusive), or null for no lower bound
+     * @param end the end of the time range (inclusive), or null for no upper bound
+     * @return list of matching events, never null
+     */
+    List<QueriedLearningEvent> queryEventsByConnection(String connectionId, Instant start, Instant end);
+
+    /**
+     * Get event statistics within a time range.
+     *
+     * @param start the start of the time range (inclusive), or null for no lower bound
+     * @param end the end of the time range (inclusive), or null for no upper bound
+     * @return statistics about events in the time range
+     */
+    EventStatistics getEventStatistics(Instant start, Instant end);
+
+    /**
+     * A read-only representation of a queried learning event.
+     */
+    record QueriedLearningEvent(
+        long id,
+        LearningEventType type,
+        Instant occurredAt,
+        String connectionId,
+        boolean successful,
+        Map<String, String> attributes,
+        Instant createdAt
+    ) {
+        public QueriedLearningEvent {
+            Objects.requireNonNull(type, "type must not be null");
+            Objects.requireNonNull(occurredAt, "occurredAt must not be null");
+            Objects.requireNonNull(connectionId, "connectionId must not be null");
+            attributes = Map.copyOf(Objects.requireNonNull(attributes, "attributes must not be null"));
+            Objects.requireNonNull(createdAt, "createdAt must not be null");
+        }
+    }
+
+    /**
+     * Statistics about learning events in a time range.
+     */
+    record EventStatistics(
+        long totalEvents,
+        long successfulEvents,
+        long failedEvents,
+        Map<LearningEventType, Long> eventsByType,
+        Map<String, Long> eventsByConnection
+    ) {
+        public EventStatistics {
+            eventsByType = Map.copyOf(Objects.requireNonNull(eventsByType, "eventsByType must not be null"));
+            eventsByConnection = Map.copyOf(
+                    Objects.requireNonNull(eventsByConnection, "eventsByConnection must not be null"));
+        }
+    }
+}
+// FILE: src\main\java\com\sqlteacher\application\event\LearningEventRecorder.java
+package com.sqlteacher.application.event;
+
+public interface LearningEventRecorder {
+    /**
+     * Persists an application event. Implementations own all storage details and must not
+     * require callers to know a table, file, or serialization format.
+     */
+    void record(LearningEvent event);
+}
+// FILE: src\main\java\com\sqlteacher\application\event\LearningEventService.java
+package com.sqlteacher.application.event;
+
+import com.sqlteacher.application.risk.SqlRiskLevel;
+
+import java.time.Duration;
+
+/**
+ * Records P0 learning events without accepting raw SQL, natural-language prompts, or model output.
+ */
+public interface LearningEventService {
+    void recordSqlExecution(
+        String connectionId,
+        boolean successful,
+        String statementType,
+        Duration duration,
+        int resultCount,
+        String errorCode
+    );
+
+    void recordSqlRiskBlocked(
+        String connectionId,
+        String statementType,
+        SqlRiskLevel riskLevel,
+        boolean multiStatement
+    );
+
+    void recordAiGeneration(
+        String connectionId,
+        boolean successful,
+        String model,
+        String promptVersion,
+        String errorCode
+    );
+
+    default void recordExerciseAttempt(
+        String exerciseId,
+        String status,
+        boolean successful,
+        Duration duration,
+        String errorCode
+    ) {
+    }
+
+    default void recordExerciseHint(String exerciseId, int hintLevel) {
+    }
+
+    default void recordKnowledgeSearch(int queryLength, int resultCount) {
+    }
+}
+// FILE: src\main\java\com\sqlteacher\application\event\LearningEventType.java
+package com.sqlteacher.application.event;
+
+public enum LearningEventType {
+    SQL_EXECUTION,
+    SQL_RISK_BLOCKED,
+    AI_SQL_GENERATED,
+    AI_GENERATION_FAILED,
+    EXERCISE_ATTEMPT,
+    EXERCISE_PASSED,
+    EXERCISE_FAILED,
+    EXERCISE_HINT_USED,
+    KNOWLEDGE_SEARCHED
+}
+// FILE: src\main\java\com\sqlteacher\application\execution\SqlExecutionRequest.java
+package com.sqlteacher.application.execution;
+
+import java.time.Duration;
+
+public record SqlExecutionRequest(
+    String connectionId,
+    String sql,
+    int maxRows,
+    Duration timeout,
+    boolean riskConfirmed
+) {
+    public SqlExecutionRequest(String connectionId, String sql, int maxRows, Duration timeout) {
+        this(connectionId, sql, maxRows, timeout, false);
+    }
+}
+// FILE: src\main\java\com\sqlteacher\application\execution\SqlExecutionResult.java
+            }
+            statement.executeBatch();
+        }
+    }
+
+    private static String title(Path path, String content) {
+        for (String line : content.lines().limit(20).toList()) {
+            String trimmed = line.trim();
+            if (trimmed.startsWith("#")) {
+                String heading = trimmed.replaceFirst("^#+\\s*", "").trim();
+                if (!heading.isBlank()) {
+                    return truncate(heading, 160);
+                }
+            }
+        }
+        String fileName = path.getFileName().toString();
+        int dot = fileName.lastIndexOf('.');
+        return truncate(dot > 0 ? fileName.substring(0, dot) : fileName, 160);
+    }
+
+    private static String toFtsQuery(String query) {
+        String[] tokens = query.trim().split("\\s+");
+        List<String> phrases = new ArrayList<>();
+        for (String token : tokens) {
+            String safe = token.replace("\"", "\"\"").trim();
+            if (!safe.isBlank()) {
+                phrases.add("\"" + safe + "\"");
+            }
+        }
+        if (phrases.isEmpty()) {
+            throw new IllegalArgumentException("query must contain searchable text");
+        }
+        return String.join(" AND ", phrases);
+    }
+
+    private static String sha256(byte[] content) {
+        try {
+            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(content));
+        } catch (NoSuchAlgorithmException impossible) {
+            throw new IllegalStateException("SHA-256 is unavailable", impossible);
+        }
+    }
+
+    private static String decodeUtf8(byte[] content) {
+        try {
+            return StandardCharsets.UTF_8.newDecoder()
+                .onMalformedInput(CodingErrorAction.REPORT)
+                .onUnmappableCharacter(CodingErrorAction.REPORT)
+                .decode(ByteBuffer.wrap(content))
+                .toString();
+        } catch (CharacterCodingException error) {
+            throw new IllegalArgumentException("Knowledge document must use valid UTF-8", error);
+        }
+    }
+
+    private static String truncate(String value, int maxLength) {
+        return value.length() <= maxLength ? value : value.substring(0, maxLength);
+    }
+
+    private static String requireText(String value, String name) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalArgumentException(name + " must not be blank");
+        }
+        return value.trim();
+    }
+}
+// FILE: src\main\java\com\sqlteacher\infrastructure\database\SqliteSchemaMigrator.java
+package com.sqlteacher.infrastructure.database;
+
+import java.nio.file.Path;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
+import java.util.ArrayList;
+import java.util.List;
+
+final class SqliteSchemaMigrator {
+    private static final List<Migration> DEFAULT_MIGRATIONS = List.of(
+        new Migration(
+            1,
+            "Create the Demo baseline application tables",
+            List.of(
+                """
+                    create table if not exists app_event (
+                        id integer primary key autoincrement,
+                        event_type text not null,
+                        message text,
+                        created_at text not null default current_timestamp
+                    )
+                    """,
+                """
+                    create table if not exists learning_events (
+                        id integer primary key autoincrement,
+                        event_type text not null,
+                        occurred_at text not null,
+                        connection_id text not null,
+                        successful integer not null,
+                        attributes text,
+                        created_at text not null default current_timestamp
+                    )
+                    """
+            )
+        ),
+        new Migration(
+            2,
+            "Create database connection profile tables",
+            List.of(
+                """
+                    create table connection_profiles (
+                        id text primary key,
+                        display_name text not null,
+                        dialect text not null check (dialect in ('SQLITE', 'MYSQL', 'MARIADB')),
+                        sqlite_path text,
+                        host text,
+                        port integer,
+                        database_name text,
+                        username text,
+                        read_only integer not null check (read_only in (0, 1)),
+                        enabled integer not null check (enabled in (0, 1)),
+                        built_in integer not null check (built_in in (0, 1)),
+                        created_at text not null default current_timestamp,
+                        updated_at text not null default current_timestamp,
+                        check (
+                            (dialect = 'SQLITE' and sqlite_path is not null
+                                and host is null and port is null and database_name is null and username is null)
+                            or
+                            (dialect in ('MYSQL', 'MARIADB') and sqlite_path is null
+                                and host is not null and port between 1 and 65535
+                                and database_name is not null and username is not null)
+                        )
+                    )
+                    """,
+                """
+                    create table connection_selection (
+                        singleton_id integer primary key check (singleton_id = 1),
+                        connection_id text not null,
+                        updated_at text not null default current_timestamp
+                    )
+                """
+            )
+        ),
+        new Migration(
+            3,
+            "Create exercise catalog and attempt tables",
+            List.of(
+                """
+                    create table exercise_datasets (
+                        id text primary key,
+                        name text not null,
+                        setup_sql text not null,
+                        version integer not null check (version > 0),
+                        created_at text not null default current_timestamp,
+                        updated_at text not null default current_timestamp
+                    )
+                    """,
+                """
+                    create table exercises (
+                        id text primary key,
+                        title text not null,
+                        description text not null,
+                        knowledge_point text not null,
+                        difficulty text not null check (
+                            difficulty in ('BEGINNER', 'INTERMEDIATE', 'ADVANCED')
+                        ),
+                        dataset_id text not null references exercise_datasets(id),
+                        reference_sql text not null,
+                        evaluation_rule_json text not null,
+                        hints_json text not null,
+                        version integer not null check (version > 0),
+                        enabled integer not null check (enabled in (0, 1)),
+                        created_at text not null default current_timestamp,
+                        updated_at text not null default current_timestamp
+                    )
+                    """,
+                """
+                    create index exercises_enabled_order
+                    on exercises(enabled, difficulty, knowledge_point, title)
+                    """,
+                """
+                    create table exercise_sessions (
+                        id text primary key,
+                        exercise_id text not null references exercises(id),
+                        exercise_version integer not null check (exercise_version > 0),
+                        started_at text not null,
+                        completed_at text,
+                        hints_used integer not null default 0 check (hints_used between 0 and 3)
+                    )
+                    """,
+                """
+                    create index exercise_sessions_exercise_started
+                    on exercise_sessions(exercise_id, started_at)
+                    """,
+                """
+                    create table exercise_attempts (
+                        id text primary key,
+                        session_id text not null references exercise_sessions(id),
+                        status text not null check (
+                            status in ('RUN', 'SUBMITTED', 'PASSED', 'FAILED')
+                        ),
+                        sql_text text not null,
+                        execution_success integer check (execution_success in (0, 1)),
+                        passed integer check (passed in (0, 1)),
+                        duration_ms integer not null check (duration_ms >= 0),
+                        result_columns_json text not null default '[]',
+                        result_rows_json text not null default '[]',
+                        feedback_json text not null default '[]',
+                        error_code text,
+                        created_at text not null
+                    )
+                    """,
+                """
+                    create index exercise_attempts_session_created
+                    on exercise_attempts(session_id, created_at)
+                    """
+            )
+        ),
+        new Migration(
+            4,
+            "Create local knowledge document and FTS5 index tables",
+            List.of(
+                """
+                    create table knowledge_documents (
+                        id text primary key,
+                        title text not null,
+                        source_name text not null,
+                        content_hash text not null unique,
+                        chunk_count integer not null check (chunk_count > 0),
+                        imported_at text not null
+                    )
+                    """,
+                """
+                    create table knowledge_chunks (
+                        id text primary key,
+                        document_id text not null references knowledge_documents(id) on delete cascade,
+                        chunk_index integer not null check (chunk_index >= 0),
+                        content text not null,
+                        unique(document_id, chunk_index)
+                    )
+                    """,
+                """
+                    create virtual table knowledge_chunks_fts using fts5(
+                        content,
+                        content='knowledge_chunks',
+                        content_rowid='rowid',
+                        tokenize='unicode61 remove_diacritics 2'
+                    )
+                    """,
+                """
+                    create trigger knowledge_chunks_ai after insert on knowledge_chunks begin
+                        insert into knowledge_chunks_fts(rowid, content) values (new.rowid, new.content);
+                    end
+                    """,
+                """
+                    create trigger knowledge_chunks_ad after delete on knowledge_chunks begin
+                        insert into knowledge_chunks_fts(knowledge_chunks_fts, rowid, content)
+                        values ('delete', old.rowid, old.content);
+                    end
+                    """,
+                """
+                    create trigger knowledge_chunks_au after update on knowledge_chunks begin
+                        insert into knowledge_chunks_fts(knowledge_chunks_fts, rowid, content)
+                        values ('delete', old.rowid, old.content);
+                        insert into knowledge_chunks_fts(rowid, content) values (new.rowid, new.content);
+                    end
+                    """,
+                "create index knowledge_chunks_document_order on knowledge_chunks(document_id, chunk_index)"
+            )
+        )
+    );
+
+    private final List<Migration> migrations;
+
+    SqliteSchemaMigrator() {
+        this(DEFAULT_MIGRATIONS);
+    }
+
+    SqliteSchemaMigrator(List<Migration> migrations) {
+        this.migrations = validateMigrations(migrations);
+    }
+
+    int migrate(Path databasePath) throws SQLException {
+        SqliteDriver.ensureLoaded();
+        try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + databasePath)) {
+            connection.setAutoCommit(false);
+            try {
+                createVersionTable(connection);
+                List<Integer> appliedVersions = readAppliedVersions(connection);
+                validateAppliedVersions(appliedVersions);
+
+                for (int index = appliedVersions.size(); index < migrations.size(); index++) {
+                    applyMigration(connection, migrations.get(index));
+                }
+
+                connection.commit();
+                return latestVersion();
+            } catch (SQLException | RuntimeException error) {
+                rollback(connection, error);
+                throw error;
+            }
+        }
+    }
+
+    int latestVersion() {
+        return migrations.getLast().version();
+    }
+
+    int currentVersion(Path databasePath) throws SQLException {
+        if (java.nio.file.Files.notExists(databasePath)) {
+            return 0;
+        }
+        SqliteDriver.ensureLoaded();
+        try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + databasePath);
+             Statement statement = connection.createStatement()) {
+            try (ResultSet result = statement.executeQuery(
+                "select max(version) from schema_version"
+            )) {
+                return result.next() ? result.getInt(1) : 0;
+            } catch (SQLException missingVersionTable) {
+                return 0;
+            }
+        }
+    }
+
+    private static void createVersionTable(Connection connection) throws SQLException {
+        try (Statement statement = connection.createStatement()) {
+            statement.executeUpdate("""
+                create table if not exists schema_version (
+                    version integer primary key,
+                    description text not null,
+                    applied_at text not null default current_timestamp
+                )
+                """);
+        }
+    }
+
+    private static List<Integer> readAppliedVersions(Connection connection) throws SQLException {
+        List<Integer> versions = new ArrayList<>();
+        try (Statement statement = connection.createStatement();
+             ResultSet resultSet = statement.executeQuery("select version from schema_version order by version")) {
+            while (resultSet.next()) {
+                versions.add(resultSet.getInt("version"));
+            }
+        }
+        return List.copyOf(versions);
+    }
+
+    private void validateAppliedVersions(List<Integer> appliedVersions) throws SQLException {
+        if (appliedVersions.size() > migrations.size()) {
+            throw new SQLException("Application database schema is newer than this SQLTeacher version");
+        }
+        for (int index = 0; index < appliedVersions.size(); index++) {
+            int expected = migrations.get(index).version();
+            int actual = appliedVersions.get(index);
+            if (actual != expected) {
+                throw new SQLException(
+                    "Application database migration history is invalid: expected version "
+                        + expected + " but found " + actual
+                );
+            }
+        }
+    }
+
+    private static void applyMigration(Connection connection, Migration migration) throws SQLException {
+        for (String sql : migration.statements()) {
+            try (Statement statement = connection.createStatement()) {
+                statement.executeUpdate(sql);
+            }
+        }
+        try (PreparedStatement statement = connection.prepareStatement(
+            "insert into schema_version(version, description) values (?, ?)"
+        )) {
+            statement.setInt(1, migration.version());
+            statement.setString(2, migration.description());
+            statement.executeUpdate();
+        }
+    }
+
+    private static void rollback(Connection connection, Throwable originalError) {
+        try {
+            connection.rollback();
+        } catch (SQLException rollbackError) {
+            originalError.addSuppressed(rollbackError);
+        }
+    }
+
+    private static List<Migration> validateMigrations(List<Migration> migrations) {
+        if (migrations == null || migrations.isEmpty()) {
+            throw new IllegalArgumentException("At least one SQLite schema migration is required");
+        }
+        List<Migration> copy = List.copyOf(migrations);
+        for (int index = 0; index < copy.size(); index++) {
+            int expectedVersion = index + 1;
+            if (copy.get(index).version() != expectedVersion) {
+                throw new IllegalArgumentException(
+                    "SQLite schema migrations must be ordered and contiguous from version 1"
+                );
+            }
+        }
+        return copy;
+    }
+
+    record Migration(int version, String description, List<String> statements) {
+        Migration {
+            if (version < 1) {
+                throw new IllegalArgumentException("Migration version must be positive");
+            }
+            if (description == null || description.isBlank()) {
+                throw new IllegalArgumentException("Migration description must not be blank");
+            }
+            if (statements == null || statements.isEmpty()) {
+                throw new IllegalArgumentException("Migration statements must not be empty");
+            }
+            statements = List.copyOf(statements);
+            if (statements.stream().anyMatch(sql -> sql == null || sql.isBlank())) {
+                throw new IllegalArgumentException("Migration SQL must not be blank");
+            }
+        }
+    }
+}
+// FILE: src\main\java\com\sqlteacher\infrastructure\database\SqlResultMapper.java
+package com.sqlteacher.infrastructure.database;
+
+import com.sqlteacher.application.execution.SqlExecutionResult;
+
+import java.sql.ResultSet;
+import java.sql.ResultSetMetaData;
+import java.sql.SQLException;
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
+public final class SqlResultMapper {
+    public SqlExecutionResult mapQueryResult(
+            ResultSet resultSet,
+            Duration duration,
+            int maxRows
+    ) throws SQLException {
+
+        List<String> columns = new ArrayList<>();
+        List<Map<String, Object>> rows = new ArrayList<>();
+
+        ResultSetMetaData metaData = resultSet.getMetaData();
+
+        int columnCount = metaData.getColumnCount();
+
+        for (int i = 1; i <= columnCount; i++) {
+            columns.add(metaData.getColumnLabel(i));
+        }
+
+        boolean truncated = false;
+
+        while (resultSet.next()) {
+
+            if (rows.size() >= maxRows) {
+                truncated = true;
+                break;
+            }
+
+            Map<String, Object> row = new LinkedHashMap<>();
+
+            for (int i = 1; i <= columnCount; i++) {
+                row.put(
+                        metaData.getColumnLabel(i),
+                        resultSet.getObject(i)
+                );
+            }
+
+            rows.add(row);
+        }
+
+        return new SqlExecutionResult(
+                true,
+                columns,
+                rows,
+                0,
+                truncated,
+                "SQL executed successfully",
+                duration
+        );
+    }
+
+    public SqlExecutionResult mapUpdateResult(
+            int affectedRows,
+            Duration duration
+    ) {
+
+        return new SqlExecutionResult(
+                true,
+                List.of(),
+                List.of(),
+                affectedRows,
+                false,
+                "SQL executed successfully",
+                duration
+        );
+    }
+
+}
+// FILE: src\main\java\com\sqlteacher\infrastructure\database\SqlScriptSplitter.java
+package com.sqlteacher.infrastructure.database;
+
+import java.util.ArrayList;
+import java.util.List;
+
+final class SqlScriptSplitter {
+    private SqlScriptSplitter() {
+    }
+
+    static List<String> split(String script) {
+        List<String> statements = new ArrayList<>();
+        StringBuilder current = new StringBuilder();
+        char quote = '\0';
+        boolean lineComment = false;
+        boolean blockComment = false;
+
+        for (int index = 0; index < script.length(); index++) {
+            char character = script.charAt(index);
+            char next = index + 1 < script.length() ? script.charAt(index + 1) : '\0';
+            if (lineComment) {
+                current.append(character);
+                if (character == '\n' || character == '\r') {
+                    lineComment = false;
+                }
+                continue;
+            }
+            if (blockComment) {
+                current.append(character);
+                if (character == '*' && next == '/') {
+                    current.append(next);
+                    index++;
+                    blockComment = false;
+                }
+                continue;
+            }
+            if (quote == '\0' && character == '-' && next == '-') {
+                current.append(character).append(next);
+                index++;
+                lineComment = true;
+                continue;
+            }
+            if (quote == '\0' && character == '/' && next == '*') {
+                current.append(character).append(next);
+                index++;
+                blockComment = true;
+                continue;
+            }
+            if (quote == '\0' && (character == '\'' || character == '"' || character == '`')) {
+                quote = character;
+                current.append(character);
+                continue;
+            }
+            if (quote != '\0' && character == quote) {
+                current.append(character);
+                if (next == quote) {
+                    current.append(next);
+                    index++;
+                } else {
+                    quote = '\0';
+                }
+                continue;
+            }
+            if (quote == '\0' && character == ';') {
+                addStatement(statements, current);
+            } else {
+                current.append(character);
+            }
+        }
+        addStatement(statements, current);
+        return List.copyOf(statements);
+    }
+
+    private static void addStatement(List<String> statements, StringBuilder current) {
+        String statement = current.toString().trim();
+        if (!statement.isEmpty()) {
+            statements.add(statement);
+        }
+        current.setLength(0);
+    }
+}
+// FILE: src\main\java\com\sqlteacher\infrastructure\environment\JavaFxEnvironmentVerifier.java
+package com.sqlteacher.infrastructure.environment;
+
+import java.awt.GraphicsEnvironment;
+
+public final class JavaFxEnvironmentVerifier {
+    public VerificationItem verifyRuntime() {
+        try {
+            Class.forName("javafx.application.Application");
+            Class.forName("javafx.stage.Stage");
+            return VerificationItem.passed("JavaFX runtime", "required JavaFX classes are available");
+        } catch (ClassNotFoundException ex) {
+            return VerificationItem.failed("JavaFX runtime", "required JavaFX classes are missing");
+        }
+    }
+
+    public VerificationItem verifyGraphicsEnvironment() {
+        if (GraphicsEnvironment.isHeadless()) {
+            return VerificationItem.warning(
+                "Graphics environment",
+                "headless environment detected; use CLI verification and skip JavaFX window launch"
+            );
+        }
+
+        return VerificationItem.passed(
+            "Graphics environment",
+            "desktop graphics environment is available for JavaFX manual verification"
+        );
+    }
+}
+// FILE: src\main\java\com\sqlteacher\infrastructure\environment\RuntimeEnvironment.java
+package com.sqlteacher.infrastructure.environment;
+
+public record RuntimeEnvironment(String javaVersion, String osName, String osVersion, String architecture) {
+    public static RuntimeEnvironment detect() {
+        return new RuntimeEnvironment(
+            System.getProperty("java.version"),
+            System.getProperty("os.name"),
+            System.getProperty("os.version"),
+            System.getProperty("os.arch")
+        );
+    }
+
+    public VerificationItem javaVersionItem() {
+        return VerificationItem.passed("Java runtime", javaVersion);
+    }
+
+    public VerificationItem osItem() {
+        return VerificationItem.passed("Operating system", osName + " " + osVersion + " (" + architecture + ")");
+    }
+}
+// FILE: src\main\java\com\sqlteacher\infrastructure\environment\VerificationItem.java
+package com.sqlteacher.infrastructure.environment;
+
+public record VerificationItem(String name, VerificationStatus status, String detail) {
+    public static VerificationItem passed(String name, String detail) {
+        return new VerificationItem(name, VerificationStatus.PASS, detail);
+    }
+
+    public static VerificationItem warning(String name, String detail) {
+        return new VerificationItem(name, VerificationStatus.WARNING, detail);
+    }
+
+    public static VerificationItem failed(String name, String detail) {
+        return new VerificationItem(name, VerificationStatus.FAIL, detail);
+    }
+}
+// FILE: src\main\java\com\sqlteacher\infrastructure\environment\VerificationStatus.java
+package com.sqlteacher.infrastructure.environment;
+
+public enum VerificationStatus {
+    PASS,
+    WARNING,
+    FAIL
+}
+// FILE: src\main\java\com\sqlteacher\infrastructure\spring\MockApplicationServiceConfig.java
+package com.sqlteacher.infrastructure.spring;
+
+import com.sqlteacher.application.ai.AiStatusService;
+import com.sqlteacher.application.error.ApplicationExceptionMapper;
+import com.sqlteacher.application.error.DefaultApplicationExceptionMapper;
+import com.sqlteacher.application.execution.SqlExecutionService;
+import com.sqlteacher.application.event.LearningEventService;
+import com.sqlteacher.application.metadata.DatabaseMetadataService;
+import com.sqlteacher.application.mock.MockAiStatusService;
+import com.sqlteacher.application.mock.MockDatabaseMetadataService;
+import com.sqlteacher.application.mock.MockNl2SqlService;
+import com.sqlteacher.application.mock.MockLearningEventService;
+import com.sqlteacher.application.mock.MockSqlExecutionService;
+import com.sqlteacher.application.mock.MockSqlRiskAnalysisService;
+import com.sqlteacher.application.nl2sql.Nl2SqlService;
+import com.sqlteacher.application.nl2sql.DefaultNl2SqlSafetyService;
+import com.sqlteacher.application.nl2sql.Nl2SqlSafetyService;
+import com.sqlteacher.application.risk.SqlRiskAnalysisService;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+@Configuration
+public class MockApplicationServiceConfig {
+    @Bean
+    public SqlRiskAnalysisService sqlRiskAnalysisService() {
+        return new MockSqlRiskAnalysisService();
+    }
+
+    @Bean
+    public SqlExecutionService sqlExecutionService(SqlRiskAnalysisService sqlRiskAnalysisService) {
+        return new MockSqlExecutionService(sqlRiskAnalysisService);
+    }
+
+    @Bean
+    public DatabaseMetadataService databaseMetadataService() {
+        return new MockDatabaseMetadataService();
+    }
+
+    @Bean
+    public Nl2SqlService nl2SqlService() {
+        return new MockNl2SqlService();
+    }
+
+    @Bean
+    public LearningEventService learningEventService() {
+        return new MockLearningEventService();
+    }
+
+    @Bean
+    public Nl2SqlSafetyService nl2SqlSafetyService(
+        Nl2SqlService nl2SqlService,
+        SqlRiskAnalysisService sqlRiskAnalysisService,
+        LearningEventService learningEventService
+    ) {
+        return new DefaultNl2SqlSafetyService(
+            nl2SqlService,
+            sqlRiskAnalysisService,
+            learningEventService
+        );
+    }
+
+    @Bean
+    public AiStatusService mockAiStatusService() {
+        return new MockAiStatusService();
+    }
+
+    @Bean
+    public ApplicationExceptionMapper applicationExceptionMapper() {
+        return new DefaultApplicationExceptionMapper();
+    }
+}
+// FILE: src\main\java\com\sqlteacher\infrastructure\spring\SqlTeacherApplicationConfig.java
+package com.sqlteacher.infrastructure.spring;
+
+import com.sqlteacher.application.ai.AiModelProvider;
+import com.sqlteacher.application.ai.AiModelSelectionService;
+import com.sqlteacher.application.ai.AiStatusService;
+import com.sqlteacher.application.ai.NetworkAiSettingsService;
+import com.sqlteacher.application.config.AppConfigurationService;
+import com.sqlteacher.application.config.SqlTeacherConfiguration;
+import com.sqlteacher.application.collaboration.CloudApiClient;
+import com.sqlteacher.application.collaboration.CloudSessionService;
+import com.sqlteacher.application.collaboration.CloudLearningSyncService;
+import com.sqlteacher.application.event.LearningEventQueryService;
+import com.sqlteacher.application.event.LearningEventRecorder;
+import com.sqlteacher.application.connection.ConnectionManagementService;
+import com.sqlteacher.application.database.DatabaseInitializationService;
+import com.sqlteacher.application.error.ApplicationExceptionMapper;
+import com.sqlteacher.application.error.DefaultApplicationExceptionMapper;
+import com.sqlteacher.application.event.LearningEventService;
+import com.sqlteacher.application.metadata.DatabaseMetadataService;
+import com.sqlteacher.application.nl2sql.DefaultNl2SqlSafetyService;
+import com.sqlteacher.application.nl2sql.Nl2SqlService;
+import com.sqlteacher.application.nl2sql.Nl2SqlSafetyService;
+import com.sqlteacher.application.risk.SqlRiskAnalysisService;
+import com.sqlteacher.infrastructure.ai.Nl2SqlServiceImpl;
+import com.sqlteacher.infrastructure.ai.OllamaAiModelProvider;
+import com.sqlteacher.infrastructure.ai.OllamaAiStatusService;
+import com.sqlteacher.infrastructure.ai.OllamaModelSelectionService;
+import com.sqlteacher.infrastructure.ai.InMemoryNetworkAiSettingsService;
+import com.sqlteacher.infrastructure.ai.SwitchableAiModelProvider;
+import com.sqlteacher.infrastructure.config.PropertiesAppConfigurationService;
+import com.sqlteacher.infrastructure.cloud.HttpCloudApiClient;
+import com.sqlteacher.infrastructure.cloud.InMemoryCloudSessionService;
+import com.sqlteacher.infrastructure.cloud.DefaultCloudLearningSyncService;
+import com.sqlteacher.infrastructure.database.DatabaseServiceConfig;
+import com.sqlteacher.infrastructure.database.SqliteAppDatabaseInitializer;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Import;
+
+import java.net.URI;
+
+@Configuration
+@Import(DatabaseServiceConfig.class)
+public class SqlTeacherApplicationConfig {
+    @Bean
+    public AppConfigurationService appConfigurationService() {
+        return new PropertiesAppConfigurationService();
+    }
+
+    @Bean
+    public SqlTeacherConfiguration sqlTeacherConfiguration(AppConfigurationService appConfigurationService) {
+        return appConfigurationService.current();
+    }
+
+    @Bean
+    public DatabaseInitializationService databaseInitializationService(SqlTeacherConfiguration properties) {
+        return new SqliteAppDatabaseInitializer(properties);
+    }
+
+    @Bean
+    public AiStatusService aiStatusService(SqlTeacherConfiguration properties) {
+        return new OllamaAiStatusService(properties.ai());
+    }
+
+    @Bean
+    public AiModelProvider aiModelProvider(SqlTeacherConfiguration properties, AiStatusService aiStatusService,
+            NetworkAiSettingsService networkSettings) {
+        return new SwitchableAiModelProvider(new OllamaAiModelProvider(properties.ai(), aiStatusService), networkSettings);
+    }
+
+    @Bean(destroyMethod = "clear")
+    public NetworkAiSettingsService networkAiSettingsService() { return new InMemoryNetworkAiSettingsService(); }
+
+    @Bean
+    public AiModelSelectionService aiModelSelectionService(SqlTeacherConfiguration properties) {
+        return new OllamaModelSelectionService(
+            properties.ai(),
+            properties.dataDirectory().resolve("selected-ai-model.txt")
+        );
+    }
+
+    @Bean
+    public Nl2SqlService nl2SqlService(
+        AiModelProvider aiModelProvider,
+        SqlTeacherConfiguration properties,
+        AiModelSelectionService modelSelectionService,
+        DatabaseMetadataService databaseMetadataService,
+        LearningEventService learningEventService,
+        ConnectionManagementService connectionManagementService
+    ) {
+        return new Nl2SqlServiceImpl(
+            aiModelProvider,
+            properties.ai(),
+            modelSelectionService,
+            databaseMetadataService,
+            learningEventService,
+            connectionManagementService
+        );
+    }
+
+    @Bean
+    public Nl2SqlSafetyService nl2SqlSafetyService(
+        Nl2SqlService nl2SqlService,
+        SqlRiskAnalysisService riskAnalysisService,
+        LearningEventService learningEventService
+    ) {
+        return new DefaultNl2SqlSafetyService(
+            nl2SqlService,
+            riskAnalysisService,
+            learningEventService
+        );
+    }
+
+    @Bean
+    public ApplicationExceptionMapper applicationExceptionMapper() {
+        return new DefaultApplicationExceptionMapper();
+    }
+
+    @Bean
+    public CloudApiClient cloudApiClient() {
+        return new HttpCloudApiClient(URI.create(System.getProperty("sqlteacher.cloud.base-url", "http://8.130.47.235")));
+    }
+
+    @Bean
+    public CloudSessionService cloudSessionService() {
+        return new InMemoryCloudSessionService();
+    }
+
+    @Bean
+    public CloudLearningSyncService cloudLearningSyncService(CloudApiClient api, CloudSessionService sessions,
+            LearningEventQueryService query, LearningEventRecorder recorder, SqlTeacherConfiguration configuration) {
+        return new DefaultCloudLearningSyncService(api, sessions, query, recorder,
+            configuration.dataDirectory().resolve("cloud-state"));
+    }
+}
+// FILE: src\main\java\com\sqlteacher\ReleaseVerificationApp.java
+package com.sqlteacher;
+
+import com.sqlteacher.application.analytics.AnalyticsFilter;
+import com.sqlteacher.application.analytics.LearningAnalyticsService;
+import com.sqlteacher.application.config.SqlTeacherConfiguration;
+import com.sqlteacher.application.database.DatabaseInitializationService;
+import com.sqlteacher.application.execution.SqlExecutionRequest;
+import com.sqlteacher.application.execution.SqlExecutionService;
+import com.sqlteacher.application.knowledge.KnowledgeDocumentService;
+import com.sqlteacher.application.knowledge.KnowledgeSearchService;
+import com.sqlteacher.application.metadata.DatabaseMetadataService;
+import com.sqlteacher.infrastructure.spring.SqlTeacherApplicationConfig;
+import org.springframework.context.annotation.AnnotationConfigApplicationContext;
+
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.sql.DriverManager;
+import java.time.Duration;
+import java.util.Comparator;
+
+public final class ReleaseVerificationApp {
+    private static final long STARTUP_LIMIT_MS = 5_000;
+    private static final long OPERATION_LIMIT_MS = 2_000;
+
+    private ReleaseVerificationApp() {
+    }
+
+    public static void main(String[] args) throws Exception {
+        Path workspace = Files.createTempDirectory("sqlteacher-release-verification-");
+        String previousDataDirectory = System.getProperty("sqlteacher.data.dir");
+        System.setProperty("sqlteacher.data.dir", workspace.toString());
+        try {
+            long startupStarted = System.nanoTime();
+            try (AnnotationConfigApplicationContext context =
+                     new AnnotationConfigApplicationContext(SqlTeacherApplicationConfig.class)) {
+                context.getBean(DatabaseInitializationService.class).initialize();
+                long startupMs = elapsedMillis(startupStarted);
+                SqlTeacherConfiguration configuration = context.getBean(SqlTeacherConfiguration.class);
+                populateFiveHundredRows(configuration.database().demoDatabasePath());
+
+                long metadataStarted = System.nanoTime();
+                int tableCount = context.getBean(DatabaseMetadataService.class).listTables("demo").size();
+                long metadataMs = elapsedMillis(metadataStarted);
+
+                long queryStarted = System.nanoTime();
+                var query = context.getBean(SqlExecutionService.class).execute(
+                    new SqlExecutionRequest("demo", "select id, name, score from student order by id", 500,
+                        Duration.ofSeconds(5))
+                );
+                long queryMs = elapsedMillis(queryStarted);
+
+                long analyticsStarted = System.nanoTime();
+                context.getBean(LearningAnalyticsService.class).analyze(AnalyticsFilter.all());
+                long analyticsMs = elapsedMillis(analyticsStarted);
+
+                Path knowledgeFile = workspace.resolve("release-verification.md");
+                Files.writeString(knowledgeFile, "# SQL 聚合\nGROUP BY 用于分组，HAVING 用于过滤聚合结果。\n");
+                KnowledgeDocumentService documents = context.getBean(KnowledgeDocumentService.class);
+                KnowledgeSearchService search = context.getBean(KnowledgeSearchService.class);
+                documents.importDocument(knowledgeFile);
+                long searchStarted = System.nanoTime();
+                int searchResults = search.search("GROUP BY", 5).size();
+                long searchMs = elapsedMillis(searchStarted);
+
+                check("startup", startupMs, STARTUP_LIMIT_MS, true);
+                check("metadata", metadataMs, OPERATION_LIMIT_MS, tableCount > 0);
+                check("500-row query", queryMs, OPERATION_LIMIT_MS, query.success() && query.rows().size() == 500);
+                check("analytics", analyticsMs, OPERATION_LIMIT_MS, true);
+                check("local search", searchMs, OPERATION_LIMIT_MS, searchResults > 0);
+            }
+        } finally {
+            if (previousDataDirectory == null) {
+                System.clearProperty("sqlteacher.data.dir");
+            } else {
+                System.setProperty("sqlteacher.data.dir", previousDataDirectory);
+            }
+            deleteTree(workspace);
+        }
+    }
+
+    private static void populateFiveHundredRows(Path database) throws Exception {
+        try (var connection = DriverManager.getConnection("jdbc:sqlite:" + database)) {
+            connection.setAutoCommit(false);
+            try (var statement = connection.prepareStatement(
+                "insert into student(id, name, score) values (?, ?, ?)")) {
+                for (int id = 3; id <= 500; id++) {
+                    statement.setInt(1, id);
+                    statement.setString(2, "Student " + id);
+                    statement.setInt(3, id % 101);
+                    statement.addBatch();
+                }
+                statement.executeBatch();
+            }
+            connection.commit();
+        }
+    }
+
+    private static void check(String name, long elapsedMs, long limitMs, boolean correct) {
+        boolean passed = correct && elapsedMs <= limitMs;
+        System.out.printf("[%s] %s - %d ms (limit %d ms)%n", passed ? "PASS" : "FAIL", name, elapsedMs, limitMs);
+        if (!passed) {
+            throw new IllegalStateException("Release performance verification failed: " + name);
+        }
+    }
+
+    private static long elapsedMillis(long startedNanos) {
+        return Duration.ofNanos(System.nanoTime() - startedNanos).toMillis();
+    }
+
+    private static void deleteTree(Path root) {
+        if (root == null || Files.notExists(root)) {
+            return;
+        }
+        try (var paths = Files.walk(root)) {
+            paths.sorted(Comparator.reverseOrder()).forEach(path -> {
+                try {
+                    Files.deleteIfExists(path);
+                } catch (Exception ignored) {
+                    // Temporary release verification data is best-effort cleanup only.
+                }
+            });
+        } catch (Exception ignored) {
+            // Temporary release verification data is best-effort cleanup only.
+        }
+    }
+}
+// FILE: src\main\java\com\sqlteacher\server\SqlTeacherCloudServer.java
+package com.sqlteacher.server;
+
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.sqlteacher.application.collaboration.AuthenticatedUser;
+import com.sqlteacher.application.collaboration.ClassroomService;
+import com.sqlteacher.application.collaboration.CloudAuthenticationService;
+import com.sqlteacher.application.collaboration.CloudSyncItem;
+import com.sqlteacher.application.collaboration.ClassAssignment;
+import com.sqlteacher.application.collaboration.UserRole;
+import com.sun.net.httpserver.HttpExchange;
+import com.sun.net.httpserver.HttpServer;
+
+import java.io.IOException;
+import java.net.InetSocketAddress;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.security.GeneralSecurityException;
+import java.security.SecureRandom;
+import java.security.spec.KeySpec;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
+import java.util.Base64;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.Executors;
+import javax.crypto.SecretKeyFactory;
+import javax.crypto.spec.PBEKeySpec;
+
+/**
+ * Small deployable cloud API for v1.1. It intentionally exposes only account and class APIs;
+ * desktop database credentials and BYO-AI keys never cross this boundary.
+ */
+public final class SqlTeacherCloudServer {
+    private static final ObjectMapper JSON = new ObjectMapper().findAndRegisterModules();
+    private static final int TOKEN_BYTES = 32;
+    private static final int SALT_BYTES = 16;
+    private static final int PBKDF2_ITERATIONS = 310_000;
+    private static final int HASH_BITS = 256;
+
+    private final CloudStore store;
+    private final HttpServer server;
+
+    private SqlTeacherCloudServer(Path databasePath, int port) throws IOException, SQLException {
+        this.store = new CloudStore(databasePath);
+        String bootstrapEmail = System.getenv("SQLTEACHER_CLOUD_BOOTSTRAP_ADMIN_EMAIL");
+        String bootstrapPassword = System.getenv("SQLTEACHER_CLOUD_BOOTSTRAP_ADMIN_PASSWORD");
+        if (bootstrapEmail != null && !bootstrapEmail.isBlank()
+            && bootstrapPassword != null && !bootstrapPassword.isBlank()) {
+            store.ensureBootstrapAdmin(bootstrapEmail, bootstrapPassword.toCharArray());
+        }
+        this.server = HttpServer.create(new InetSocketAddress("127.0.0.1", port), 0);
+        this.server.createContext("/health", this::health);
+        this.server.createContext("/api/v1/auth/register", this::register);
+        this.server.createContext("/api/v1/auth/login", this::login);
+        this.server.createContext("/api/v1/auth/logout", this::logout);
+        this.server.createContext("/api/v1/classes", this::classes);
+        this.server.createContext("/api/v1/sync/events", this::syncEvents);
+        this.server.setExecutor(Executors.newVirtualThreadPerTaskExecutor());
+    }
+
+    public static void main(String[] args) throws Exception {
+        int port = Integer.parseInt(System.getenv().getOrDefault("SQLTEACHER_CLOUD_PORT", "8080"));
+        Path database = Path.of(System.getenv().getOrDefault("SQLTEACHER_CLOUD_DB", "./data/cloud.db"))
+            .toAbsolutePath().normalize();
+        SqlTeacherCloudServer cloudServer = new SqlTeacherCloudServer(database, port);
+        cloudServer.server.start();
+        System.out.println("SQLTeacher cloud API started on port " + port);
+    }
+
+    private void health(HttpExchange exchange) throws IOException {
+        if (!"GET".equals(exchange.getRequestMethod())) { methodNotAllowed(exchange); return; }
+        respond(exchange, 200, Map.of("status", "ok", "time", Instant.now().toString()));
+    }
+
+    private void register(HttpExchange exchange) throws IOException {
+        if (!"POST".equals(exchange.getRequestMethod())) { methodNotAllowed(exchange); return; }
+        try {
+            Map<String, String> body = request(exchange);
+            SessionData session = store.registerData(body.get("email"), body.get("displayName"), password(body));
+            respond(exchange, 201, sessionResponse(session));
+        } catch (IllegalArgumentException error) { respond(exchange, 400, errorResponse("INVALID_REQUEST", error.getMessage())); }
+        catch (SecurityException error) { respond(exchange, 409, errorResponse("ACCOUNT_EXISTS", "This email is already registered.")); }
+        catch (RuntimeException error) { error.printStackTrace(); respond(exchange, 500, errorResponse("SERVER_ERROR", "Registration failed.")); }
+        finally { clearPassword(exchange); }
+    }
+
+    private void login(HttpExchange exchange) throws IOException {
+        if (!"POST".equals(exchange.getRequestMethod())) { methodNotAllowed(exchange); return; }
+        try {
+            Map<String, String> body = request(exchange);
+            SessionData session = store.loginData(body.get("email"), password(body));
+            respond(exchange, 200, sessionResponse(session));
+        } catch (IllegalArgumentException error) { respond(exchange, 400, errorResponse("INVALID_REQUEST", error.getMessage())); }
+        catch (SecurityException error) { respond(exchange, 401, errorResponse("LOGIN_FAILED", "Email or password is incorrect.")); }
+        catch (RuntimeException error) { error.printStackTrace(); respond(exchange, 500, errorResponse("SERVER_ERROR", "Login failed.")); }
+        finally { clearPassword(exchange); }
+    }
+
+    private void logout(HttpExchange exchange) throws IOException {
+        if (!"POST".equals(exchange.getRequestMethod())) { methodNotAllowed(exchange); return; }
+        try {
+            store.logout(token(exchange));
+            exchange.sendResponseHeaders(204, -1);
+        } catch (SecurityException error) { respond(exchange, 401, errorResponse("UNAUTHORIZED", "Login is required.")); }
+    }
+
+    private void classes(HttpExchange exchange) throws IOException {
+        try {
+            AuthenticatedUser actor = store.authenticate(token(exchange));
+            String path = exchange.getRequestURI().getPath();
+            if ("/api/v1/classes".equals(path) && "GET".equals(exchange.getRequestMethod())) {
+                respond(exchange, 200, Map.of("classes", store.listVisibleTo(actor)));
+                return;
+            }
+            if ("/api/v1/classes".equals(path) && "POST".equals(exchange.getRequestMethod())) {
+                Map<String, String> body = request(exchange);
+                respond(exchange, 201, store.create(actor, body.get("name")));
+                return;
+            }
+            String[] segments = path.split("/");
+            if (segments.length == 6 && "members".equals(segments[5]) && "POST".equals(exchange.getRequestMethod())) {
+                Map<String, String> body = request(exchange);
+                UserRole role = UserRole.valueOf(body.get("role").toUpperCase(Locale.ROOT));
+                String userId = body.get("userId");
+                if ((userId == null || userId.isBlank()) && body.get("email") != null) userId = store.userIdByEmail(body.get("email"));
+                respond(exchange, 200, store.addMember(actor, segments[4], userId, role));
+                return;
+            }
+            if (segments.length == 6 && "assignments".equals(segments[5])) {
+                if ("GET".equals(exchange.getRequestMethod())) {
+                    respond(exchange,200,Map.of("assignments",store.listAssignments(actor,segments[4])));return;
+                }
+                if ("POST".equals(exchange.getRequestMethod())) {
+                    Map<String,String> body=request(exchange);
+                    respond(exchange,201,store.createAssignment(actor,segments[4],body.get("exerciseId"),body.get("title")));return;
+                }
+            }
+            respond(exchange, 404, errorResponse("NOT_FOUND", "API endpoint was not found."));
+        } catch (SecurityException error) { respond(exchange, 403, errorResponse("FORBIDDEN", "You do not have access to this resource.")); }
+        catch (IllegalArgumentException error) { respond(exchange, 400, errorResponse("INVALID_REQUEST", error.getMessage())); }
+        catch (RuntimeException error) { error.printStackTrace(); respond(exchange, 500, errorResponse("SERVER_ERROR", "Classroom operation failed.")); }
+    }
+
+    private void syncEvents(HttpExchange exchange) throws IOException {
+        try {
+            AuthenticatedUser actor = store.authenticate(token(exchange));
+            if ("POST".equals(exchange.getRequestMethod())) {
+                SyncUpload upload = JSON.readValue(exchange.getRequestBody(), SyncUpload.class);
+                respond(exchange, 200, Map.of("accepted", store.upload(actor, upload.items())));
+                return;
+            }
+            if ("GET".equals(exchange.getRequestMethod())) {
+                long after = queryLong(exchange.getRequestURI().getRawQuery(), "afterVersion", 0);
+                respond(exchange, 200, Map.of("items", store.download(actor, after)));
+                return;
+            }
+            methodNotAllowed(exchange);
+        } catch (SecurityException error) {
+            respond(exchange, 401, errorResponse("UNAUTHORIZED", "Login is required."));
+        } catch (IllegalArgumentException error) {
+            respond(exchange, 400, errorResponse("INVALID_REQUEST", error.getMessage()));
+        } catch (RuntimeException error) {
+            error.printStackTrace();
+            respond(exchange, 500, errorResponse("SERVER_ERROR", "Synchronization failed."));
+        }
+    }
+
+    private static long queryLong(String query, String name, long defaultValue) {
+        if (query == null || query.isBlank()) return defaultValue;
+        for (String pair : query.split("&")) {
+            String[] parts = pair.split("=", 2);
+            if (parts.length == 2 && name.equals(parts[0])) return Long.parseLong(parts[1]);
+        }
+        return defaultValue;
+    }
+
+    private static Map<String, String> request(HttpExchange exchange) throws IOException {
+        Map<String, Object> decoded = JSON.readValue(exchange.getRequestBody(), new TypeReference<>() { });
+        Map<String, String> result = new LinkedHashMap<>();
+        decoded.forEach((key, value) -> result.put(key, value == null ? "" : String.valueOf(value)));
+        return result;
+    }
+
+    private static char[] password(Map<String, String> body) { return body.getOrDefault("password", "").toCharArray(); }
+    private static void clearPassword(HttpExchange ignored) { /* request body is released after this handler returns */ }
+
+    private static String token(HttpExchange exchange) {
+        String header = exchange.getRequestHeaders().getFirst("Authorization");
+        if (header == null || !header.startsWith("Bearer ") || header.length() < 20) throw new SecurityException("Missing bearer token");
+        return header.substring("Bearer ".length());
+    }
+
+    private static void methodNotAllowed(HttpExchange exchange) throws IOException {
+        exchange.getResponseHeaders().set("Allow", "GET, POST");
+        respond(exchange, 405, errorResponse("METHOD_NOT_ALLOWED", "Method not allowed."));
+    }
+
+    private static void respond(HttpExchange exchange, int status, Object body) throws IOException {
+        byte[] bytes = JSON.writeValueAsBytes(body);
+        exchange.getResponseHeaders().set("Content-Type", "application/json; charset=utf-8");
+        exchange.getResponseHeaders().set("Cache-Control", "no-store");
+        exchange.sendResponseHeaders(status, bytes.length);
+        exchange.getResponseBody().write(bytes);
+        exchange.close();
+    }
+
+    private static Map<String, Object> errorResponse(String code, String message) { return Map.of("code", code, "message", message); }
+    private static Map<String, Object> sessionResponse(SessionData session) {
+        return Map.of("accessToken", session.token(), "expiresAt", session.expiresAt().toString(), "user", session.user());
+    }
+    private record SyncUpload(List<CloudSyncItem> items) {
+        private SyncUpload { items = items == null ? List.of() : List.copyOf(items); }
+    }
+
+    private static final class CloudStore implements CloudAuthenticationService, ClassroomService {
+        private final Path database;
+        private final SecureRandom random = new SecureRandom();
+
+        private CloudStore(Path database) throws SQLException, IOException {
+            this.database = database;
+            Files.createDirectories(database.getParent());
+            try {
+                Class.forName("org.sqlite.JDBC");
+                initialize();
+            } catch (ClassNotFoundException error) {
+                throw new SQLException("SQLite JDBC driver is unavailable", error);
+            }
+        }
+
+        @Override public Session register(String email, String displayName, char[] password) { return toSession(registerData(email, displayName, password)); }
+        @Override public Session login(String email, char[] password) { return toSession(loginData(email, password)); }
+        @Override public AuthenticatedUser authenticate(String accessToken) { return authenticateData(accessToken); }
+        @Override public void logout(String accessToken) { revoke(accessToken); }
+
+        SessionData registerData(String email, String displayName, char[] password) {
+            String normalizedEmail = validateEmail(email);
+            if (displayName == null || displayName.isBlank() || displayName.length() > 80) throw new IllegalArgumentException("displayName must be 1 to 80 characters");
+            validatePassword(password);
+            String id = UUID.randomUUID().toString();
+            byte[] salt = bytes(SALT_BYTES);
+            byte[] hash = hash(password, salt);
+            try (Connection connection = open(); PreparedStatement statement = connection.prepareStatement(
+                "insert into users(id,email,display_name,password_hash,password_salt,disabled,created_at) values(?,?,?,?,?,0,?)")) {
+                statement.setString(1, id); statement.setString(2, normalizedEmail); statement.setString(3, displayName.trim());
+                statement.setBytes(4, hash); statement.setBytes(5, salt); statement.setString(6, Instant.now().toString()); statement.executeUpdate();
+                try (PreparedStatement role = connection.prepareStatement("insert into user_roles(user_id,role) values(?, 'STUDENT')")) { role.setString(1, id); role.executeUpdate(); }
+            } catch (SQLException error) { if (error.getMessage().contains("UNIQUE")) throw new SecurityException("duplicate account"); throw database(error); }
+            return issue(user(id));
+        }
+
+        void ensureBootstrapAdmin(String email, char[] password) {
+            String normalizedEmail = validateEmail(email);
+            try (Connection connection = open();
+                 PreparedStatement find = connection.prepareStatement("select id from users where email=?")) {
+                find.setString(1, normalizedEmail);
+                try (ResultSet existing = find.executeQuery()) {
+                    String userId;
+                    if (existing.next()) {
+                        userId = existing.getString(1);
+                    } else {
+                        userId = registerData(normalizedEmail, "System Administrator", password).user().id();
+                    }
+                    try (PreparedStatement role = connection.prepareStatement(
+                        "insert or ignore into user_roles(user_id,role) values(?, 'ADMIN')")) {
+                        role.setString(1, userId);
+                        role.executeUpdate();
+                    }
+                }
+            } catch (SQLException error) {
+                throw database(error);
+            } finally {
+                java.util.Arrays.fill(password, '\0');
+            }
+        }
+
+        SessionData loginData(String email, char[] password) {
+            String normalizedEmail = validateEmail(email); validatePassword(password);
+            String userId;
+            try (Connection connection = open(); PreparedStatement statement = connection.prepareStatement(
+                "select id,password_hash,password_salt,disabled from users where email=?")) {
+                statement.setString(1, normalizedEmail);
+                try (ResultSet result = statement.executeQuery()) {
+                    if (!result.next() || result.getInt("disabled") != 0 || !constantTimeEquals(result.getBytes("password_hash"), hash(password, result.getBytes("password_salt")))) throw new SecurityException("invalid credentials");
+                    userId = result.getString("id");
+                }
+            } catch (SQLException error) { throw database(error); }
+            return issue(user(userId));
+        }
+
+        @Override public Classroom create(AuthenticatedUser actor, String name) {
+            if (!(actor.hasRole(UserRole.TEACHER) || actor.hasRole(UserRole.ADMIN))) throw new SecurityException("teacher role required");
+            if (name == null || name.isBlank() || name.length() > 100) throw new IllegalArgumentException("name must be 1 to 100 characters");
+            String id = UUID.randomUUID().toString(); Instant now = Instant.now();
+            try (Connection connection = open(); PreparedStatement classroom = connection.prepareStatement("insert into classrooms(id,name,created_at) values(?,?,?)"); PreparedStatement member = connection.prepareStatement("insert into classroom_members(classroom_id,user_id,role) values(?,?,?)")) {
+                connection.setAutoCommit(false); classroom.setString(1,id); classroom.setString(2,name.trim()); classroom.setString(3,now.toString()); classroom.executeUpdate();
+                member.setString(1,id); member.setString(2,actor.id()); member.setString(3,UserRole.TEACHER.name()); member.executeUpdate(); connection.commit();
+            } catch (SQLException error) { throw database(error); }
+            return classroom(id);
+        }
+
+        @Override public Classroom addMember(AuthenticatedUser actor, String classroomId, String userId, UserRole role) {
+            if (role == null || role == UserRole.ADMIN) throw new IllegalArgumentException("Only TEACHER or STUDENT can join a classroom");
+            requireTeacher(actor, classroomId);
+            try (Connection connection = open();
+                 PreparedStatement statement = connection.prepareStatement(
+                     "insert into classroom_members(classroom_id,user_id,role) values(?,?,?) "
+                         + "on conflict(classroom_id,user_id) do update set role=excluded.role");
+                 PreparedStatement promoteTeacher = connection.prepareStatement(
+                     "insert or ignore into user_roles(user_id,role) values(?, 'TEACHER')")) {
+                connection.setAutoCommit(false);
+                statement.setString(1, classroomId);
+                statement.setString(2, userId);
+                statement.setString(3, role.name());
+                statement.executeUpdate();
+                if (role == UserRole.TEACHER) {
+                    promoteTeacher.setString(1, userId);
+                    promoteTeacher.executeUpdate();
+                }
+                connection.commit();
+            } catch (SQLException error) { throw database(error); }
+            return classroom(classroomId);
+        }
+
+        @Override public List<Classroom> listVisibleTo(AuthenticatedUser actor) {
+            List<Classroom> classrooms = new ArrayList<>();
+            String sql = actor.hasRole(UserRole.ADMIN) ? "select id from classrooms order by created_at desc" : "select c.id from classrooms c join classroom_members m on m.classroom_id=c.id where m.user_id=? order by c.created_at desc";
+            try (Connection connection = open(); PreparedStatement statement = connection.prepareStatement(sql)) {
+                if (!actor.hasRole(UserRole.ADMIN)) statement.setString(1,actor.id());
+                try (ResultSet result = statement.executeQuery()) { while (result.next()) classrooms.add(classroom(result.getString(1))); }
+            } catch (SQLException error) { throw database(error); }
+            return List.copyOf(classrooms);
+        }
+
+        int upload(AuthenticatedUser actor, List<CloudSyncItem> items) {
+            if (items.size() > 500) throw new IllegalArgumentException("A sync batch may contain at most 500 items");
+            try (Connection connection = open(); PreparedStatement statement = connection.prepareStatement(
+                "insert into sync_events(user_id,event_id,event_type,payload_json,occurred_at) values(?,?,?,?,?) "
+                    + "on conflict(user_id,event_id) do update set event_type=excluded.event_type,payload_json=excluded.payload_json,occurred_at=excluded.occurred_at")) {
+                connection.setAutoCommit(false);
+                for (CloudSyncItem item : items) {
+                    statement.setString(1, actor.id()); statement.setString(2, item.id()); statement.setString(3, item.type());
+                    statement.setString(4, item.payloadJson()); statement.setString(5, item.occurredAt().toString()); statement.addBatch();
+                }
+                statement.executeBatch(); connection.commit(); return items.size();
+            } catch (SQLException error) { throw database(error); }
+        }
+
+        List<CloudSyncItem> download(AuthenticatedUser actor, long afterVersion) {
+            if (afterVersion < 0) throw new IllegalArgumentException("afterVersion must not be negative");
+            List<CloudSyncItem> items = new ArrayList<>();
+            try (Connection connection = open(); PreparedStatement statement = connection.prepareStatement(
+                "select event_id,event_type,payload_json,occurred_at,version from sync_events where user_id=? and version>? order by version limit 500")) {
+                statement.setString(1, actor.id()); statement.setLong(2, afterVersion);
+                try (ResultSet rows = statement.executeQuery()) {
+                    while (rows.next()) items.add(new CloudSyncItem(rows.getString(1), rows.getString(2), rows.getString(3), Instant.parse(rows.getString(4)), rows.getLong(5)));
+                }
+            } catch (SQLException error) { throw database(error); }
+            return List.copyOf(items);
+        }
+
+        ClassAssignment createAssignment(AuthenticatedUser actor,String classroomId,String exerciseId,String title){requireTeacher(actor,classroomId);if(exerciseId==null||exerciseId.isBlank()||title==null||title.isBlank())throw new IllegalArgumentException("exerciseId and title must not be blank");String id=UUID.randomUUID().toString();Instant now=Instant.now();try(Connection c=open();PreparedStatement s=c.prepareStatement("insert into class_assignments(id,classroom_id,exercise_id,title,created_at) values(?,?,?,?,?)")){s.setString(1,id);s.setString(2,classroomId);s.setString(3,exerciseId.trim());s.setString(4,title.trim());s.setString(5,now.toString());s.executeUpdate();return new ClassAssignment(id,classroomId,exerciseId.trim(),title.trim(),now);}catch(SQLException e){throw database(e);}}
+        List<ClassAssignment> listAssignments(AuthenticatedUser actor,String classroomId){requireMember(actor,classroomId);List<ClassAssignment> result=new ArrayList<>();try(Connection c=open();PreparedStatement s=c.prepareStatement("select id,exercise_id,title,created_at from class_assignments where classroom_id=? order by created_at desc")){s.setString(1,classroomId);try(ResultSet r=s.executeQuery()){while(r.next())result.add(new ClassAssignment(r.getString(1),classroomId,r.getString(2),r.getString(3),Instant.parse(r.getString(4))));}return List.copyOf(result);}catch(SQLException e){throw database(e);}}
+
+        private AuthenticatedUser authenticateData(String token) {
+            try (Connection connection = open(); PreparedStatement statement = connection.prepareStatement("select user_id from access_tokens where token_hash=? and expires_at>? and revoked_at is null")) {
+                statement.setBytes(1, tokenHash(token)); statement.setString(2, Instant.now().toString());
+                try (ResultSet result = statement.executeQuery()) { if (!result.next()) throw new SecurityException("invalid token"); return user(result.getString(1)); }
+            } catch (SQLException error) { throw database(error); }
+        }
+        private void revoke(String token) { try (Connection c=open(); PreparedStatement s=c.prepareStatement("update access_tokens set revoked_at=? where token_hash=?")) { s.setString(1,Instant.now().toString()); s.setBytes(2,tokenHash(token)); if(s.executeUpdate()==0) throw new SecurityException("invalid token"); } catch(SQLException e){throw database(e);} }
+        private SessionData issue(AuthenticatedUser user) { String token=Base64.getUrlEncoder().withoutPadding().encodeToString(bytes(TOKEN_BYTES)); Instant expiry=Instant.now().plus(8, ChronoUnit.HOURS); try(Connection c=open(); PreparedStatement s=c.prepareStatement("insert into access_tokens(token_hash,user_id,expires_at,created_at) values(?,?,?,?)")){s.setBytes(1,tokenHash(token));s.setString(2,user.id());s.setString(3,expiry.toString());s.setString(4,Instant.now().toString());s.executeUpdate();}catch(SQLException e){throw database(e);} return new SessionData(token,expiry,user); }
+        private AuthenticatedUser user(String id) { try(Connection c=open(); PreparedStatement s=c.prepareStatement("select id,email,display_name from users where id=? and disabled=0")){s.setString(1,id);try(ResultSet r=s.executeQuery()){if(!r.next())throw new SecurityException("unknown user");Set<UserRole> roles=new java.util.HashSet<>();try(PreparedStatement rs=c.prepareStatement("select role from user_roles where user_id=?")){rs.setString(1,id);try(ResultSet rr=rs.executeQuery()){while(rr.next())roles.add(UserRole.valueOf(rr.getString(1)));}}return new AuthenticatedUser(r.getString(1),r.getString(2),r.getString(3),roles);}}catch(SQLException e){throw database(e);} }
+        private String userIdByEmail(String email){String normalized=validateEmail(email);try(Connection c=open();PreparedStatement s=c.prepareStatement("select id from users where email=? and disabled=0")){s.setString(1,normalized);try(ResultSet r=s.executeQuery()){if(!r.next())throw new IllegalArgumentException("User email was not found");return r.getString(1);}}catch(SQLException e){throw database(e);}}
+        private Classroom classroom(String id) {
+            try (Connection connection = open();
+                 PreparedStatement classroomStatement = connection.prepareStatement(
+                     "select name, created_at from classrooms where id=?")) {
+                classroomStatement.setString(1, id);
+                try (ResultSet classroom = classroomStatement.executeQuery()) {
+                    if (!classroom.next()) {
+                        throw new IllegalArgumentException("Classroom not found");
+                    }
+                    List<Member> members = new ArrayList<>();
+                    try (PreparedStatement memberStatement = connection.prepareStatement(
+                        "select user_id, role from classroom_members where classroom_id=?")) {
+                        memberStatement.setString(1, id);
+                        try (ResultSet memberRows = memberStatement.executeQuery()) {
+                            while (memberRows.next()) {
+                                members.add(new Member(memberRows.getString(1), UserRole.valueOf(memberRows.getString(2))));
+                            }
+                        }
+                    }
+                    return new Classroom(id, classroom.getString(1), Instant.parse(classroom.getString(2)), members);
+                }
+            } catch (SQLException error) {
+                throw database(error);
+            }
+        }
+        private void requireTeacher(AuthenticatedUser actor,String classId){if(actor.hasRole(UserRole.ADMIN))return;try(Connection c=open();PreparedStatement s=c.prepareStatement("select 1 from classroom_members where classroom_id=? and user_id=? and role='TEACHER'")){s.setString(1,classId);s.setString(2,actor.id());try(ResultSet r=s.executeQuery()){if(!r.next())throw new SecurityException("not classroom teacher");}}catch(SQLException e){throw database(e);}}
+        private void requireMember(AuthenticatedUser actor,String classId){if(actor.hasRole(UserRole.ADMIN))return;try(Connection c=open();PreparedStatement s=c.prepareStatement("select 1 from classroom_members where classroom_id=? and user_id=?")){s.setString(1,classId);s.setString(2,actor.id());try(ResultSet r=s.executeQuery()){if(!r.next())throw new SecurityException("not classroom member");}}catch(SQLException e){throw database(e);}}
+        private Connection open() throws SQLException { return DriverManager.getConnection("jdbc:sqlite:"+database); }
+        private void initialize() throws SQLException { try(Connection c=open(); Statement s=c.createStatement()){s.executeUpdate("pragma foreign_keys=on");s.executeUpdate("create table if not exists users(id text primary key,email text not null unique,display_name text not null,password_hash blob not null,password_salt blob not null,disabled integer not null default 0,created_at text not null)");s.executeUpdate("create table if not exists user_roles(user_id text not null references users(id),role text not null check(role in ('ADMIN','TEACHER','STUDENT')),primary key(user_id,role))");s.executeUpdate("create table if not exists access_tokens(token_hash blob primary key,user_id text not null references users(id),expires_at text not null,created_at text not null,revoked_at text)");s.executeUpdate("create table if not exists classrooms(id text primary key,name text not null,created_at text not null)");s.executeUpdate("create table if not exists classroom_members(classroom_id text not null references classrooms(id),user_id text not null references users(id),role text not null check(role in ('TEACHER','STUDENT')),primary key(classroom_id,user_id))");s.executeUpdate("create table if not exists class_assignments(id text primary key,classroom_id text not null references classrooms(id),exercise_id text not null,title text not null,created_at text not null)");s.executeUpdate("create table if not exists sync_events(version integer primary key autoincrement,user_id text not null references users(id),event_id text not null,event_type text not null,payload_json text not null,occurred_at text not null,unique(user_id,event_id))");} }
+        private byte[] bytes(int count){byte[] value=new byte[count];random.nextBytes(value);return value;} private byte[] hash(char[] password,byte[] salt){try{KeySpec spec=new PBEKeySpec(password,salt,PBKDF2_ITERATIONS,HASH_BITS);return SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256").generateSecret(spec).getEncoded();}catch(GeneralSecurityException e){throw new IllegalStateException("Password hashing unavailable",e);}} private byte[] tokenHash(String token){try{return java.security.MessageDigest.getInstance("SHA-256").digest(token.getBytes(StandardCharsets.UTF_8));}catch(GeneralSecurityException e){throw new IllegalStateException(e);}} private static boolean constantTimeEquals(byte[] a,byte[] b){return java.security.MessageDigest.isEqual(a,b);} private static String validateEmail(String e){if(e==null||!e.matches("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$")||e.length()>254)throw new IllegalArgumentException("email must be valid");return e.trim().toLowerCase(Locale.ROOT);} private static void validatePassword(char[] p){if(p==null||p.length<12||p.length>128)throw new IllegalArgumentException("password must contain 12 to 128 characters");} private static IllegalStateException database(SQLException e){return new IllegalStateException("Cloud database operation failed",e);} private static CloudAuthenticationService.Session toSession(SessionData s){return new CloudAuthenticationService.Session(s.token(),s.expiresAt(),s.user());}
+    }
+    private record SessionData(String token, Instant expiresAt, AuthenticatedUser user) { }
+}
+// FILE: src\main\java\com\sqlteacher\StageOneVerificationApp.java
+package com.sqlteacher;
+
+import com.sqlteacher.application.ai.AiStatus;
+import com.sqlteacher.application.ai.AiStatusService;
+import com.sqlteacher.application.ai.AiModelSelection;
+import com.sqlteacher.application.ai.AiModelSelectionService;
+import com.sqlteacher.application.database.DatabaseInitializationResult;
+import com.sqlteacher.application.database.DatabaseInitializationService;
+import com.sqlteacher.infrastructure.spring.SqlTeacherApplicationConfig;
+import org.springframework.context.annotation.AnnotationConfigApplicationContext;
+
+public final class StageOneVerificationApp {
+    private StageOneVerificationApp() {
+    }
+
+    public static void main(String[] args) {
+        try (AnnotationConfigApplicationContext context =
+                 new AnnotationConfigApplicationContext(SqlTeacherApplicationConfig.class)) {
+            DatabaseInitializationResult databaseResult =
+                context.getBean(DatabaseInitializationService.class).initialize();
+            AiStatus aiStatus = context.getBean(AiStatusService.class).checkStatus();
+            AiModelSelection modelSelection =
+                context.getBean(AiModelSelectionService.class).refresh();
+
+            System.out.println("SQLTeacher stage 1 application verification");
+            System.out.println("[PASS] Spring DI - application context started");
+            System.out.println("[PASS] SQLite app database - " + databaseResult.appDatabasePath());
+            System.out.println("[PASS] SQLite demo database - " + databaseResult.demoDatabasePath());
+            System.out.printf(
+                "[%s] Ollama status - %s%n",
+                aiStatus.available() ? "PASS" : "WARNING",
+                aiStatus.message()
+            );
+            System.out.printf(
+                "[%s] Ollama models - installed=%s, selected=%s%n",
+                modelSelection.hasSelection() ? "PASS" : "WARNING",
+                modelSelection.installedModels(),
+                modelSelection.hasSelection() ? modelSelection.selectedModel() : "none"
+            );
+        }
+    }
+}
+// FILE: src\main\java\com\sqlteacher\TechnologyVerificationApp.java
+package com.sqlteacher;
+
+import com.sqlteacher.infrastructure.ai.OllamaHealthClient;
+import com.sqlteacher.infrastructure.database.JdbcTechnologyVerifier;
+import com.sqlteacher.infrastructure.environment.JavaFxEnvironmentVerifier;
+import com.sqlteacher.infrastructure.environment.RuntimeEnvironment;
+import com.sqlteacher.infrastructure.environment.VerificationItem;
+
+import java.net.URI;
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
+
+public final class TechnologyVerificationApp {
+    private TechnologyVerificationApp() {
+    }
+
+    public static void main(String[] args) {
+        List<VerificationItem> items = new ArrayList<>();
+        RuntimeEnvironment environment = RuntimeEnvironment.detect();
+        JdbcTechnologyVerifier jdbcVerifier = new JdbcTechnologyVerifier();
+        JavaFxEnvironmentVerifier javaFxVerifier = new JavaFxEnvironmentVerifier();
+        OllamaHealthClient ollamaHealthClient = new OllamaHealthClient(
+            URI.create("http://localhost:11434/api/tags"),
+            Duration.ofSeconds(2)
+        );
+
+        items.add(environment.javaVersionItem());
+        items.add(environment.osItem());
+        items.add(javaFxVerifier.verifyRuntime());
+        items.add(javaFxVerifier.verifyGraphicsEnvironment());
+        items.add(jdbcVerifier.verifySqliteInMemoryQuery());
+        items.add(jdbcVerifier.verifyMysqlDriverAvailable());
+        items.add(jdbcVerifier.verifyMariaDbDriverAvailable());
+        items.add(ollamaHealthClient.checkHealth());
+
+        System.out.println("SQLTeacher stage 0 technology verification");
+        for (VerificationItem item : items) {
+            System.out.printf("[%s] %s - %s%n", item.status(), item.name(), item.detail());
+        }
+    }
+}

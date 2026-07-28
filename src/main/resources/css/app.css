@@ -1,5 +1,5 @@
 /* =====================================================================
- * SQLTeacher 桌面端全局样式表（浅色清爽主题 · 课堂演示版 · JavaFX 21 原生适配）
+ * SQLTeacher 桌面端全局样式表（深色精致主题 · 课堂演示版 · JavaFX 21 原生适配）
  * 作用域：JavaFX 桌面模块（com.sqlteacher.desktop）
  *
  * 兼容性说明（重要）：
@@ -10,11 +10,11 @@
  *   - 阴影统一使用 JavaFX 原生的 -fx-effect: dropshadow(...) 实现（弱参数、柔和）。
  *   - 渐变统一使用原生 linear-gradient，边框使用基础 -fx-border-*。
  *
- * 配色目标（对标参考截图深色精致设计）：
- *   最外层窗口与页面底层统一浅灰白底色 #f0f2f7；顶部横向导航保持深邃 #0f1627；
- *   深色卡片面板 #1b253d 作为功能模块强调区保持不变；输入框 #212c44；
- *   主操作按钮蓝紫横向渐变；页面标题深蓝、副标题弱化灰蓝；错误浅红条。
- *   整体清爽明亮，适配 800×600 及以上分辨率课堂投屏。
+ * 配色目标（深色精致设计）：
+ *   最外层窗口与页面底层统一深色底色 #141c30；顶部横向导航保持深邃 #0f1627；
+ *   深色卡片面板 #1b253d 作为功能模块强调区；输入框 #212c44；
+ *   主操作按钮蓝紫横向渐变；页面标题紫色、副标题弱化灰蓝；错误浅红条。
+ *   整体精致沉稳，适配 800×600 及以上分辨率课堂投屏。
  * 约束：仅修改本文件；样式类名 / 结构与 FXML / Controller 完全保持一致。
  * ===================================================================== */
 
@@ -46,7 +46,7 @@
     -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.32), 14, 0.0, 0, 4);
 }
 
-/* 品牌 Logo 小方块：纯 CSS 蓝紫渐变装饰（无图片文件），26x26、8px 圆角。 */
+/* 品牌 Logo 小方块：纯 CSS 蓝紫渐变装饰（无图片文件），26x26、8px 圆角，微弱光晕增强品牌感。 */
 .brand-logo {
     -fx-min-width: 26;
     -fx-pref-width: 26;
@@ -56,6 +56,7 @@
     -fx-max-height: 26;
     -fx-background-color: linear-gradient(to bottom right, #5b6ef5, #8259f0);
     -fx-background-radius: 8;
+    -fx-effect: dropshadow(gaussian, rgba(91, 110, 245, 0.35), 8, 0.05, 0, 2);
 }
 
 /* 品牌文字「SQL Teacher」：柔和浅白蓝 #e8ecf8、16px 加粗。 */
@@ -85,12 +86,13 @@
     -fx-text-fill: #e6ecf8;
 }
 
-/* 导航按钮：选中态 —— 蓝紫横向渐变实底 + 纯白字（与 Controller 追加的 selected 样式类联动）。 */
+/* 导航按钮：选中态 —— 蓝紫横向渐变实底 + 纯白字 + 微弱光晕（与 Controller 追加的 selected 样式类联动）。 */
 .nav-button.selected {
     -fx-background-color: linear-gradient(to right, #4b62f0, #7a5cf0);
     -fx-border-color: transparent;
     -fx-text-fill: #ffffff;
     -fx-font-weight: bold;
+    -fx-effect: dropshadow(gaussian, rgba(91, 110, 245, 0.30), 10, 0.0, 0, 2);
 }
 
 .nav-button.selected:hover {
@@ -277,7 +279,8 @@
 }
 
 /* ===== 统一卡片容器 panel-card =====
- * 深色半透明底 #1b253d（双层近似渐变制造柔和层次）+ 半透浅紫色细边框 + 12px 圆角 + 微弱内阴影 + 均匀内边距。 */
+ * 深色半透明底 #1b253d（双层近似渐变制造柔和层次）+ 半透浅紫色细边框 + 12px 圆角 + 微弱内阴影 + 均匀内边距。
+ * 悬浮时边框提亮，增强交互感知（多卡片场景下尤其有效）。 */
 .panel-card {
     -fx-background-color:
         linear-gradient(to bottom, rgba(159, 122, 234, 0.06) 0%, rgba(41, 55, 92, 0.0) 40%),
@@ -376,9 +379,14 @@
     -fx-padding: 10 12 10 12;
 }
 
-/* 聚焦态：边框切换为提亮科技蓝 #6b8cff（仅描边加深，不加发光）。 */
+/* 聚焦态：边框切换为提亮科技蓝 #6b8cff（仅描边加深，不加发光）+ 微弱底色提亮。 */
 .sql-editor:focused {
     -fx-border-color: #6b8cff;
+    -fx-background-color: #243150;
+}
+
+.sql-editor:focused .content {
+    -fx-background-color: #243150;
 }
 
 /* 输入框滚动条：暗色调细滚动条、透明轨道，并折叠原生上下箭头按钮。 */
@@ -496,6 +504,40 @@
     -fx-faint-focus-color: transparent;
 }
 
+/* 次要操作按钮（如「清空」）：描边幽灵风格，与主操作按钮形成层级区分。
+ * 透明底 + 浅灰蓝描边 + 浅灰文字，悬浮时填充淡色、按下加深。 */
+.sql-secondary-button {
+    -fx-background-color: transparent;
+    -fx-background-insets: 0;
+    -fx-background-radius: 12;
+    -fx-text-fill: #9ca3af;
+    -fx-font-size: 14px;
+    -fx-font-weight: bold;
+    -fx-min-width: 128;
+    -fx-pref-width: 128;
+    -fx-padding: 11 22 11 22;
+    -fx-border-color: rgba(120, 145, 200, 0.35);
+    -fx-border-width: 1;
+    -fx-border-radius: 12;
+    -fx-cursor: hand;
+}
+
+.sql-secondary-button:hover {
+    -fx-background-color: rgba(255, 255, 255, 0.06);
+    -fx-text-fill: #d5dce9;
+    -fx-border-color: rgba(120, 145, 200, 0.55);
+}
+
+.sql-secondary-button:pressed {
+    -fx-background-color: rgba(255, 255, 255, 0.10);
+    -fx-text-fill: #e6ecf8;
+}
+
+.sql-secondary-button:focused {
+    -fx-focus-color: transparent;
+    -fx-faint-focus-color: transparent;
+}
+
 /* =====================================================================
  * 第三层卡片：结果表格区域（SqlPractice.fxml 的 resultPane / resultTable）
  * ===================================================================== */
@@ -528,16 +570,17 @@
     -fx-faint-focus-color: transparent;
 }
 
-/* 表头背景条：主题紫色底并保留顶部圆角，避免与面板割裂。 */
+/* 表头背景条：主题紫色渐变底并保留顶部圆角，避免与面板割裂。 */
 .result-table .column-header-background {
-    -fx-background-color: linear-gradient(to bottom, #8b5cf6, #7c3aed);
+    -fx-background-color: linear-gradient(to bottom, #8b5cf6, #6d3fe8);
     -fx-background-radius: 12 12 0 0;
+    -fx-effect: dropshadow(gaussian, rgba(139, 92, 246, 0.18), 6, 0.0, 0, 2);
 }
 
 /* 表头右侧留白填充块与右上角块：紫色底，消除原生灰块。 */
 .result-table .column-header-background .filler,
 .result-table .corner {
-    -fx-background-color: linear-gradient(to bottom, #8b5cf6, #7c3aed);
+    -fx-background-color: linear-gradient(to bottom, #8b5cf6, #6d3fe8);
 }
 
 /* 表头单元：主题紫色底 + 右侧 / 底部 1px 细分隔线。 */
@@ -635,12 +678,13 @@
 
 .home-card:hover {
     -fx-background-color: #243050;
-    -fx-border-color: rgba(130, 89, 240, 0.40);
-    -fx-effect: dropshadow(gaussian, rgba(130, 89, 240, 0.20), 16, 0.0, 0, 6);
+    -fx-border-color: rgba(130, 89, 240, 0.50);
+    -fx-effect: dropshadow(gaussian, rgba(130, 89, 240, 0.28), 20, 0.0, 0, 8);
 }
 
 .home-card:pressed {
     -fx-background-color: #1e2a44;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.30), 10, 0.0, 0, 3);
 }
 
 .card-icon {
@@ -670,11 +714,22 @@
 .result-table .table-row-cell {
     -fx-border-color: transparent transparent rgba(120, 145, 200, 0.10) transparent;
     -fx-border-width: 0 0 1 0;
+    -fx-cell-hover-color: rgba(91, 110, 245, 0.08);
 }
 
-/* 选中行：偏亮深蓝高亮。 */
+/* 悬浮态：极淡蓝紫高亮，提升可读性与交互感知。 */
+.result-table .table-row-cell:hover {
+    -fx-background-color: rgba(91, 110, 245, 0.10);
+}
+
+/* 悬浮态但非选中：文字微提亮。 */
+.result-table .table-row-cell:hover:not(:selected) .table-cell {
+    -fx-text-fill: #e6ecf8;
+}
+
+/* 选中行：蓝紫渐变高亮，更鲜明。 */
 .result-table .table-row-cell:selected {
-    -fx-background-color: #33477a;
+    -fx-background-color: linear-gradient(to right, rgba(91, 110, 245, 0.32), rgba(130, 89, 240, 0.22));
 }
 
 /* 单元格文字：浅蓝灰 #d5dce9、左对齐、四周舒适留白。 */
@@ -1087,12 +1142,17 @@
 .connection-split > .split-pane-divider { -fx-background-color: transparent; -fx-padding: 0 5 0 5; }
 .connection-list { -fx-background-color: #172035; -fx-control-inner-background: #172035; }
 .connection-list .list-cell { -fx-background-color: transparent; -fx-text-fill: #d5dce9; -fx-padding: 10; }
+.connection-list .list-cell:filled:hover { -fx-background-color: rgba(91, 110, 245, 0.10); -fx-text-fill: #e6ecf8; }
 .connection-list .list-cell:selected { -fx-background-color: #33477a; -fx-text-fill: white; }
 .connection-form-scroll, .connection-form-scroll > .viewport { -fx-background-color: transparent; }
 .connection-form { -fx-padding: 18; }
 .connection-form .text-field, .connection-form .password-field, .connection-form .combo-box {
     -fx-background-color: #172035; -fx-text-fill: #edf2ff;
     -fx-border-color: rgba(120,145,200,0.25); -fx-border-radius: 8; -fx-background-radius: 8;
+    -fx-prompt-text-fill: #687693;
+}
+.connection-form .text-field:focused, .connection-form .password-field:focused, .connection-form .combo-box:focused {
+    -fx-border-color: #6b8cff; -fx-focus-color: transparent; -fx-faint-focus-color: transparent;
 }
 .connection-form .combo-box .list-cell { -fx-text-fill: #edf2ff; -fx-background-color: #172035; }
 .connection-form .check-box { -fx-text-fill: #c9d3ea; }
@@ -1100,14 +1160,15 @@
 .danger-button { -fx-background-color: rgba(239,68,68,0.15); -fx-text-fill: #fca5a5;
     -fx-border-color: rgba(239,68,68,0.4); -fx-border-radius: 8; -fx-background-radius: 8; -fx-padding: 7 14; }
 
-/* v0.3 题库与闯关练习 */
-.top-nav .nav-button { -fx-padding: 7 10 7 10; -fx-font-size: 13px; }
+/* v0.3 题库与闯关练习 —— 导航按钮保持舒适内边距，避免拥挤 */
+.top-nav .nav-button { -fx-padding: 7 14 7 14; -fx-font-size: 13px; }
 .exercise-page { -fx-background-color: #141c30; }
 .exercise-split { -fx-background-color: transparent; -fx-padding: 0 20 20 20; }
 .exercise-split > .split-pane-divider,
 .exercise-result-split > .split-pane-divider { -fx-background-color: transparent; -fx-padding: 4; }
 .exercise-list { -fx-background-color: #172035; -fx-control-inner-background: #172035; }
 .exercise-list .list-cell { -fx-background-color: transparent; -fx-text-fill: #d5dce9; -fx-padding: 10; }
+.exercise-list .list-cell:filled:hover { -fx-background-color: rgba(91, 110, 245, 0.10); -fx-text-fill: #e6ecf8; }
 .exercise-list .list-cell:selected { -fx-background-color: #33477a; -fx-text-fill: white; }
 .exercise-scroll, .exercise-scroll > .viewport { -fx-background-color: transparent; }
 .exercise-form { -fx-padding: 18; }
@@ -1115,6 +1176,11 @@
 .exercise-workspace .text-area {
     -fx-background-color: #172035; -fx-text-fill: #edf2ff;
     -fx-border-color: rgba(120,145,200,0.25); -fx-border-radius: 8; -fx-background-radius: 8;
+    -fx-prompt-text-fill: #687693;
+}
+.exercise-form .text-field:focused, .exercise-form .text-area:focused, .exercise-form .combo-box:focused,
+.exercise-workspace .text-area:focused {
+    -fx-border-color: #6b8cff; -fx-focus-color: transparent; -fx-faint-focus-color: transparent;
 }
 .exercise-form .text-area .content, .exercise-workspace .text-area .content { -fx-background-color: #172035; }
 .exercise-form .combo-box .list-cell { -fx-text-fill: #edf2ff; -fx-background-color: #172035; }
@@ -1127,6 +1193,11 @@
     -fx-background-color: #1b253d; -fx-background-radius: 10;
     -fx-border-color: rgba(159,122,234,0.22); -fx-border-radius: 10;
     -fx-padding: 12; -fx-pref-width: 160; -fx-alignment: CENTER_LEFT;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.18), 8, 0.0, 0, 2);
+}
+.progress-card:hover {
+    -fx-border-color: rgba(159,122,234,0.40);
+    -fx-effect: dropshadow(gaussian, rgba(159,122,234,0.18), 12, 0.0, 0, 4);
 }
 .progress-value { -fx-text-fill: #ffffff; -fx-font-size: 21px; -fx-font-weight: bold; }
 
@@ -1139,6 +1210,11 @@
 .knowledge-split .text-field {
     -fx-background-color: #172035; -fx-text-fill: #edf2ff;
     -fx-border-color: rgba(120,145,200,0.28); -fx-border-radius: 8; -fx-background-radius: 8;
+    -fx-prompt-text-fill: #687693;
+}
+.analytics-filter-bar .date-picker:focused, .analytics-filter-bar .combo-box:focused,
+.knowledge-split .text-field:focused {
+    -fx-border-color: #6b8cff; -fx-focus-color: transparent; -fx-faint-focus-color: transparent;
 }
 .analytics-filter-bar .combo-box .list-cell { -fx-text-fill: #edf2ff; -fx-background-color: #172035; }
 .knowledge-split { -fx-background-color: transparent; -fx-padding: 0 12 8 12; }

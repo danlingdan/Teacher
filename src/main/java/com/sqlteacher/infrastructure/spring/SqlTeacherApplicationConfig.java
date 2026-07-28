@@ -43,6 +43,8 @@ import java.net.URI;
 @Configuration
 @Import(DatabaseServiceConfig.class)
 public class SqlTeacherApplicationConfig {
+    static final String DEFAULT_CLOUD_BASE_URL = "https://api.sqlteacher.tech";
+
     @Bean
     public AppConfigurationService appConfigurationService() {
         return new PropertiesAppConfigurationService();
@@ -120,7 +122,7 @@ public class SqlTeacherApplicationConfig {
     @Bean
     public CloudApiClient cloudApiClient() {
         return new HttpCloudApiClient(URI.create(System.getProperty(
-            "sqlteacher.cloud.base-url", "https://api.sqlteacher.invalid"
+            "sqlteacher.cloud.base-url", DEFAULT_CLOUD_BASE_URL
         )));
     }
 
