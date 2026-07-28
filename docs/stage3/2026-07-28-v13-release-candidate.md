@@ -24,13 +24,13 @@
 
 ```text
 SQLTeacher-1.3.0.exe
-  b565416d302168ae4ecbcec23526c8a2eb0768d282700bd92710c967ec5e281c
+  93c532a64d42d083b5c8ff923c588f95e7dee1db06611f09b4ac79027f871a53
 
 SQLTeacher-1.3.0-windows-x64.zip
-  3ca14966f7e4079f5d8f57eabfe7d6fd096f84c4e2bd93a84533e009358d7374
+  4e4e4414fe4c90f1eafb393bfda48054bc1f6303a064089282bb0395a6c7812c
 ```
 
-本地产物位于 `target/installer/`，该目录不提交 Git。安装器未代码签名，Windows 可能显示来源提示。
+以上哈希来自提交 `7ef5522` 的独立干净工作树本地构建；GitHub Actions 会重新构建并生成其自身的 `SHA256SUMS.txt`。本地产物位于独立工作树的 `target/installer/`，该目录不提交 Git。安装器未代码签名，Windows 可能显示来源提示。
 
 ## 发布前仍需的人工作业
 
