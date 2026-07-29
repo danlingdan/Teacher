@@ -1,6 +1,6 @@
 # SQLTeacher
 
-SQLTeacher 是一款面向数据库课程教学与 SQL 练习的本地优先 Java 桌面应用。`v1.5.5` 在 v1.5 角色化工作台基础上加入现代 JavaFX 控件基线、语义设计令牌、三档自适应应用壳、自动换列首页和常驻编辑器/结果 SQL 工作区，同时保留课程协作、离线教学闭环与既有安全边界。
+SQLTeacher 是一款面向数据库课程教学与 SQL 练习的本地优先 Java 桌面应用。`v1.5.6` 在现代 JavaFX 应用壳基础上进一步修复浅色模式可读性，统一本地与网络 AI 入口，改进练习字段提示、任务时间与反馈选择，并新增默认关闭的本机 SQL 无限模式。
 
 ## 当前功能
 
@@ -64,7 +64,7 @@ mvn -q compile exec:java "-Dexec.mainClass=com.sqlteacher.StageOneVerificationAp
 target\installer\SQLTeacher
 ```
 
-脚本会生成 `SQLTeacher-1.5.5.exe` 正式安装器、便携 app-image 和 `SQLTeacher-1.5.5-windows-x64.zip`。WiX 3.14.1 在首次打包时下载到 `target/tools` 并校验 SHA-256，不进入 Git。推送与 Maven 版本一致的 `vX.Y.Z` 标签后，GitHub Actions 会自动测试、打包并发布这些文件。
+脚本会生成 `SQLTeacher-1.5.6.exe` 正式安装器、便携 app-image 和 `SQLTeacher-1.5.6-windows-x64.zip`。WiX 3.14.1 在首次打包时下载到 `target/tools` 并校验 SHA-256，不进入 Git。推送与 Maven 版本一致的 `vX.Y.Z` 标签后，GitHub Actions 会自动测试、打包并发布这些文件。
 
 ## 项目结构
 
@@ -81,10 +81,11 @@ docs                                         架构、计划、验收与软著�
 
 ## 当前边界
 
-`v1.5.5` 的云端功能仍是可选增强；服务器或网络 AI 不可用时，SQLite 练习、确定性评测和本地知识检索仍可使用，任务结果会进入当前账号隔离的本地队列，最近同步的课程、反馈、掌握度和通知可从当前账号缓存读取。主题、字体、密度和布局模式只涉及当前设备界面，不改变凭据、SQL 或教学数据范围。正式 Windows 包内置 `https://api.sqlteacher.tech`；客户端拒绝非回环 HTTP 地址，正式教学数据只能经域名与 HTTPS 传输。
+`v1.5.6` 的云端功能仍是可选增强；服务器或网络 AI 不可用时，SQLite 练习、确定性评测和本地知识检索仍可使用。主题、字体、密度、布局和 SQL 安全模式均为当前设备设置。无限模式默认关闭，只绕过应用层 SQL 拦截，数据库权限仍然有效；AI 仍只生成草稿。正式 Windows 包内置 `https://api.sqlteacher.tech`，客户端拒绝非回环 HTTP 地址。
 
 ## 版本
 
+- `v1.5.6`：修复浅色模式与禁用状态可读性，统一本地/网络 AI，增强练习与教学表单，并增加默认关闭的 SQL 无限模式。详见 [`v1.5.6 发布说明`](docs/releases/v1.5.6.md)。
 - `v1.5.5`：新增 AtlantaFX 控件基线、语义设计令牌、分层 CSS、三档响应式侧栏、自动换列首页、常驻 SQL 编辑器/结果工作区和可见键盘焦点。详见 [`v1.5.5 UI Foundation 计划`](docs/plans/2026-07-29-v1.5.5-ui-foundation-plan.md)。
 - `v1.5.0`：新增角色化侧栏、三主题、字体/密度偏好、统一矢量图标、全员设置入口与设置项权限，并重构学生练习和教师教学工作台。详见 [`v1.5 UI 与易用性升级计划`](docs/plans/2026-07-28-v1.5-ui-usability-delivery-plan.md)。
 - `v1.4.0`：新增课程与知识点目录、云端共享题库和不可变题目版本、任务内容快照、教师反馈、薄弱点练习建议、应用内通知及账号隔离离线缓存。详见 [`v1.4 单人迭代计划`](docs/plans/2026-07-28-v1.4-delivery-plan.md)。

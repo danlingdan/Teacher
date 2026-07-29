@@ -61,12 +61,11 @@ public final class DefaultSqlRiskAnalysisService implements SqlRiskAnalysisServi
             return dialectRisk;
         }
 
-        if (statementType.equals("DROP")
-                && normalized.toUpperCase(Locale.ROOT).matches("DROP\\s+DATABASE\\b.*")) {
+        if (statementType.equals("DROP") || statementType.equals("TRUNCATE")) {
             return forbidden(
-                    "DROP",
+                    statementType,
                     false,
-                    "DROP DATABASE is not allowed."
+                    statementType + " statements are not allowed."
             );
         }
 
@@ -81,7 +80,7 @@ public final class DefaultSqlRiskAnalysisService implements SqlRiskAnalysisServi
                     List.of("Read-only query.")
             );
 
-            case "INSERT", "UPDATE", "DELETE" -> new SqlRiskAnalysis(
+            case "INSERT" -> new SqlRiskAnalysis(
                     SqlRiskLevel.MEDIUM,
                     true,
                     true,
@@ -90,7 +89,16 @@ public final class DefaultSqlRiskAnalysisService implements SqlRiskAnalysisServi
                     List.of("This statement modifies data.")
             );
 
-            case "CREATE", "ALTER", "DROP", "TRUNCATE" -> new SqlRiskAnalysis(
+            case "UPDATE", "DELETE" -> new SqlRiskAnalysis(
+                    SqlRiskLevel.HIGH,
+                    true,
+                    true,
+                    false,
+                    statementType,
+                    List.of("This statement modifies or deletes existing data and requires explicit confirmation.")
+            );
+
+            case "CREATE", "ALTER" -> new SqlRiskAnalysis(
                     SqlRiskLevel.HIGH,
                     true,
                     true,

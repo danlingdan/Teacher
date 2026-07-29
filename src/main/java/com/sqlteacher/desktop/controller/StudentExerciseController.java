@@ -43,6 +43,7 @@ public final class StudentExerciseController {
     @FXML private Label titleLabel;
     @FXML private Label metaLabel;
     @FXML private Label descriptionLabel;
+    @FXML private Label schemaLabel;
     @FXML private TextArea sqlArea;
     @FXML private TableView<Map<String, Object>> resultTable;
     @FXML private TextArea feedbackArea;
@@ -115,6 +116,7 @@ public final class StudentExerciseController {
             titleLabel.setText(started.exercise().title());
             metaLabel.setText(started.exercise().knowledgePoint() + " · " + started.exercise().difficulty());
             descriptionLabel.setText(started.exercise().description());
+            schemaLabel.setText("可用表与字段：" + started.exercise().schemaSummary());
             sqlArea.clear();
             feedbackArea.clear();
             resultTable.getColumns().clear();
@@ -221,6 +223,7 @@ public final class StudentExerciseController {
             titleLabel.setText(view.title());
             metaLabel.setText(view.knowledgePoint() + " · " + view.difficulty());
             descriptionLabel.setText(view.description());
+            schemaLabel.setText("可用表与字段：" + view.schemaSummary());
         });
     }
 

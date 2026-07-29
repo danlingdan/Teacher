@@ -21,14 +21,13 @@ public record Nl2SqlSafetyResult(
     }
 
     /**
-     * Whether the draft passed the read-only AI safety gate. This is not execution
-     * authorization; callers must continue to present the SQL as a draft.
+     * Whether the single draft passed the Java safety gate and may be copied for review.
+     * This is not execution authorization; risky executable statements still require
+     * the execution layer's explicit confirmation.
      */
     public boolean accepted() {
         return draftAvailable()
             && riskAnalysis.executable()
-            && !riskAnalysis.confirmationRequired()
-            && !riskAnalysis.multiStatement()
-            && "SELECT".equals(riskAnalysis.statementType());
+            && !riskAnalysis.multiStatement();
     }
 }

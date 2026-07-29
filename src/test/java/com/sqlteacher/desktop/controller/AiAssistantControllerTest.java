@@ -25,15 +25,20 @@ class AiAssistantControllerTest {
     }
 
     @Test
-    void shouldRejectUnsafeOrMissingDrafts() {
-        Nl2SqlSafetyResult deleteResult = result(
-            "DELETE FROM student",
-            new SqlRiskAnalysis(SqlRiskLevel.MEDIUM, true, true, false, "DELETE", List.of("Modifies data."))
+    void shouldAllowRiskyExecutableDraftForReviewButRejectForbiddenOrMissingDrafts() {
+        Nl2SqlSafetyResult updateResult = result(
+            "UPDATE student SET score = 90 WHERE id = 1",
+            new SqlRiskAnalysis(SqlRiskLevel.HIGH, true, true, false, "UPDATE", List.of("Modifies data."))
+        );
+        Nl2SqlSafetyResult dropResult = result(
+            "DROP TABLE student",
+            new SqlRiskAnalysis(SqlRiskLevel.FORBIDDEN, false, false, false, "DROP", List.of("Forbidden."))
         );
 
-        assertFalse(AiAssistantController.canCopyDraft(deleteResult, "DELETE FROM student"));
+        assertTrue(AiAssistantController.canCopyDraft(updateResult, "UPDATE student SET score = 90 WHERE id = 1"));
+        assertFalse(AiAssistantController.canCopyDraft(dropResult, "DROP TABLE student"));
         assertFalse(AiAssistantController.canCopyDraft(null, "SELECT 1"));
-        assertFalse(AiAssistantController.canCopyDraft(deleteResult, null));
+        assertFalse(AiAssistantController.canCopyDraft(updateResult, null));
     }
 
     private static Nl2SqlSafetyResult result(String sql, SqlRiskAnalysis risk) {

@@ -19,6 +19,7 @@ import com.sqlteacher.application.maintenance.DataMaintenanceService;
 import com.sqlteacher.application.maintenance.ApplicationBackupService;
 import com.sqlteacher.application.metadata.DatabaseMetadataService;
 import com.sqlteacher.application.risk.SqlRiskAnalysisService;
+import com.sqlteacher.application.risk.SqlSafetyModeService;
 import com.sqlteacher.application.config.SqlTeacherConfiguration;
 import com.sqlteacher.application.collaboration.AssignmentDeliveryService;
 import com.sqlteacher.application.collaboration.CloudApiClient;
@@ -27,6 +28,7 @@ import com.sqlteacher.application.collaboration.TeachingContentCache;
 import com.sqlteacher.infrastructure.cloud.JdbcAssignmentDeliveryService;
 import com.sqlteacher.infrastructure.cloud.InMemoryLearningEventOwnerContext;
 import com.sqlteacher.infrastructure.cloud.JdbcTeachingContentCache;
+import com.sqlteacher.infrastructure.config.FileSqlSafetyModeService;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.beans.factory.ObjectProvider;
@@ -49,6 +51,11 @@ public class DatabaseServiceConfig {
     @Bean
     public SqlRiskAnalysisService sqlRiskAnalysisService() {
         return new DefaultSqlRiskAnalysisService();
+    }
+
+    @Bean
+    public SqlSafetyModeService sqlSafetyModeService(SqlTeacherConfiguration configuration) {
+        return new FileSqlSafetyModeService(configuration.dataDirectory().resolve("sql-safety.properties"));
     }
 
     @Bean
@@ -86,8 +93,11 @@ public class DatabaseServiceConfig {
             JdbcConnectionProvider connectionProvider,
             SqlResultMapper resultMapper,
             SqlRiskAnalysisService riskAnalysisService,
+            SqlSafetyModeService safetyModeService,
             LearningEventService learningEventService) {
-        return new JdbcSqlExecutionService(connectionProvider, resultMapper, riskAnalysisService, learningEventService);
+        return new JdbcSqlExecutionService(
+            connectionProvider, resultMapper, riskAnalysisService, safetyModeService, learningEventService
+        );
     }
 
     @Bean
@@ -142,6 +152,7 @@ public class DatabaseServiceConfig {
             SqlExerciseEvaluationService evaluationService,
             SqlResultMapper resultMapper,
             SqlTeacherConfiguration configuration,
+            SqlSafetyModeService safetyModeService,
             LearningEventService learningEventService) {
         return new JdbcExercisePracticeService(
             connectionFactory,
@@ -150,6 +161,7 @@ public class DatabaseServiceConfig {
             evaluationService,
             resultMapper,
             configuration,
+            safetyModeService,
             learningEventService
         );
     }

@@ -1,6 +1,5 @@
 package com.sqlteacher.desktop.controller;
 
-import com.sqlteacher.application.ai.NetworkAiSettingsService;
 import com.sqlteacher.application.collaboration.ClassAssignment;
 import com.sqlteacher.application.collaboration.AssignmentStatus;
 import com.sqlteacher.application.collaboration.ClassroomService;
@@ -19,13 +18,14 @@ import com.sqlteacher.application.collaboration.RetentionCategory;
 import com.sqlteacher.application.collaboration.RetentionPreview;
 import com.sqlteacher.application.collaboration.RetentionJob;
 import com.sqlteacher.desktop.DesktopExecutors;
+import com.sqlteacher.desktop.DeadlineValueConverter;
 import javafx.application.Platform;
 import javafx.fxml.FXML;
 import javafx.scene.control.Button;
 import javafx.scene.control.ComboBox;
+import javafx.scene.control.DatePicker;
 import javafx.scene.control.Label;
 import javafx.scene.control.ListView;
-import javafx.scene.control.PasswordField;
 import javafx.scene.control.ProgressIndicator;
 import javafx.scene.control.TextField;
 import javafx.stage.FileChooser;
@@ -34,12 +34,11 @@ import javafx.scene.layout.VBox;
 import javafx.scene.layout.FlowPane;
 import javafx.util.StringConverter;
 
-import java.net.URI;
 import java.time.Instant;
+import java.time.ZoneId;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
@@ -51,7 +50,6 @@ public final class CloudCenterController {
     private final CloudApiClient api;
     private final CloudSessionService session;
     private final CloudLearningSyncService sync;
-    private final NetworkAiSettingsService networkAiSettings;
     private final AssignmentDeliveryService assignmentDeliveryService;
     private final Consumer<AssignmentTaskContext> openAssignmentAction;
     private final AtomicInteger activeOperations = new AtomicInteger();
@@ -64,6 +62,7 @@ public final class CloudCenterController {
     @FXML private Label classAnalyticsLabel;
     @FXML private HBox statusBanner;
     @FXML private VBox authenticatedContent;
+    @FXML private VBox signedOutPrompt;
     @FXML private FlowPane classCreationPane;
     @FXML private VBox memberManagementPane;
     @FXML private FlowPane assignmentCreationPane;
@@ -74,15 +73,13 @@ public final class CloudCenterController {
     @FXML private Button logoutButton;
     @FXML private Button exportClassRecordsButton;
     @FXML private ListView<String> classList;
-    @FXML private TextField aiEndpointField;
-    @FXML private TextField aiModelField;
-    @FXML private PasswordField aiKeyField;
     @FXML private TextField memberEmailField;
     @FXML private ComboBox<UserRole> memberRoleCombo;
     @FXML private TextField assignmentExerciseField;
     @FXML private TextField assignmentTitleField;
     @FXML private TextField assignmentDescriptionField;
-    @FXML private TextField assignmentDueAtField;
+    @FXML private DatePicker assignmentDueDatePicker;
+    @FXML private ComboBox<String> assignmentDueTimeCombo;
     @FXML private ListView<String> assignmentList;
     @FXML private Label assignmentAnalyticsLabel;
     @FXML private VBox adminOperationsPane;
@@ -108,7 +105,6 @@ public final class CloudCenterController {
         CloudApiClient api,
         CloudSessionService session,
         CloudLearningSyncService sync,
-        NetworkAiSettingsService networkAiSettings,
         AssignmentDeliveryService assignmentDeliveryService,
         DesktopAccessProfile accessProfile,
         Runnable switchIdentityAction,
@@ -117,7 +113,6 @@ public final class CloudCenterController {
         this.api = api;
         this.session = session;
         this.sync = sync;
-        this.networkAiSettings = networkAiSettings;
         this.assignmentDeliveryService = java.util.Objects.requireNonNull(assignmentDeliveryService);
         this.accessProfile = java.util.Objects.requireNonNull(accessProfile, "accessProfile must not be null");
         this.switchIdentityAction = java.util.Objects.requireNonNull(
@@ -141,6 +136,8 @@ public final class CloudCenterController {
             }
         });
         memberRoleCombo.setValue(UserRole.STUDENT);
+        assignmentDueTimeCombo.getItems().setAll(DeadlineValueConverter.timeOptions());
+        assignmentDueTimeCombo.setValue(DeadlineValueConverter.DEFAULT_TIME);
         retentionCategoryCombo.getItems().setAll(RetentionCategory.values());
         retentionCategoryCombo.setValue(RetentionCategory.SYNC_EVENTS);
         classList.setPlaceholder(new Label("暂无班级，先创建一个教学班级"));
@@ -155,7 +152,7 @@ public final class CloudCenterController {
                 ClassAssignment selected = assignments.get(index);
                 assignmentTitleField.setText(selected.title());
                 assignmentDescriptionField.setText(selected.description());
-                assignmentDueAtField.setText(selected.dueAt() == null ? "" : selected.dueAt().toString());
+                setAssignmentDeadline(selected.dueAt());
             }
         });
         boolean canManageClass = canManageClass();
@@ -266,36 +263,6 @@ public final class CloudCenterController {
             }
             Platform.runLater(() -> showStatus("教学记录已导出到 " + target, Status.SUCCESS));
         });
-    }
-
-    @FXML
-    private void onConfigureNetworkAi() {
-        String endpoint = required(aiEndpointField, "请输入 HTTPS 接口地址");
-        String model = required(aiModelField, "请输入模型名称");
-        String keyText = aiKeyField.getText();
-        if (endpoint == null || model == null) return;
-        if (keyText == null || keyText.isBlank()) {
-            showStatus("请输入 API Key", Status.ERROR);
-            aiKeyField.requestFocus();
-            return;
-        }
-        char[] key = keyText.toCharArray();
-        try {
-            networkAiSettings.configure(URI.create(endpoint), model, key);
-            showStatus("网络 AI 已启用，API Key 仅保存在当前进程内存", Status.SUCCESS);
-        } catch (RuntimeException error) {
-            showStatus(message(error), Status.ERROR);
-        } finally {
-            Arrays.fill(key, '\0');
-            aiKeyField.clear();
-        }
-    }
-
-    @FXML
-    private void onClearNetworkAi() {
-        networkAiSettings.clear();
-        aiKeyField.clear();
-        showStatus("已切换回本地 Ollama", Status.SUCCESS);
     }
 
     @FXML
@@ -483,15 +450,7 @@ public final class CloudCenterController {
         String exerciseId = required(assignmentExerciseField, "请输入本地题目 ID");
         String title = required(assignmentTitleField, "请输入任务标题");
         if (exerciseId == null || title == null) return;
-        Instant dueAt;
-        try {
-            String value = assignmentDueAtField.getText() == null ? "" : assignmentDueAtField.getText().trim();
-            dueAt = value.isEmpty() ? null : Instant.parse(value);
-        } catch (RuntimeException error) {
-            showStatus("截止时间请使用 ISO-8601 格式，例如 2026-12-31T15:00:00Z", Status.ERROR);
-            assignmentDueAtField.requestFocus();
-            return;
-        }
+        Instant dueAt = selectedAssignmentDeadline();
         String description = assignmentDescriptionField.getText() == null ? "" : assignmentDescriptionField.getText().trim();
         run(draft ? "正在保存任务草稿…" : "正在发布班级任务…", () -> {
             var current = currentSession();
@@ -505,7 +464,7 @@ public final class CloudCenterController {
                 assignmentExerciseField.clear();
                 assignmentTitleField.clear();
                 assignmentDescriptionField.clear();
-                assignmentDueAtField.clear();
+                setAssignmentDeadline(null);
                 showStatus(draft ? "任务草稿已保存" : "任务已发布", Status.SUCCESS);
             });
         });
@@ -587,14 +546,7 @@ public final class CloudCenterController {
         }
         String title = required(assignmentTitleField, "请输入更新后的任务标题");
         if (title == null) return;
-        Instant dueAt;
-        try {
-            String value = assignmentDueAtField.getText() == null ? "" : assignmentDueAtField.getText().trim();
-            dueAt = value.isEmpty() ? null : Instant.parse(value);
-        } catch (RuntimeException error) {
-            showStatus("截止时间请使用 ISO-8601 格式", Status.ERROR);
-            return;
-        }
+        Instant dueAt = selectedAssignmentDeadline();
         ClassAssignment assignment = assignments.get(index);
         String description = assignmentDescriptionField.getText() == null
             ? "" : assignmentDescriptionField.getText().trim();
@@ -608,6 +560,18 @@ public final class CloudCenterController {
                 showStatus("任务已更新", Status.SUCCESS);
             });
         });
+    }
+
+    private Instant selectedAssignmentDeadline() {
+        return DeadlineValueConverter.toInstant(
+            assignmentDueDatePicker.getValue(), assignmentDueTimeCombo.getValue(), ZoneId.systemDefault()
+        );
+    }
+
+    private void setAssignmentDeadline(Instant dueAt) {
+        ZoneId zone = ZoneId.systemDefault();
+        assignmentDueDatePicker.setValue(DeadlineValueConverter.datePart(dueAt, zone));
+        assignmentDueTimeCombo.setValue(DeadlineValueConverter.timePart(dueAt, zone));
     }
 
     private void changeSelectedAssignmentStatus(AssignmentStatus status, String successMessage) {
@@ -763,7 +727,11 @@ public final class CloudCenterController {
         accountLabel.setText(current
             .map(value -> value.user().displayName() + " · " + value.user().roles().stream().map(this::roleName).sorted().reduce((a, b) -> a + "/" + b).orElse("用户"))
             .orElse("未登录"));
-        authenticatedContent.setDisable(!signedIn || activeOperations.get() > 0);
+        signedOutPrompt.setVisible(!signedIn);
+        signedOutPrompt.setManaged(!signedIn);
+        authenticatedContent.setVisible(signedIn);
+        authenticatedContent.setManaged(signedIn);
+        authenticatedContent.setDisable(signedIn && activeOperations.get() > 0);
         logoutButton.setDisable(!signedIn || activeOperations.get() > 0);
     }
 

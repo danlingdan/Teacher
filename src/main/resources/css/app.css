@@ -18,6 +18,12 @@
  * 约束：仅修改本文件；样式类名 / 结构与 FXML / Controller 完全保持一致。
  * ===================================================================== */
 
+/*
+ * Legacy layout baseline. New cross-theme page and control colors belong in
+ * foundation/tokens.css and components/pages.css, which load after this file.
+ * Do not add new business-page palette values here.
+ */
+
 /* ===== .root 全局兜底 =====
  * 为所有未显式设置背景的 Scene / 弹窗底层提供统一深色背景，杜绝透明空白。 */
 .root {

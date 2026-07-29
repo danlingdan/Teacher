@@ -2,6 +2,7 @@ package com.sqlteacher.desktop.controller;
 
 import com.sqlteacher.application.ai.AiModelSelection;
 import com.sqlteacher.application.ai.AiModelSelectionService;
+import com.sqlteacher.application.ai.NetworkAiSettingsService;
 import com.sqlteacher.application.connection.ConnectionManagementService;
 import com.sqlteacher.application.connection.DatabaseConnectionProfile;
 import com.sqlteacher.application.nl2sql.Nl2SqlPlan;
@@ -21,11 +22,16 @@ import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
+import javafx.scene.control.PasswordField;
 import javafx.scene.control.TextArea;
+import javafx.scene.control.TextField;
 import javafx.scene.Parent;
+import javafx.scene.layout.VBox;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.net.URI;
+import java.util.Arrays;
 import java.util.Objects;
 import java.util.function.Consumer;
 
@@ -45,12 +51,15 @@ public final class AiAssistantController {
     private static final Logger log = LoggerFactory.getLogger(AiAssistantController.class);
 
     private static final String GENERATING_MESSAGE = "AI 正在生成 SQL…";
-    private static final String OFFLINE_MESSAGE = "当前未部署 Ollama，展示模拟演示数据";
+    private static final String OFFLINE_MESSAGE = "当前 AI 服务不可用，以下为模拟演示数据";
     private static final String EMPTY_INPUT_MESSAGE = "请输入自然语言提问";
     private static final String ERROR_MESSAGE = "AI 生成失败，请稍后重试";
+    private static final String LOCAL_SOURCE = "本地 Ollama";
+    private static final String NETWORK_SOURCE = "网络 AI";
 
     private final Nl2SqlSafetyService nl2SqlSafetyService;
     private final AiModelSelectionService aiModelSelectionService;
+    private final NetworkAiSettingsService networkAiSettingsService;
     private final Consumer<String> fillSqlCallback;
     private final Runnable switchPageCallback;
     private final SqlRiskAnalysisService sqlRiskAnalysisService;
@@ -59,12 +68,21 @@ public final class AiAssistantController {
     private boolean applyingModelSelection;
     private boolean modelOperationInProgress;
     private boolean generationInProgress;
+    private boolean applyingProviderSelection;
 
     @FXML
     private TextArea questionInput;
 
     @FXML
     private ComboBox<String> modelSelector;
+
+    @FXML private ComboBox<String> providerSelector;
+    @FXML private VBox localProviderPane;
+    @FXML private VBox networkProviderPane;
+    @FXML private TextField networkEndpointField;
+    @FXML private TextField networkModelField;
+    @FXML private PasswordField networkApiKeyField;
+    @FXML private Label providerStatusLabel;
 
     @FXML
     private Button refreshModelsButton;
@@ -96,6 +114,7 @@ public final class AiAssistantController {
     public AiAssistantController(
         Nl2SqlSafetyService nl2SqlSafetyService,
         AiModelSelectionService aiModelSelectionService,
+        NetworkAiSettingsService networkAiSettingsService,
         SqlRiskAnalysisService sqlRiskAnalysisService,
         ConnectionManagementService connectionManagementService,
         Consumer<String> fillSqlCallback,
@@ -112,6 +131,10 @@ public final class AiAssistantController {
         this.sqlRiskAnalysisService = Objects.requireNonNull(
             sqlRiskAnalysisService,
             "sqlRiskAnalysisService must not be null"
+        );
+        this.networkAiSettingsService = Objects.requireNonNull(
+            networkAiSettingsService,
+            "networkAiSettingsService must not be null"
         );
         this.connectionManagementService = Objects.requireNonNull(
             connectionManagementService,
@@ -135,6 +158,78 @@ public final class AiAssistantController {
         if (questionInput == null) {
             log.error("questionInput is null, FXML binding failed");
         }
+        providerSelector.getItems().setAll(LOCAL_SOURCE, NETWORK_SOURCE);
+        applyingProviderSelection = true;
+        try {
+            boolean networkConfigured = networkAiSettingsService.current().isPresent();
+            providerSelector.setValue(networkConfigured ? NETWORK_SOURCE : LOCAL_SOURCE);
+            networkAiSettingsService.current().ifPresent(configuration -> {
+                networkEndpointField.setText(configuration.endpoint().toString());
+                networkModelField.setText(configuration.model());
+            });
+        } finally {
+            applyingProviderSelection = false;
+        }
+        updateProviderPanels();
+        if (isNetworkSelected()) {
+            providerStatusLabel.setText("当前使用网络 AI；API Key 仅保存在本次运行内存中");
+            updateControlAvailability();
+        } else {
+            refreshModels();
+        }
+    }
+
+    @FXML
+    private void onProviderSelected() {
+        if (applyingProviderSelection) return;
+        if (LOCAL_SOURCE.equals(providerSelector.getValue())) {
+            networkAiSettingsService.clear();
+            providerStatusLabel.setText("当前使用本地 Ollama");
+            updateProviderPanels();
+            refreshModels();
+            return;
+        }
+        updateProviderPanels();
+        providerStatusLabel.setText(networkAiSettingsService.current().isPresent()
+            ? "当前使用网络 AI；API Key 仅保存在本次运行内存中"
+            : "请输入 HTTPS 接口、模型名称和 API Key 后启用网络 AI");
+        updateControlAvailability();
+    }
+
+    @FXML
+    private void onConfigureNetworkAi() {
+        String endpoint = networkEndpointField.getText();
+        String model = networkModelField.getText();
+        String keyText = networkApiKeyField.getText();
+        if (endpoint == null || endpoint.isBlank() || model == null || model.isBlank()
+            || keyText == null || keyText.isBlank()) {
+            providerStatusLabel.setText("请完整填写 HTTPS 接口、模型名称和 API Key");
+            return;
+        }
+        char[] key = keyText.toCharArray();
+        try {
+            networkAiSettingsService.configure(URI.create(endpoint.trim()), model.trim(), key);
+            providerStatusLabel.setText("网络 AI 已启用；模型输出仍会经过本地 SQL 安全检查");
+            networkApiKeyField.clear();
+        } catch (RuntimeException error) {
+            providerStatusLabel.setText(error.getMessage() == null ? "网络 AI 配置无效" : error.getMessage());
+        } finally {
+            Arrays.fill(key, '\0');
+            updateControlAvailability();
+        }
+    }
+
+    @FXML
+    private void onUseLocalAi() {
+        networkAiSettingsService.clear();
+        applyingProviderSelection = true;
+        try {
+            providerSelector.setValue(LOCAL_SOURCE);
+        } finally {
+            applyingProviderSelection = false;
+        }
+        updateProviderPanels();
+        providerStatusLabel.setText("已切换回本地 Ollama");
         refreshModels();
     }
 
@@ -165,8 +260,9 @@ public final class AiAssistantController {
                 log.warn("Empty input, returning early");
                 return;
             }
-            if (!aiModelSelectionService.current().hasSelection()) {
-                showAlert(Alert.AlertType.WARNING, "未检测到模型", "请先启动 Ollama、安装模型并刷新模型列表");
+            if (!hasActiveProvider()) {
+                showAlert(Alert.AlertType.WARNING, "未配置 AI 模型",
+                    isNetworkSelected() ? "请先填写并启用网络 AI" : "请先启动 Ollama、安装模型并刷新模型列表");
                 return;
             }
 
@@ -257,7 +353,7 @@ public final class AiAssistantController {
 
     private void copyAcceptedDraft(String sql) {
         if (!canCopyDraft(currentResult, sql)) {
-            showAlert(Alert.AlertType.WARNING, "安全检查未通过", "该 SQL 草案未通过只读安全检查，不能复制到练习页");
+            showAlert(Alert.AlertType.WARNING, "安全检查未通过", "该 SQL 草案被本地安全规则禁止，不能复制到练习页");
             return;
         }
         log.info("Copying accepted SQL draft to practice page, sqlLength={}", sql.length());
@@ -423,6 +519,10 @@ public final class AiAssistantController {
     }
 
     private void refreshModels() {
+        if (isNetworkSelected()) {
+            updateControlAvailability();
+            return;
+        }
         runModelOperation(aiModelSelectionService::refresh, "正在检测本地 Ollama 模型…");
     }
 
@@ -481,16 +581,35 @@ public final class AiAssistantController {
     }
 
     private void updateControlAvailability() {
-        boolean hasModel = aiModelSelectionService.current().hasSelection();
+        boolean networkSelected = isNetworkSelected();
+        boolean hasModel = hasActiveProvider();
         if (generateButton != null) {
             generateButton.setDisable(modelOperationInProgress || generationInProgress || !hasModel);
         }
         if (modelSelector != null) {
-            modelSelector.setDisable(modelOperationInProgress || generationInProgress);
+            modelSelector.setDisable(networkSelected || modelOperationInProgress || generationInProgress);
         }
         if (refreshModelsButton != null) {
-            refreshModelsButton.setDisable(modelOperationInProgress || generationInProgress);
+            refreshModelsButton.setDisable(networkSelected || modelOperationInProgress || generationInProgress);
         }
+    }
+
+    private boolean hasActiveProvider() {
+        return isNetworkSelected()
+            ? networkAiSettingsService.current().isPresent()
+            : aiModelSelectionService.current().hasSelection();
+    }
+
+    private boolean isNetworkSelected() {
+        return providerSelector != null && NETWORK_SOURCE.equals(providerSelector.getValue());
+    }
+
+    private void updateProviderPanels() {
+        boolean network = isNetworkSelected();
+        localProviderPane.setVisible(!network);
+        localProviderPane.setManaged(!network);
+        networkProviderPane.setVisible(network);
+        networkProviderPane.setManaged(network);
     }
 
     private static void setPlaceholderVisible(Label label, boolean visible) {

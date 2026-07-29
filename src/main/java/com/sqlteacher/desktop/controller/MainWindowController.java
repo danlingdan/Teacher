@@ -28,6 +28,7 @@ import com.sqlteacher.application.ai.NetworkAiSettingsService;
 import com.sqlteacher.application.metadata.DatabaseMetadataService;
 import com.sqlteacher.application.nl2sql.Nl2SqlSafetyService;
 import com.sqlteacher.application.risk.SqlRiskAnalysisService;
+import com.sqlteacher.application.risk.SqlSafetyModeService;
 import com.sqlteacher.desktop.GlobalLoading;
 import com.sqlteacher.desktop.appearance.UiIcon;
 import com.sqlteacher.desktop.appearance.UiIcons;
@@ -115,6 +116,7 @@ public final class MainWindowController {
 
     /** SQL 风险分析服务（应用层接口）；运行期实现由 Spring 提供，向下注入到 AI 助手页控制器。 */
     private final SqlRiskAnalysisService sqlRiskAnalysisService;
+    private final SqlSafetyModeService sqlSafetyModeService;
     private final ConnectionManagementService connectionManagementService;
     private final DatabaseConnectionTestService databaseConnectionTestService;
     private final ApplicationExceptionMapper applicationExceptionMapper;
@@ -254,6 +256,7 @@ public final class MainWindowController {
                                 Nl2SqlSafetyService nl2SqlSafetyService,
                                 AiModelSelectionService aiModelSelectionService,
                                 SqlRiskAnalysisService sqlRiskAnalysisService,
+                                SqlSafetyModeService sqlSafetyModeService,
                                 ConnectionManagementService connectionManagementService,
                                 DatabaseConnectionTestService databaseConnectionTestService,
                                 ApplicationExceptionMapper applicationExceptionMapper,
@@ -285,6 +288,7 @@ public final class MainWindowController {
             "aiModelSelectionService must not be null"
         );
         this.sqlRiskAnalysisService = Objects.requireNonNull(sqlRiskAnalysisService, "sqlRiskAnalysisService must not be null");
+        this.sqlSafetyModeService = Objects.requireNonNull(sqlSafetyModeService, "sqlSafetyModeService must not be null");
         this.connectionManagementService = Objects.requireNonNull(connectionManagementService);
         this.databaseConnectionTestService = Objects.requireNonNull(databaseConnectionTestService);
         this.applicationExceptionMapper = Objects.requireNonNull(applicationExceptionMapper);
@@ -646,7 +650,8 @@ public final class MainWindowController {
                 sqlPracticeController = new SqlPracticeController(
                     sqlExecutionService,
                     sqlRiskAnalysisService,
-                    connectionManagementService
+                    connectionManagementService,
+                    sqlSafetyModeService
                 );
                 sqlPracticeController.setOnDdlSuccessCallback(this::refreshTableSchema);
                 return sqlPracticeController;
@@ -706,6 +711,7 @@ public final class MainWindowController {
                 return new AiAssistantController(
                     nl2SqlSafetyService,
                     aiModelSelectionService,
+                    networkAiSettingsService,
                     sqlRiskAnalysisService,
                     connectionManagementService,
                     fillSqlCallback,
@@ -761,7 +767,8 @@ public final class MainWindowController {
                         applicationBackupService,
                         configuration,
                         accessProfile,
-                        uiPreferences
+                        uiPreferences,
+                        sqlSafetyModeService
                     );
                 }
                 throw new IllegalStateException("Unexpected controller type for settings: " + type);
@@ -873,7 +880,6 @@ public final class MainWindowController {
                         cloudApiClient,
                         cloudSessionService,
                         cloudLearningSyncService,
-                        networkAiSettingsService,
                         assignmentDeliveryService,
                         accessProfile,
                         switchIdentityAction,

@@ -46,7 +46,7 @@ class Nl2SqlServiceImplTest {
         assertEquals("QUERY", result.intent());
         assertEquals("查询所有学生", result.explanation());
         assertEquals("test-model", result.model());
-        assertEquals("v3", result.promptVersion());
+        assertEquals("v4", result.promptVersion());
     }
 
     @Test
@@ -146,7 +146,7 @@ class Nl2SqlServiceImplTest {
     @Test
     void shouldReturnStructurallyValidNonSelectDraftForApplicationSafetyAssessment() {
         AiModelProvider mockProvider = new MockProvider(AiCompletionResult.success(
-            "{\"sqlDraft\": \"INSERT INTO student (name) VALUES ('test')\", \"intent\": \"QUERY\", \"explanation\": \"插入学生\"}",
+            "{\"sqlDraft\": \"INSERT INTO student (name) VALUES ('test')\", \"intent\": \"INSERT\", \"explanation\": \"插入学生\"}",
             "test-model"
         ));
 
@@ -185,7 +185,7 @@ class Nl2SqlServiceImplTest {
     @Test
     void shouldRejectInvalidIntent() {
         AiModelProvider mockProvider = new MockProvider(AiCompletionResult.success(
-            "{\"sqlDraft\": \"SELECT * FROM student\", \"intent\": \"INSERT\", \"explanation\": \"查询学生\"}",
+            "{\"sqlDraft\": \"CREATE TABLE demo(id INTEGER)\", \"intent\": \"DDL\", \"explanation\": \"建表\"}",
             "test-model"
         ));
 
@@ -222,6 +222,22 @@ class Nl2SqlServiceImplTest {
 
         assertTrue(result.sqlDraft().isEmpty());
         assertTrue(result.explanation().contains("empty SQL draft"));
+    }
+
+    @Test
+    void shouldLoadVersionedPromptThatAllowsDmlDraftsForJavaSafetyAssessment() {
+        MockProvider provider = new MockProvider(AiCompletionResult.success(
+            "{\"sqlDraft\":\"DELETE FROM student WHERE id = 1\",\"intent\":\"DELETE\",\"explanation\":\"删除指定学生\"}",
+            "test-model"
+        ));
+        Nl2SqlServiceImpl service = new Nl2SqlServiceImpl(provider, CONFIG, EMPTY_METADATA_SERVICE, NO_OP_EVENT_SERVICE);
+
+        Nl2SqlPlan result = service.generate(new Nl2SqlRequest("删除学号为 1 的学生", "demo"));
+
+        assertEquals("DELETE", result.intent());
+        assertTrue(provider.lastRequest.prompt().contains("SELECT, INSERT, UPDATE, and DELETE"));
+        assertTrue(provider.lastRequest.prompt().contains("untrusted draft"));
+        assertTrue(!provider.lastRequest.prompt().contains("ONLY generate SELECT"));
     }
 
     @Test
@@ -284,6 +300,7 @@ class Nl2SqlServiceImplTest {
 
     private static class MockProvider implements AiModelProvider {
         private final AiCompletionResult result;
+        private AiCompletionRequest lastRequest;
 
         MockProvider(AiCompletionResult result) {
             this.result = result;
@@ -291,6 +308,7 @@ class Nl2SqlServiceImplTest {
 
         @Override
         public AiCompletionResult complete(AiCompletionRequest request) {
+            lastRequest = request;
             return result;
         }
 

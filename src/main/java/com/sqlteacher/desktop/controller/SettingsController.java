@@ -9,6 +9,7 @@ import com.sqlteacher.application.connection.DatabaseCredentialSession;
 import com.sqlteacher.application.error.ApplicationExceptionMapper;
 import com.sqlteacher.application.maintenance.ApplicationBackupService;
 import com.sqlteacher.desktop.appearance.UiPreferencesService;
+import com.sqlteacher.application.risk.SqlSafetyModeService;
 import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.Node;
@@ -27,8 +28,10 @@ public final class SettingsController {
     private final SqlTeacherConfiguration configuration;
     private final DesktopAccessProfile accessProfile;
     private final UiPreferencesService uiPreferences;
+    private final SqlSafetyModeService sqlSafetyModeService;
 
     @FXML private Tab appearanceTab;
+    @FXML private Tab sqlSafetyTab;
     @FXML private Tab connectionsTab;
     @FXML private Tab dataTab;
 
@@ -40,7 +43,8 @@ public final class SettingsController {
             ApplicationBackupService backupService,
             SqlTeacherConfiguration configuration,
             DesktopAccessProfile accessProfile,
-            UiPreferencesService uiPreferences) {
+            UiPreferencesService uiPreferences,
+            SqlSafetyModeService sqlSafetyModeService) {
         this.connectionManagementService = Objects.requireNonNull(connectionManagementService);
         this.databaseConnectionTestService = Objects.requireNonNull(databaseConnectionTestService);
         this.applicationExceptionMapper = Objects.requireNonNull(applicationExceptionMapper);
@@ -49,11 +53,13 @@ public final class SettingsController {
         this.configuration = Objects.requireNonNull(configuration);
         this.accessProfile = Objects.requireNonNull(accessProfile);
         this.uiPreferences = Objects.requireNonNull(uiPreferences);
+        this.sqlSafetyModeService = Objects.requireNonNull(sqlSafetyModeService);
     }
 
     @FXML
     private void initialize() {
         appearanceTab.setContent(load("/fxml/appearance-settings.fxml", AppearanceSettingsController.class));
+        sqlSafetyTab.setContent(load("/fxml/sql-safety-settings.fxml", SqlSafetySettingsController.class));
         connectionsTab.setContent(load("/fxml/connection-settings.fxml", ConnectionSettingsController.class));
         dataTab.setContent(load("/fxml/data-maintenance.fxml", DataMaintenanceController.class));
     }
@@ -67,6 +73,9 @@ public final class SettingsController {
         loader.setControllerFactory(type -> {
             if (type == AppearanceSettingsController.class && controllerType == type) {
                 return new AppearanceSettingsController(uiPreferences);
+            }
+            if (type == SqlSafetySettingsController.class && controllerType == type) {
+                return new SqlSafetySettingsController(sqlSafetyModeService);
             }
             if (type == ConnectionSettingsController.class && controllerType == type) {
                 return new ConnectionSettingsController(

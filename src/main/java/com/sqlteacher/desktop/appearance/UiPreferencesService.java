@@ -23,6 +23,7 @@ public final class UiPreferencesService {
     private static final String BASE_CSS = "/css/app.css";
     private static final String TOKENS_CSS = "/css/foundation/tokens.css";
     private static final String COMPONENTS_CSS = "/css/components/core.css";
+    private static final String PAGES_CSS = "/css/components/pages.css";
     private static final String RESPONSIVE_CSS = "/css/layouts/responsive.css";
     private static final String LIGHT_CSS = "/css/theme-light.css";
     private static final List<String> ROOT_CLASSES = List.of(
@@ -74,6 +75,7 @@ public final class UiPreferencesService {
         addStylesheet(scene, TOKENS_CSS);
         addStylesheet(scene, BASE_CSS);
         addStylesheet(scene, COMPONENTS_CSS);
+        addStylesheet(scene, PAGES_CSS);
         addStylesheet(scene, RESPONSIVE_CSS);
         scene.getStylesheets().removeIf(value -> value.endsWith("theme-light.css"));
         if (resolved == UiTheme.LIGHT) addStylesheet(scene, LIGHT_CSS);

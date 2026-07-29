@@ -6,6 +6,7 @@ import com.sqlteacher.application.execution.SqlExecutionService;
 import com.sqlteacher.application.event.LearningEventService;
 import com.sqlteacher.application.risk.SqlRiskAnalysis;
 import com.sqlteacher.application.risk.SqlRiskAnalysisService;
+import com.sqlteacher.application.risk.SqlSafetyModeService;
 import com.sqlteacher.domain.SqlTeacherException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -22,6 +23,7 @@ public final class JdbcSqlExecutionService implements SqlExecutionService {
     private final JdbcConnectionProvider connectionProvider;
     private final SqlResultMapper resultMapper;
     private final SqlRiskAnalysisService riskAnalysisService;
+    private final SqlSafetyModeService safetyModeService;
     private final LearningEventService eventService;
     private static final Logger log = LoggerFactory.getLogger(JdbcSqlExecutionService.class);
 
@@ -31,9 +33,20 @@ public final class JdbcSqlExecutionService implements SqlExecutionService {
             SqlRiskAnalysisService riskAnalysisService,
             LearningEventService eventService
     ) {
+        this(connectionProvider, resultMapper, riskAnalysisService, SqlSafetyModeService.standardMode(), eventService);
+    }
+
+    public JdbcSqlExecutionService(
+            JdbcConnectionProvider connectionProvider,
+            SqlResultMapper resultMapper,
+            SqlRiskAnalysisService riskAnalysisService,
+            SqlSafetyModeService safetyModeService,
+            LearningEventService eventService
+    ) {
         this.connectionProvider = Objects.requireNonNull(connectionProvider);
         this.resultMapper = Objects.requireNonNull(resultMapper);
         this.riskAnalysisService = Objects.requireNonNull(riskAnalysisService);
+        this.safetyModeService = Objects.requireNonNull(safetyModeService);
         this.eventService = Objects.requireNonNull(eventService);
     }
 
@@ -51,6 +64,7 @@ public final class JdbcSqlExecutionService implements SqlExecutionService {
             request.sql(),
             connectionProvider.dialect(request.connectionId())
         );
+        boolean unrestricted = safetyModeService.isUnrestrictedModeEnabled();
 
         log.debug("Risk analysis result: level={}, executable={}, confirmationRequired={}, type={}",
                 risk.level(),
@@ -59,7 +73,7 @@ public final class JdbcSqlExecutionService implements SqlExecutionService {
                 risk.statementType()
         );
 
-        if (!risk.executable()) {
+        if (!unrestricted && !risk.executable()) {
             // Record risk blocked event
             eventService.recordSqlRiskBlocked(
                     request.connectionId(),
@@ -71,12 +85,13 @@ public final class JdbcSqlExecutionService implements SqlExecutionService {
             throw new SqlTeacherException(
                     "SQL_BLOCKED",
                     risk.reasons().isEmpty()
-                            ? "SQL execution blocked."
-                            : risk.reasons().getFirst()
+                            ? standardModeHint("SQL 被安全规则拦截。")
+                            : standardModeHint(risk.reasons().getFirst())
             );
         }
 
-        if (connectionProvider.isReadOnly(request.connectionId()) && !"SELECT".equals(risk.statementType())) {
+        if (!unrestricted && connectionProvider.isReadOnly(request.connectionId())
+                && !"SELECT".equals(risk.statementType())) {
             eventService.recordSqlRiskBlocked(
                 request.connectionId(),
                 risk.statementType(),
@@ -89,7 +104,7 @@ public final class JdbcSqlExecutionService implements SqlExecutionService {
             );
         }
 
-        if (risk.confirmationRequired() && !request.riskConfirmed()) {
+        if (!unrestricted && risk.confirmationRequired() && !request.riskConfirmed()) {
             eventService.recordSqlRiskBlocked(
                     request.connectionId(),
                     risk.statementType(),
@@ -202,6 +217,10 @@ public final class JdbcSqlExecutionService implements SqlExecutionService {
 
     private static int queryProbeLimit(int maxRows) {
         return maxRows == Integer.MAX_VALUE ? Integer.MAX_VALUE : maxRows + 1;
+    }
+
+    private static String standardModeHint(String reason) {
+        return reason + " 如确需执行，可在“设置 > SQL 安全”中启用无限模式。";
     }
 
     private static void validate(SqlExecutionRequest request) {

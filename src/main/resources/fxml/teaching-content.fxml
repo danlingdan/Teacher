@@ -81,8 +81,10 @@
                                 <VBox spacing="10" styleClass="panel-card">
                                     <Label text="3. 从所选题目发布任务快照" styleClass="section-title"/>
                                     <FlowPane hgap="10" vgap="10">
+                                        <ComboBox fx:id="assignmentClassroomCombo" prefWidth="240"/>
                                         <TextField fx:id="assignmentTitleField" promptText="任务标题" prefWidth="250"/>
-                                        <TextField fx:id="assignmentDueAtField" promptText="截止时间（ISO-8601，可选）" prefWidth="280"/>
+                                        <DatePicker fx:id="assignmentDueDatePicker" promptText="截止日期（可选）" prefWidth="170"/>
+                                        <ComboBox fx:id="assignmentDueTimeCombo" promptText="截止时间" prefWidth="110"/>
                                         <Button text="核对并发布任务" onAction="#onCreateAssignmentSnapshot" styleClass="primary-button"/>
                                     </FlowPane>
                                 </VBox>
@@ -98,12 +100,12 @@
                                 <padding><Insets top="18" right="22" bottom="24" left="22"/></padding>
                                 <VBox spacing="10" styleClass="panel-card">
                                     <Label text="筛选学生学习证据" styleClass="section-title"/>
-                                    <Label text="学生填写班级与任务查看本人反馈；教师查询学生时填写学生 ID。筛选条件在页面切换后保留。"
+                                    <Label text="从列表选择班级、任务和学生，无需填写 UUID；学生身份默认查看本人反馈。"
                                            wrapText="true" styleClass="page-subtitle"/>
                                     <FlowPane hgap="10" vgap="10">
-                                        <TextField fx:id="classroomIdField" promptText="班级 ID" prefWidth="250"/>
-                                        <TextField fx:id="assignmentIdField" promptText="任务 ID" prefWidth="270"/>
-                                        <TextField fx:id="studentIdField" promptText="学生 ID（教师）" prefWidth="270"/>
+                                        <ComboBox fx:id="learningClassroomCombo" prefWidth="250"/>
+                                        <ComboBox fx:id="learningAssignmentCombo" prefWidth="300"/>
+                                        <ComboBox fx:id="learningStudentCombo" prefWidth="220"/>
                                         <Button text="刷新反馈与建议" onAction="#onRefreshLearning" styleClass="primary-button"/>
                                     </FlowPane>
                                 </VBox>
@@ -143,7 +145,10 @@
                             <Button text="刷新通知" onAction="#onRefreshNotifications" styleClass="secondary-button"/>
                             <Button fx:id="markReadButton" text="标记已读" onAction="#onMarkNotificationRead" disable="true" styleClass="primary-button"/>
                         </HBox>
-                        <ListView fx:id="notificationList" VBox.vgrow="ALWAYS"/>
+                        <VBox spacing="8" styleClass="panel-card" VBox.vgrow="ALWAYS">
+                            <Label text="通知列表" styleClass="card-title"/>
+                            <ListView fx:id="notificationList" styleClass="notification-list" VBox.vgrow="ALWAYS"/>
+                        </VBox>
                     </VBox>
                 </Tab>
             </tabs>

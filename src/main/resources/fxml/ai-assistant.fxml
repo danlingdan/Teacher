@@ -30,8 +30,10 @@
 <?import javafx.scene.control.Button?>
 <?import javafx.scene.control.ComboBox?>
 <?import javafx.scene.control.Label?>
+<?import javafx.scene.control.PasswordField?>
 <?import javafx.scene.control.ScrollPane?>
 <?import javafx.scene.control.TextArea?>
+<?import javafx.scene.control.TextField?>
 <?import javafx.scene.layout.HBox?>
 <?import javafx.scene.layout.Region?>
 <?import javafx.scene.layout.StackPane?>
@@ -57,38 +59,69 @@
                             <Region styleClass="title-badge"/>
                             <Label styleClass="page-title" text="AI 助手"/>
                             <Label styleClass="page-subtitle"
-                                   text="用自然语言提问，AI 帮你生成 SQL 查询语句"/>
+                                   text="统一使用本地或网络模型生成 SQL 草稿，并经过同一套本地安全检查"/>
                         </children>
                     </VBox>
 
-                    <!-- 本地模型选择：自动读取 Ollama 已安装模型，用户可刷新并切换。 -->
+                    <!-- 统一 AI 来源：本地 Ollama 与 OpenAI-compatible 网络模型在同一入口切换。 -->
                     <VBox styleClass="panel-card" spacing="10.0">
                         <children>
                             <HBox styleClass="card-title-row" alignment="CENTER_LEFT" spacing="10.0">
                                 <children>
                                     <Region styleClass="card-accent"/>
-                                    <Label styleClass="card-title" text="本地 AI 模型"/>
+                                    <Label styleClass="card-title" text="AI 模型来源"/>
+                                    <Region HBox.hgrow="ALWAYS"/>
+                                    <Label styleClass="model-status" text="网络 API Key 不写入磁盘"/>
                                 </children>
                             </HBox>
                             <HBox alignment="CENTER_LEFT" spacing="12.0">
                                 <children>
-                                    <Label styleClass="model-label" text="选择模型"/>
-                                    <ComboBox fx:id="modelSelector"
-                                              styleClass="model-selector"
-                                              promptText="正在检测已安装模型…"
-                                              onAction="#onModelSelected"
-                                              maxWidth="Infinity"
-                                              HBox.hgrow="ALWAYS"/>
-                                    <Button fx:id="refreshModelsButton"
-                                            styleClass="model-refresh-button"
-                                            text="刷新"
-                                            onAction="#onRefreshModels"/>
+                                    <Label styleClass="model-label" text="来源"/>
+                                    <ComboBox fx:id="providerSelector" prefWidth="190"
+                                              onAction="#onProviderSelected"/>
                                 </children>
                             </HBox>
-                            <Label fx:id="modelStatusLabel"
-                                   styleClass="model-status"
-                                   text="正在检测本地 Ollama 模型…"
-                                   wrapText="true"/>
+                            <VBox fx:id="localProviderPane" spacing="8.0">
+                                <children>
+                                    <HBox alignment="CENTER_LEFT" spacing="12.0">
+                                        <children>
+                                            <Label styleClass="model-label" text="本地模型"/>
+                                            <ComboBox fx:id="modelSelector" styleClass="model-selector"
+                                                      promptText="正在检测已安装模型…" onAction="#onModelSelected"
+                                                      maxWidth="Infinity" HBox.hgrow="ALWAYS"/>
+                                            <Button fx:id="refreshModelsButton" styleClass="model-refresh-button"
+                                                    text="刷新" onAction="#onRefreshModels"/>
+                                        </children>
+                                    </HBox>
+                                    <Label fx:id="modelStatusLabel" styleClass="model-status"
+                                           text="正在检测本地 Ollama 模型…" wrapText="true"/>
+                                </children>
+                            </VBox>
+                            <VBox fx:id="networkProviderPane" spacing="8.0" visible="false" managed="false">
+                                <children>
+                                    <TextField fx:id="networkEndpointField"
+                                               promptText="HTTPS Chat Completions 地址"/>
+                                    <HBox spacing="10.0">
+                                        <children>
+                                            <TextField fx:id="networkModelField" promptText="模型名称"
+                                                       HBox.hgrow="ALWAYS"/>
+                                            <PasswordField fx:id="networkApiKeyField"
+                                                           promptText="API Key（仅本次运行）"
+                                                           HBox.hgrow="ALWAYS"/>
+                                        </children>
+                                    </HBox>
+                                    <HBox spacing="10.0" alignment="CENTER_RIGHT">
+                                        <children>
+                                            <Button text="切换回本地" onAction="#onUseLocalAi"
+                                                    styleClass="secondary-button"/>
+                                            <Button text="启用网络 AI" onAction="#onConfigureNetworkAi"
+                                                    styleClass="sql-execute-button"/>
+                                        </children>
+                                    </HBox>
+                                </children>
+                            </VBox>
+                            <Label fx:id="providerStatusLabel" styleClass="model-status"
+                                   text="选择本地 Ollama 或网络 AI" wrapText="true"/>
                         </children>
                     </VBox>
 
@@ -104,7 +137,7 @@
                             <Label fx:id="offlineHint"
                                    styleClass="offline-message"
                                    wrapText="true"
-                                   text="Ollama 服务未连接，AI 助手功能暂时不可用。请启动本地 Ollama 服务后重试。"/>
+                                   text="当前选择的 AI 服务不可用，请检查本地 Ollama 或网络 AI 配置后重试。"/>
                         </children>
                     </VBox>
 

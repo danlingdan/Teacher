@@ -8,11 +8,14 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 
 final class DefaultExerciseCatalogSeeder {
     static final String DATASET_ID = "school-core-v1";
     private static final Instant SEED_TIME = Instant.parse("2026-07-21T00:00:00Z");
+    private static final Instant HINT_UPGRADE_TIME = Instant.parse("2026-07-30T00:00:00Z");
+    private static final int SEED_VERSION = 2;
     private static final String SETUP_SQL = """
         create table student(id integer primary key, name text not null, class_name text not null, score integer not null);
         insert into student values
@@ -74,7 +77,26 @@ final class DefaultExerciseCatalogSeeder {
             statement.setBoolean(11, exercise.enabled());
             statement.setString(12, exercise.createdAt().toString());
             statement.setString(13, exercise.updatedAt().toString());
-            return statement.executeUpdate();
+            int inserted = statement.executeUpdate();
+            if (inserted == 0) upgradeSeedHints(connection, exercise);
+            return inserted;
+        }
+    }
+
+    private void upgradeSeedHints(Connection connection, ExerciseDefinition exercise) throws SQLException {
+        if (exercise.hints().size() != 3) return;
+        String originalHints = codec.encodeHints(exercise.hints().subList(0, 2));
+        try (PreparedStatement statement = connection.prepareStatement("""
+            update exercises
+            set hints_json = ?, version = ?, updated_at = ?
+            where id = ? and version = 1 and hints_json = ?
+            """)) {
+            statement.setString(1, codec.encodeHints(exercise.hints()));
+            statement.setInt(2, SEED_VERSION);
+            statement.setString(3, HINT_UPGRADE_TIME.toString());
+            statement.setString(4, exercise.id());
+            statement.setString(5, originalHints);
+            statement.executeUpdate();
         }
     }
 
@@ -131,9 +153,14 @@ final class DefaultExerciseCatalogSeeder {
         String id, String title, String description, String knowledgePoint, ExerciseDifficulty difficulty,
         String referenceSql, boolean ordered, String... hints
     ) {
+        List<String> expandedHints = new ArrayList<>(List.of(hints));
+        if (expandedHints.size() < 3) {
+            expandedHints.add("运行前逐项核对题目要求中的返回字段、筛选条件、分组和排序。");
+        }
         return new ExerciseDefinition(
             id, title, description, knowledgePoint, difficulty, DATASET_ID, referenceSql,
-            ExerciseEvaluationRule.exactResult(ordered), List.of(hints), 1, true, SEED_TIME, SEED_TIME
+            ExerciseEvaluationRule.exactResult(ordered), expandedHints, SEED_VERSION, true,
+            SEED_TIME, HINT_UPGRADE_TIME
         );
     }
 }

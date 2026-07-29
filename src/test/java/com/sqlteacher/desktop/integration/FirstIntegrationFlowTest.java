@@ -52,7 +52,7 @@ class FirstIntegrationFlowTest {
 
             assertErrorCode(service, "SELECT FROM student", "SQL_EXECUTION_FAILED");
             assertErrorCode(service, "SELECT * FROM student; SELECT 1", "SQL_BLOCKED");
-            assertErrorCode(service, "DROP TABLE student", "SQL_CONFIRMATION_REQUIRED");
+            assertErrorCode(service, "DROP TABLE student", "SQL_BLOCKED");
             assertErrorCode(
                 service,
                 "UPDATE student SET score = 0 WHERE id = 1",
