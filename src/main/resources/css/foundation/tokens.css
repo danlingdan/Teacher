@@ -1,0 +1,58 @@
+/* SQLTeacher v1.5.5 semantic design tokens. Keep page CSS free of raw palette values. */
+.root,
+.theme-dark {
+    -st-bg-canvas: #0f172a;
+    -st-bg-sidebar: #0b1220;
+    -st-bg-surface: #17213a;
+    -st-bg-surface-raised: #1d2945;
+    -st-bg-input: #111b30;
+    -st-border-subtle: #2c3958;
+    -st-border-strong: #46587d;
+    -st-text-primary: #f3f6ff;
+    -st-text-secondary: #aab6cf;
+    -st-text-muted: #71809e;
+    -st-accent: #7c6cff;
+    -st-accent-hover: #9083ff;
+    -st-accent-soft: #2a2856;
+    -st-success: #4ade80;
+    -st-warning: #fbbf24;
+    -st-danger: #fb7185;
+    -st-focus: #a99dff;
+
+    /* AtlantaFX consumes these looked-up colors for standard controls. */
+    -color-accent-emphasis: -st-accent;
+    -color-accent-fg: -st-accent-hover;
+    -color-bg-default: -st-bg-canvas;
+    -color-bg-subtle: -st-bg-surface;
+    -color-border-default: -st-border-subtle;
+    -color-fg-default: -st-text-primary;
+    -color-fg-muted: -st-text-secondary;
+}
+
+.theme-light {
+    -st-bg-canvas: #f4f7fc;
+    -st-bg-sidebar: #ffffff;
+    -st-bg-surface: #ffffff;
+    -st-bg-surface-raised: #f8faff;
+    -st-bg-input: #ffffff;
+    -st-border-subtle: #d8dfed;
+    -st-border-strong: #aebbd2;
+    -st-text-primary: #182238;
+    -st-text-secondary: #53617a;
+    -st-text-muted: #7c899f;
+    -st-accent: #6557e8;
+    -st-accent-hover: #5547d8;
+    -st-accent-soft: #ebe9ff;
+    -st-success: #16834b;
+    -st-warning: #a35a00;
+    -st-danger: #c53048;
+    -st-focus: #6557e8;
+
+    -color-accent-emphasis: -st-accent;
+    -color-accent-fg: -st-accent-hover;
+    -color-bg-default: -st-bg-canvas;
+    -color-bg-subtle: -st-bg-surface;
+    -color-border-default: -st-border-subtle;
+    -color-fg-default: -st-text-primary;
+    -color-fg-muted: -st-text-secondary;
+}

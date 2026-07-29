@@ -1,5 +1,8 @@
 package com.sqlteacher.desktop.appearance;
 
+import atlantafx.base.theme.PrimerDark;
+import atlantafx.base.theme.PrimerLight;
+import javafx.application.Application;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.scene.paint.Color;
@@ -18,6 +21,9 @@ import java.util.concurrent.TimeUnit;
 public final class UiPreferencesService {
     private static final Logger LOG = LoggerFactory.getLogger(UiPreferencesService.class);
     private static final String BASE_CSS = "/css/app.css";
+    private static final String TOKENS_CSS = "/css/foundation/tokens.css";
+    private static final String COMPONENTS_CSS = "/css/components/core.css";
+    private static final String RESPONSIVE_CSS = "/css/layouts/responsive.css";
     private static final String LIGHT_CSS = "/css/theme-light.css";
     private static final List<String> ROOT_CLASSES = List.of(
         "theme-dark", "theme-light", "font-modern", "font-system", "font-classic",
@@ -61,9 +67,15 @@ public final class UiPreferencesService {
 
     public void apply(Scene scene) {
         Objects.requireNonNull(scene);
-        addStylesheet(scene, BASE_CSS);
-        scene.getStylesheets().removeIf(value -> value.endsWith("theme-light.css"));
         UiTheme resolved = resolve(current.theme());
+        Application.setUserAgentStylesheet(resolved == UiTheme.LIGHT
+            ? new PrimerLight().getUserAgentStylesheet()
+            : new PrimerDark().getUserAgentStylesheet());
+        addStylesheet(scene, TOKENS_CSS);
+        addStylesheet(scene, BASE_CSS);
+        addStylesheet(scene, COMPONENTS_CSS);
+        addStylesheet(scene, RESPONSIVE_CSS);
+        scene.getStylesheets().removeIf(value -> value.endsWith("theme-light.css"));
         if (resolved == UiTheme.LIGHT) addStylesheet(scene, LIGHT_CSS);
         scene.setFill(resolved == UiTheme.LIGHT ? Color.web("#f4f7fb") : Color.web("#141c30"));
         Parent root = scene.getRoot();

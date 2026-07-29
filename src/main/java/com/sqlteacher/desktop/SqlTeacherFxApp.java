@@ -244,7 +244,7 @@ public final class SqlTeacherFxApp extends Application {
             MainWindowController controller = loader.getController();
             Scene scene = themedScene(root, DEFAULT_WIDTH, DEFAULT_HEIGHT);
             controller.registerKeyboardShortcuts(scene);
-            stage.setMinWidth(960.0);
+            stage.setMinWidth(840.0);
             stage.setMinHeight(600.0);
             stage.setScene(scene);
             stage.centerOnScreen();

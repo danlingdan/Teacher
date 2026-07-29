@@ -14,11 +14,31 @@ class DesktopVisualResourceTest {
     void shouldShipBaseAndLightThemeResources() throws IOException {
         String base = resource("/css/app.css");
         String light = resource("/css/theme-light.css");
+        String tokens = resource("/css/foundation/tokens.css");
+        String components = resource("/css/components/core.css");
+        String responsive = resource("/css/layouts/responsive.css");
 
         assertTrue(base.contains(".app-sidebar"));
         assertTrue(base.contains(".font-modern"));
         assertTrue(light.contains(".theme-light") || light.contains("SQLTeacher v1.5 light theme"));
         assertTrue(light.contains(".panel-card"));
+        assertTrue(tokens.contains("-st-bg-canvas"));
+        assertTrue(tokens.contains("-color-accent-emphasis"));
+        assertTrue(components.contains(".sql-workbench-split"));
+        assertTrue(responsive.contains(".layout-compact"));
+    }
+
+    @Test
+    void shellAndSqlWorkbenchShouldUseAdaptiveStructures() throws IOException {
+        String shell = resource("/fxml/MainWindow.fxml");
+        String home = resource("/fxml/home.fxml");
+        String sql = resource("/fxml/SqlPractice.fxml");
+
+        assertTrue(shell.contains("fx:id=\"mainWindowRoot\""));
+        assertTrue(shell.contains("fx:id=\"appSidebar\""));
+        assertTrue(home.contains("TilePane"));
+        assertTrue(sql.contains("fx:id=\"workbenchSplit\""));
+        assertFalse(sql.contains("sql-practice-scroll"));
     }
 
     @Test

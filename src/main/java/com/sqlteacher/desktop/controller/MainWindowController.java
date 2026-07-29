@@ -31,12 +31,15 @@ import com.sqlteacher.application.risk.SqlRiskAnalysisService;
 import com.sqlteacher.desktop.GlobalLoading;
 import com.sqlteacher.desktop.appearance.UiIcon;
 import com.sqlteacher.desktop.appearance.UiIcons;
+import com.sqlteacher.desktop.appearance.UiLayoutMode;
 import com.sqlteacher.desktop.appearance.UiPreferencesService;
+import javafx.application.Platform;
 import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.Node;
 import javafx.scene.control.Button;
 import javafx.scene.control.ButtonBase;
+import javafx.scene.control.ContentDisplay;
 import javafx.scene.control.Label;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.StackPane;
@@ -145,6 +148,14 @@ public final class MainWindowController {
     /** 主内容层 BorderPane（FXML 根节点改为 StackPane 后，业务内容仍放在 BorderPane 内）。 */
     @FXML
     private BorderPane mainContainer;
+    @FXML
+    private StackPane mainWindowRoot;
+    @FXML
+    private VBox appSidebar;
+    @FXML
+    private Label brandTitle;
+    @FXML
+    private Label sidebarCaption;
 
     /** 首页导航按钮（顶部导航栏）。 */
     @FXML
@@ -177,11 +188,18 @@ public final class MainWindowController {
     private Button teachingContentNavButton;
     @FXML
     private Label identityLabel;
+    @FXML
+    private Button switchIdentityButton;
     @FXML private VBox learningNavGroup;
     @FXML private VBox teachingNavGroup;
     @FXML private VBox toolsNavGroup;
     @FXML private VBox systemNavGroup;
     @FXML private Label teachingNavGroupTitle;
+    @FXML private Label learningNavGroupTitle;
+    @FXML private Label toolsNavGroupTitle;
+    @FXML private Label systemNavGroupTitle;
+
+    private UiLayoutMode layoutMode;
 
     /** 右侧页面容器，导航切换时替换其中的内容节点。 */
     @FXML
@@ -308,7 +326,54 @@ public final class MainWindowController {
         GlobalLoading.initialize(loadingOverlay, loadingText);
         decorateNavigation();
         applyAccessPolicy();
+        bindResponsiveLayout();
         onNavigateHome();
+    }
+
+    private void bindResponsiveLayout() {
+        mainWindowRoot.widthProperty().addListener((ignored, oldWidth, newWidth) ->
+            applyResponsiveLayout(newWidth.doubleValue()));
+        Platform.runLater(() -> applyResponsiveLayout(mainWindowRoot.getWidth()));
+    }
+
+    private void applyResponsiveLayout(double width) {
+        if (width <= 0) return;
+        UiLayoutMode next = UiLayoutMode.forWidth(width);
+        if (next == layoutMode) return;
+        layoutMode = next;
+        for (UiLayoutMode candidate : UiLayoutMode.values()) {
+            mainWindowRoot.getStyleClass().remove(candidate.styleClass());
+        }
+        mainWindowRoot.getStyleClass().add(next.styleClass());
+
+        boolean compact = next == UiLayoutMode.COMPACT;
+        double sidebarWidth = switch (next) {
+            case COMPACT -> 72.0;
+            case MEDIUM -> 196.0;
+            case WIDE -> 232.0;
+        };
+        appSidebar.setMinWidth(sidebarWidth);
+        appSidebar.setPrefWidth(sidebarWidth);
+        appSidebar.setMaxWidth(sidebarWidth);
+        brandTitle.setText(compact ? "ST" : "SQLTeacher");
+        sidebarCaption.setVisible(!compact);
+        sidebarCaption.setManaged(!compact);
+        setVisibleAndManaged(learningNavGroupTitle, !compact);
+        setVisibleAndManaged(teachingNavGroupTitle, !compact);
+        setVisibleAndManaged(toolsNavGroupTitle, !compact);
+        setVisibleAndManaged(systemNavGroupTitle, !compact);
+        for (ButtonBase navButton : navButtons()) {
+            navButton.setContentDisplay(compact ? ContentDisplay.GRAPHIC_ONLY : ContentDisplay.LEFT);
+        }
+        identityLabel.setText(compact
+            ? accessProfile.roleLabel()
+            : accessProfile.displayName() + " · " + accessProfile.roleLabel());
+        switchIdentityButton.setContentDisplay(compact ? ContentDisplay.GRAPHIC_ONLY : ContentDisplay.LEFT);
+    }
+
+    private static void setVisibleAndManaged(Node node, boolean visible) {
+        node.setVisible(visible);
+        node.setManaged(visible);
     }
 
     private void applyAccessPolicy() {
@@ -352,6 +417,7 @@ public final class MainWindowController {
         UiIcons.decorate(aiAssistantNavButton, UiIcon.SPARK, "AI 助手");
         UiIcons.decorate(tableSchemaNavButton, UiIcon.TABLE, "表结构");
         UiIcons.decorate(settingsNavButton, UiIcon.SETTINGS, "设置");
+        UiIcons.decorate(switchIdentityButton, UiIcon.USER, "切换身份");
     }
 
     private static void updateGroupVisibility(VBox group, Button... buttons) {
