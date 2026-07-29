@@ -1,47 +1,70 @@
 package com.sqlteacher.infrastructure.ai;
 
-import com.sqlteacher.application.ai.AiCompletionRequest;
-import com.sqlteacher.application.ai.AiModelProvider;
-import com.sqlteacher.application.collaboration.FeedbackDraft;
-import com.sqlteacher.application.collaboration.FeedbackDraftEnhancer;
+import com.sqlteacher.application.ai.*;
+import com.sqlteacher.application.collaboration.*;
 
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
-/** Uses a configured network provider only; failures deterministically fall back to the server draft. */
+/** AI may rewrite wording only; deterministic evidence and result remain authoritative. */
 public final class SafeAiFeedbackDraftEnhancer implements FeedbackDraftEnhancer {
-    private static final int MAX_OUTPUT = 2_000;
-    private final AiModelProvider provider;
+    private final AiTaskService taskService;
+    private final AiModelProvider legacyProvider;
+    private final AiContextPolicy contextPolicy;
 
     public SafeAiFeedbackDraftEnhancer(AiModelProvider provider) {
-        this.provider = Objects.requireNonNull(provider);
+        this.legacyProvider = Objects.requireNonNull(provider);
+        this.taskService = null;
+        this.contextPolicy = new DefaultAiContextPolicy();
     }
 
-    @Override
-    public FeedbackDraft enhance(FeedbackDraft deterministicDraft) {
-        Objects.requireNonNull(deterministicDraft, "deterministicDraft must not be null");
-        String model = provider.preferredModel();
-        if (model == null || model.isBlank()) return deterministicDraft;
-        String prompt = """
-            你是 SQL 课程教师的反馈草稿助手。只根据下面的确定性证据改写一段简洁、友善、可操作的中文反馈。
-            不得改变通过/未通过结论，不得给分，不得编造学生身份、SQL、数据库结构或答案，不得包含 Markdown。
-            输出不超过 300 个汉字，教师会人工确认后再发布。
+    public SafeAiFeedbackDraftEnhancer(AiTaskService taskService, AiContextPolicy contextPolicy) {
+        this.taskService = Objects.requireNonNull(taskService);
+        this.contextPolicy = Objects.requireNonNull(contextPolicy);
+        this.legacyProvider = null;
+    }
 
-            证据：%s
-            基础草稿：%s
-            """.formatted(String.join("；", deterministicDraft.evidence()), deterministicDraft.text());
+    @Override public FeedbackDraft enhance(FeedbackDraft draft) { return enhance(draft, FeedbackDraftStyle.CONCISE); }
+
+    @Override public AiContextPreview preview(FeedbackDraft draft) { return prepare(draft).preview(); }
+
+    @Override public FeedbackDraft enhance(FeedbackDraft draft, FeedbackDraftStyle style) {
+        Objects.requireNonNull(draft, "deterministicDraft must not be null");
+        FeedbackDraftStyle selected = style == null ? FeedbackDraftStyle.CONCISE : style;
+        AiPreparedContext context = prepare(draft);
+        if (context.items().isEmpty()) return draft;
+        String prompt = PromptTemplateLoader.render("/prompts/feedback-draft-v1.txt", Map.of(
+            "style", selected.displayName(), "evidence", context.items().get(0).content()
+        ));
         try {
-            var result = provider.complete(new AiCompletionRequest(model, prompt, Duration.ofSeconds(20)));
-            if (!result.success() || result.content() == null || result.content().isBlank()) return deterministicDraft;
-            String content = result.content().strip();
-            if (content.length() > MAX_OUTPUT) content = content.substring(0, MAX_OUTPUT);
-            List<String> evidence = new ArrayList<>(deterministicDraft.evidence());
+            AiTaskResult result;
+            if (taskService != null) {
+                result = taskService.execute(new AiTaskRequest(AiTaskType.FEEDBACK_DRAFT, "", prompt,
+                    "feedback-v1", context.preview()));
+            } else {
+                String model = legacyProvider.preferredModel();
+                if (model == null || model.isBlank()) return draft;
+                AiCompletionResult legacy = legacyProvider.complete(new AiCompletionRequest(model, prompt, java.time.Duration.ofSeconds(20)));
+                result = legacy.success() ? AiTaskResult.success(legacy.content(), legacy.model())
+                    : AiTaskResult.failure(AiTaskErrorCode.PROVIDER_UNAVAILABLE, legacy.errorMessage(), legacy.model());
+            }
+            if (!result.success() || result.content().isBlank()) return draft;
+            List<String> evidence = new ArrayList<>(draft.evidence());
             evidence.add("AI model: " + result.model());
-            return new FeedbackDraft(content, evidence, true);
+            evidence.add("AI wording draft: " + result.model() + " / feedback-v1 / " + selected.name());
+            return new FeedbackDraft(result.content().strip(), evidence, true);
         } catch (RuntimeException error) {
-            return deterministicDraft;
+            return draft;
         }
+    }
+
+    private AiPreparedContext prepare(FeedbackDraft draft) {
+        Objects.requireNonNull(draft, "deterministicDraft must not be null");
+        return contextPolicy.prepare(AiTaskType.FEEDBACK_DRAFT, List.of(
+            new AiContextItem(AiContextCategory.DETERMINISTIC_RESULT, "确定性评测证据",
+                String.join("；", draft.evidence()) + "\n基础草稿：" + draft.text())
+        ));
     }
 }

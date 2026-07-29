@@ -6,7 +6,7 @@ import java.util.Arrays;
 
 /**
  * 用户自带密钥的 OpenAI-compatible 网络模型配置。
- * API Key 仅用于一次请求，调用方不得持久化、同步或记录该值。
+ * API Key 只能存在于受控内存或当前 Windows 用户的 DPAPI 加密存储中，不得同步或记录。
  */
 public record OpenAiCompatibleConfiguration(URI endpoint, String model, char[] apiKey) {
     public OpenAiCompatibleConfiguration {

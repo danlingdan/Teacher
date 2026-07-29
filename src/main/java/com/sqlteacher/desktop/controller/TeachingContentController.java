@@ -11,6 +11,7 @@ import com.sqlteacher.application.collaboration.ContentStatus;
 import com.sqlteacher.application.collaboration.DesktopAccessProfile;
 import com.sqlteacher.application.collaboration.FeedbackStatus;
 import com.sqlteacher.application.collaboration.FeedbackDraftEnhancer;
+import com.sqlteacher.application.collaboration.FeedbackDraftStyle;
 import com.sqlteacher.application.collaboration.KnowledgeMastery;
 import com.sqlteacher.application.collaboration.KnowledgePoint;
 import com.sqlteacher.application.collaboration.SharedExerciseVersion;
@@ -81,6 +82,7 @@ public final class TeachingContentController {
     @FXML private ComboBox<SelectionOption> learningStudentCombo;
     @FXML private ComboBox<FeedbackStatus> feedbackStatusCombo;
     @FXML private TextArea feedbackCommentField;
+    @FXML private ComboBox<FeedbackDraftStyle> feedbackDraftStyleCombo;
     @FXML private ListView<String> feedbackList;
     @FXML private ListView<String> masteryList;
     @FXML private ListView<String> notificationList;
@@ -112,6 +114,8 @@ public final class TeachingContentController {
         feedbackEditorPane.setManaged(teacher);
         feedbackStatusCombo.getItems().setAll(FeedbackStatus.values());
         feedbackStatusCombo.setValue(FeedbackStatus.NEEDS_WORK);
+        feedbackDraftStyleCombo.getItems().setAll(FeedbackDraftStyle.values());
+        feedbackDraftStyleCombo.setValue(FeedbackDraftStyle.CONCISE);
         assignmentDueTimeCombo.getItems().setAll(DeadlineValueConverter.timeOptions());
         assignmentDueTimeCombo.setValue(DeadlineValueConverter.DEFAULT_TIME);
         assignmentClassroomCombo.setPromptText("选择发布班级");
@@ -466,12 +470,26 @@ public final class TeachingContentController {
         String assignmentId = selectedId(learningAssignmentCombo, "请选择任务");
         String submissionId = required(submissionIdField.getText(), "请输入提交 ID");
         if (classroomId == null || assignmentId == null || submissionId == null) return;
-        run("正在生成安全反馈草稿…", () -> {
-            var draft = feedbackDraftEnhancer.enhance(
-                api.draftSubmissionFeedback(token(), classroomId, assignmentId, submissionId));
+        run("正在准备最小必要反馈上下文…", () -> {
+            var deterministic = api.draftSubmissionFeedback(token(), classroomId, assignmentId, submissionId);
+            var preview = feedbackDraftEnhancer.preview(deterministic);
             Platform.runLater(() -> {
-                feedbackCommentField.setText(draft.text());
-                showStatus(draft.aiGenerated() ? "已生成网络 AI 反馈草稿，请人工确认" : "已生成确定性模板草稿", false);
+                javafx.scene.control.Alert alert = new javafx.scene.control.Alert(javafx.scene.control.Alert.AlertType.CONFIRMATION);
+                alert.setTitle("确认生成 AI 反馈草稿");
+                alert.setHeaderText("将发送 " + preview.characterCount() + " 个脱敏后的确定性证据字符");
+                alert.setContentText("来源：" + String.join("、", preview.sources()) + "\nAI 不得改变评测结论，草稿发布前仍需人工确认。");
+                if (alert.showAndWait().filter(javafx.scene.control.ButtonType.OK::equals).isEmpty()) {
+                    feedbackCommentField.setText(deterministic.text());
+                    showStatus("已取消网络增强，保留确定性模板草稿", false);
+                    return;
+                }
+                run("正在生成安全反馈草稿…", () -> {
+                    var draft = feedbackDraftEnhancer.enhance(deterministic, feedbackDraftStyleCombo.getValue());
+                    Platform.runLater(() -> {
+                        feedbackCommentField.setText(draft.text());
+                        showStatus(draft.aiGenerated() ? "已生成 AI 反馈草稿，请人工确认" : "已生成确定性模板草稿", false);
+                    });
+                });
             });
         });
     }

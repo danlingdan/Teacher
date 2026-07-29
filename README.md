@@ -1,6 +1,6 @@
 # SQLTeacher
 
-SQLTeacher 是一款面向数据库课程教学与 SQL 练习的本地优先 Java 桌面应用。`v1.5.6` 在现代 JavaFX 应用壳基础上进一步修复浅色模式可读性，统一本地与网络 AI 入口，改进练习字段提示、任务时间与反馈选择，并新增默认关闭的本机 SQL 无限模式。
+SQLTeacher 是一款面向数据库课程教学与 SQL 练习的本地优先 Java 桌面应用。`v1.6.0` 将本地 Ollama 与 OpenAI-compatible 网络模型收敛为可配置、可解释、可降级的统一 AI 教学工作区，并继续坚持 AI 只生成待审查草稿的安全边界。
 
 ## 当前功能
 
@@ -64,7 +64,7 @@ mvn -q compile exec:java "-Dexec.mainClass=com.sqlteacher.StageOneVerificationAp
 target\installer\SQLTeacher
 ```
 
-脚本会生成 `SQLTeacher-1.5.6.exe` 正式安装器、便携 app-image 和 `SQLTeacher-1.5.6-windows-x64.zip`。WiX 3.14.1 在首次打包时下载到 `target/tools` 并校验 SHA-256，不进入 Git。推送与 Maven 版本一致的 `vX.Y.Z` 标签后，GitHub Actions 会自动测试、打包并发布这些文件。
+脚本会生成 `SQLTeacher-1.6.0.exe` 正式安装器、便携 app-image 和 `SQLTeacher-1.6.0-windows-x64.zip`。WiX 3.14.1 在首次打包时下载到 `target/tools` 并校验 SHA-256，不进入 Git。推送与 Maven 版本一致的 `vX.Y.Z` 标签后，GitHub Actions 会自动测试、打包并发布这些文件。
 
 ## 项目结构
 
@@ -85,6 +85,7 @@ docs                                         架构、计划、验收与软著�
 
 ## 版本
 
+- `v1.6.0`：统一 AI 教学工作区，包含 DPAPI Provider Profile、统一探测与任务编排、隐私预览、SQL 草稿修订、用量/历史、教师模板和 Ollama 模型切换自动卸载。详见 [`v1.6 发布说明`](docs/releases/v1.6.0.md)、[`实施计划`](docs/plans/2026-07-30-v1.6-controlled-ai-workspace-plan.md)与[`实施记录`](docs/stage5/2026-07-30-v16-controlled-ai-workspace-implementation.md)。
 - `v1.5.6`：修复浅色模式与禁用状态可读性，统一本地/网络 AI，增强练习与教学表单，并增加默认关闭的 SQL 无限模式。详见 [`v1.5.6 发布说明`](docs/releases/v1.5.6.md)。
 - `v1.5.5`：新增 AtlantaFX 控件基线、语义设计令牌、分层 CSS、三档响应式侧栏、自动换列首页、常驻 SQL 编辑器/结果工作区和可见键盘焦点。详见 [`v1.5.5 UI Foundation 计划`](docs/plans/2026-07-29-v1.5.5-ui-foundation-plan.md)。
 - `v1.5.0`：新增角色化侧栏、三主题、字体/密度偏好、统一矢量图标、全员设置入口与设置项权限，并重构学生练习和教师教学工作台。详见 [`v1.5 UI 与易用性升级计划`](docs/plans/2026-07-28-v1.5-ui-usability-delivery-plan.md)。

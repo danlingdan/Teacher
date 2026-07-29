@@ -24,6 +24,9 @@ import com.sqlteacher.application.collaboration.AssignmentDeliveryService;
 import com.sqlteacher.application.collaboration.FeedbackDraftEnhancer;
 import com.sqlteacher.application.collaboration.TeachingContentCache;
 import com.sqlteacher.application.ai.NetworkAiSettingsService;
+import com.sqlteacher.application.ai.AiProviderProfileService;
+import com.sqlteacher.application.ai.AiProviderProbeService;
+import com.sqlteacher.application.ai.AiTaskHistoryService;
 import com.sqlteacher.application.metadata.DatabaseMetadataService;
 import com.sqlteacher.application.nl2sql.Nl2SqlSafetyService;
 import com.sqlteacher.application.risk.SqlRiskAnalysisService;
@@ -92,6 +95,9 @@ public final class SqlTeacherFxApp extends Application {
     private CloudLearningSyncService cloudLearningSyncService;
     private AssignmentDeliveryService assignmentDeliveryService;
     private NetworkAiSettingsService networkAiSettingsService;
+    private AiProviderProfileService aiProviderProfileService;
+    private AiProviderProbeService aiProviderProbeService;
+    private AiTaskHistoryService aiTaskHistoryService;
     private FeedbackDraftEnhancer feedbackDraftEnhancer;
     private TeachingContentCache teachingContentCache;
     private InMemoryLearningEventOwnerContext learningEventOwnerContext;
@@ -130,6 +136,9 @@ public final class SqlTeacherFxApp extends Application {
             cloudLearningSyncService = context.getBean(CloudLearningSyncService.class);
             assignmentDeliveryService = context.getBean(AssignmentDeliveryService.class);
             networkAiSettingsService = context.getBean(NetworkAiSettingsService.class);
+            aiProviderProfileService = context.getBean(AiProviderProfileService.class);
+            aiProviderProbeService = context.getBean(AiProviderProbeService.class);
+            aiTaskHistoryService = context.getBean(AiTaskHistoryService.class);
             feedbackDraftEnhancer = context.getBean(FeedbackDraftEnhancer.class);
             teachingContentCache = context.getBean(TeachingContentCache.class);
             learningEventOwnerContext = context.getBean(InMemoryLearningEventOwnerContext.class);
@@ -155,7 +164,8 @@ public final class SqlTeacherFxApp extends Application {
             || applicationBackupService == null || configuration == null
             || cloudApiClient == null || cloudSessionService == null || cloudLearningSyncService == null
             || assignmentDeliveryService == null
-            || networkAiSettingsService == null || learningEventOwnerContext == null
+            || networkAiSettingsService == null || aiProviderProfileService == null
+            || aiProviderProbeService == null || aiTaskHistoryService == null || learningEventOwnerContext == null
             || uiPreferencesService == null) {
             throw new IllegalStateException("Services are unavailable because application initialization did not complete");
         }
@@ -235,6 +245,9 @@ public final class SqlTeacherFxApp extends Application {
                     cloudLearningSyncService,
                     assignmentDeliveryService,
                     networkAiSettingsService,
+                    aiProviderProfileService,
+                    aiProviderProbeService,
+                    aiTaskHistoryService,
                     feedbackDraftEnhancer,
                     teachingContentCache,
                     uiPreferencesService,
@@ -310,6 +323,9 @@ public final class SqlTeacherFxApp extends Application {
         cloudSessionService = null;
         cloudLearningSyncService = null;
         networkAiSettingsService = null;
+        aiProviderProfileService = null;
+        aiProviderProbeService = null;
+        aiTaskHistoryService = null;
         learningEventOwnerContext = null;
         uiPreferencesService = null;
     }

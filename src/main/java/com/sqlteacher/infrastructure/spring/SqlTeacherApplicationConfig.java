@@ -1,9 +1,6 @@
 package com.sqlteacher.infrastructure.spring;
 
-import com.sqlteacher.application.ai.AiModelProvider;
-import com.sqlteacher.application.ai.AiModelSelectionService;
-import com.sqlteacher.application.ai.AiStatusService;
-import com.sqlteacher.application.ai.NetworkAiSettingsService;
+import com.sqlteacher.application.ai.*;
 import com.sqlteacher.application.config.AppConfigurationService;
 import com.sqlteacher.application.config.SqlTeacherConfiguration;
 import com.sqlteacher.application.collaboration.CloudApiClient;
@@ -22,17 +19,12 @@ import com.sqlteacher.application.nl2sql.DefaultNl2SqlSafetyService;
 import com.sqlteacher.application.nl2sql.Nl2SqlService;
 import com.sqlteacher.application.nl2sql.Nl2SqlSafetyService;
 import com.sqlteacher.application.risk.SqlRiskAnalysisService;
-import com.sqlteacher.infrastructure.ai.Nl2SqlServiceImpl;
-import com.sqlteacher.infrastructure.ai.OllamaAiModelProvider;
-import com.sqlteacher.infrastructure.ai.OllamaAiStatusService;
-import com.sqlteacher.infrastructure.ai.OllamaModelSelectionService;
-import com.sqlteacher.infrastructure.ai.InMemoryNetworkAiSettingsService;
-import com.sqlteacher.infrastructure.ai.SwitchableAiModelProvider;
-import com.sqlteacher.infrastructure.ai.SafeAiFeedbackDraftEnhancer;
+import com.sqlteacher.infrastructure.ai.*;
 import com.sqlteacher.infrastructure.config.PropertiesAppConfigurationService;
 import com.sqlteacher.infrastructure.cloud.HttpCloudApiClient;
 import com.sqlteacher.infrastructure.cloud.PersistentCloudSessionService;
 import com.sqlteacher.infrastructure.cloud.WindowsDpapiCloudSessionStore;
+import com.sqlteacher.infrastructure.security.WindowsDpapiSecretStore;
 import com.sqlteacher.infrastructure.cloud.DefaultCloudLearningSyncService;
 import com.sqlteacher.infrastructure.database.DatabaseServiceConfig;
 import com.sqlteacher.infrastructure.database.SqliteAppDatabaseInitializer;
@@ -74,12 +66,32 @@ public class SqlTeacherApplicationConfig {
     }
 
     @Bean
-    public FeedbackDraftEnhancer feedbackDraftEnhancer(AiModelProvider aiModelProvider) {
-        return new SafeAiFeedbackDraftEnhancer(aiModelProvider);
+    public FeedbackDraftEnhancer feedbackDraftEnhancer(AiTaskService taskService, AiContextPolicy contextPolicy) {
+        return new SafeAiFeedbackDraftEnhancer(taskService, contextPolicy);
     }
 
-    @Bean(destroyMethod = "clear")
-    public NetworkAiSettingsService networkAiSettingsService() { return new InMemoryNetworkAiSettingsService(); }
+    @Bean(destroyMethod = "close")
+    public PersistentNetworkAiSettingsService networkAiSettingsService(SqlTeacherConfiguration properties) {
+        return new PersistentNetworkAiSettingsService(
+            properties.dataDirectory().resolve("ai-providers.json"),
+            properties.dataDirectory().resolve("ai-provider-keys")
+        );
+    }
+
+    @Bean public AiProviderProbeService aiProviderProbeService() { return new HttpAiProviderProbeService(); }
+
+    @Bean public AiContextPolicy aiContextPolicy() { return new DefaultAiContextPolicy(); }
+
+    @Bean public AiTaskHistoryService aiTaskHistoryService(SqlTeacherConfiguration properties) {
+        return new FileAiTaskHistoryService(properties.dataDirectory().resolve("ai-task-history.json"));
+    }
+
+    @Bean public AiUsagePolicy aiUsagePolicy() { return AiUsagePolicy.defaults(); }
+
+    @Bean public AiTaskService aiTaskService(AiModelProvider provider, AiUsagePolicy usagePolicy,
+            AiTaskHistoryService historyService) {
+        return new DefaultAiTaskService(provider, usagePolicy, historyService);
+    }
 
     @Bean
     public AiModelSelectionService aiModelSelectionService(SqlTeacherConfiguration properties) {
@@ -91,20 +103,22 @@ public class SqlTeacherApplicationConfig {
 
     @Bean
     public Nl2SqlService nl2SqlService(
-        AiModelProvider aiModelProvider,
+        AiTaskService aiTaskService,
         SqlTeacherConfiguration properties,
         AiModelSelectionService modelSelectionService,
         DatabaseMetadataService databaseMetadataService,
         LearningEventService learningEventService,
-        ConnectionManagementService connectionManagementService
+        ConnectionManagementService connectionManagementService,
+        AiContextPolicy contextPolicy
     ) {
         return new Nl2SqlServiceImpl(
-            aiModelProvider,
+            aiTaskService,
             properties.ai(),
             modelSelectionService,
             databaseMetadataService,
             learningEventService,
-            connectionManagementService
+            connectionManagementService,
+            contextPolicy
         );
     }
 

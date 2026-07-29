@@ -25,6 +25,9 @@ import com.sqlteacher.application.collaboration.AssignmentTaskContext;
 import com.sqlteacher.application.collaboration.FeedbackDraftEnhancer;
 import com.sqlteacher.application.collaboration.TeachingContentCache;
 import com.sqlteacher.application.ai.NetworkAiSettingsService;
+import com.sqlteacher.application.ai.AiProviderProfileService;
+import com.sqlteacher.application.ai.AiProviderProbeService;
+import com.sqlteacher.application.ai.AiTaskHistoryService;
 import com.sqlteacher.application.metadata.DatabaseMetadataService;
 import com.sqlteacher.application.nl2sql.Nl2SqlSafetyService;
 import com.sqlteacher.application.risk.SqlRiskAnalysisService;
@@ -135,6 +138,9 @@ public final class MainWindowController {
     private final CloudLearningSyncService cloudLearningSyncService;
     private final AssignmentDeliveryService assignmentDeliveryService;
     private final NetworkAiSettingsService networkAiSettingsService;
+    private final AiProviderProfileService aiProviderProfileService;
+    private final AiProviderProbeService aiProviderProbeService;
+    private final AiTaskHistoryService aiTaskHistoryService;
     private final DesktopAccessProfile accessProfile;
     private final FeedbackDraftEnhancer feedbackDraftEnhancer;
     private final TeachingContentCache teachingContentCache;
@@ -275,6 +281,9 @@ public final class MainWindowController {
                                 CloudLearningSyncService cloudLearningSyncService,
                                 AssignmentDeliveryService assignmentDeliveryService,
                                 NetworkAiSettingsService networkAiSettingsService,
+                                AiProviderProfileService aiProviderProfileService,
+                                AiProviderProbeService aiProviderProbeService,
+                                AiTaskHistoryService aiTaskHistoryService,
                                 FeedbackDraftEnhancer feedbackDraftEnhancer,
                                 TeachingContentCache teachingContentCache,
                                 UiPreferencesService uiPreferences,
@@ -307,6 +316,9 @@ public final class MainWindowController {
         this.cloudLearningSyncService = Objects.requireNonNull(cloudLearningSyncService);
         this.assignmentDeliveryService = Objects.requireNonNull(assignmentDeliveryService);
         this.networkAiSettingsService = Objects.requireNonNull(networkAiSettingsService);
+        this.aiProviderProfileService = Objects.requireNonNull(aiProviderProfileService);
+        this.aiProviderProbeService = Objects.requireNonNull(aiProviderProbeService);
+        this.aiTaskHistoryService = Objects.requireNonNull(aiTaskHistoryService);
         this.feedbackDraftEnhancer = Objects.requireNonNull(feedbackDraftEnhancer);
         this.teachingContentCache = Objects.requireNonNull(teachingContentCache);
         this.uiPreferences = Objects.requireNonNull(uiPreferences);
@@ -712,6 +724,9 @@ public final class MainWindowController {
                     nl2SqlSafetyService,
                     aiModelSelectionService,
                     networkAiSettingsService,
+                    aiProviderProfileService,
+                    aiProviderProbeService,
+                    aiTaskHistoryService,
                     sqlRiskAnalysisService,
                     connectionManagementService,
                     fillSqlCallback,

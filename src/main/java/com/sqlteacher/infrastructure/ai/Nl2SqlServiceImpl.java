@@ -6,6 +6,15 @@ import com.sqlteacher.application.ai.AiCompletionResult;
 import com.sqlteacher.application.ai.AiModelProvider;
 import com.sqlteacher.application.ai.AiModelSelection;
 import com.sqlteacher.application.ai.AiModelSelectionService;
+import com.sqlteacher.application.ai.AiContextCategory;
+import com.sqlteacher.application.ai.AiContextItem;
+import com.sqlteacher.application.ai.AiContextPolicy;
+import com.sqlteacher.application.ai.AiContextPreview;
+import com.sqlteacher.application.ai.AiPreparedContext;
+import com.sqlteacher.application.ai.AiTaskRequest;
+import com.sqlteacher.application.ai.AiTaskResult;
+import com.sqlteacher.application.ai.AiTaskService;
+import com.sqlteacher.application.ai.AiTaskType;
 import com.sqlteacher.application.config.AiConfiguration;
 import com.sqlteacher.application.connection.ConnectionManagementService;
 import com.sqlteacher.application.connection.DatabaseDialect;
@@ -39,6 +48,8 @@ public final class Nl2SqlServiceImpl implements Nl2SqlService {
     private final LearningEventService learningEventService;
     private final ObjectMapper objectMapper;
     private final ConnectionManagementService connectionManagementService;
+    private final AiTaskService aiTaskService;
+    private final AiContextPolicy contextPolicy;
 
     public Nl2SqlServiceImpl(
         AiModelProvider aiModelProvider,
@@ -97,21 +108,63 @@ public final class Nl2SqlServiceImpl implements Nl2SqlService {
         );
         this.connectionManagementService = connectionManagementService;
         this.objectMapper = new ObjectMapper();
+        this.aiTaskService = null;
+        this.contextPolicy = new DefaultAiContextPolicy();
+    }
+
+    public Nl2SqlServiceImpl(
+        AiTaskService aiTaskService,
+        AiConfiguration aiConfiguration,
+        AiModelSelectionService modelSelectionService,
+        DatabaseMetadataService databaseMetadataService,
+        LearningEventService learningEventService,
+        ConnectionManagementService connectionManagementService,
+        AiContextPolicy contextPolicy
+    ) {
+        this.aiModelProvider = null;
+        this.aiTaskService = Objects.requireNonNull(aiTaskService);
+        this.aiConfiguration = Objects.requireNonNull(aiConfiguration);
+        this.modelSelectionService = Objects.requireNonNull(modelSelectionService);
+        this.databaseMetadataService = Objects.requireNonNull(databaseMetadataService);
+        this.learningEventService = Objects.requireNonNull(learningEventService);
+        this.connectionManagementService = connectionManagementService;
+        this.contextPolicy = Objects.requireNonNull(contextPolicy);
+        this.objectMapper = new ObjectMapper();
     }
 
     @Override
     public Nl2SqlPlan generate(Nl2SqlRequest request) {
-        Objects.requireNonNull(request, "request must not be null");
-        if (request.naturalLanguage() == null || request.naturalLanguage().isBlank()) {
-            throw new IllegalArgumentException("naturalLanguage must not be blank");
-        }
-        if (request.connectionId() == null || request.connectionId().isBlank()) {
-            throw new IllegalArgumentException("connectionId must not be blank");
-        }
+        return generateInternal(request, null, null);
+    }
 
-        String prompt;
+    @Override
+    public Nl2SqlPlan revise(Nl2SqlRequest request, Nl2SqlPlan previous, String instruction) {
+        Objects.requireNonNull(previous, "previous must not be null");
+        if (instruction == null || instruction.isBlank()) throw new IllegalArgumentException("instruction must not be blank");
+        return generateInternal(request, previous, instruction.strip());
+    }
+
+    @Override
+    public AiContextPreview preview(Nl2SqlRequest request) {
+        validateRequest(request);
+        return preparePrompt(request, null, null).preview();
+    }
+
+    @Override
+    public AiContextPreview previewRevision(Nl2SqlRequest request, Nl2SqlPlan previous, String instruction) {
+        validateRequest(request);
+        Objects.requireNonNull(previous, "previous must not be null");
+        if (instruction == null || instruction.isBlank()) throw new IllegalArgumentException("instruction must not be blank");
+        return preparePrompt(request, previous, instruction.strip()).preview();
+    }
+
+    private Nl2SqlPlan generateInternal(Nl2SqlRequest request, Nl2SqlPlan previous, String instruction) {
+        Objects.requireNonNull(request, "request must not be null");
+        validateRequest(request);
+
+        PreparedPrompt prepared;
         try {
-            prompt = buildPrompt(request.naturalLanguage(), request.connectionId());
+            prepared = preparePrompt(request, previous, instruction);
         } catch (SqlTeacherException error) {
             recordAiGeneration(request.connectionId(), false, aiConfiguration.defaultModel(), error.errorCode());
             return new Nl2SqlPlan(
@@ -126,22 +179,16 @@ public final class Nl2SqlServiceImpl implements Nl2SqlService {
         if (selectedModel.isEmpty()) {
             return unavailableModelPlan(request.connectionId());
         }
-        AiCompletionRequest aiRequest = new AiCompletionRequest(
-            selectedModel,
-            prompt,
-            aiConfiguration.generateTimeout()
-        );
-
-        AiCompletionResult aiResult = aiModelProvider.complete(aiRequest);
+        AiTaskResult aiResult = complete(AiTaskType.NL2SQL, selectedModel, prepared);
 
         if (!aiResult.success()) {
-            recordAiGeneration(request.connectionId(), false, aiResult.model(), "AI_PROVIDER_FAILED");
+            recordAiGeneration(request.connectionId(), false, aiResult.model(), aiResult.errorCode().name());
             return new Nl2SqlPlan(
                 "",
                 "",
-                aiResult.errorMessage(),
+                aiResult.message(),
                 aiResult.model(),
-                PROMPT_VERSION
+                prepared.version()
             );
         }
 
@@ -157,7 +204,7 @@ public final class Nl2SqlServiceImpl implements Nl2SqlService {
                     "",
                     validationError,
                     aiResult.model(),
-                    PROMPT_VERSION
+                    prepared.version()
                 );
             }
 
@@ -167,7 +214,7 @@ public final class Nl2SqlServiceImpl implements Nl2SqlService {
                 response.intent(),
                 response.explanation(),
                 aiResult.model(),
-                PROMPT_VERSION
+                prepared.version()
             );
         } catch (Exception ex) {
             log.warn("Failed to parse AI response", ex);
@@ -177,9 +224,15 @@ public final class Nl2SqlServiceImpl implements Nl2SqlService {
                 "",
                 "Failed to parse AI response: " + ex.getClass().getSimpleName(),
                 aiResult.model(),
-                PROMPT_VERSION
+                prepared.version()
             );
         }
+    }
+
+    private void validateRequest(Nl2SqlRequest request) {
+        Objects.requireNonNull(request, "request must not be null");
+        if (request.naturalLanguage() == null || request.naturalLanguage().isBlank()) throw new IllegalArgumentException("naturalLanguage must not be blank");
+        if (request.connectionId() == null || request.connectionId().isBlank()) throw new IllegalArgumentException("connectionId must not be blank");
     }
 
     private void recordAiGeneration(String connectionId, boolean successful, String model, String errorCode) {
@@ -207,13 +260,28 @@ public final class Nl2SqlServiceImpl implements Nl2SqlService {
         return null;
     }
 
-    private String buildPrompt(String naturalLanguage, String connectionId) {
-        String databaseName = databaseDialect(connectionId).name();
-        return PromptTemplateLoader.render("/prompts/nl2sql-v4.txt", Map.of(
+    private PreparedPrompt preparePrompt(Nl2SqlRequest request, Nl2SqlPlan previous, String instruction) {
+        List<AiContextItem> items = new java.util.ArrayList<>();
+        items.add(new AiContextItem(AiContextCategory.USER_REQUEST, "用户当前请求", request.naturalLanguage()));
+        if (instruction != null) items.add(new AiContextItem(AiContextCategory.USER_REQUEST, "本轮修订要求", instruction));
+        items.add(new AiContextItem(AiContextCategory.DATABASE_SCHEMA, "所选数据库结构", buildTableSchema(request.connectionId())));
+        if (previous != null) items.add(new AiContextItem(AiContextCategory.SQL_DRAFT, "上一版 SQL 草稿", previous.sqlDraft()));
+        AiPreparedContext context = contextPolicy.prepare(AiTaskType.NL2SQL, items);
+        Map<AiContextCategory, List<String>> grouped = context.items().stream().collect(java.util.stream.Collectors.groupingBy(
+            AiContextItem::category, java.util.LinkedHashMap::new, java.util.stream.Collectors.mapping(AiContextItem::content, java.util.stream.Collectors.toList())));
+        String databaseName = databaseDialect(request.connectionId()).name();
+        if (previous == null) return new PreparedPrompt(PromptTemplateLoader.render("/prompts/nl2sql-v4.txt", Map.of(
             "database", databaseName,
-            "schema", buildTableSchema(connectionId),
-            "naturalLanguage", naturalLanguage
-        ));
+            "schema", first(grouped, AiContextCategory.DATABASE_SCHEMA),
+            "naturalLanguage", first(grouped, AiContextCategory.USER_REQUEST)
+        )), context.preview(), PROMPT_VERSION);
+        return new PreparedPrompt(PromptTemplateLoader.render("/prompts/nl2sql-revision-v1.txt", Map.of(
+            "database", databaseName,
+            "schema", first(grouped, AiContextCategory.DATABASE_SCHEMA),
+            "naturalLanguage", grouped.getOrDefault(AiContextCategory.USER_REQUEST, List.of()).get(0),
+            "previousSql", first(grouped, AiContextCategory.SQL_DRAFT),
+            "instruction", nth(grouped, AiContextCategory.USER_REQUEST, 1)
+        )), context.preview(), "revision-v1");
     }
 
     private String buildTableSchema(String connectionId) {
@@ -271,7 +339,7 @@ public final class Nl2SqlServiceImpl implements Nl2SqlService {
             throw new IllegalArgumentException("errorMessage must not be blank");
         }
 
-        String prompt = buildErrorExplanationPrompt(sql, errorMessage, connectionId);
+        PreparedPrompt prepared = buildErrorExplanationPrompt(sql, errorMessage, connectionId);
         String selectedModel = resolveSelectedModel();
         if (selectedModel.isEmpty()) {
             return SqlErrorExplanation.failure(
@@ -279,17 +347,11 @@ public final class Nl2SqlServiceImpl implements Nl2SqlService {
                 aiConfiguration.defaultModel()
             );
         }
-        AiCompletionRequest aiRequest = new AiCompletionRequest(
-            selectedModel,
-            prompt,
-            aiConfiguration.generateTimeout()
-        );
-
-        AiCompletionResult aiResult = aiModelProvider.complete(aiRequest);
+        AiTaskResult aiResult = complete(AiTaskType.SQL_ERROR_EXPLANATION, selectedModel, prepared);
 
         if (!aiResult.success()) {
             recordAiGeneration(connectionId, false, aiResult.model(), "AI_PROVIDER_FAILED");
-            return SqlErrorExplanation.failure(aiResult.errorMessage(), aiResult.model());
+            return SqlErrorExplanation.failure(aiResult.message(), aiResult.model());
         }
 
         try {
@@ -317,7 +379,7 @@ public final class Nl2SqlServiceImpl implements Nl2SqlService {
     }
 
     private String resolveSelectedModel() {
-        String preferred = aiModelProvider.preferredModel();
+        String preferred = aiTaskService == null ? aiModelProvider.preferredModel() : aiTaskService.preferredModel();
         if (!preferred.isBlank()) {
             return preferred;
         }
@@ -353,12 +415,37 @@ public final class Nl2SqlServiceImpl implements Nl2SqlService {
         return null;
     }
 
-    private String buildErrorExplanationPrompt(String sql, String errorMessage, String connectionId) {
-        return PromptTemplateLoader.render("/prompts/sql-error-explanation-v1.txt", Map.of(
-            "database", databaseDialect(connectionId).name(),
-            "schema", buildTableSchema(connectionId),
-            "sql", sql,
-            "errorMessage", errorMessage
+    private PreparedPrompt buildErrorExplanationPrompt(String sql, String errorMessage, String connectionId) {
+        AiPreparedContext context = contextPolicy.prepare(AiTaskType.SQL_ERROR_EXPLANATION, List.of(
+            new AiContextItem(AiContextCategory.DATABASE_SCHEMA, "所选数据库结构", buildTableSchema(connectionId)),
+            new AiContextItem(AiContextCategory.SQL_DRAFT, "失败 SQL 草稿", sql),
+            new AiContextItem(AiContextCategory.SQL_ERROR, "脱敏后的数据库错误", errorMessage)
         ));
+        Map<AiContextCategory, String> values = context.items().stream().collect(java.util.stream.Collectors.toMap(
+            AiContextItem::category, AiContextItem::content, (left, right) -> left, java.util.LinkedHashMap::new));
+        return new PreparedPrompt(PromptTemplateLoader.render("/prompts/sql-error-explanation-v1.txt", Map.of(
+            "database", databaseDialect(connectionId).name(),
+            "schema", values.getOrDefault(AiContextCategory.DATABASE_SCHEMA, ""),
+            "sql", values.getOrDefault(AiContextCategory.SQL_DRAFT, ""),
+            "errorMessage", values.getOrDefault(AiContextCategory.SQL_ERROR, "")
+        )), context.preview(), "sql-error-v1");
     }
+
+    private AiTaskResult complete(AiTaskType type, String model, PreparedPrompt prepared) {
+        if (aiTaskService != null) return aiTaskService.execute(new AiTaskRequest(type, model, prepared.prompt(), prepared.version(), prepared.preview()));
+        AiCompletionResult legacy = aiModelProvider.complete(new AiCompletionRequest(model, prepared.prompt(), aiConfiguration.generateTimeout()));
+        return legacy.success() ? AiTaskResult.success(legacy.content(), legacy.model())
+            : AiTaskResult.failure(com.sqlteacher.application.ai.AiTaskErrorCode.PROVIDER_UNAVAILABLE, legacy.errorMessage(), legacy.model());
+    }
+
+    private static String first(Map<AiContextCategory, List<String>> values, AiContextCategory category) {
+        return values.getOrDefault(category, List.of("")).get(0);
+    }
+
+    private static String nth(Map<AiContextCategory, List<String>> values, AiContextCategory category, int index) {
+        List<String> items = values.getOrDefault(category, List.of());
+        return index < items.size() ? items.get(index) : "";
+    }
+
+    private record PreparedPrompt(String prompt, AiContextPreview preview, String version) { }
 }

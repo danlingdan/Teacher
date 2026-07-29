@@ -71,7 +71,7 @@
                                     <Region styleClass="card-accent"/>
                                     <Label styleClass="card-title" text="AI 模型来源"/>
                                     <Region HBox.hgrow="ALWAYS"/>
-                                    <Label styleClass="model-status" text="网络 API Key 不写入磁盘"/>
+                                    <Label styleClass="model-status" text="网络 API Key 使用 Windows DPAPI 加密保存"/>
                                 </children>
                             </HBox>
                             <HBox alignment="CENTER_LEFT" spacing="12.0">
@@ -99,20 +99,31 @@
                             </VBox>
                             <VBox fx:id="networkProviderPane" spacing="8.0" visible="false" managed="false">
                                 <children>
+                                    <HBox spacing="10.0" alignment="CENTER_LEFT">
+                                        <children>
+                                            <ComboBox fx:id="networkProfileSelector" promptText="选择已保存 Profile"
+                                                      onAction="#onNetworkProfileSelected" maxWidth="Infinity" HBox.hgrow="ALWAYS"/>
+                                            <TextField fx:id="networkProfileNameField" promptText="Profile 名称"
+                                                       maxWidth="Infinity" HBox.hgrow="ALWAYS"/>
+                                            <Button text="删除" onAction="#onDeleteNetworkProfile" styleClass="danger-button"/>
+                                        </children>
+                                    </HBox>
                                     <TextField fx:id="networkEndpointField"
                                                promptText="HTTPS Chat Completions 地址"/>
                                     <HBox spacing="10.0">
                                         <children>
-                                            <TextField fx:id="networkModelField" promptText="模型名称"
-                                                       HBox.hgrow="ALWAYS"/>
+                                            <ComboBox fx:id="networkModelSelector" promptText="模型名称" editable="true"
+                                                      maxWidth="Infinity" HBox.hgrow="ALWAYS"/>
                                             <PasswordField fx:id="networkApiKeyField"
-                                                           promptText="API Key（仅本次运行）"
+                                                           promptText="API Key（留空保留已保存凭据）"
                                                            HBox.hgrow="ALWAYS"/>
                                         </children>
                                     </HBox>
                                     <HBox spacing="10.0" alignment="CENTER_RIGHT">
                                         <children>
                                             <Button text="切换回本地" onAction="#onUseLocalAi"
+                                                    styleClass="secondary-button"/>
+                                            <Button text="测试并发现模型" onAction="#onTestNetworkAi"
                                                     styleClass="secondary-button"/>
                                             <Button text="启用网络 AI" onAction="#onConfigureNetworkAi"
                                                     styleClass="sql-execute-button"/>
@@ -155,8 +166,12 @@
                                       promptText="例如：查询成绩大于90分的学生姓名和分数"
                                       wrapText="true"
                                       prefRowCount="4"/>
+                            <Label fx:id="privacyPreviewLabel" styleClass="model-status" wrapText="true"
+                                   text="发送前会显示数据类别、来源、字符数和删减情况；网络调用需要人工确认。"/>
                             <HBox styleClass="sql-action-row" alignment="CENTER_RIGHT" spacing="12.0">
                                 <children>
+                                    <Button fx:id="cancelAiButton" styleClass="secondary-button" disable="true"
+                                            text="取消" onAction="#onCancelAiTask"/>
                                     <Button fx:id="generateButton"
                                             styleClass="sql-execute-button"
                                             text="生成 SQL"
@@ -196,6 +211,18 @@
                                            text="生成的 SQL 将在此显示"/>
                                 </children>
                             </StackPane>
+                            <HBox alignment="CENTER_LEFT" spacing="10.0">
+                                <children>
+                                    <TextField fx:id="revisionInstructionField" HBox.hgrow="ALWAYS"
+                                               promptText="例如：增加班级条件，并按成绩降序（每轮都会重新安全检查）"/>
+                                    <Button fx:id="reviseButton" text="修订草稿" disable="true"
+                                            onAction="#onReviseSql" styleClass="secondary-button"/>
+                                    <Button fx:id="favoriteDraftButton" text="收藏草稿" disable="true"
+                                            onAction="#onFavoriteDraft" styleClass="secondary-button"/>
+                                </children>
+                            </HBox>
+                            <Label fx:id="historyStatusLabel" styleClass="model-status" wrapText="true"
+                                   text="默认仅保存任务元数据；只有主动收藏时才保存草稿正文。"/>
                         </children>
                     </VBox>
 

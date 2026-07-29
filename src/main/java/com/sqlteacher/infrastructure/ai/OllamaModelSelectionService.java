@@ -88,6 +88,10 @@ public final class OllamaModelSelectionService implements AiModelSelectionServic
             throw new IllegalArgumentException("model is not installed: " + normalized);
         }
 
+        String previous = snapshot.selectedModel();
+        if (!previous.isBlank() && !previous.equals(normalized)) {
+            unload(previous);
+        }
         preferredModel = normalized;
         persistPreference(normalized);
         current = new AiModelSelection(snapshot.installedModels(), normalized, "Selected model: " + normalized);
@@ -151,6 +155,32 @@ public final class OllamaModelSelectionService implements AiModelSelectionServic
                 "Failed to save the selected AI model",
                 ex
             );
+        }
+    }
+
+    private void unload(String model) {
+        try {
+            String body = objectMapper.writeValueAsString(java.util.Map.of(
+                "model", model,
+                "keep_alive", 0,
+                "stream", false
+            ));
+            HttpRequest request = HttpRequest.newBuilder(properties.generateEndpoint())
+                .header("Content-Type", "application/json")
+                .timeout(properties.healthTimeout())
+                .POST(HttpRequest.BodyPublishers.ofString(body, StandardCharsets.UTF_8))
+                .build();
+            HttpResponse<Void> response = httpClient.send(request, HttpResponse.BodyHandlers.discarding());
+            if (response.statusCode() < 200 || response.statusCode() >= 300) {
+                throw new IOException("Ollama returned HTTP " + response.statusCode());
+            }
+        } catch (IOException ex) {
+            throw new SqlTeacherException("AI_MODEL_UNLOAD_FAILED",
+                "Failed to unload the previously selected Ollama model", ex);
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+            throw new SqlTeacherException("AI_MODEL_UNLOAD_INTERRUPTED",
+                "Unloading the previously selected Ollama model was interrupted", ex);
         }
     }
 }

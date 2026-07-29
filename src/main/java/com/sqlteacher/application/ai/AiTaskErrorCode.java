@@ -1,0 +1,14 @@
+package com.sqlteacher.application.ai;
+
+public enum AiTaskErrorCode {
+    PROVIDER_NOT_CONFIGURED,
+    PROVIDER_UNAVAILABLE,
+    AUTHENTICATION_FAILED,
+    MODEL_NOT_FOUND,
+    RATE_LIMITED,
+    TIMED_OUT,
+    RESPONSE_TOO_LARGE,
+    MALFORMED_OUTPUT,
+    CANCELLED,
+    SAFETY_REJECTED
+}
