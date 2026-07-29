@@ -1,12 +1,18 @@
 package com.sqlteacher.infrastructure.ai;
 
 import com.sqlteacher.application.ai.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.time.Instant;
 import java.util.Objects;
 import java.util.UUID;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public final class DefaultAiTaskService implements AiTaskService {
+    private static final Logger log = LoggerFactory.getLogger(DefaultAiTaskService.class);
+    private static final Pattern HTTP_STATUS = Pattern.compile("\\bhttp\\s+(\\d{3})\\b", Pattern.CASE_INSENSITIVE);
     private final AiModelProvider provider;
     private final AiUsagePolicy policy;
     private final AiTaskHistoryService history;
@@ -37,8 +43,10 @@ public final class DefaultAiTaskService implements AiTaskService {
             history.record(new AiTaskHistoryEntry(UUID.randomUUID().toString(), Instant.now(), request.type(),
                 outcome.model(), outcome.success(), outcome.success() ? "SUCCESS" : outcome.errorCode().name(),
                 duration, request.promptVersion(), false, ""));
-        } catch (RuntimeException ignored) {
+        } catch (RuntimeException error) {
             // Audit persistence must not turn a successfully generated draft into a failed task.
+            log.warn("Unable to persist AI task audit metadata, exceptionType={}",
+                error.getClass().getSimpleName());
         }
         return outcome;
     }
@@ -70,6 +78,8 @@ public final class DefaultAiTaskService implements AiTaskService {
                 if (attempt == 0 && (code == AiTaskErrorCode.TIMED_OUT || code == AiTaskErrorCode.PROVIDER_UNAVAILABLE)) continue;
                 return AiTaskResult.failure(code, safeMessage(result.errorMessage()), result.model());
             } catch (RuntimeException error) {
+                log.warn("AI provider call failed, taskType={}, attempt={}, exceptionType={}",
+                    request.type(), attempt + 1, error.getClass().getSimpleName());
                 if (attempt == 0) continue;
                 return AiTaskResult.failure(AiTaskErrorCode.PROVIDER_UNAVAILABLE,
                     "AI Provider 暂不可用，请检查连接或切换 Provider。", model);
@@ -84,6 +94,8 @@ public final class DefaultAiTaskService implements AiTaskService {
         if (normalized.contains("429") || normalized.contains("rate")) return AiTaskErrorCode.RATE_LIMITED;
         if (normalized.contains("timeout") || normalized.contains("timed out")) return AiTaskErrorCode.TIMED_OUT;
         if (normalized.contains("model") && normalized.contains("not")) return AiTaskErrorCode.MODEL_NOT_FOUND;
+        Matcher status = HTTP_STATUS.matcher(normalized);
+        if (status.find() && status.group(1).startsWith("4")) return AiTaskErrorCode.INVALID_REQUEST;
         return AiTaskErrorCode.PROVIDER_UNAVAILABLE;
     }
 

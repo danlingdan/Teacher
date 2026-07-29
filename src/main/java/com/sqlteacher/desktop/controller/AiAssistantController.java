@@ -53,9 +53,8 @@ public final class AiAssistantController {
     private static final Logger log = LoggerFactory.getLogger(AiAssistantController.class);
 
     private static final String GENERATING_MESSAGE = "AI 正在生成 SQL…";
-    private static final String OFFLINE_MESSAGE = "当前 AI 服务不可用，以下为模拟演示数据";
+    private static final String REQUEST_FAILED_MESSAGE = "AI 请求未完成，请检查 Provider 配置后重试";
     private static final String EMPTY_INPUT_MESSAGE = "请输入自然语言提问";
-    private static final String ERROR_MESSAGE = "AI 生成失败，请稍后重试";
     private static final String LOCAL_SOURCE = "本地 Ollama";
     private static final String NETWORK_SOURCE = "网络 AI";
 
@@ -122,6 +121,9 @@ public final class AiAssistantController {
 
     @FXML
     private Label explanationPlaceholder;
+
+    @FXML
+    private Label offlineTitle;
 
     @FXML
     private Label offlineHint;
@@ -389,14 +391,14 @@ public final class AiAssistantController {
                 providerStatusLabel.setText("已取消网络 AI 调用，输入内容保持不变");
                 return;
             }
-            executeGeneration(question, prepared);
+            executeGeneration(prepared);
         });
-        previewTask.setOnFailed(event -> { activeAiTask = null; finishGenerationFailure(question, previewTask.getException()); });
+        previewTask.setOnFailed(event -> { activeAiTask = null; finishGenerationFailure(previewTask.getException()); });
         previewTask.setOnCancelled(event -> finishCancelled());
         DesktopExecutors.background().execute(previewTask);
     }
 
-    private void executeGeneration(String question, PreparedGeneration prepared) {
+    private void executeGeneration(PreparedGeneration prepared) {
         GlobalLoading.show(GENERATING_MESSAGE);
         hideOfflineHint();
         Task<Nl2SqlSafetyResult> task = new Task<>() {
@@ -411,22 +413,31 @@ public final class AiAssistantController {
             activeAiTask = null;
             try {
                 Nl2SqlSafetyResult result = task.getValue();
-                if (result == null || !result.draftAvailable()) { displayResult(generateMockResult(question)); showOfflineHint(); }
-                else displayResult(result);
+                if (result == null) {
+                    displayResult(failureResult(REQUEST_FAILED_MESSAGE));
+                    showFailureHint(REQUEST_FAILED_MESSAGE);
+                } else if (!result.draftAvailable()) {
+                    displayResult(result);
+                    showFailureHint(failureMessage(result));
+                } else {
+                    displayResult(result);
+                }
                 updateHistoryStatus();
             } catch (RuntimeException error) {
-                displayResult(generateMockResult(question)); showOfflineHint();
+                log.error("Failed to display AI generation result", error);
+                displayResult(failureResult(REQUEST_FAILED_MESSAGE));
+                showFailureHint(REQUEST_FAILED_MESSAGE);
             } finally { generationInProgress = false; updateControlAvailability(); GlobalLoading.hide(); }
         });
-        task.setOnFailed(event -> { activeAiTask = null; finishGenerationFailure(question, task.getException()); });
+        task.setOnFailed(event -> { activeAiTask = null; finishGenerationFailure(task.getException()); });
         task.setOnCancelled(event -> finishCancelled());
         DesktopExecutors.background().execute(task);
     }
 
-    private void finishGenerationFailure(String question, Throwable error) {
+    private void finishGenerationFailure(Throwable error) {
         log.error("AI generation task failed", error);
-        displayResult(generateMockResult(question));
-        showOfflineHint();
+        displayResult(failureResult(REQUEST_FAILED_MESSAGE));
+        showFailureHint(REQUEST_FAILED_MESSAGE);
         generationInProgress = false;
         updateControlAvailability();
         GlobalLoading.forceHide();
@@ -552,80 +563,37 @@ public final class AiAssistantController {
         sqlPreviewArea.getStyleClass().remove("risk-highlight");
     }
 
-    private Nl2SqlSafetyResult generateMockResult(String question) {
-        Nl2SqlPlan plan = generateMockPlan(question);
-        return new Nl2SqlSafetyResult(plan, sqlRiskAnalysisService.analyze(plan.sqlDraft()));
+    private Nl2SqlSafetyResult failureResult(String message) {
+        Nl2SqlPlan plan = new Nl2SqlPlan("", "", message, "", "");
+        return new Nl2SqlSafetyResult(plan, sqlRiskAnalysisService.analyze(""));
     }
 
-    private Nl2SqlPlan generateMockPlan(String question) {
-        if (question == null) {
-            return new Nl2SqlPlan(
-                "SELECT name FROM student WHERE score > 90;",
-                "QUERY",
-                "当前未部署 Ollama，以下为演示模拟数据",
-                "mock",
-                "v1"
-            );
+    static String failureMessage(Nl2SqlSafetyResult result) {
+        if (result == null || result.plan() == null || result.plan().explanation() == null
+            || result.plan().explanation().isBlank()) {
+            return REQUEST_FAILED_MESSAGE;
         }
-
-        String lowerQuestion = question.toLowerCase();
-
-        if (lowerQuestion.contains("清空") || lowerQuestion.contains("删除") ||
-            lowerQuestion.contains("全部数据")) {
-            return new Nl2SqlPlan(
-                "DELETE FROM student;",
-                "DELETE",
-                "该语句会清空整张学生表所有数据，属于高危删除操作，当前未部署 Ollama，为模拟演示数据",
-                "mock",
-                "v1"
-            );
-        }
-
-        if (lowerQuestion.contains("大于") || lowerQuestion.contains("小于") ||
-            lowerQuestion.contains("分数") || lowerQuestion.contains("成绩")) {
-            return new Nl2SqlPlan(
-                "SELECT name, score FROM student WHERE score > 90;",
-                "QUERY",
-                "筛选学生表中成绩大于90分的学生姓名与分数，当前未部署 Ollama，为模拟演示数据",
-                "mock",
-                "v1"
-            );
-        }
-
-        if (lowerQuestion.contains("查询全部") || lowerQuestion.contains("所有学生")) {
-            return new Nl2SqlPlan(
-                "SELECT * FROM student;",
-                "QUERY",
-                "查询学生表里全部字段、全部学生记录，当前未部署 Ollama，为模拟演示数据",
-                "mock",
-                "v1"
-            );
-        }
-
-        return new Nl2SqlPlan(
-            "SELECT name FROM student WHERE score > 90;",
-            "QUERY",
-            "当前未部署 Ollama，以下为演示模拟数据",
-            "mock",
-            "v1"
-        );
+        return result.plan().explanation().strip();
     }
 
-    private void showOfflineHint() {
-        log.info("Showing offline hint");
+    private void showFailureHint(String message) {
+        log.info("Showing AI request failure hint");
+        if (offlineTitle != null) {
+            offlineTitle.setText("AI 请求未完成");
+        }
         if (offlineHint != null) {
-            offlineHint.setText(OFFLINE_MESSAGE);
+            offlineHint.setText(message == null || message.isBlank() ? REQUEST_FAILED_MESSAGE : message);
             Parent parent = offlineHint.getParent();
             if (parent != null) {
                 parent.setVisible(true);
                 parent.setManaged(true);
             } else {
                 log.warn("offlineHint parent is null, cannot show offline hint");
-                showAlert(Alert.AlertType.WARNING, "服务离线", OFFLINE_MESSAGE);
+                showAlert(Alert.AlertType.WARNING, "AI 请求未完成", REQUEST_FAILED_MESSAGE);
             }
         } else {
             log.error("offlineHint is null, cannot show offline hint");
-            showAlert(Alert.AlertType.WARNING, "服务离线", OFFLINE_MESSAGE);
+            showAlert(Alert.AlertType.WARNING, "AI 请求未完成", REQUEST_FAILED_MESSAGE);
         }
     }
 

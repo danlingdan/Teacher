@@ -31,6 +31,9 @@ public record AiProviderProfile(
         if (scheme == null || host == null || host.isBlank()) {
             throw new IllegalArgumentException("endpoint must be an absolute HTTP(S) URI");
         }
+        if (endpoint.getRawUserInfo() != null || endpoint.getRawQuery() != null || endpoint.getRawFragment() != null) {
+            throw new IllegalArgumentException("endpoint must not contain credentials, query parameters, or fragments");
+        }
         if ("https".equalsIgnoreCase(scheme)) return;
         if ("http".equalsIgnoreCase(scheme) && isLoopback(host)) return;
         throw new IllegalArgumentException("AI provider endpoint must use HTTPS; HTTP is loopback-only");

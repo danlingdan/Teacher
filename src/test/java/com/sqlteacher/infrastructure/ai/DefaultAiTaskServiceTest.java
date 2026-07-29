@@ -38,6 +38,22 @@ class DefaultAiTaskServiceTest {
         assertEquals(AiTaskErrorCode.MALFORMED_OUTPUT, result.errorCode());
     }
 
+    @Test void shouldNotRetryDeterministicHttpClientErrors() {
+        AtomicInteger calls = new AtomicInteger();
+        AiModelProvider provider = request -> {
+            calls.incrementAndGet();
+            return AiCompletionResult.failure("Network AI request failed (HTTP 404)", "model-a");
+        };
+        DefaultAiTaskService service = new DefaultAiTaskService(provider,
+            new AiUsagePolicy(1_000, 1_000, 10, Duration.ofSeconds(2)), new RecordingHistory());
+
+        AiTaskResult result = service.execute(request("prompt"));
+
+        assertFalse(result.success());
+        assertEquals(AiTaskErrorCode.INVALID_REQUEST, result.errorCode());
+        assertEquals(1, calls.get());
+    }
+
     private static AiTaskRequest request(String prompt) {
         return new AiTaskRequest(AiTaskType.NL2SQL, "model-a", prompt, "test-v1",
             new AiContextPreview(AiTaskType.NL2SQL, Set.of(AiContextCategory.USER_REQUEST),

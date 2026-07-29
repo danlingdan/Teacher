@@ -9,6 +9,7 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class AiAssistantControllerTest {
@@ -39,6 +40,17 @@ class AiAssistantControllerTest {
         assertFalse(AiAssistantController.canCopyDraft(dropResult, "DROP TABLE student"));
         assertFalse(AiAssistantController.canCopyDraft(null, "SELECT 1"));
         assertFalse(AiAssistantController.canCopyDraft(updateResult, null));
+    }
+
+    @Test
+    void shouldExposeTheActualProviderFailureInsteadOfClaimingAllFailuresAreOffline() {
+        Nl2SqlSafetyResult failed = new Nl2SqlSafetyResult(
+            new Nl2SqlPlan("", "", "Network AI request failed (HTTP 404)", "deepseek", "v3"),
+            new SqlRiskAnalysis(SqlRiskLevel.FORBIDDEN, false, false, false, "UNKNOWN", List.of("No SQL draft."))
+        );
+
+        assertEquals("Network AI request failed (HTTP 404)", AiAssistantController.failureMessage(failed));
+        assertEquals("AI 请求未完成，请检查 Provider 配置后重试", AiAssistantController.failureMessage(null));
     }
 
     private static Nl2SqlSafetyResult result(String sql, SqlRiskAnalysis risk) {

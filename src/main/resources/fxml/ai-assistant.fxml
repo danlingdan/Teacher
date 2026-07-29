@@ -142,7 +142,7 @@
                             <HBox alignment="CENTER_LEFT" spacing="10.0">
                                 <children>
                                     <Region styleClass="warning-icon"/>
-                                    <Label styleClass="offline-title" text="服务离线"/>
+                                    <Label fx:id="offlineTitle" styleClass="offline-title" text="AI 请求未完成"/>
                                 </children>
                             </HBox>
                             <Label fx:id="offlineHint"

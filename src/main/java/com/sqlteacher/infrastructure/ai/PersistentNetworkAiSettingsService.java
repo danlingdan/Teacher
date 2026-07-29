@@ -149,8 +149,14 @@ public final class PersistentNetworkAiSettingsService
             for (StoredProfile item : state.profiles()) {
                 try { profiles.add(item.toProfile()); } catch (RuntimeException ignored) { /* isolate damaged profile */ }
             }
-            activeProfileId = profiles.stream().anyMatch(item -> item.id().equals(state.activeProfileId()))
-                ? state.activeProfileId() : profiles.stream().filter(AiProviderProfile::enabled).map(AiProviderProfile::id).findFirst().orElse("");
+            if (state.activeProfileId().isBlank()) {
+                activeProfileId = "";
+            } else {
+                activeProfileId = profiles.stream().anyMatch(item -> item.id().equals(state.activeProfileId()) && item.enabled())
+                    ? state.activeProfileId()
+                    : profiles.stream().filter(AiProviderProfile::enabled)
+                        .map(AiProviderProfile::id).findFirst().orElse("");
+            }
         } catch (Exception error) {
             profiles.clear();
             activeProfileId = "";

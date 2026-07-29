@@ -33,6 +33,8 @@ import com.sqlteacher.application.collaboration.ContentStatus;
 import com.sqlteacher.application.collaboration.FeedbackStatus;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
@@ -68,6 +70,7 @@ import javax.crypto.spec.PBEKeySpec;
  * desktop database credentials and BYO-AI keys never cross this boundary.
  */
 public final class SqlTeacherCloudServer {
+    private static final Logger log = LoggerFactory.getLogger(SqlTeacherCloudServer.class);
     private static final ObjectMapper JSON = new ObjectMapper().findAndRegisterModules()
         .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
     private static final int TOKEN_BYTES = 32;
@@ -109,7 +112,7 @@ public final class SqlTeacherCloudServer {
             .toAbsolutePath().normalize();
         SqlTeacherCloudServer cloudServer = new SqlTeacherCloudServer(database, port);
         cloudServer.server.start();
-        System.out.println("SQLTeacher cloud API started on port " + port);
+        log.info("SQLTeacher cloud API started, port={}", port);
     }
 
     void start() { server.start(); }
@@ -129,7 +132,7 @@ public final class SqlTeacherCloudServer {
             respond(exchange, 201, sessionResponse(session));
         } catch (IllegalArgumentException error) { respond(exchange, 400, errorResponse("INVALID_REQUEST", error.getMessage())); }
         catch (SecurityException error) { respond(exchange, 409, errorResponse("ACCOUNT_EXISTS", "This email is already registered.")); }
-        catch (RuntimeException error) { error.printStackTrace(); respond(exchange, 500, errorResponse("SERVER_ERROR", "Registration failed.")); }
+        catch (RuntimeException error) { logUnexpectedFailure("registration", error); respond(exchange, 500, errorResponse("SERVER_ERROR", "Registration failed.")); }
         finally { clearPassword(exchange); }
     }
 
@@ -141,7 +144,7 @@ public final class SqlTeacherCloudServer {
             respond(exchange, 200, sessionResponse(session));
         } catch (IllegalArgumentException error) { respond(exchange, 400, errorResponse("INVALID_REQUEST", error.getMessage())); }
         catch (SecurityException error) { respond(exchange, 401, errorResponse("LOGIN_FAILED", "Email or password is incorrect.")); }
-        catch (RuntimeException error) { error.printStackTrace(); respond(exchange, 500, errorResponse("SERVER_ERROR", "Login failed.")); }
+        catch (RuntimeException error) { logUnexpectedFailure("login", error); respond(exchange, 500, errorResponse("SERVER_ERROR", "Login failed.")); }
         finally { clearPassword(exchange); }
     }
 
@@ -161,7 +164,7 @@ public final class SqlTeacherCloudServer {
             respond(exchange, 200, sessionResponse(store.refreshData(body.get("refreshToken"))));
         } catch (IllegalArgumentException error) { respond(exchange, 400, errorResponse("INVALID_REQUEST", error.getMessage())); }
         catch (SecurityException error) { respond(exchange, 401, errorResponse("REFRESH_FAILED", "Refresh token is invalid or expired.")); }
-        catch (RuntimeException error) { error.printStackTrace(); respond(exchange, 500, errorResponse("SERVER_ERROR", "Session refresh failed.")); }
+        catch (RuntimeException error) { logUnexpectedFailure("session refresh", error); respond(exchange, 500, errorResponse("SERVER_ERROR", "Session refresh failed.")); }
     }
 
     private void classes(HttpExchange exchange) throws IOException {
@@ -276,7 +279,7 @@ public final class SqlTeacherCloudServer {
             respond(exchange, 409, errorResponse(error.code(), error.getMessage()));
         } catch (SecurityException error) { respond(exchange, 403, errorResponse("FORBIDDEN", "You do not have access to this resource.")); }
         catch (IllegalArgumentException error) { respond(exchange, 400, errorResponse("INVALID_REQUEST", error.getMessage())); }
-        catch (RuntimeException error) { error.printStackTrace(); respond(exchange, 500, errorResponse("SERVER_ERROR", "Classroom operation failed.")); }
+        catch (RuntimeException error) { logUnexpectedFailure("classroom operation", error); respond(exchange, 500, errorResponse("SERVER_ERROR", "Classroom operation failed.")); }
     }
 
     private void syncEvents(HttpExchange exchange) throws IOException {
@@ -298,7 +301,7 @@ public final class SqlTeacherCloudServer {
         } catch (IllegalArgumentException error) {
             respond(exchange, 400, errorResponse("INVALID_REQUEST", error.getMessage()));
         } catch (RuntimeException error) {
-            error.printStackTrace();
+            logUnexpectedFailure("learning-event synchronization", error);
             respond(exchange, 500, errorResponse("SERVER_ERROR", "Synchronization failed."));
         }
     }
@@ -467,7 +470,7 @@ public final class SqlTeacherCloudServer {
         } catch (IllegalArgumentException error) {
             respond(exchange, 400, errorResponse("INVALID_REQUEST", error.getMessage()));
         } catch (RuntimeException error) {
-            error.printStackTrace();
+            logUnexpectedFailure("v1.4 operation", error);
             respond(exchange, 500, errorResponse("SERVER_ERROR", "v1.4 operation failed."));
         }
     }
@@ -541,7 +544,7 @@ public final class SqlTeacherCloudServer {
         } catch (IllegalArgumentException error) {
             respond(exchange, 400, errorResponse("INVALID_REQUEST", error.getMessage()));
         } catch (RuntimeException error) {
-            error.printStackTrace();
+            logUnexpectedFailure("administrator operation", error);
             respond(exchange, 500, errorResponse("SERVER_ERROR", "Administrator operation failed."));
         }
     }
@@ -553,6 +556,11 @@ public final class SqlTeacherCloudServer {
             if (parts.length == 2 && name.equals(parts[0])) return Long.parseLong(parts[1]);
         }
         return defaultValue;
+    }
+
+    private static void logUnexpectedFailure(String operation, RuntimeException error) {
+        log.error("Cloud API operation failed, operation={}, exceptionType={}",
+            operation, error.getClass().getSimpleName());
     }
 
     private static String queryValue(String query, String name) {

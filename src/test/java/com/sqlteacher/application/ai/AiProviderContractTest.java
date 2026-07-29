@@ -22,6 +22,10 @@ class AiProviderContractTest {
         assertEquals(AiProviderKind.OLLAMA, local.kind());
         assertThrows(IllegalArgumentException.class,
             () -> profile(URI.create("http://ai.example.test/v1")));
+        assertThrows(IllegalArgumentException.class,
+            () -> profile(URI.create("https://user:password@ai.example.test/v1")));
+        assertThrows(IllegalArgumentException.class,
+            () -> profile(URI.create("https://ai.example.test/v1?api_key=secret")));
     }
 
     @Test

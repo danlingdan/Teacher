@@ -15,6 +15,8 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.net.http.HttpTimeoutException;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Arrays;
@@ -46,7 +48,7 @@ public final class OpenAiCompatibleModelProvider implements AiModelProvider {
                 new ResponseFormat("json_object"),
                 0.1
             ));
-            HttpRequest httpRequest = HttpRequest.newBuilder(configuration.endpoint())
+            HttpRequest httpRequest = HttpRequest.newBuilder(chatCompletionsEndpoint(configuration.endpoint()))
                 .header("Content-Type", "application/json")
                 .header("Authorization", "Bearer " + new String(key))
                 .timeout(request.timeout())
@@ -79,6 +81,41 @@ public final class OpenAiCompatibleModelProvider implements AiModelProvider {
         } finally {
             Arrays.fill(key, '\0');
         }
+    }
+
+    static URI chatCompletionsEndpoint(URI configuredEndpoint) {
+        Objects.requireNonNull(configuredEndpoint, "configuredEndpoint must not be null");
+        String path = configuredEndpoint.getPath();
+        path = trimTrailingSlashes(path == null ? "" : path);
+        if (path.endsWith("/models")) {
+            path = path.substring(0, path.length() - "/models".length()) + "/chat/completions";
+        } else if (!path.endsWith("/chat/completions")) {
+            path = (path.isEmpty() || path.endsWith("/") ? path : path + "/") + "chat/completions";
+        }
+        if (!path.startsWith("/")) {
+            path = "/" + path;
+        }
+        try {
+            return new URI(
+                configuredEndpoint.getScheme(),
+                configuredEndpoint.getUserInfo(),
+                configuredEndpoint.getHost(),
+                configuredEndpoint.getPort(),
+                path,
+                null,
+                null
+            );
+        } catch (URISyntaxException error) {
+            throw new IllegalArgumentException("Invalid network AI endpoint", error);
+        }
+    }
+
+    private static String trimTrailingSlashes(String path) {
+        int end = path.length();
+        while (end > 1 && path.charAt(end - 1) == '/') {
+            end--;
+        }
+        return path.substring(0, end);
     }
 
     private record ChatRequest(String model, List<ChatMessage> messages, ResponseFormat response_format, double temperature) { }

@@ -42,6 +42,8 @@ public final class HttpAiProviderProbeService implements AiProviderProbeService 
                 { response.body().close(); return fail(AiTaskErrorCode.RATE_LIMITED, "Provider 正在限流，请稍后重试。"); }
             if (response.statusCode() >= 300 && response.statusCode() < 400)
                 { response.body().close(); return fail(AiTaskErrorCode.SAFETY_REJECTED, "Provider 返回重定向；为防止凭据泄露，请直接填写最终 HTTPS 地址。"); }
+            if (response.statusCode() >= 400 && response.statusCode() < 500)
+                { response.body().close(); return fail(AiTaskErrorCode.INVALID_REQUEST, "Provider 返回 HTTP " + response.statusCode() + "，请检查接口地址和模型。"); }
             if (response.statusCode() < 200 || response.statusCode() >= 300)
                 { response.body().close(); return fail(AiTaskErrorCode.PROVIDER_UNAVAILABLE, "Provider 返回 HTTP " + response.statusCode() + "。"); }
             byte[] bytes;
@@ -76,6 +78,7 @@ public final class HttpAiProviderProbeService implements AiProviderProbeService 
         URI endpoint = profile.endpoint();
         if (profile.kind() == AiProviderKind.OLLAMA) return endpoint.resolve("/api/tags");
         String path = endpoint.getPath();
+        while (path.length() > 1 && path.endsWith("/")) path = path.substring(0, path.length() - 1);
         if (path.endsWith("/chat/completions")) path = path.substring(0, path.length() - "/chat/completions".length()) + "/models";
         else if (!path.endsWith("/models")) path = (path.endsWith("/") ? path : path + "/") + "models";
         try { return new URI(endpoint.getScheme(), endpoint.getUserInfo(), endpoint.getHost(), endpoint.getPort(), path, null, null); }

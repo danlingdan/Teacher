@@ -13,8 +13,11 @@ public record OpenAiCompatibleConfiguration(URI endpoint, String model, char[] a
         Objects.requireNonNull(endpoint, "endpoint must not be null");
         Objects.requireNonNull(model, "model must not be null");
         Objects.requireNonNull(apiKey, "apiKey must not be null");
-        if (!"https".equalsIgnoreCase(endpoint.getScheme())) {
+        if (!"https".equalsIgnoreCase(endpoint.getScheme()) || endpoint.getHost() == null || endpoint.getHost().isBlank()) {
             throw new IllegalArgumentException("Network AI endpoint must use HTTPS");
+        }
+        if (endpoint.getRawUserInfo() != null || endpoint.getRawQuery() != null || endpoint.getRawFragment() != null) {
+            throw new IllegalArgumentException("Network AI endpoint must not contain credentials, query parameters, or fragments");
         }
         if (model.isBlank() || apiKey.length == 0) {
             throw new IllegalArgumentException("model and apiKey must not be blank");

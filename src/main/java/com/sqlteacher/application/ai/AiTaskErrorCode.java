@@ -3,6 +3,7 @@ package com.sqlteacher.application.ai;
 public enum AiTaskErrorCode {
     PROVIDER_NOT_CONFIGURED,
     PROVIDER_UNAVAILABLE,
+    INVALID_REQUEST,
     AUTHENTICATION_FAILED,
     MODEL_NOT_FOUND,
     RATE_LIMITED,

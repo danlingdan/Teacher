@@ -66,6 +66,25 @@ class PersistentNetworkAiSettingsServiceTest {
         assertFalse(Files.exists(secretFile));
     }
 
+    @Test
+    void shouldKeepNetworkProviderDeactivatedAfterRestart(@TempDir Path tempDirectory) {
+        Path profileFile = tempDirectory.resolve("ai-providers.json");
+        Path secretFile = tempDirectory.resolve("ai-provider-key.dat");
+        var service = service(profileFile, secretFile);
+        service.configure(
+            URI.create("https://ai.example.test/v1"), "model-a", "temporary-key".toCharArray()
+        );
+        service.deactivate();
+        service.close();
+
+        var restored = service(profileFile, secretFile);
+
+        assertTrue(restored.activeProfile().isEmpty());
+        assertTrue(restored.current().isEmpty());
+        assertEquals(1, restored.profiles().size());
+        restored.clear();
+    }
+
     private static PersistentNetworkAiSettingsService service(Path profileFile, Path secretFile) {
         return new PersistentNetworkAiSettingsService(
             profileFile, new WindowsDpapiSecretStore(secretFile)
