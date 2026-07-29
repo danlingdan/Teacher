@@ -75,6 +75,30 @@
                             </columns>
                         </TableView>
                     </Tab>
+                    <Tab text="教师干预队列">
+                        <VBox spacing="8">
+                            <HBox spacing="8" alignment="CENTER_LEFT">
+                                <Label text="仅显示当前账号有权访问的班级；处理状态保存在本机。" styleClass="model-status"/>
+                                <Region HBox.hgrow="ALWAYS"/>
+                                <Button text="刷新" onAction="#onRefreshInterventions" styleClass="secondary-button"/>
+                                <Button text="已查看" onAction="#onAcknowledgeIntervention" styleClass="secondary-button"/>
+                                <Button text="已解决" onAction="#onResolveIntervention" styleClass="primary-button"/>
+                                <Button text="忽略" onAction="#onDismissIntervention" styleClass="secondary-button"/>
+                                <Button text="进入反馈/任务" onAction="#onOpenTeachingWorkspace" styleClass="secondary-button"/>
+                                <Button text="导出" onAction="#onExportInterventions" styleClass="secondary-button"/>
+                            </HBox>
+                            <TableView fx:id="interventionTable" styleClass="result-table" VBox.vgrow="ALWAYS">
+                                <columns>
+                                    <TableColumn fx:id="interventionClassColumn" text="班级" prefWidth="120"/>
+                                    <TableColumn fx:id="interventionAssignmentColumn" text="任务" prefWidth="170"/>
+                                    <TableColumn fx:id="interventionStudentColumn" text="学生" prefWidth="140"/>
+                                    <TableColumn fx:id="interventionReasonColumn" text="原因" prefWidth="110"/>
+                                    <TableColumn fx:id="interventionEvidenceColumn" text="证据摘要" prefWidth="260"/>
+                                    <TableColumn fx:id="interventionStatusColumn" text="状态" prefWidth="100"/>
+                                </columns>
+                            </TableView>
+                        </VBox>
+                    </Tab>
                 </tabs>
             </TabPane>
             <Label fx:id="statusLabel" visible="false" managed="false" wrapText="true"/>

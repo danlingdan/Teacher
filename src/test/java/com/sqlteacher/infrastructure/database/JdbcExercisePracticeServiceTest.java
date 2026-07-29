@@ -101,6 +101,27 @@ class JdbcExercisePracticeServiceTest {
     }
 
     @Test
+    void shouldPersistTheCurrentLearningOwnerOnNewSessions() throws Exception {
+        Fixture fixture = fixture();
+        var service = new JdbcExercisePracticeService(
+            fixture.connections(), new JdbcExerciseManagementService(fixture.connections()),
+            new DefaultSqlRiskAnalysisService(), (exercise, dataset, sql) -> new ExerciseEvaluationResult(
+                true, List.of(), "通过", Duration.ZERO, ""), new SqlResultMapper(), fixture.configuration(),
+            safetyMode(false), new MockLearningEventService(), () -> "student-42");
+
+        ExerciseSession session = service.start("query-02");
+
+        try (Connection connection = fixture.connections().open("app");
+             var statement = connection.prepareStatement("select owner_id from exercise_sessions where id=?")) {
+            statement.setString(1, session.id());
+            try (ResultSet row = statement.executeQuery()) {
+                assertTrue(row.next());
+                assertEquals("student-42", row.getString(1));
+            }
+        }
+    }
+
+    @Test
     void shouldCloseActiveSessionsAndDeleteDatabasesOnShutdown() throws Exception {
         Fixture fixture = fixture();
         ExerciseSession session = fixture.service().start("query-02");
@@ -155,7 +176,7 @@ class JdbcExercisePracticeServiceTest {
             safetyMode(unrestricted),
             new MockLearningEventService()
         );
-        return new Fixture(service, appDb, tempDir.resolve("exercise-sessions"));
+        return new Fixture(service, appDb, tempDir.resolve("exercise-sessions"), connections, configuration);
     }
 
     private static SqlSafetyModeService safetyMode(boolean unrestricted) {
@@ -185,7 +206,8 @@ class JdbcExercisePracticeServiceTest {
         return count(database, "student");
     }
 
-    private record Fixture(JdbcExercisePracticeService service, Path appDb, Path sessionDirectory) {
+    private record Fixture(JdbcExercisePracticeService service, Path appDb, Path sessionDirectory,
+                           JdbcConnectionFactory connections, SqlTeacherConfiguration configuration) {
         Path sessionDatabase(String sessionId) {
             return sessionDirectory.resolve(sessionId + ".db");
         }

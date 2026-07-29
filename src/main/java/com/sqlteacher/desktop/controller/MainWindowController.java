@@ -32,6 +32,9 @@ import com.sqlteacher.application.metadata.DatabaseMetadataService;
 import com.sqlteacher.application.nl2sql.Nl2SqlSafetyService;
 import com.sqlteacher.application.risk.SqlRiskAnalysisService;
 import com.sqlteacher.application.risk.SqlSafetyModeService;
+import com.sqlteacher.application.learning.LearningDiagnosisService;
+import com.sqlteacher.application.learning.InterventionService;
+import com.sqlteacher.application.learning.StudentLearningQueueService;
 import com.sqlteacher.desktop.GlobalLoading;
 import com.sqlteacher.desktop.appearance.UiIcon;
 import com.sqlteacher.desktop.appearance.UiIcons;
@@ -144,6 +147,9 @@ public final class MainWindowController {
     private final DesktopAccessProfile accessProfile;
     private final FeedbackDraftEnhancer feedbackDraftEnhancer;
     private final TeachingContentCache teachingContentCache;
+    private final LearningDiagnosisService learningDiagnosisService;
+    private final InterventionService interventionService;
+    private final StudentLearningQueueService studentLearningQueueService;
     private final UiPreferencesService uiPreferences;
     private final Runnable switchIdentityAction;
 
@@ -286,6 +292,9 @@ public final class MainWindowController {
                                 AiTaskHistoryService aiTaskHistoryService,
                                 FeedbackDraftEnhancer feedbackDraftEnhancer,
                                 TeachingContentCache teachingContentCache,
+                                LearningDiagnosisService learningDiagnosisService,
+                                InterventionService interventionService,
+                                StudentLearningQueueService studentLearningQueueService,
                                 UiPreferencesService uiPreferences,
                                 DesktopAccessProfile accessProfile,
                                 Runnable switchIdentityAction) {
@@ -321,6 +330,9 @@ public final class MainWindowController {
         this.aiTaskHistoryService = Objects.requireNonNull(aiTaskHistoryService);
         this.feedbackDraftEnhancer = Objects.requireNonNull(feedbackDraftEnhancer);
         this.teachingContentCache = Objects.requireNonNull(teachingContentCache);
+        this.learningDiagnosisService = Objects.requireNonNull(learningDiagnosisService);
+        this.interventionService = Objects.requireNonNull(interventionService);
+        this.studentLearningQueueService = Objects.requireNonNull(studentLearningQueueService);
         this.uiPreferences = Objects.requireNonNull(uiPreferences);
         this.accessProfile = Objects.requireNonNull(accessProfile, "accessProfile must not be null");
         this.switchIdentityAction = Objects.requireNonNull(switchIdentityAction, "switchIdentityAction must not be null");
@@ -848,7 +860,8 @@ public final class MainWindowController {
             loader.setControllerFactory(type -> {
                 if (type == ExerciseProgressController.class) {
                     return new ExerciseProgressController(
-                        learningAnalyticsService, exerciseCatalogService, dataMaintenanceService, applicationExceptionMapper
+                        learningAnalyticsService, exerciseCatalogService, dataMaintenanceService,
+                        interventionService, this::onNavigateTeachingContent, applicationExceptionMapper
                     );
                 }
                 throw new IllegalStateException("Unexpected controller type for exercise progress: " + type);
@@ -952,10 +965,13 @@ public final class MainWindowController {
         FXMLLoader loader = new FXMLLoader(fxml);
         loader.setControllerFactory(type -> {
             if (type == HomeController.class) {
-                HomeController controller = new HomeController();
+                HomeController controller = new HomeController(studentLearningQueueService, applicationExceptionMapper);
                 controller.setOnNavigateAiAssistant(this::onNavigateAiAssistant);
                 controller.setOnNavigateSqlPractice(this::onNavigateSqlPractice);
                 controller.setOnNavigateTableSchema(this::onNavigateTableSchema);
+                controller.setOnOpenExercise(this::openExercise);
+                controller.setOnOpenAssignment(this::openAssignment);
+                controller.setOnReviewFeedback(this::onNavigateTeachingContent);
                 return controller;
             }
             throw new IllegalStateException("Unexpected controller type for home.fxml: " + type);
@@ -965,5 +981,13 @@ public final class MainWindowController {
         } catch (IOException error) {
             throw new IllegalStateException("Failed to load " + HOME_FXML, error);
         }
+    }
+
+    private void openExercise(String exerciseId) {
+        requireCapability(DesktopCapability.STUDENT_EXERCISE);
+        Node page = studentExercisePage();
+        studentExerciseController.openExercise(exerciseId);
+        selectNav(studentExerciseNavButton);
+        showPage(page);
     }
 }

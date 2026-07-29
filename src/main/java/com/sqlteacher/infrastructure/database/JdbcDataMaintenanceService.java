@@ -23,6 +23,8 @@ public final class JdbcDataMaintenanceService implements DataMaintenanceService 
                 int attempts = statement.executeUpdate("delete from exercise_attempts");
                 int sessions = statement.executeUpdate("delete from exercise_sessions");
                 int events = statement.executeUpdate("delete from learning_events");
+                statement.executeUpdate("delete from mastery_snapshot");
+                statement.executeUpdate("delete from learning_action_state");
                 connection.commit();
                 return new LearningDataResetResult(sessions, attempts, events);
             } catch (SQLException | RuntimeException error) {

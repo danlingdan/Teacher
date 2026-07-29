@@ -248,6 +248,48 @@ final class SqliteSchemaMigrator {
                     on teaching_content_cache(account_id, updated_at desc)
                     """
             )
+        ),
+        new Migration(
+            7,
+            "Create v1.7 deterministic learning diagnosis state",
+            List.of(
+                "alter table exercise_sessions add column owner_id text not null default 'guest'",
+                "create index exercise_sessions_owner_active on exercise_sessions(owner_id, completed_at, started_at desc)",
+                """
+                    create table mastery_snapshot (
+                        owner_id text not null,
+                        knowledge_point text not null,
+                        level text not null check (level in ('UNKNOWN','NEEDS_PRACTICE','DEVELOPING','MASTERED')),
+                        attempts integer not null check (attempts >= 0),
+                        passes integer not null check (passes >= 0),
+                        failures integer not null check (failures >= 0),
+                        hints_used integer not null check (hints_used >= 0),
+                        mastery_percent integer not null check (mastery_percent between 0 and 100),
+                        reason_codes text not null,
+                        evidence_hash text not null,
+                        policy_version text not null,
+                        updated_at text not null,
+                        primary key(owner_id, knowledge_point, policy_version)
+                    )
+                    """,
+                "create index mastery_snapshot_owner_level on mastery_snapshot(owner_id, level, updated_at desc)",
+                """
+                    create table learning_action_state (
+                        action_id text primary key,
+                        owner_id text not null,
+                        state text not null check (state in ('OPEN','DISMISSED')),
+                        updated_at text not null
+                    )
+                    """,
+                "create index learning_action_state_owner on learning_action_state(owner_id, state, updated_at desc)",
+                """
+                    create table intervention_state (
+                        candidate_id text primary key,
+                        status text not null check (status in ('OPEN','ACKNOWLEDGED','RESOLVED','DISMISSED')),
+                        updated_at text not null
+                    )
+                    """
+            )
         )
     );
 

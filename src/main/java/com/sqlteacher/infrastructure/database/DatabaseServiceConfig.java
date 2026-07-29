@@ -17,6 +17,9 @@ import com.sqlteacher.application.exercise.ExerciseProgressService;
 import com.sqlteacher.application.analytics.LearningAnalyticsService;
 import com.sqlteacher.application.maintenance.DataMaintenanceService;
 import com.sqlteacher.application.maintenance.ApplicationBackupService;
+import com.sqlteacher.application.learning.LearningDiagnosisService;
+import com.sqlteacher.application.learning.InterventionService;
+import com.sqlteacher.application.learning.StudentLearningQueueService;
 import com.sqlteacher.application.metadata.DatabaseMetadataService;
 import com.sqlteacher.application.risk.SqlRiskAnalysisService;
 import com.sqlteacher.application.risk.SqlSafetyModeService;
@@ -28,6 +31,8 @@ import com.sqlteacher.application.collaboration.TeachingContentCache;
 import com.sqlteacher.infrastructure.cloud.JdbcAssignmentDeliveryService;
 import com.sqlteacher.infrastructure.cloud.InMemoryLearningEventOwnerContext;
 import com.sqlteacher.infrastructure.cloud.JdbcTeachingContentCache;
+import com.sqlteacher.infrastructure.cloud.DefaultInterventionService;
+import com.sqlteacher.infrastructure.cloud.DefaultStudentLearningQueueService;
 import com.sqlteacher.infrastructure.config.FileSqlSafetyModeService;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -153,7 +158,8 @@ public class DatabaseServiceConfig {
             SqlResultMapper resultMapper,
             SqlTeacherConfiguration configuration,
             SqlSafetyModeService safetyModeService,
-            LearningEventService learningEventService) {
+            LearningEventService learningEventService,
+            LearningEventOwnerProvider ownerProvider) {
         return new JdbcExercisePracticeService(
             connectionFactory,
             managementService,
@@ -162,8 +168,15 @@ public class DatabaseServiceConfig {
             resultMapper,
             configuration,
             safetyModeService,
-            learningEventService
+            learningEventService,
+            ownerProvider
         );
+    }
+
+    @Bean
+    public LearningDiagnosisService learningDiagnosisService(JdbcConnectionFactory connectionFactory,
+                                                              LearningEventOwnerProvider ownerProvider) {
+        return new JdbcLearningDiagnosisService(connectionFactory, ownerProvider);
     }
 
     @Bean
@@ -230,5 +243,76 @@ public class DatabaseServiceConfig {
     @Bean
     public TeachingContentCache teachingContentCache(SqlTeacherConfiguration configuration) {
         return new JdbcTeachingContentCache(configuration.database().appDatabasePath());
+    }
+
+    @Bean
+    public InterventionService interventionService(ObjectProvider<CloudApiClient> apiProvider,
+                                                   ObjectProvider<CloudSessionService> sessionProvider,
+                                                   SqlTeacherConfiguration configuration) {
+        return new InterventionService() {
+            @Override
+            public java.util.List<com.sqlteacher.application.learning.InterventionCandidate> refreshAuthorized() {
+                return delegate().refreshAuthorized();
+            }
+
+            @Override
+            public void updateStatus(String candidateId,
+                                     com.sqlteacher.application.learning.InterventionStatus status) {
+                delegate().updateStatus(candidateId, status);
+            }
+
+            @Override
+            public String exportCsv(java.util.List<com.sqlteacher.application.learning.InterventionCandidate> items) {
+                return delegate().exportCsv(items);
+            }
+
+            private InterventionService delegate() {
+                CloudApiClient api = apiProvider.getIfAvailable();
+                CloudSessionService sessions = sessionProvider.getIfAvailable();
+                if (api == null || sessions == null) {
+                    throw new IllegalStateException("云端教师干预服务当前不可用");
+                }
+                return new DefaultInterventionService(api, sessions,
+                    configuration.database().appDatabasePath());
+            }
+        };
+    }
+
+    @Bean
+    public StudentLearningQueueService studentLearningQueueService(LearningDiagnosisService diagnosis,
+                                                                   ObjectProvider<CloudApiClient> apiProvider,
+                                                                   ObjectProvider<CloudSessionService> sessionProvider) {
+        return new StudentLearningQueueService() {
+            @Override public com.sqlteacher.application.learning.StudentLearningQueue refresh() {
+                return delegate().refresh();
+            }
+            @Override public void dismiss(com.sqlteacher.application.learning.StudentLearningQueueItem item) {
+                delegate().dismiss(item);
+            }
+            @Override public void complete(com.sqlteacher.application.learning.StudentLearningQueueItem item) {
+                delegate().complete(item);
+            }
+            private StudentLearningQueueService delegate() {
+                CloudApiClient api = apiProvider.getIfAvailable();
+                CloudSessionService sessions = sessionProvider.getIfAvailable();
+                if (api == null || sessions == null) {
+                    return new StudentLearningQueueService() {
+                        @Override public com.sqlteacher.application.learning.StudentLearningQueue refresh() {
+                            var dashboard = diagnosis.refresh();
+                            return new com.sqlteacher.application.learning.StudentLearningQueue(dashboard,
+                                dashboard.actions().stream().map(action ->
+                                    new com.sqlteacher.application.learning.StudentLearningQueueItem(action, null, "")).toList(), false);
+                        }
+                        @Override public void dismiss(com.sqlteacher.application.learning.StudentLearningQueueItem item) {
+                            diagnosis.dismissAction(item.action().id());
+                        }
+                        @Override public void complete(com.sqlteacher.application.learning.StudentLearningQueueItem item) {
+                            diagnosis.dismissAction(item.action().id());
+                        }
+                    };
+                }
+                return new DefaultStudentLearningQueueService(diagnosis, api, sessions);
+            }
+        };
     }
 }

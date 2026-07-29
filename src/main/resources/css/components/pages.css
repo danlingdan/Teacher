@@ -615,3 +615,30 @@
     -fx-text-fill: -st-danger;
     -fx-font-weight: 600;
 }
+
+.learning-queue-panel {
+    -fx-background-color: -st-bg-surface;
+    -fx-background-radius: 14;
+    -fx-border-color: -st-border-subtle;
+    -fx-border-radius: 14;
+    -fx-padding: 18;
+    -fx-effect: dropshadow(gaussian, rgba(15, 23, 42, 0.10), 12, 0.10, 0, 4);
+}
+
+.learning-queue-list {
+    -fx-background-color: -st-bg-surface-raised;
+    -fx-border-color: -st-border-subtle;
+    -fx-border-radius: 10;
+    -fx-background-radius: 10;
+}
+
+.learning-queue-list .list-cell {
+    -fx-padding: 10 12;
+    -fx-text-fill: -st-text-primary;
+    -fx-background-color: transparent;
+}
+
+.learning-queue-list .list-cell:selected {
+    -fx-background-color: -st-accent-soft;
+    -fx-text-fill: -st-text-primary;
+}

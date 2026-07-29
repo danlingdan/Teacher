@@ -31,6 +31,9 @@ import com.sqlteacher.application.metadata.DatabaseMetadataService;
 import com.sqlteacher.application.nl2sql.Nl2SqlSafetyService;
 import com.sqlteacher.application.risk.SqlRiskAnalysisService;
 import com.sqlteacher.application.risk.SqlSafetyModeService;
+import com.sqlteacher.application.learning.LearningDiagnosisService;
+import com.sqlteacher.application.learning.InterventionService;
+import com.sqlteacher.application.learning.StudentLearningQueueService;
 import com.sqlteacher.desktop.controller.MainWindowController;
 import com.sqlteacher.desktop.controller.LoginGateController;
 import com.sqlteacher.desktop.appearance.UiPreferencesService;
@@ -100,6 +103,9 @@ public final class SqlTeacherFxApp extends Application {
     private AiTaskHistoryService aiTaskHistoryService;
     private FeedbackDraftEnhancer feedbackDraftEnhancer;
     private TeachingContentCache teachingContentCache;
+    private LearningDiagnosisService learningDiagnosisService;
+    private InterventionService interventionService;
+    private StudentLearningQueueService studentLearningQueueService;
     private InMemoryLearningEventOwnerContext learningEventOwnerContext;
     private UiPreferencesService uiPreferencesService;
 
@@ -141,6 +147,9 @@ public final class SqlTeacherFxApp extends Application {
             aiTaskHistoryService = context.getBean(AiTaskHistoryService.class);
             feedbackDraftEnhancer = context.getBean(FeedbackDraftEnhancer.class);
             teachingContentCache = context.getBean(TeachingContentCache.class);
+            learningDiagnosisService = context.getBean(LearningDiagnosisService.class);
+            interventionService = context.getBean(InterventionService.class);
+            studentLearningQueueService = context.getBean(StudentLearningQueueService.class);
             learningEventOwnerContext = context.getBean(InMemoryLearningEventOwnerContext.class);
             uiPreferencesService = UiPreferencesService.shared();
             applicationContext = context;
@@ -166,6 +175,7 @@ public final class SqlTeacherFxApp extends Application {
             || assignmentDeliveryService == null
             || networkAiSettingsService == null || aiProviderProfileService == null
             || aiProviderProbeService == null || aiTaskHistoryService == null || learningEventOwnerContext == null
+            || learningDiagnosisService == null || interventionService == null || studentLearningQueueService == null
             || uiPreferencesService == null) {
             throw new IllegalStateException("Services are unavailable because application initialization did not complete");
         }
@@ -250,6 +260,9 @@ public final class SqlTeacherFxApp extends Application {
                     aiTaskHistoryService,
                     feedbackDraftEnhancer,
                     teachingContentCache,
+                    learningDiagnosisService,
+                    interventionService,
+                    studentLearningQueueService,
                     uiPreferencesService,
                     accessProfile,
                     () -> switchToLogin(stage)
@@ -327,6 +340,9 @@ public final class SqlTeacherFxApp extends Application {
         aiProviderProbeService = null;
         aiTaskHistoryService = null;
         learningEventOwnerContext = null;
+        learningDiagnosisService = null;
+        interventionService = null;
+        studentLearningQueueService = null;
         uiPreferencesService = null;
     }
 
