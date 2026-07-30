@@ -1,0 +1,644 @@
+/*
+ * SQLTeacher semantic page layer.
+ *
+ * This stylesheet is loaded after the legacy app.css and owns every business
+ * page surface and standard control color. Layout may remain in FXML/app.css,
+ * but page styling must consume the -st-* tokens defined by tokens.css.
+ */
+
+/* ===== Page canvases and scrolling ===== */
+.main-window,
+.page-container,
+.home-page,
+.sql-practice-page,
+.exercise-page,
+.teaching-workbench,
+.table-schema-page,
+.connection-settings-page,
+.settings-section,
+.cloud-center-page,
+.page-scroll,
+.page-scroll > .viewport,
+.home-scroll,
+.home-scroll > .viewport,
+.sql-practice-scroll,
+.sql-practice-scroll > .viewport,
+.exercise-scroll,
+.exercise-scroll > .viewport,
+.connection-form-scroll,
+.connection-form-scroll > .viewport,
+.cloud-center-scroll,
+.cloud-center-scroll > .viewport {
+    -fx-background-color: -st-bg-canvas;
+}
+
+.page-title,
+.intro-title,
+.card-title,
+.section-title,
+.form-label,
+.cloud-page-title,
+.cloud-subsection-title {
+    -fx-text-fill: -st-text-primary;
+}
+
+.page-subtitle,
+.card-subtitle,
+.card-description,
+.model-status,
+.table-empty-hint,
+.cloud-page-subtitle,
+.cloud-helper-text {
+    -fx-text-fill: -st-text-secondary;
+}
+
+/* ===== Surfaces ===== */
+.panel-card,
+.home-card,
+.settings-grid,
+.appearance-preview,
+.connection-card,
+.analytics-card,
+.cloud-card,
+.cloud-section-card,
+.cloud-sync-card,
+.progress-card {
+    -fx-background-color: -st-bg-surface;
+    -fx-border-color: -st-border-subtle;
+    -fx-effect: dropshadow(gaussian, -st-shadow, 14, 0.03, 0, 4);
+}
+
+.panel-card:hover,
+.home-card:hover {
+    -fx-background-color: -st-bg-surface-raised;
+    -fx-border-color: -st-border-strong;
+}
+
+.section-divider,
+.separator .line {
+    -fx-background-color: -st-border-subtle;
+    -fx-border-color: -st-border-subtle;
+}
+
+/* ===== Standard inputs ===== */
+.text-field,
+.password-field,
+.text-area,
+.combo-box,
+.date-picker,
+.list-view,
+.table-view,
+.tree-view,
+.exercise-list,
+.connection-list,
+.cloud-list {
+    -fx-background-color: -st-bg-input;
+    -fx-control-inner-background: -st-bg-input;
+    -fx-text-fill: -st-text-primary;
+    -fx-prompt-text-fill: -st-text-muted;
+    -fx-border-color: -st-border-strong;
+}
+
+.text-area .content,
+.sql-editor,
+.sql-editor .content,
+.sql-editor:focused,
+.sql-editor:focused .content,
+.exercise-form .text-area .content,
+.exercise-workspace .text-area .content {
+    -fx-background-color: -st-bg-input;
+}
+
+.sql-editor,
+.exercise-form .text-field,
+.exercise-form .text-area,
+.exercise-form .combo-box,
+.exercise-workspace .text-area,
+.connection-form .text-field,
+.connection-form .password-field,
+.connection-form .combo-box,
+.knowledge-split .text-field,
+.analytics-filter-bar .date-picker,
+.analytics-filter-bar .combo-box,
+.cloud-center-page .text-field,
+.cloud-center-page .password-field,
+.cloud-center-page .combo-box,
+.cloud-center-page .list-view {
+    -fx-background-color: -st-bg-input;
+    -fx-control-inner-background: -st-bg-input;
+    -fx-text-fill: -st-text-primary;
+    -fx-prompt-text-fill: -st-text-muted;
+    -fx-border-color: -st-border-strong;
+}
+
+.settings-section .combo-box .list-cell,
+.exercise-form .combo-box .list-cell,
+.connection-form .combo-box .list-cell,
+.analytics-filter-bar .combo-box .list-cell,
+.cloud-center-page .combo-box .list-cell {
+    -fx-background-color: transparent;
+    -fx-text-fill: -st-text-primary;
+}
+
+.settings-section .combo-box {
+    -fx-background-color: -st-bg-input;
+    -fx-border-color: -st-border-strong;
+}
+
+.settings-section .label,
+.settings-section .page-title,
+.settings-section .section-title,
+.settings-section .card-title {
+    -fx-text-fill: -st-text-primary;
+}
+
+.settings-section .page-subtitle,
+.settings-section .form-label { -fx-text-fill: -st-text-secondary; }
+
+.text-field:focused,
+.password-field:focused,
+.text-area:focused,
+.combo-box:focused,
+.date-picker:focused,
+.list-view:focused,
+.table-view:focused,
+.tree-view:focused,
+.sql-editor:focused,
+.exercise-form .text-field:focused,
+.exercise-form .text-area:focused,
+.exercise-form .combo-box:focused,
+.exercise-workspace .text-area:focused,
+.connection-form .text-field:focused,
+.connection-form .password-field:focused,
+.connection-form .combo-box:focused,
+.knowledge-split .text-field:focused,
+.analytics-filter-bar .date-picker:focused,
+.analytics-filter-bar .combo-box:focused {
+    -fx-border-color: -st-focus;
+    -fx-focus-color: -st-focus;
+    -fx-faint-focus-color: transparent;
+}
+
+.text-input:disabled,
+.combo-box-base:disabled,
+.choice-box:disabled,
+.check-box:disabled,
+.radio-button:disabled,
+.label:disabled,
+.button:disabled,
+.toggle-button:disabled,
+.list-view:disabled,
+.table-view:disabled,
+.tree-view:disabled,
+.scroll-pane:disabled {
+    -fx-opacity: 1;
+}
+
+.text-input:disabled,
+.combo-box-base:disabled,
+.choice-box:disabled {
+    -fx-background-color: -st-bg-disabled;
+    -fx-text-fill: -st-text-disabled;
+    -fx-prompt-text-fill: -st-text-muted;
+}
+
+.label:disabled,
+.check-box:disabled,
+.radio-button:disabled {
+    -fx-text-fill: -st-text-disabled;
+}
+
+.card-title:disabled,
+.section-title:disabled,
+.cloud-subsection-title:disabled {
+    -fx-text-fill: -st-text-primary;
+}
+
+.list-view > .virtual-flow:disabled,
+.table-view > .virtual-flow:disabled,
+.tree-view > .virtual-flow:disabled,
+.scroll-pane:disabled > .scroll-bar {
+    -fx-opacity: 1;
+}
+
+.check-box,
+.exercise-form .check-box,
+.connection-form .check-box,
+.analytics-filter-bar .label,
+.cloud-section-card .label {
+    -fx-text-fill: -st-text-primary;
+}
+
+.model-label { -fx-text-fill: -st-text-primary; }
+
+.model-selector,
+.model-selector .list-cell,
+.model-selector .list-view {
+    -fx-background-color: -st-bg-input;
+    -fx-text-fill: -st-text-primary;
+    -fx-border-color: -st-border-strong;
+}
+
+.model-refresh-button {
+    -fx-background-color: -st-bg-surface-raised;
+    -fx-border-color: -st-border-strong;
+    -fx-text-fill: -st-text-primary;
+}
+
+/* ===== Lists and selection ===== */
+.list-cell,
+.exercise-list .list-cell,
+.connection-list .list-cell,
+.cloud-center-page .list-cell {
+    -fx-background-color: transparent;
+    -fx-text-fill: -st-text-primary;
+}
+
+.list-cell:filled:hover,
+.exercise-list .list-cell:filled:hover,
+.connection-list .list-cell:filled:hover,
+.cloud-center-page .list-cell:filled:hover {
+    -fx-background-color: -st-accent-soft;
+    -fx-text-fill: -st-text-primary;
+}
+
+.list-cell:filled:selected,
+.exercise-list .list-cell:selected,
+.connection-list .list-cell:selected,
+.cloud-center-page .list-cell:selected {
+    -fx-background-color: -st-accent;
+    -fx-text-fill: white;
+}
+
+.combo-box-popup .list-view {
+    -fx-background-color: -st-bg-surface;
+    -fx-border-color: -st-border-strong;
+}
+
+.combo-box-popup .list-cell {
+    -fx-background-color: -st-bg-surface;
+    -fx-text-fill: -st-text-primary;
+}
+
+.combo-box-popup .list-cell:filled:hover,
+.combo-box-popup .list-cell:filled:selected {
+    -fx-background-color: -st-accent-soft;
+    -fx-text-fill: -st-text-primary;
+}
+
+.tab-pane .tab-header-area .tab-header-background {
+    -fx-background-color: -st-bg-surface-raised;
+}
+
+.tab-pane .tab {
+    -fx-background-color: -st-bg-surface;
+    -fx-border-color: -st-border-subtle;
+}
+
+.tab-pane .tab:selected { -fx-background-color: -st-bg-surface-raised; }
+.tab-pane .tab .tab-label { -fx-text-fill: -st-text-secondary; }
+.tab-pane .tab:selected .tab-label { -fx-text-fill: -st-text-primary; }
+.tab-pane .tab-content-area { -fx-background-color: -st-bg-canvas; }
+
+/* ===== Tables and trees ===== */
+.result-pane {
+    -fx-background-color: -st-bg-input;
+    -fx-border-color: -st-border-subtle;
+}
+
+.result-table {
+    -color-cell-bg: -st-bg-surface;
+    -color-cell-fg: -st-text-primary;
+    -color-cell-bg-selected: -st-accent;
+    -color-cell-fg-selected: white;
+    -color-cell-bg-selected-focused: -st-accent;
+    -color-cell-fg-selected-focused: white;
+    -color-cell-bg-odd: -st-bg-surface-raised;
+    -color-cell-border: -st-border-subtle;
+    -fx-background-color: transparent;
+    -fx-control-inner-background: -st-bg-surface;
+    -fx-control-inner-background-alt: -st-bg-surface-raised;
+    -fx-table-cell-border-color: -st-border-subtle;
+}
+
+.result-table .table-row-cell {
+    -fx-background-color: -st-bg-surface;
+    -fx-border-color: transparent transparent -st-border-subtle transparent;
+}
+
+.result-table .table-row-cell:hover {
+    -fx-background-color: -st-accent-soft;
+}
+
+.result-table .table-row-cell:hover:not(:selected) .table-cell,
+.result-table .table-row-cell > .table-cell,
+.result-table .table-cell {
+    -fx-text-fill: -st-text-primary;
+    -fx-opacity: 1;
+}
+
+.result-table .table-row-cell:selected { -fx-background-color: -st-accent; }
+.result-table .table-row-cell:selected .table-cell { -fx-text-fill: white; }
+.table-empty-hint { -fx-opacity: 1; }
+
+.schema-tree .tree-cell {
+    -fx-background-color: transparent;
+    -fx-text-fill: -st-text-primary;
+}
+
+.schema-tree .tree-cell:hover { -fx-background-color: -st-accent-soft; }
+.schema-tree .tree-cell:selected { -fx-background-color: -st-accent; -fx-text-fill: white; }
+.schema-tree .tree-disclosure-node .arrow { -fx-background-color: -st-text-secondary; }
+.schema-tree .scroll-bar .thumb,
+.result-table .scroll-bar .thumb { -fx-background-color: -st-border-strong; }
+
+/* ===== Buttons ===== */
+.refresh-button,
+.secondary-button {
+    -fx-background-color: -st-bg-surface-raised;
+    -fx-border-color: -st-border-strong;
+    -fx-text-fill: -st-text-secondary;
+}
+
+.refresh-button:hover,
+.secondary-button:hover {
+    -fx-background-color: -st-accent-soft;
+    -fx-border-color: -st-accent;
+    -fx-text-fill: -st-text-primary;
+}
+
+.primary-button,
+.sql-execute-button {
+    -fx-background-color: -st-accent;
+    -fx-border-color: transparent;
+    -fx-text-fill: white;
+}
+
+.primary-button:hover,
+.sql-execute-button:hover { -fx-background-color: -st-accent-hover; }
+
+.danger-button,
+.danger-outline-button {
+    -fx-background-color: -st-danger-surface;
+    -fx-border-color: -st-danger-border;
+    -fx-text-fill: -st-danger;
+}
+
+.button:disabled,
+.toggle-button:disabled {
+    -color-button-fg: -st-text-disabled;
+    -color-button-fg-hover: -st-text-disabled;
+    -color-button-fg-focused: -st-text-disabled;
+    -color-button-fg-pressed: -st-text-disabled;
+    -fx-opacity: 1;
+    -fx-background-color: -st-bg-disabled;
+    -fx-border-color: -st-border-subtle;
+    -fx-text-fill: -st-text-disabled;
+    -fx-effect: none;
+}
+
+.identity-pill {
+    -fx-background-color: -st-accent-soft;
+    -fx-border-color: -st-border-strong;
+    -fx-text-fill: -st-text-primary;
+}
+
+.identity-switch-button {
+    -color-button-fg: -st-text-secondary;
+    -fx-background-color: transparent;
+    -fx-border-color: -st-border-strong;
+    -fx-text-fill: -st-text-secondary;
+}
+
+/* ===== SQL risk confirmation ===== */
+.risk-dialog {
+    -fx-background-color: -st-bg-canvas;
+    -fx-border-color: -st-danger-border;
+    -fx-effect: dropshadow(gaussian, -st-shadow, 16, 0.03, 0, 6);
+}
+
+.risk-dialog-title,
+.risk-dialog-type { -fx-text-fill: -st-danger; }
+.risk-dialog-tables { -fx-text-fill: -st-text-secondary; }
+
+.risk-dialog-sql,
+.risk-dialog-sql .content {
+    -fx-background-color: -st-bg-surface;
+    -fx-text-fill: -st-danger;
+    -fx-border-color: -st-danger-border;
+}
+
+.risk-dialog-cancel {
+    -fx-background-color: -st-bg-surface-raised;
+    -fx-border-color: -st-border-strong;
+    -fx-text-fill: -st-text-secondary;
+}
+
+/* ===== Teaching workbench ===== */
+.teaching-workbench {
+    -fx-background-color: -st-bg-canvas;
+}
+
+.teaching-tabs,
+.teaching-tabs .tab-content-area,
+.teaching-tabs .page-content {
+    -fx-background-color: -st-bg-canvas;
+}
+
+.teaching-tabs .tab-header-area .tab-header-background {
+    -fx-background-color: -st-bg-surface-raised;
+    -fx-border-color: transparent transparent -st-border-subtle transparent;
+}
+
+.teaching-tabs .tab {
+    -fx-background-color: transparent;
+    -fx-border-color: transparent;
+    -fx-padding: 7 16 7 16;
+}
+
+.teaching-tabs .tab:hover { -fx-background-color: -st-accent-soft; }
+.teaching-tabs .tab:selected {
+    -fx-background-color: -st-bg-surface;
+    -fx-border-color: transparent transparent -st-accent transparent;
+    -fx-border-width: 0 0 3 0;
+}
+.teaching-tabs .tab .tab-label { -fx-text-fill: -st-text-secondary; }
+.teaching-tabs .tab:selected .tab-label { -fx-text-fill: -st-text-primary; }
+
+.teaching-tabs .split-pane,
+.teaching-tabs .split-pane > .split-pane-divider {
+    -fx-background-color: transparent;
+}
+
+/* ===== Exercise and analytics ===== */
+.exercise-split,
+.exercise-result-split,
+.knowledge-split,
+.connection-split,
+.exercise-split > .split-pane-divider,
+.exercise-result-split > .split-pane-divider,
+.knowledge-split > .split-pane-divider,
+.connection-split > .split-pane-divider {
+    -fx-background-color: transparent;
+}
+
+.workflow-hint {
+    -fx-background-color: -st-accent-soft;
+    -fx-text-fill: -st-text-secondary;
+}
+
+.offline-card {
+    -fx-background-color: -st-warning-surface;
+    -fx-border-color: -st-warning-border;
+}
+
+.offline-title { -fx-text-fill: -st-warning; }
+.offline-message { -fx-text-fill: -st-text-secondary; }
+
+.analytics-filter-bar,
+.cloud-subsection {
+    -fx-background-color: -st-bg-surface-raised;
+    -fx-border-color: -st-border-subtle;
+    -fx-border-radius: 10;
+    -fx-background-radius: 10;
+}
+
+.progress-value { -fx-text-fill: -st-text-primary; }
+
+/* ===== Cloud center ===== */
+.cloud-center-page { -fx-background-color: -st-bg-canvas; }
+
+.cloud-status-banner,
+.cloud-status-banner.status-info {
+    -fx-background-color: -st-info-surface;
+    -fx-border-color: -st-info-border;
+}
+
+.cloud-status-banner.status-success {
+    -fx-background-color: -st-success-surface;
+    -fx-border-color: -st-success-border;
+}
+
+.cloud-status-banner.status-error {
+    -fx-background-color: -st-danger-surface;
+    -fx-border-color: -st-danger-border;
+}
+
+.cloud-status-banner .label { -fx-text-fill: -st-text-primary; }
+.cloud-status-banner.status-info .cloud-status-dot { -fx-background-color: -st-accent; }
+.cloud-status-banner.status-success .cloud-status-dot { -fx-background-color: -st-success; }
+.cloud-status-banner.status-error .cloud-status-dot { -fx-background-color: -st-danger; }
+
+.cloud-account-pill,
+.cloud-selection-pill {
+    -fx-background-color: -st-accent-soft;
+    -fx-border-color: -st-border-strong;
+    -fx-text-fill: -st-text-primary;
+}
+
+.cloud-security-pill {
+    -fx-background-color: -st-success-surface;
+    -fx-border-color: -st-success-border;
+    -fx-text-fill: -st-success;
+}
+
+.cloud-center-page .button:disabled,
+.cloud-center-page .text-field:disabled,
+.cloud-center-page .password-field:disabled,
+.cloud-center-page .combo-box:disabled,
+.cloud-center-page .list-view:disabled {
+    -fx-opacity: 1;
+}
+
+.cloud-center-page .authenticated-content:disabled {
+    -fx-opacity: 1;
+}
+
+.cloud-center-page .authenticated-content:disabled .label:disabled {
+    -fx-opacity: 1;
+}
+
+.cloud-center-page .authenticated-content:disabled .button:disabled {
+    -color-button-fg: -st-text-disabled;
+    -color-button-fg-hover: -st-text-disabled;
+    -color-button-fg-focused: -st-text-disabled;
+    -fx-background-color: -st-bg-disabled;
+    -fx-border-color: -st-border-strong;
+    -fx-text-fill: -st-text-disabled;
+    -fx-opacity: 1;
+}
+
+.cloud-signed-out-prompt {
+    -fx-background-color: -st-info-surface;
+    -fx-border-color: -st-info-border;
+    -fx-effect: none;
+}
+
+.exercise-schema-summary {
+    -fx-text-fill: -st-text-secondary;
+    -fx-font-size: 13px;
+    -fx-padding: 8 10 8 10;
+    -fx-background-color: -st-info-surface;
+    -fx-background-radius: 8;
+    -fx-border-color: -st-info-border;
+    -fx-border-radius: 8;
+}
+
+.exercise-sql-editor {
+    -fx-min-height: 180px;
+    -fx-pref-height: 220px;
+}
+
+/* ===== Status text ===== */
+.status-info,
+.sql-result-hint { -fx-text-fill: -st-accent-hover; }
+.status-success { -fx-text-fill: -st-success; }
+.status-error,
+.sql-error-hint { -fx-text-fill: -st-danger; }
+.settings-section .status-info { -fx-text-fill: -st-accent-hover; }
+.settings-section .status-success { -fx-text-fill: -st-success; }
+.settings-section .status-error { -fx-text-fill: -st-danger; }
+
+.safety-settings-card {
+    -fx-padding: 20;
+    -fx-background-color: -st-warning-surface;
+    -fx-border-color: -st-warning-border;
+}
+
+.safety-mode-toggle {
+    -fx-font-size: 15px;
+    -fx-font-weight: 700;
+    -fx-text-fill: -st-text-primary;
+}
+
+.safety-warning-text {
+    -fx-text-fill: -st-danger;
+    -fx-font-weight: 600;
+}
+
+.learning-queue-panel {
+    -fx-background-color: -st-bg-surface;
+    -fx-background-radius: 14;
+    -fx-border-color: -st-border-subtle;
+    -fx-border-radius: 14;
+    -fx-padding: 18;
+    -fx-effect: dropshadow(gaussian, rgba(15, 23, 42, 0.10), 12, 0.10, 0, 4);
+}
+
+.learning-queue-list {
+    -fx-background-color: -st-bg-surface-raised;
+    -fx-border-color: -st-border-subtle;
+    -fx-border-radius: 10;
+    -fx-background-radius: 10;
+}
+
+.learning-queue-list .list-cell {
+    -fx-padding: 10 12;
+    -fx-text-fill: -st-text-primary;
+    -fx-background-color: transparent;
+}
+
+.learning-queue-list .list-cell:selected {
+    -fx-background-color: -st-accent-soft;
+    -fx-text-fill: -st-text-primary;
+}

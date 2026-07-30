@@ -26,7 +26,12 @@ public final class JdbcExerciseCatalogService implements ExerciseCatalogService 
             .filter(definition -> definition.enabled())
             .map(definition -> new ExerciseView(
                 definition.id(), definition.title(), definition.description(), definition.knowledgePoint(),
-                definition.difficulty(), definition.version()
+                definition.difficulty(), managementService.listDatasets().stream()
+                    .filter(dataset -> dataset.id().equals(definition.datasetId()))
+                    .findFirst()
+                    .map(dataset -> ExerciseDatasetSchemaSummary.fromSetupSql(dataset.setupSql()))
+                    .orElse("暂无数据集字段说明"),
+                definition.version()
             ));
     }
 }

@@ -61,12 +61,11 @@ public final class DefaultSqlRiskAnalysisService implements SqlRiskAnalysisServi
             return dialectRisk;
         }
 
-        if (statementType.equals("DROP")
-                && normalized.toUpperCase(Locale.ROOT).matches("DROP\\s+DATABASE\\b.*")) {
+        if (statementType.equals("DROP") || statementType.equals("TRUNCATE")) {
             return forbidden(
-                    "DROP",
+                    statementType,
                     false,
-                    "DROP DATABASE is not allowed."
+                    statementType + " statements are not allowed."
             );
         }
 

@@ -10,6 +10,7 @@ public record ExerciseView(
     String description,
     String knowledgePoint,
     ExerciseDifficulty difficulty,
+    String schemaSummary,
     int version
 ) {
     public ExerciseView {
@@ -18,6 +19,7 @@ public record ExerciseView(
         description = requireText(description, "description");
         knowledgePoint = requireText(knowledgePoint, "knowledgePoint");
         difficulty = Objects.requireNonNull(difficulty, "difficulty must not be null");
+        schemaSummary = requireText(schemaSummary, "schemaSummary");
         if (version < 1) {
             throw new IllegalArgumentException("version must be positive");
         }

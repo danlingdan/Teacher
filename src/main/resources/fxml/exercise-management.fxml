@@ -73,7 +73,7 @@
                         <Label text="必需结构" GridPane.rowIndex="1" styleClass="form-label"/>
                         <TextField fx:id="keywordsField" promptText="逗号分隔，如 GROUP BY, HAVING" GridPane.columnIndex="1" GridPane.rowIndex="1"/>
                     </GridPane>
-                    <Label text="分级提示（每行一级，最多三级）" styleClass="form-label"/>
+                    <Label text="分级提示（每行一级，建议填写三级）" styleClass="form-label"/>
                     <TextArea fx:id="hintsArea" prefRowCount="3" wrapText="true"/>
                     <Label fx:id="statusLabel" visible="false" managed="false" wrapText="true"/>
                     <HBox spacing="8" alignment="CENTER_RIGHT">

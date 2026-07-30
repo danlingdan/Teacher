@@ -91,7 +91,7 @@ class SecondIntegrationFlowTest {
 
             AiModelProvider unsafeProvider = request -> AiCompletionResult.success(
                 "{\"sqlDraft\":\"UPDATE student SET score = 0 WHERE id = 1\","
-                    + "\"intent\":\"QUERY\",\"explanation\":\"修改学生成绩\"}",
+                    + "\"intent\":\"UPDATE\",\"explanation\":\"修改学生成绩\"}",
                 request.model()
             );
             Nl2SqlSafetyResult unsafeResult = new DefaultNl2SqlSafetyService(
@@ -104,9 +104,14 @@ class SecondIntegrationFlowTest {
                 riskService,
                 eventService
             ).generateAndAssess(new Nl2SqlRequest("把一号学生成绩改为零", "demo"));
-            assertFalse(unsafeResult.accepted());
+            assertTrue(unsafeResult.accepted());
             assertEquals("UPDATE", unsafeResult.riskAnalysis().statementType());
             assertTrue(unsafeResult.riskAnalysis().confirmationRequired());
+            SqlTeacherException confirmationRequired = assertThrows(
+                SqlTeacherException.class,
+                () -> execute(executionService, unsafeResult.plan().sqlDraft(), false)
+            );
+            assertEquals("SQL_CONFIRMATION_REQUIRED", confirmationRequired.errorCode());
 
             SqlExecutionResult rows = execute(
                 executionService,

@@ -1,0 +1,47 @@
+/* Root layout classes are managed by MainWindowController. */
+.layout-wide .page-container { -fx-padding: 0; }
+
+.layout-medium .sql-practice-header,
+.layout-medium .sql-practice-body {
+    -fx-padding-left: 22;
+    -fx-padding-right: 22;
+}
+
+.layout-compact .app-sidebar .nav-button {
+    -fx-alignment: CENTER;
+    -fx-padding: 10;
+    -fx-graphic-text-gap: 0;
+}
+
+.layout-compact .sidebar-brand {
+    -fx-alignment: CENTER;
+    -fx-padding: 2 0 8 0;
+}
+
+.layout-compact .identity-card {
+    -fx-padding: 8 5 8 5;
+}
+
+.layout-compact .sql-practice-header {
+    -fx-padding: 16 16 10 16;
+}
+
+.layout-compact .sql-practice-body {
+    -fx-padding: 0 16 16 16;
+}
+
+.layout-compact .panel-card {
+    -fx-padding: 14;
+}
+
+.layout-compact .page-title {
+    -fx-font-size: 21px;
+}
+
+.layout-compact .home-page {
+    -fx-padding: 12;
+}
+
+.layout-compact .intro-section {
+    -fx-padding: 12 8 4 8;
+}

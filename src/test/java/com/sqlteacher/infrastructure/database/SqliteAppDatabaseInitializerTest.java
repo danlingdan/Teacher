@@ -41,9 +41,22 @@ class SqliteAppDatabaseInitializerTest {
         assertTrue(result.demoDatabaseCreated());
         assertTrue(Files.exists(appDb));
         assertTrue(Files.exists(demoDb));
-        assertEquals(6, readSchemaVersion(appDb));
+        assertEquals(7, readSchemaVersion(appDb));
         assertEquals(20, countExercises(appDb));
+        assertEquals(20, countExercisesWithThreeHints(appDb));
         assertEquals(2, countDemoStudents(demoDb));
+
+        try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + appDb);
+             var statement = connection.prepareStatement(
+                 "update exercises set hints_json = ?, version = 1 where id = 'query-01'"
+             )) {
+            statement.setString(1, new ExercisePackageCodec().encodeHints(
+                java.util.List.of("先写 SELECT 和 FROM。", "使用 ORDER BY id。")
+            ));
+            statement.executeUpdate();
+        }
+        new SqliteAppDatabaseInitializer(properties).initialize();
+        assertEquals(20, countExercisesWithThreeHints(appDb));
     }
 
     @Test
@@ -89,6 +102,17 @@ class SqliteAppDatabaseInitializerTest {
         try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + appDb);
              Statement statement = connection.createStatement();
              ResultSet resultSet = statement.executeQuery("select count(*) from exercises")) {
+            resultSet.next();
+            return resultSet.getInt(1);
+        }
+    }
+
+    private static int countExercisesWithThreeHints(Path appDb) throws Exception {
+        try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + appDb);
+             Statement statement = connection.createStatement();
+             ResultSet resultSet = statement.executeQuery(
+                 "select count(*) from exercises where json_array_length(hints_json) = 3 and version = 2"
+             )) {
             resultSet.next();
             return resultSet.getInt(1);
         }

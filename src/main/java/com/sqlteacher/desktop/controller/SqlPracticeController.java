@@ -6,6 +6,7 @@ import com.sqlteacher.application.execution.SqlExecutionResult;
 import com.sqlteacher.application.execution.SqlExecutionService;
 import com.sqlteacher.application.risk.SqlRiskAnalysis;
 import com.sqlteacher.application.risk.SqlRiskAnalysisService;
+import com.sqlteacher.application.risk.SqlSafetyModeService;
 import com.sqlteacher.desktop.DesktopExecutors;
 import com.sqlteacher.desktop.GlobalLoading;
 import com.sqlteacher.desktop.SqlRiskConfirmDialogUtil;
@@ -87,6 +88,7 @@ public final class SqlPracticeController {
 
     private final SqlRiskAnalysisService sqlRiskAnalysisService;
     private final ConnectionManagementService connectionManagementService;
+    private final SqlSafetyModeService safetyModeService;
 
     /** 多行 SQL 输入框，对应 FXML 中 fx:id="sqlInputArea"。 */
     @FXML
@@ -132,9 +134,20 @@ public final class SqlPracticeController {
         SqlRiskAnalysisService sqlRiskAnalysisService,
         ConnectionManagementService connectionManagementService
     ) {
+        this(sqlExecutionService, sqlRiskAnalysisService, connectionManagementService,
+            SqlSafetyModeService.standardMode());
+    }
+
+    public SqlPracticeController(
+        SqlExecutionService sqlExecutionService,
+        SqlRiskAnalysisService sqlRiskAnalysisService,
+        ConnectionManagementService connectionManagementService,
+        SqlSafetyModeService safetyModeService
+    ) {
         this.sqlExecutionService = sqlExecutionService;
         this.sqlRiskAnalysisService = sqlRiskAnalysisService;
         this.connectionManagementService = connectionManagementService;
+        this.safetyModeService = safetyModeService;
     }
 
     /**
@@ -190,7 +203,7 @@ public final class SqlPracticeController {
 
         // ② 高危SQL风险检查：命中高危规则弹出二次确认弹窗。
         SqlRiskAnalysis risk = sqlRiskAnalysisService.analyze(sql);
-        if (risk.confirmationRequired()) {
+        if (!safetyModeService.isUnrestrictedModeEnabled() && risk.confirmationRequired()) {
             SqlRiskConfirmDialogUtil.showRiskConfirmDialog(sql, () -> executeSqlInternal(sql, true));
             return;
         }

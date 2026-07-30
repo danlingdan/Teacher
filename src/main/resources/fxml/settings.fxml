@@ -8,6 +8,7 @@
          tabClosingPolicy="UNAVAILABLE">
     <tabs>
         <Tab fx:id="appearanceTab" text="外观与易用性"/>
+        <Tab fx:id="sqlSafetyTab" text="SQL 安全"/>
         <Tab fx:id="connectionsTab" text="数据库连接"/>
         <Tab fx:id="dataTab" text="版本、备份与恢复"/>
     </tabs>

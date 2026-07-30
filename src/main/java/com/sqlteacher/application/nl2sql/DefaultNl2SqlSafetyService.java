@@ -1,5 +1,7 @@
 package com.sqlteacher.application.nl2sql;
 
+import com.sqlteacher.application.ai.AiContextPreview;
+
 import com.sqlteacher.application.event.LearningEventService;
 import com.sqlteacher.application.risk.SqlRiskAnalysis;
 import com.sqlteacher.application.risk.SqlRiskAnalysisService;
@@ -38,8 +40,27 @@ public final class DefaultNl2SqlSafetyService implements Nl2SqlSafetyService {
     public Nl2SqlSafetyResult generateAndAssess(Nl2SqlRequest request) {
         Objects.requireNonNull(request, "request must not be null");
 
+        return assess(request, nl2SqlService.generate(request));
+    }
+
+    @Override
+    public AiContextPreview preview(Nl2SqlRequest request) {
+        return nl2SqlService.preview(request);
+    }
+
+    @Override
+    public Nl2SqlSafetyResult reviseAndAssess(Nl2SqlRequest request, Nl2SqlPlan previous, String instruction) {
+        return assess(request, nl2SqlService.revise(request, previous, instruction));
+    }
+
+    @Override
+    public AiContextPreview previewRevision(Nl2SqlRequest request, Nl2SqlPlan previous, String instruction) {
+        return nl2SqlService.previewRevision(request, previous, instruction);
+    }
+
+    private Nl2SqlSafetyResult assess(Nl2SqlRequest request, Nl2SqlPlan generated) {
         Nl2SqlPlan plan = Objects.requireNonNull(
-            nl2SqlService.generate(request),
+            generated,
             "nl2SqlService result must not be null"
         );
         SqlRiskAnalysis riskAnalysis = riskAnalysisService.analyze(plan.sqlDraft(), request.dialect());

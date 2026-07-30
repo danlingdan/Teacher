@@ -43,6 +43,7 @@ public final class StudentExerciseController {
     @FXML private Label titleLabel;
     @FXML private Label metaLabel;
     @FXML private Label descriptionLabel;
+    @FXML private Label schemaLabel;
     @FXML private TextArea sqlArea;
     @FXML private TableView<Map<String, Object>> resultTable;
     @FXML private TextArea feedbackArea;
@@ -55,6 +56,7 @@ public final class StudentExerciseController {
 
     private ExerciseSession session;
     private AssignmentTaskContext assignmentTask;
+    private String requestedExerciseId;
     private final AtomicBoolean running = new AtomicBoolean();
 
     public StudentExerciseController(
@@ -72,6 +74,13 @@ public final class StudentExerciseController {
     public void openAssignment(AssignmentTaskContext task) {
         assignmentTask = Objects.requireNonNull(task);
         if (!exerciseList.getItems().isEmpty()) activateAssignment();
+    }
+
+    public void openExercise(String exerciseId) {
+        if (exerciseId == null || exerciseId.isBlank()) throw new IllegalArgumentException("exerciseId must not be blank");
+        assignmentTask = null;
+        requestedExerciseId = exerciseId.trim();
+        activateRequestedExercise();
     }
 
     @FXML
@@ -115,6 +124,7 @@ public final class StudentExerciseController {
             titleLabel.setText(started.exercise().title());
             metaLabel.setText(started.exercise().knowledgePoint() + " · " + started.exercise().difficulty());
             descriptionLabel.setText(started.exercise().description());
+            schemaLabel.setText("可用表与字段：" + started.exercise().schemaSummary());
             sqlArea.clear();
             feedbackArea.clear();
             resultTable.getColumns().clear();
@@ -221,6 +231,7 @@ public final class StudentExerciseController {
             titleLabel.setText(view.title());
             metaLabel.setText(view.knowledgePoint() + " · " + view.difficulty());
             descriptionLabel.setText(view.description());
+            schemaLabel.setText("可用表与字段：" + view.schemaSummary());
         });
     }
 
@@ -229,10 +240,26 @@ public final class StudentExerciseController {
             exerciseList.getItems().setAll(exercises);
             if (assignmentTask != null) {
                 activateAssignment();
+            } else if (requestedExerciseId != null) {
+                activateRequestedExercise();
             } else if (!exercises.isEmpty() && exerciseList.getSelectionModel().isEmpty()) {
                 exerciseList.getSelectionModel().selectFirst();
             }
         });
+    }
+
+    private void activateRequestedExercise() {
+        if (requestedExerciseId == null || exerciseList == null || exerciseList.getItems().isEmpty()) return;
+        ExerciseSummary target = exerciseList.getItems().stream()
+            .filter(item -> item.id().equals(requestedExerciseId)).findFirst().orElse(null);
+        if (target == null) {
+            showStatus("建议关联的题目已停用或不存在：" + requestedExerciseId, true);
+            requestedExerciseId = null;
+            return;
+        }
+        exerciseList.getSelectionModel().select(target);
+        requestedExerciseId = null;
+        showStatus("已从学习队列打开“" + target.title() + "”，点击开始练习即可继续。", false);
     }
 
     private void activateAssignment() {

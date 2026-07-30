@@ -3,12 +3,15 @@ package com.sqlteacher.desktop.controller;
 import com.sqlteacher.application.collaboration.CloudApiClient;
 import com.sqlteacher.application.collaboration.CloudNotification;
 import com.sqlteacher.application.collaboration.CloudSessionService;
+import com.sqlteacher.application.collaboration.ClassAssignment;
+import com.sqlteacher.application.collaboration.ClassroomService;
 import com.sqlteacher.application.collaboration.CourseCatalog;
 import com.sqlteacher.application.collaboration.CourseSection;
 import com.sqlteacher.application.collaboration.ContentStatus;
 import com.sqlteacher.application.collaboration.DesktopAccessProfile;
 import com.sqlteacher.application.collaboration.FeedbackStatus;
 import com.sqlteacher.application.collaboration.FeedbackDraftEnhancer;
+import com.sqlteacher.application.collaboration.FeedbackDraftStyle;
 import com.sqlteacher.application.collaboration.KnowledgeMastery;
 import com.sqlteacher.application.collaboration.KnowledgePoint;
 import com.sqlteacher.application.collaboration.SharedExerciseVersion;
@@ -16,10 +19,12 @@ import com.sqlteacher.application.collaboration.SubmissionFeedback;
 import com.sqlteacher.application.collaboration.TeachingContentCache;
 import com.sqlteacher.application.collaboration.CachedCourseContent;
 import com.sqlteacher.desktop.DesktopExecutors;
+import com.sqlteacher.desktop.DeadlineValueConverter;
 import javafx.application.Platform;
 import javafx.fxml.FXML;
 import javafx.scene.control.Button;
 import javafx.scene.control.ComboBox;
+import javafx.scene.control.DatePicker;
 import javafx.scene.control.Label;
 import javafx.scene.control.ListView;
 import javafx.scene.control.TextArea;
@@ -32,6 +37,7 @@ import javafx.stage.FileChooser;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.time.Instant;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -66,14 +72,17 @@ public final class TeachingContentController {
     @FXML private TextField datasetVersionField;
     @FXML private TextField evaluationRuleField;
     @FXML private ListView<String> exerciseList;
-    @FXML private TextField classroomIdField;
+    @FXML private ComboBox<SelectionOption> assignmentClassroomCombo;
+    @FXML private ComboBox<SelectionOption> learningClassroomCombo;
     @FXML private TextField assignmentTitleField;
-    @FXML private TextField assignmentDueAtField;
-    @FXML private TextField assignmentIdField;
+    @FXML private DatePicker assignmentDueDatePicker;
+    @FXML private ComboBox<String> assignmentDueTimeCombo;
+    @FXML private ComboBox<SelectionOption> learningAssignmentCombo;
     @FXML private TextField submissionIdField;
-    @FXML private TextField studentIdField;
+    @FXML private ComboBox<SelectionOption> learningStudentCombo;
     @FXML private ComboBox<FeedbackStatus> feedbackStatusCombo;
     @FXML private TextArea feedbackCommentField;
+    @FXML private ComboBox<FeedbackDraftStyle> feedbackDraftStyleCombo;
     @FXML private ListView<String> feedbackList;
     @FXML private ListView<String> masteryList;
     @FXML private ListView<String> notificationList;
@@ -85,6 +94,7 @@ public final class TeachingContentController {
     private List<SharedExerciseVersion> exercises = List.of();
     private List<SubmissionFeedback> feedback = List.of();
     private List<CloudNotification> notifications = List.of();
+    private List<ClassroomService.Classroom> learningClassrooms = List.of();
 
     public TeachingContentController(CloudApiClient api, CloudSessionService sessions,
                                      DesktopAccessProfile accessProfile, FeedbackDraftEnhancer feedbackDraftEnhancer,
@@ -104,6 +114,16 @@ public final class TeachingContentController {
         feedbackEditorPane.setManaged(teacher);
         feedbackStatusCombo.getItems().setAll(FeedbackStatus.values());
         feedbackStatusCombo.setValue(FeedbackStatus.NEEDS_WORK);
+        feedbackDraftStyleCombo.getItems().setAll(FeedbackDraftStyle.values());
+        feedbackDraftStyleCombo.setValue(FeedbackDraftStyle.CONCISE);
+        assignmentDueTimeCombo.getItems().setAll(DeadlineValueConverter.timeOptions());
+        assignmentDueTimeCombo.setValue(DeadlineValueConverter.DEFAULT_TIME);
+        assignmentClassroomCombo.setPromptText("选择发布班级");
+        learningClassroomCombo.setPromptText("选择班级");
+        learningAssignmentCombo.setPromptText("选择任务");
+        learningStudentCombo.setPromptText("全部学生");
+        learningStudentCombo.setVisible(teacher);
+        learningStudentCombo.setManaged(teacher);
         courseList.setPlaceholder(new Label("暂无云端课程"));
         sectionList.setPlaceholder(new Label("暂无章节"));
         knowledgePointList.setPlaceholder(new Label("暂无知识点"));
@@ -146,12 +166,17 @@ public final class TeachingContentController {
             if (index >= 0 && index < feedback.size()) {
                 SubmissionFeedback selected = feedback.get(index);
                 submissionIdField.setText(selected.submissionId());
+                selectOption(learningStudentCombo, selected.studentUserId());
                 feedbackStatusCombo.setValue(selected.status());
                 feedbackCommentField.setText(selected.comment());
             }
         });
         notificationList.getSelectionModel().selectedIndexProperty().addListener((ignored, oldValue, newValue) ->
             markReadButton.setDisable(newValue.intValue() < 0));
+        learningClassroomCombo.valueProperty().addListener((ignored, oldValue, selected) -> {
+            applyLearningStudents(selected == null ? null : selected.id());
+            if (selected != null && !running.get()) loadLearningAssignments(selected.id());
+        });
         onRefresh();
     }
 
@@ -162,25 +187,35 @@ public final class TeachingContentController {
             String account = accountId();
             List<CourseCatalog> loadedCourses;
             List<CloudNotification> loadedNotifications;
+            List<ClassroomService.Classroom> loadedClassrooms;
+            List<ClassAssignment> loadedAssignments = List.of();
             boolean offline = false;
             try {
                 loadedCourses = isTeacher() ? api.listCourses(token) : List.of();
                 loadedNotifications = api.listNotifications(token, 0, 50);
+                loadedClassrooms = api.listClasses(token);
+                if (!loadedClassrooms.isEmpty()) {
+                    loadedAssignments = api.listAssignments(token, loadedClassrooms.getFirst().id());
+                }
                 if (isTeacher()) cache.saveCourses(account, loadedCourses);
                 cache.saveNotifications(account, loadedNotifications);
             } catch (RuntimeException error) {
                 loadedCourses = isTeacher() ? cache.loadCourses(account) : List.of();
                 loadedNotifications = cache.loadNotifications(account);
+                loadedClassrooms = List.of();
                 offline = true;
             }
             boolean cached = offline;
             List<CourseCatalog> uiCourses = List.copyOf(loadedCourses);
             List<CloudNotification> uiNotifications = List.copyOf(loadedNotifications);
+            List<ClassroomService.Classroom> uiClassrooms = List.copyOf(loadedClassrooms);
+            List<ClassAssignment> uiAssignments = List.copyOf(loadedAssignments);
             Platform.runLater(() -> {
                 courses = uiCourses;
                 courseList.getItems().setAll(uiCourses.stream().map(this::courseLabel).toList());
                 notifications = uiNotifications;
                 renderNotifications();
+                applyLearningFilters(uiClassrooms, uiAssignments);
                 showStatus(cached ? "云端不可用，已加载当前账号的本地缓存" : "课程与通知已刷新", false);
             });
         });
@@ -357,16 +392,20 @@ public final class TeachingContentController {
     private void onCreateAssignmentSnapshot() {
         requireTeacher();
         SharedExerciseVersion exercise = selectedExercise();
-        String classroomId = required(classroomIdField.getText(), "请输入班级 ID");
+        String classroomId = selectedId(assignmentClassroomCombo, "请选择发布班级");
         if (exercise == null || classroomId == null) return;
-        Instant dueAt = parseInstant(assignmentDueAtField.getText());
-        if (!assignmentDueAtField.getText().isBlank() && dueAt == null) return;
+        Instant dueAt = DeadlineValueConverter.toInstant(
+            assignmentDueDatePicker.getValue(), assignmentDueTimeCombo.getValue(), ZoneId.systemDefault()
+        );
         run("正在创建带快照的任务…", () -> {
             var assignment = api.createAssignmentFromVersion(token(), classroomId, exercise.id(),
                 assignmentTitleField.getText(), "来自云端共享题库 v" + exercise.version(), dueAt,
                 UUID.randomUUID().toString());
+            List<ClassAssignment> loaded = api.listAssignments(token(), classroomId);
             Platform.runLater(() -> {
-                assignmentIdField.setText(assignment.id());
+                selectOption(learningClassroomCombo, classroomId);
+                applyLearningAssignments(loaded);
+                selectOption(learningAssignmentCombo, assignment.id());
                 showStatus("任务已发布，内容快照已冻结", false);
             });
         });
@@ -387,11 +426,12 @@ public final class TeachingContentController {
 
     @FXML
     private void onRefreshLearning() {
-        String classroomId = required(classroomIdField.getText(), "请输入班级 ID");
+        String classroomId = selectedId(learningClassroomCombo, "请选择班级");
         if (classroomId == null) return;
-        String assignmentId = blankToNull(assignmentIdField.getText());
+        String assignmentId = selectedId(learningAssignmentCombo, "请选择任务");
+        if (assignmentId == null) return;
         run("正在刷新反馈与薄弱点…", () -> {
-            String requestedStudent = isTeacher() ? blankToNull(studentIdField.getText()) : null;
+            String requestedStudent = isTeacher() ? optionalSelectedId(learningStudentCombo) : null;
             String account = accountId();
             List<SubmissionFeedback> loadedFeedback;
             List<KnowledgeMastery> mastery;
@@ -426,16 +466,30 @@ public final class TeachingContentController {
     @FXML
     private void onDraftFeedback() {
         requireTeacher();
-        String classroomId = required(classroomIdField.getText(), "请输入班级 ID");
-        String assignmentId = required(assignmentIdField.getText(), "请输入任务 ID");
+        String classroomId = selectedId(learningClassroomCombo, "请选择班级");
+        String assignmentId = selectedId(learningAssignmentCombo, "请选择任务");
         String submissionId = required(submissionIdField.getText(), "请输入提交 ID");
         if (classroomId == null || assignmentId == null || submissionId == null) return;
-        run("正在生成安全反馈草稿…", () -> {
-            var draft = feedbackDraftEnhancer.enhance(
-                api.draftSubmissionFeedback(token(), classroomId, assignmentId, submissionId));
+        run("正在准备最小必要反馈上下文…", () -> {
+            var deterministic = api.draftSubmissionFeedback(token(), classroomId, assignmentId, submissionId);
+            var preview = feedbackDraftEnhancer.preview(deterministic);
             Platform.runLater(() -> {
-                feedbackCommentField.setText(draft.text());
-                showStatus(draft.aiGenerated() ? "已生成网络 AI 反馈草稿，请人工确认" : "已生成确定性模板草稿", false);
+                javafx.scene.control.Alert alert = new javafx.scene.control.Alert(javafx.scene.control.Alert.AlertType.CONFIRMATION);
+                alert.setTitle("确认生成 AI 反馈草稿");
+                alert.setHeaderText("将发送 " + preview.characterCount() + " 个脱敏后的确定性证据字符");
+                alert.setContentText("来源：" + String.join("、", preview.sources()) + "\nAI 不得改变评测结论，草稿发布前仍需人工确认。");
+                if (alert.showAndWait().filter(javafx.scene.control.ButtonType.OK::equals).isEmpty()) {
+                    feedbackCommentField.setText(deterministic.text());
+                    showStatus("已取消网络增强，保留确定性模板草稿", false);
+                    return;
+                }
+                run("正在生成安全反馈草稿…", () -> {
+                    var draft = feedbackDraftEnhancer.enhance(deterministic, feedbackDraftStyleCombo.getValue());
+                    Platform.runLater(() -> {
+                        feedbackCommentField.setText(draft.text());
+                        showStatus(draft.aiGenerated() ? "已生成 AI 反馈草稿，请人工确认" : "已生成确定性模板草稿", false);
+                    });
+                });
             });
         });
     }
@@ -443,8 +497,8 @@ public final class TeachingContentController {
     @FXML
     private void onSaveFeedback() {
         requireTeacher();
-        String classroomId = required(classroomIdField.getText(), "请输入班级 ID");
-        String assignmentId = required(assignmentIdField.getText(), "请输入任务 ID");
+        String classroomId = selectedId(learningClassroomCombo, "请选择班级");
+        String assignmentId = selectedId(learningAssignmentCombo, "请选择任务");
         String submissionId = required(submissionIdField.getText(), "请输入提交 ID");
         if (classroomId == null || assignmentId == null || submissionId == null) return;
         long expectedVersion = feedback.stream().filter(item -> item.submissionId().equals(submissionId))
@@ -589,6 +643,80 @@ public final class TeachingContentController {
         markReadButton.setDisable(notificationList.getSelectionModel().getSelectedIndex() < 0);
     }
 
+    private void applyLearningFilters(List<ClassroomService.Classroom> classrooms,
+                                      List<ClassAssignment> initialAssignments) {
+        learningClassrooms = List.copyOf(classrooms);
+        List<SelectionOption> classOptions = classrooms.stream()
+            .map(item -> new SelectionOption(item.id(), item.name()))
+            .toList();
+        assignmentClassroomCombo.getItems().setAll(classOptions);
+        learningClassroomCombo.getItems().setAll(classOptions);
+        if (!classOptions.isEmpty()) {
+            assignmentClassroomCombo.getSelectionModel().selectFirst();
+            learningClassroomCombo.getSelectionModel().selectFirst();
+            applyLearningStudents(classOptions.getFirst().id());
+        }
+        applyLearningAssignments(initialAssignments);
+    }
+
+    private void loadLearningAssignments(String classroomId) {
+        run("正在加载班级任务…", () -> {
+            List<ClassAssignment> loaded = api.listAssignments(token(), classroomId);
+            Platform.runLater(() -> {
+                applyLearningAssignments(loaded);
+                showStatus("班级任务已加载", false);
+            });
+        });
+    }
+
+    private void applyLearningAssignments(List<ClassAssignment> assignments) {
+        learningAssignmentCombo.getItems().setAll(assignments.stream()
+            .map(item -> new SelectionOption(item.id(), item.title() + " · " + item.status()))
+            .toList());
+        if (!learningAssignmentCombo.getItems().isEmpty()) {
+            learningAssignmentCombo.getSelectionModel().selectFirst();
+        }
+    }
+
+    private void applyLearningStudents(String classroomId) {
+        ClassroomService.Classroom classroom = learningClassrooms.stream()
+            .filter(item -> item.id().equals(classroomId))
+            .findFirst()
+            .orElse(null);
+        if (classroom == null) {
+            learningStudentCombo.getItems().clear();
+            return;
+        }
+        learningStudentCombo.getItems().setAll(classroom.members().stream()
+            .filter(member -> member.role() == com.sqlteacher.application.collaboration.UserRole.STUDENT)
+            .map(member -> new SelectionOption(member.userId(), "学生 · " + shortId(member.userId())))
+            .toList());
+        learningStudentCombo.getSelectionModel().clearSelection();
+    }
+
+    private String selectedId(ComboBox<SelectionOption> combo, String message) {
+        SelectionOption selected = combo.getValue();
+        if (selected == null) {
+            showStatus(message, true);
+            return null;
+        }
+        return selected.id();
+    }
+
+    private static String optionalSelectedId(ComboBox<SelectionOption> combo) {
+        SelectionOption selected = combo.getValue();
+        return selected == null ? null : selected.id();
+    }
+
+    private static void selectOption(ComboBox<SelectionOption> combo, String id) {
+        combo.getItems().stream().filter(option -> option.id().equals(id)).findFirst()
+            .ifPresent(combo::setValue);
+    }
+
+    private static String shortId(String id) {
+        return id.length() <= 12 ? id : id.substring(0, 8) + "…";
+    }
+
     private CourseCatalog selectedCourse() {
         int index = courseList.getSelectionModel().getSelectedIndex();
         if (index < 0 || index >= courses.size()) {
@@ -656,16 +784,6 @@ public final class TeachingContentController {
         if (!isTeacher()) throw new SecurityException("当前身份不能管理课程内容");
     }
 
-    private Instant parseInstant(String value) {
-        if (value == null || value.isBlank()) return null;
-        try {
-            return Instant.parse(value.trim());
-        } catch (RuntimeException error) {
-            showStatus("截止时间必须使用 ISO-8601，例如 2026-12-31T15:00:00Z", true);
-            return null;
-        }
-    }
-
     private String required(String value, String message) {
         if (value == null || value.isBlank()) {
             showStatus(message, true);
@@ -717,5 +835,11 @@ public final class TeachingContentController {
     @FunctionalInterface
     private interface CheckedRunnable {
         void run() throws Exception;
+    }
+
+    private record SelectionOption(String id, String label) {
+        @Override public String toString() {
+            return label;
+        }
     }
 }

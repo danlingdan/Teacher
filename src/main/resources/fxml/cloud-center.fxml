@@ -58,7 +58,16 @@
                     </children>
                 </VBox>
 
-                <VBox fx:id="authenticatedContent" spacing="16" disable="true">
+                <VBox fx:id="signedOutPrompt" spacing="6" styleClass="panel-card, cloud-signed-out-prompt">
+                    <children>
+                        <Label text="登录后使用云端教学工作区" styleClass="card-title"/>
+                        <Label text="请通过左下角“切换身份”登录云端账号；登录后将显示班级、任务、同步与管理操作。"
+                               wrapText="true" styleClass="cloud-helper-text"/>
+                    </children>
+                </VBox>
+
+                <VBox fx:id="authenticatedContent" spacing="16" disable="true" visible="false" managed="false"
+                      styleClass="authenticated-content">
                     <children>
                         <GridPane hgap="16" vgap="16" prefHeight="470">
                             <columnConstraints>
@@ -127,7 +136,8 @@
                                                         <TextField fx:id="assignmentExerciseField" promptText="本地题目 ID" prefWidth="180"/>
                                                         <TextField fx:id="assignmentTitleField" promptText="任务标题" prefWidth="230"/>
                                                         <TextField fx:id="assignmentDescriptionField" promptText="任务说明（可选）" prefWidth="260"/>
-                                                        <TextField fx:id="assignmentDueAtField" promptText="截止时间（ISO-8601，可选）" prefWidth="230"/>
+                                                        <DatePicker fx:id="assignmentDueDatePicker" promptText="截止日期（可选）" prefWidth="170"/>
+                                                        <ComboBox fx:id="assignmentDueTimeCombo" promptText="截止时间" prefWidth="110"/>
                                                         <Button text="发布任务" onAction="#onCreateAssignment" styleClass="primary-button"/>
                                                         <Button text="保存草稿" onAction="#onSaveAssignmentDraft" styleClass="secondary-button"/>
                                                     </children>
@@ -224,33 +234,6 @@
                                 <Label fx:id="retentionStatusLabel" text="必须先预览影响范围，执行前还会自动生成并校验安全快照" wrapText="true" styleClass="cloud-helper-text"/>
                             </children>
                         </VBox>
-                    </children>
-                </VBox>
-
-                <VBox spacing="12" styleClass="panel-card, cloud-section-card">
-                    <children>
-                        <HBox alignment="CENTER_LEFT" spacing="8" styleClass="card-title-row">
-                            <children>
-                                <Region styleClass="card-accent"/>
-                                <Label text="网络 AI" styleClass="card-title"/>
-                                <Region HBox.hgrow="ALWAYS"/>
-                                <Label text="API Key 不上传云端、不写入磁盘" styleClass="cloud-security-pill"/>
-                            </children>
-                        </HBox>
-                        <Label text="支持 OpenAI Chat Completions compatible HTTPS 接口；模型输出仍会经过本地 SQL 安全检查。" wrapText="true" styleClass="cloud-helper-text"/>
-                        <FlowPane hgap="10" vgap="10" prefWrapLength="920" styleClass="cloud-form-flow">
-                            <children>
-                                <TextField fx:id="aiEndpointField" promptText="HTTPS Chat Completions 地址" prefWidth="360"/>
-                                <TextField fx:id="aiModelField" promptText="模型名称" prefWidth="190"/>
-                                <PasswordField fx:id="aiKeyField" promptText="API Key（仅当前会话）" prefWidth="245"/>
-                            </children>
-                        </FlowPane>
-                        <HBox spacing="10">
-                            <children>
-                                <Button text="启用网络 AI" onAction="#onConfigureNetworkAi" styleClass="primary-button"/>
-                                <Button text="切换回本地模型" onAction="#onClearNetworkAi" styleClass="secondary-button"/>
-                            </children>
-                        </HBox>
                     </children>
                 </VBox>
             </children>

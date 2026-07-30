@@ -33,6 +33,7 @@
                     <Label fx:id="titleLabel" text="请选择一道题目" styleClass="card-title"/>
                     <Label fx:id="metaLabel" text="-" styleClass="model-status"/>
                     <Label fx:id="descriptionLabel" text="选择题目并开始后，在下方编写 SQL。" wrapText="true" styleClass="card-description"/>
+                    <Label fx:id="schemaLabel" text="可用表与字段：选择题目后显示" wrapText="true" styleClass="exercise-schema-summary"/>
                 </VBox>
                 <VBox spacing="8" styleClass="panel-card" VBox.vgrow="ALWAYS">
                     <HBox alignment="CENTER_LEFT">
@@ -43,7 +44,8 @@
                         <Button fx:id="runButton" text="运行查询" onAction="#onRun" styleClass="secondary-button"/>
                         <Button fx:id="submitButton" text="提交评测" onAction="#onSubmit" defaultButton="true" styleClass="sql-execute-button"/>
                     </HBox>
-                    <TextArea fx:id="sqlArea" prefRowCount="5" styleClass="sql-editor" VBox.vgrow="NEVER"/>
+                    <TextArea fx:id="sqlArea" prefRowCount="9" minHeight="180" prefHeight="220"
+                              styleClass="sql-editor, exercise-sql-editor" VBox.vgrow="SOMETIMES"/>
                     <SplitPane orientation="VERTICAL" dividerPositions="0.62" VBox.vgrow="ALWAYS" styleClass="exercise-result-split">
                         <TableView fx:id="resultTable" styleClass="result-table"/>
                         <TextArea fx:id="feedbackArea" editable="false" wrapText="true" promptText="运行结果和分项反馈会显示在这里。"/>

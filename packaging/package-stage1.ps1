@@ -137,6 +137,12 @@ try {
         -Force
 
     New-Item -ItemType Directory -Force -Path $outputPath | Out-Null
+    Get-ChildItem -LiteralPath $outputPath -File | Where-Object {
+        $_.Name -match '^SQLTeacher-[0-9]+\.[0-9]+\.[0-9]+(?:-windows-x64\.zip|\.exe)$'
+    } | ForEach-Object {
+        Assert-ChildPath -Candidate $_.FullName -Parent $outputPath
+        Remove-Item -LiteralPath $_.FullName -Force
+    }
     if (Test-Path -LiteralPath $appImageDir) {
         Remove-Item -LiteralPath $appImageDir -Recurse -Force
     }

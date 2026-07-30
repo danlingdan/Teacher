@@ -25,18 +25,28 @@ import com.sqlteacher.application.collaboration.AssignmentTaskContext;
 import com.sqlteacher.application.collaboration.FeedbackDraftEnhancer;
 import com.sqlteacher.application.collaboration.TeachingContentCache;
 import com.sqlteacher.application.ai.NetworkAiSettingsService;
+import com.sqlteacher.application.ai.AiProviderProfileService;
+import com.sqlteacher.application.ai.AiProviderProbeService;
+import com.sqlteacher.application.ai.AiTaskHistoryService;
 import com.sqlteacher.application.metadata.DatabaseMetadataService;
 import com.sqlteacher.application.nl2sql.Nl2SqlSafetyService;
 import com.sqlteacher.application.risk.SqlRiskAnalysisService;
+import com.sqlteacher.application.risk.SqlSafetyModeService;
+import com.sqlteacher.application.learning.LearningDiagnosisService;
+import com.sqlteacher.application.learning.InterventionService;
+import com.sqlteacher.application.learning.StudentLearningQueueService;
 import com.sqlteacher.desktop.GlobalLoading;
 import com.sqlteacher.desktop.appearance.UiIcon;
 import com.sqlteacher.desktop.appearance.UiIcons;
+import com.sqlteacher.desktop.appearance.UiLayoutMode;
 import com.sqlteacher.desktop.appearance.UiPreferencesService;
+import javafx.application.Platform;
 import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.Node;
 import javafx.scene.control.Button;
 import javafx.scene.control.ButtonBase;
+import javafx.scene.control.ContentDisplay;
 import javafx.scene.control.Label;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.StackPane;
@@ -112,6 +122,7 @@ public final class MainWindowController {
 
     /** SQL 风险分析服务（应用层接口）；运行期实现由 Spring 提供，向下注入到 AI 助手页控制器。 */
     private final SqlRiskAnalysisService sqlRiskAnalysisService;
+    private final SqlSafetyModeService sqlSafetyModeService;
     private final ConnectionManagementService connectionManagementService;
     private final DatabaseConnectionTestService databaseConnectionTestService;
     private final ApplicationExceptionMapper applicationExceptionMapper;
@@ -130,9 +141,15 @@ public final class MainWindowController {
     private final CloudLearningSyncService cloudLearningSyncService;
     private final AssignmentDeliveryService assignmentDeliveryService;
     private final NetworkAiSettingsService networkAiSettingsService;
+    private final AiProviderProfileService aiProviderProfileService;
+    private final AiProviderProbeService aiProviderProbeService;
+    private final AiTaskHistoryService aiTaskHistoryService;
     private final DesktopAccessProfile accessProfile;
     private final FeedbackDraftEnhancer feedbackDraftEnhancer;
     private final TeachingContentCache teachingContentCache;
+    private final LearningDiagnosisService learningDiagnosisService;
+    private final InterventionService interventionService;
+    private final StudentLearningQueueService studentLearningQueueService;
     private final UiPreferencesService uiPreferences;
     private final Runnable switchIdentityAction;
 
@@ -145,6 +162,14 @@ public final class MainWindowController {
     /** 主内容层 BorderPane（FXML 根节点改为 StackPane 后，业务内容仍放在 BorderPane 内）。 */
     @FXML
     private BorderPane mainContainer;
+    @FXML
+    private StackPane mainWindowRoot;
+    @FXML
+    private VBox appSidebar;
+    @FXML
+    private Label brandTitle;
+    @FXML
+    private Label sidebarCaption;
 
     /** 首页导航按钮（顶部导航栏）。 */
     @FXML
@@ -177,11 +202,18 @@ public final class MainWindowController {
     private Button teachingContentNavButton;
     @FXML
     private Label identityLabel;
+    @FXML
+    private Button switchIdentityButton;
     @FXML private VBox learningNavGroup;
     @FXML private VBox teachingNavGroup;
     @FXML private VBox toolsNavGroup;
     @FXML private VBox systemNavGroup;
     @FXML private Label teachingNavGroupTitle;
+    @FXML private Label learningNavGroupTitle;
+    @FXML private Label toolsNavGroupTitle;
+    @FXML private Label systemNavGroupTitle;
+
+    private UiLayoutMode layoutMode;
 
     /** 右侧页面容器，导航切换时替换其中的内容节点。 */
     @FXML
@@ -236,6 +268,7 @@ public final class MainWindowController {
                                 Nl2SqlSafetyService nl2SqlSafetyService,
                                 AiModelSelectionService aiModelSelectionService,
                                 SqlRiskAnalysisService sqlRiskAnalysisService,
+                                SqlSafetyModeService sqlSafetyModeService,
                                 ConnectionManagementService connectionManagementService,
                                 DatabaseConnectionTestService databaseConnectionTestService,
                                 ApplicationExceptionMapper applicationExceptionMapper,
@@ -254,8 +287,14 @@ public final class MainWindowController {
                                 CloudLearningSyncService cloudLearningSyncService,
                                 AssignmentDeliveryService assignmentDeliveryService,
                                 NetworkAiSettingsService networkAiSettingsService,
+                                AiProviderProfileService aiProviderProfileService,
+                                AiProviderProbeService aiProviderProbeService,
+                                AiTaskHistoryService aiTaskHistoryService,
                                 FeedbackDraftEnhancer feedbackDraftEnhancer,
                                 TeachingContentCache teachingContentCache,
+                                LearningDiagnosisService learningDiagnosisService,
+                                InterventionService interventionService,
+                                StudentLearningQueueService studentLearningQueueService,
                                 UiPreferencesService uiPreferences,
                                 DesktopAccessProfile accessProfile,
                                 Runnable switchIdentityAction) {
@@ -267,6 +306,7 @@ public final class MainWindowController {
             "aiModelSelectionService must not be null"
         );
         this.sqlRiskAnalysisService = Objects.requireNonNull(sqlRiskAnalysisService, "sqlRiskAnalysisService must not be null");
+        this.sqlSafetyModeService = Objects.requireNonNull(sqlSafetyModeService, "sqlSafetyModeService must not be null");
         this.connectionManagementService = Objects.requireNonNull(connectionManagementService);
         this.databaseConnectionTestService = Objects.requireNonNull(databaseConnectionTestService);
         this.applicationExceptionMapper = Objects.requireNonNull(applicationExceptionMapper);
@@ -285,8 +325,14 @@ public final class MainWindowController {
         this.cloudLearningSyncService = Objects.requireNonNull(cloudLearningSyncService);
         this.assignmentDeliveryService = Objects.requireNonNull(assignmentDeliveryService);
         this.networkAiSettingsService = Objects.requireNonNull(networkAiSettingsService);
+        this.aiProviderProfileService = Objects.requireNonNull(aiProviderProfileService);
+        this.aiProviderProbeService = Objects.requireNonNull(aiProviderProbeService);
+        this.aiTaskHistoryService = Objects.requireNonNull(aiTaskHistoryService);
         this.feedbackDraftEnhancer = Objects.requireNonNull(feedbackDraftEnhancer);
         this.teachingContentCache = Objects.requireNonNull(teachingContentCache);
+        this.learningDiagnosisService = Objects.requireNonNull(learningDiagnosisService);
+        this.interventionService = Objects.requireNonNull(interventionService);
+        this.studentLearningQueueService = Objects.requireNonNull(studentLearningQueueService);
         this.uiPreferences = Objects.requireNonNull(uiPreferences);
         this.accessProfile = Objects.requireNonNull(accessProfile, "accessProfile must not be null");
         this.switchIdentityAction = Objects.requireNonNull(switchIdentityAction, "switchIdentityAction must not be null");
@@ -308,7 +354,54 @@ public final class MainWindowController {
         GlobalLoading.initialize(loadingOverlay, loadingText);
         decorateNavigation();
         applyAccessPolicy();
+        bindResponsiveLayout();
         onNavigateHome();
+    }
+
+    private void bindResponsiveLayout() {
+        mainWindowRoot.widthProperty().addListener((ignored, oldWidth, newWidth) ->
+            applyResponsiveLayout(newWidth.doubleValue()));
+        Platform.runLater(() -> applyResponsiveLayout(mainWindowRoot.getWidth()));
+    }
+
+    private void applyResponsiveLayout(double width) {
+        if (width <= 0) return;
+        UiLayoutMode next = UiLayoutMode.forWidth(width);
+        if (next == layoutMode) return;
+        layoutMode = next;
+        for (UiLayoutMode candidate : UiLayoutMode.values()) {
+            mainWindowRoot.getStyleClass().remove(candidate.styleClass());
+        }
+        mainWindowRoot.getStyleClass().add(next.styleClass());
+
+        boolean compact = next == UiLayoutMode.COMPACT;
+        double sidebarWidth = switch (next) {
+            case COMPACT -> 72.0;
+            case MEDIUM -> 196.0;
+            case WIDE -> 232.0;
+        };
+        appSidebar.setMinWidth(sidebarWidth);
+        appSidebar.setPrefWidth(sidebarWidth);
+        appSidebar.setMaxWidth(sidebarWidth);
+        brandTitle.setText(compact ? "ST" : "SQLTeacher");
+        sidebarCaption.setVisible(!compact);
+        sidebarCaption.setManaged(!compact);
+        setVisibleAndManaged(learningNavGroupTitle, !compact);
+        setVisibleAndManaged(teachingNavGroupTitle, !compact);
+        setVisibleAndManaged(toolsNavGroupTitle, !compact);
+        setVisibleAndManaged(systemNavGroupTitle, !compact);
+        for (ButtonBase navButton : navButtons()) {
+            navButton.setContentDisplay(compact ? ContentDisplay.GRAPHIC_ONLY : ContentDisplay.LEFT);
+        }
+        identityLabel.setText(compact
+            ? accessProfile.roleLabel()
+            : accessProfile.displayName() + " · " + accessProfile.roleLabel());
+        switchIdentityButton.setContentDisplay(compact ? ContentDisplay.GRAPHIC_ONLY : ContentDisplay.LEFT);
+    }
+
+    private static void setVisibleAndManaged(Node node, boolean visible) {
+        node.setVisible(visible);
+        node.setManaged(visible);
     }
 
     private void applyAccessPolicy() {
@@ -352,6 +445,7 @@ public final class MainWindowController {
         UiIcons.decorate(aiAssistantNavButton, UiIcon.SPARK, "AI 助手");
         UiIcons.decorate(tableSchemaNavButton, UiIcon.TABLE, "表结构");
         UiIcons.decorate(settingsNavButton, UiIcon.SETTINGS, "设置");
+        UiIcons.decorate(switchIdentityButton, UiIcon.USER, "切换身份");
     }
 
     private static void updateGroupVisibility(VBox group, Button... buttons) {
@@ -580,7 +674,8 @@ public final class MainWindowController {
                 sqlPracticeController = new SqlPracticeController(
                     sqlExecutionService,
                     sqlRiskAnalysisService,
-                    connectionManagementService
+                    connectionManagementService,
+                    sqlSafetyModeService
                 );
                 sqlPracticeController.setOnDdlSuccessCallback(this::refreshTableSchema);
                 return sqlPracticeController;
@@ -640,6 +735,10 @@ public final class MainWindowController {
                 return new AiAssistantController(
                     nl2SqlSafetyService,
                     aiModelSelectionService,
+                    networkAiSettingsService,
+                    aiProviderProfileService,
+                    aiProviderProbeService,
+                    aiTaskHistoryService,
                     sqlRiskAnalysisService,
                     connectionManagementService,
                     fillSqlCallback,
@@ -695,7 +794,8 @@ public final class MainWindowController {
                         applicationBackupService,
                         configuration,
                         accessProfile,
-                        uiPreferences
+                        uiPreferences,
+                        sqlSafetyModeService
                     );
                 }
                 throw new IllegalStateException("Unexpected controller type for settings: " + type);
@@ -760,7 +860,8 @@ public final class MainWindowController {
             loader.setControllerFactory(type -> {
                 if (type == ExerciseProgressController.class) {
                     return new ExerciseProgressController(
-                        learningAnalyticsService, exerciseCatalogService, dataMaintenanceService, applicationExceptionMapper
+                        learningAnalyticsService, exerciseCatalogService, dataMaintenanceService,
+                        interventionService, this::onNavigateTeachingContent, applicationExceptionMapper
                     );
                 }
                 throw new IllegalStateException("Unexpected controller type for exercise progress: " + type);
@@ -807,7 +908,6 @@ public final class MainWindowController {
                         cloudApiClient,
                         cloudSessionService,
                         cloudLearningSyncService,
-                        networkAiSettingsService,
                         assignmentDeliveryService,
                         accessProfile,
                         switchIdentityAction,
@@ -865,10 +965,13 @@ public final class MainWindowController {
         FXMLLoader loader = new FXMLLoader(fxml);
         loader.setControllerFactory(type -> {
             if (type == HomeController.class) {
-                HomeController controller = new HomeController();
+                HomeController controller = new HomeController(studentLearningQueueService, applicationExceptionMapper);
                 controller.setOnNavigateAiAssistant(this::onNavigateAiAssistant);
                 controller.setOnNavigateSqlPractice(this::onNavigateSqlPractice);
                 controller.setOnNavigateTableSchema(this::onNavigateTableSchema);
+                controller.setOnOpenExercise(this::openExercise);
+                controller.setOnOpenAssignment(this::openAssignment);
+                controller.setOnReviewFeedback(this::onNavigateTeachingContent);
                 return controller;
             }
             throw new IllegalStateException("Unexpected controller type for home.fxml: " + type);
@@ -878,5 +981,13 @@ public final class MainWindowController {
         } catch (IOException error) {
             throw new IllegalStateException("Failed to load " + HOME_FXML, error);
         }
+    }
+
+    private void openExercise(String exerciseId) {
+        requireCapability(DesktopCapability.STUDENT_EXERCISE);
+        Node page = studentExercisePage();
+        studentExerciseController.openExercise(exerciseId);
+        selectNav(studentExerciseNavButton);
+        showPage(page);
     }
 }

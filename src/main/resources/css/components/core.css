@@ -1,0 +1,146 @@
+/* v1.5.5 component layer: overrides legacy page CSS with semantic tokens. */
+.main-window,
+.page-container,
+.home-page,
+.sql-practice-page,
+.settings-section {
+    -fx-background-color: -st-bg-canvas;
+}
+
+.home-scroll,
+.home-scroll > .viewport {
+    -fx-background-color: -st-bg-canvas;
+}
+
+.app-sidebar {
+    -fx-background-color: -st-bg-sidebar;
+    -fx-border-color: transparent -st-border-subtle transparent transparent;
+}
+
+.brand-title,
+.page-title,
+.card-title,
+.section-title {
+    -fx-text-fill: -st-text-primary;
+}
+
+.sidebar-caption,
+.page-subtitle,
+.card-description,
+.nav-group-title {
+    -fx-text-fill: -st-text-secondary;
+}
+
+.panel-card,
+.home-card,
+.settings-grid,
+.appearance-preview {
+    -fx-background-color: -st-bg-surface;
+    -fx-border-color: -st-border-subtle;
+    -fx-background-radius: 14;
+    -fx-border-radius: 14;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.18), 16, 0.04, 0, 5);
+}
+
+.panel-card {
+    -fx-padding: 18;
+}
+
+.home-card {
+    -fx-padding: 22;
+    -fx-min-height: 230;
+    -fx-pref-height: 260;
+    -fx-max-height: 300;
+    -fx-alignment: TOP_LEFT;
+}
+
+.home-card:hover {
+    -fx-background-color: -st-bg-surface-raised;
+    -fx-border-color: -st-border-strong;
+    -fx-translate-y: -2;
+}
+
+.home-card:focused,
+.button:focused,
+.text-field:focused,
+.password-field:focused,
+.text-area:focused,
+.combo-box:focused,
+.list-view:focused,
+.table-view:focused,
+.tab-pane:focused {
+    -fx-focus-color: -st-focus;
+    -fx-faint-focus-color: transparent;
+    -fx-border-color: -st-focus;
+    -fx-border-width: 2;
+}
+
+.app-sidebar .nav-button:focused {
+    -fx-background-color: -st-accent-soft;
+    -fx-border-color: -st-focus;
+    -fx-border-width: 2;
+}
+
+.app-sidebar .nav-button {
+    -fx-text-fill: -st-text-secondary;
+    -fx-background-radius: 10;
+    -fx-border-radius: 10;
+}
+
+.app-sidebar .nav-button:hover {
+    -fx-background-color: -st-bg-surface;
+    -fx-text-fill: -st-text-primary;
+}
+
+.app-sidebar .nav-button.selected,
+.primary-button,
+.sql-execute-button {
+    -fx-background-color: -st-accent;
+    -fx-text-fill: white;
+}
+
+.app-sidebar .nav-button.selected:hover,
+.primary-button:hover,
+.sql-execute-button:hover {
+    -fx-background-color: -st-accent-hover;
+}
+
+.identity-card,
+.sql-editor,
+.result-pane,
+.result-table {
+    -fx-background-color: -st-bg-input;
+    -fx-border-color: -st-border-subtle;
+}
+
+.sql-workbench-split,
+.sql-workbench-split > .split-pane-divider {
+    -fx-background-color: transparent;
+}
+
+.sql-workbench-split > .split-pane-divider {
+    -fx-padding: 5;
+}
+
+.sql-practice-header {
+    -fx-padding: 22 28 14 28;
+}
+
+.sql-practice-body {
+    -fx-padding: 0 28 26 28;
+}
+
+.example-chip {
+    -fx-background-color: -st-bg-input;
+    -fx-border-color: -st-border-subtle;
+    -fx-text-fill: -st-text-secondary;
+}
+
+.example-chip:hover {
+    -fx-background-color: -st-accent-soft;
+    -fx-border-color: -st-accent;
+    -fx-text-fill: -st-text-primary;
+}
+
+.sql-result-hint { -fx-text-fill: -st-success; }
+.sql-error-hint { -fx-text-fill: -st-danger; }

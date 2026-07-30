@@ -14,9 +14,11 @@ class DesktopFxmlResourceTest {
     void shouldProvideWellFormedMainHomeAndAiAssistantFxml() throws Exception {
         assertWellFormed("/fxml/MainWindow.fxml");
         assertWellFormed("/fxml/home.fxml");
+        assertWellFormed("/fxml/SqlPractice.fxml");
         assertWellFormed("/fxml/ai-assistant.fxml");
         assertWellFormed("/fxml/connection-settings.fxml");
         assertWellFormed("/fxml/settings.fxml");
+        assertWellFormed("/fxml/sql-safety-settings.fxml");
         assertWellFormed("/fxml/appearance-settings.fxml");
         assertWellFormed("/fxml/data-maintenance.fxml");
         assertWellFormed("/fxml/student-exercise.fxml");

@@ -13,8 +13,10 @@ import com.sqlteacher.application.exercise.ExerciseSession;
 import com.sqlteacher.application.exercise.ExerciseView;
 import com.sqlteacher.application.exercise.SqlExerciseEvaluationService;
 import com.sqlteacher.application.event.LearningEventService;
+import com.sqlteacher.application.event.LearningEventOwnerProvider;
 import com.sqlteacher.application.risk.SqlRiskAnalysis;
 import com.sqlteacher.application.risk.SqlRiskAnalysisService;
+import com.sqlteacher.application.risk.SqlSafetyModeService;
 import com.sqlteacher.domain.SqlTeacherException;
 import com.sqlteacher.domain.exercise.ExerciseAttemptStatus;
 import com.sqlteacher.domain.exercise.ExerciseDataset;
@@ -34,6 +36,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 import org.slf4j.Logger;
@@ -47,10 +50,12 @@ public final class JdbcExercisePracticeService implements ExercisePracticeServic
     private final JdbcConnectionFactory connectionFactory;
     private final ExerciseManagementService managementService;
     private final SqlRiskAnalysisService riskAnalysisService;
+    private final SqlSafetyModeService safetyModeService;
     private final SqlExerciseEvaluationService evaluationService;
     private final SqlResultMapper resultMapper;
     private final ExerciseAttemptCodec attemptCodec;
     private final LearningEventService learningEventService;
+    private final LearningEventOwnerProvider ownerProvider;
     private final Path sessionDirectory;
 
     public JdbcExercisePracticeService(
@@ -62,13 +67,46 @@ public final class JdbcExercisePracticeService implements ExercisePracticeServic
         SqlTeacherConfiguration configuration,
         LearningEventService learningEventService
     ) {
+        this(connectionFactory, managementService, riskAnalysisService, evaluationService, resultMapper,
+            configuration, SqlSafetyModeService.standardMode(), learningEventService,
+            () -> LearningEventOwnerProvider.GUEST_OWNER);
+    }
+
+    public JdbcExercisePracticeService(
+        JdbcConnectionFactory connectionFactory,
+        ExerciseManagementService managementService,
+        SqlRiskAnalysisService riskAnalysisService,
+        SqlExerciseEvaluationService evaluationService,
+        SqlResultMapper resultMapper,
+        SqlTeacherConfiguration configuration,
+        SqlSafetyModeService safetyModeService,
+        LearningEventService learningEventService
+    ) {
+        this(connectionFactory, managementService, riskAnalysisService, evaluationService, resultMapper,
+            configuration, safetyModeService, learningEventService,
+            () -> LearningEventOwnerProvider.GUEST_OWNER);
+    }
+
+    public JdbcExercisePracticeService(
+        JdbcConnectionFactory connectionFactory,
+        ExerciseManagementService managementService,
+        SqlRiskAnalysisService riskAnalysisService,
+        SqlExerciseEvaluationService evaluationService,
+        SqlResultMapper resultMapper,
+        SqlTeacherConfiguration configuration,
+        SqlSafetyModeService safetyModeService,
+        LearningEventService learningEventService,
+        LearningEventOwnerProvider ownerProvider
+    ) {
         this.connectionFactory = connectionFactory;
         this.managementService = managementService;
         this.riskAnalysisService = riskAnalysisService;
+        this.safetyModeService = safetyModeService;
         this.evaluationService = evaluationService;
         this.resultMapper = resultMapper;
         this.attemptCodec = new ExerciseAttemptCodec();
         this.learningEventService = learningEventService;
+        this.ownerProvider = Objects.requireNonNull(ownerProvider);
         this.sessionDirectory = configuration.dataDirectory().resolve("exercise-sessions").toAbsolutePath().normalize();
     }
 
@@ -83,20 +121,26 @@ public final class JdbcExercisePracticeService implements ExercisePracticeServic
             initializeDataset(databasePath, dataset);
             try (Connection connection = connectionFactory.open("app");
                  PreparedStatement statement = connection.prepareStatement("""
-                     insert into exercise_sessions(id, exercise_id, exercise_version, started_at, hints_used)
-                     values (?, ?, ?, ?, 0)
+                     insert into exercise_sessions(id, exercise_id, exercise_version, started_at, hints_used, owner_id)
+                     values (?, ?, ?, ?, 0, ?)
                      """)) {
                 statement.setString(1, sessionId);
                 statement.setString(2, exercise.id());
                 statement.setInt(3, exercise.version());
                 statement.setString(4, startedAt.toString());
+                statement.setString(5, currentOwnerId());
                 statement.executeUpdate();
             }
-            return toSession(sessionId, exercise, startedAt, 0, false);
+            return toSession(sessionId, exercise, dataset, startedAt, 0, false);
         } catch (SQLException | IOException error) {
             deleteSessionDatabase(databasePath);
             throw new SqlTeacherException("EXERCISE_SESSION_START_FAILED", "Failed to start exercise session", error);
         }
+    }
+
+    private String currentOwnerId() {
+        String owner = ownerProvider.currentOwnerId();
+        return owner == null || owner.isBlank() ? LearningEventOwnerProvider.GUEST_OWNER : owner.trim();
     }
 
     @Override
@@ -108,7 +152,7 @@ public final class JdbcExercisePracticeService implements ExercisePracticeServic
         deleteSessionDatabase(databasePath);
         try {
             initializeDataset(databasePath, dataset);
-            return toSession(session.id(), exercise, session.startedAt(), session.hintsUsed(), false);
+            return toSession(session.id(), exercise, dataset, session.startedAt(), session.hintsUsed(), false);
         } catch (SQLException | IOException error) {
             deleteSessionDatabase(databasePath);
             throw new SqlTeacherException("EXERCISE_SESSION_RESET_FAILED", "Failed to reset exercise dataset", error);
@@ -211,10 +255,13 @@ public final class JdbcExercisePracticeService implements ExercisePracticeServic
 
     private SqlExecutionResult executeStudentQuery(String sessionId, String sql) {
         SqlRiskAnalysis risk = riskAnalysisService.analyze(sql, DatabaseDialect.SQLITE);
-        if (!risk.executable() || risk.multiStatement() || !"SELECT".equals(risk.statementType())) {
+        boolean unrestricted = safetyModeService.isUnrestrictedModeEnabled();
+        if (!unrestricted && (!risk.executable() || risk.multiStatement() || !"SELECT".equals(risk.statementType()))) {
             return new SqlExecutionResult(
                 false, List.of(), List.of(), 0, false,
-                "练习环境只允许执行单条 SELECT 查询。", Duration.ZERO
+                "练习环境在标准安全模式下只允许执行单条 SELECT 查询。"
+                    + "如确需运行禁用 SQL，可在“设置 > SQL 安全”中启用无限模式。",
+                Duration.ZERO
             );
         }
         long started = System.nanoTime();
@@ -222,15 +269,18 @@ public final class JdbcExercisePracticeService implements ExercisePracticeServic
             SqliteDriver.ensureLoaded();
             try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + sessionDatabase(sessionId));
                  Statement settings = connection.createStatement()) {
-                settings.execute("pragma query_only = on");
-                try (PreparedStatement statement = connection.prepareStatement(sql)) {
+                if (!unrestricted) settings.execute("pragma query_only = on");
+                try (Statement statement = connection.createStatement()) {
                     statement.setQueryTimeout(QUERY_TIMEOUT_SECONDS);
                     statement.setMaxRows(MAX_RESULT_ROWS + 1);
-                    try (ResultSet rows = statement.executeQuery()) {
-                        return resultMapper.mapQueryResult(
-                            rows, Duration.ofNanos(System.nanoTime() - started), MAX_RESULT_ROWS
-                        );
+                    boolean hasResult = statement.execute(sql);
+                    Duration duration = Duration.ofNanos(System.nanoTime() - started);
+                    if (hasResult) {
+                        try (ResultSet rows = statement.getResultSet()) {
+                            return resultMapper.mapQueryResult(rows, duration, MAX_RESULT_ROWS);
+                        }
                     }
+                    return resultMapper.mapUpdateResult(Math.max(0, statement.getUpdateCount()), duration);
                 }
             }
         } catch (SQLException error) {
@@ -421,13 +471,14 @@ public final class JdbcExercisePracticeService implements ExercisePracticeServic
     }
 
     private static ExerciseSession toSession(
-        String id, ExerciseDefinition exercise, Instant startedAt, int hintsUsed, boolean completed
+        String id, ExerciseDefinition exercise, ExerciseDataset dataset, Instant startedAt,
+        int hintsUsed, boolean completed
     ) {
         return new ExerciseSession(
             id,
             new ExerciseView(
                 exercise.id(), exercise.title(), exercise.description(), exercise.knowledgePoint(),
-                exercise.difficulty(), exercise.version()
+                exercise.difficulty(), ExerciseDatasetSchemaSummary.fromSetupSql(dataset.setupSql()), exercise.version()
             ),
             startedAt,
             hintsUsed,

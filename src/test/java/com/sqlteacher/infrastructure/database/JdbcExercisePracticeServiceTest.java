@@ -11,6 +11,7 @@ import com.sqlteacher.application.exercise.ExerciseHint;
 import com.sqlteacher.application.exercise.ExerciseSession;
 import com.sqlteacher.application.exercise.SqlExerciseEvaluationService;
 import com.sqlteacher.domain.exercise.ExerciseAttemptStatus;
+import com.sqlteacher.application.risk.SqlSafetyModeService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -43,8 +44,22 @@ class JdbcExercisePracticeServiceTest {
         assertTrue(query.execution().success());
         assertEquals(6, query.execution().rows().size());
         assertFalse(mutation.execution().success());
+        assertTrue(mutation.execution().message().contains("设置 > SQL 安全"));
         assertEquals(2, count(fixture.appDb(), "exercise_attempts"));
         assertEquals(6, countStudents(fixture.sessionDatabase(session.id())));
+    }
+
+    @Test
+    void shouldAllowStudentMutationInUnrestrictedMode() throws Exception {
+        Fixture fixture = fixture(true);
+        ExerciseSession session = fixture.service().start("query-02");
+
+        ExerciseAttemptResult mutation = fixture.service().run(
+            session.id(), "delete from student where id = 1"
+        );
+
+        assertTrue(mutation.execution().success());
+        assertEquals(5, countStudents(fixture.sessionDatabase(session.id())));
     }
 
     @Test
@@ -59,12 +74,16 @@ class JdbcExercisePracticeServiceTest {
         ExerciseSession reset = fixture.service().reset(session.id());
         ExerciseHint first = fixture.service().requestHint(session.id());
         ExerciseHint second = fixture.service().requestHint(session.id());
+        ExerciseHint third = fixture.service().requestHint(session.id());
 
         assertEquals(6, countStudents(fixture.sessionDatabase(session.id())));
         assertEquals(0, reset.hintsUsed());
         assertEquals(1, first.level());
         assertEquals(2, second.level());
-        assertTrue(second.exhausted());
+        assertFalse(second.exhausted());
+        assertEquals(3, third.level());
+        assertTrue(third.exhausted());
+        assertTrue(session.exercise().schemaSummary().contains("student（id、name、class_name、score）"));
     }
 
     @Test
@@ -79,6 +98,27 @@ class JdbcExercisePracticeServiceTest {
         assertEquals(ExerciseAttemptStatus.PASSED, result.status());
         assertTrue(result.evaluation().passed());
         assertFalse(Files.exists(fixture.sessionDatabase(session.id())));
+    }
+
+    @Test
+    void shouldPersistTheCurrentLearningOwnerOnNewSessions() throws Exception {
+        Fixture fixture = fixture();
+        var service = new JdbcExercisePracticeService(
+            fixture.connections(), new JdbcExerciseManagementService(fixture.connections()),
+            new DefaultSqlRiskAnalysisService(), (exercise, dataset, sql) -> new ExerciseEvaluationResult(
+                true, List.of(), "通过", Duration.ZERO, ""), new SqlResultMapper(), fixture.configuration(),
+            safetyMode(false), new MockLearningEventService(), () -> "student-42");
+
+        ExerciseSession session = service.start("query-02");
+
+        try (Connection connection = fixture.connections().open("app");
+             var statement = connection.prepareStatement("select owner_id from exercise_sessions where id=?")) {
+            statement.setString(1, session.id());
+            try (ResultSet row = statement.executeQuery()) {
+                assertTrue(row.next());
+                assertEquals("student-42", row.getString(1));
+            }
+        }
     }
 
     @Test
@@ -101,6 +141,10 @@ class JdbcExercisePracticeServiceTest {
     }
 
     private Fixture fixture() {
+        return fixture(false);
+    }
+
+    private Fixture fixture(boolean unrestricted) {
         Path appDb = tempDir.resolve("app.db");
         Path demoDb = tempDir.resolve("demo.db");
         DatabaseConfiguration databases = new DatabaseConfiguration(appDb, demoDb);
@@ -129,9 +173,24 @@ class JdbcExercisePracticeServiceTest {
             evaluator,
             new SqlResultMapper(),
             configuration,
+            safetyMode(unrestricted),
             new MockLearningEventService()
         );
-        return new Fixture(service, appDb, tempDir.resolve("exercise-sessions"));
+        return new Fixture(service, appDb, tempDir.resolve("exercise-sessions"), connections, configuration);
+    }
+
+    private static SqlSafetyModeService safetyMode(boolean unrestricted) {
+        return new SqlSafetyModeService() {
+            @Override
+            public boolean isUnrestrictedModeEnabled() {
+                return unrestricted;
+            }
+
+            @Override
+            public void setUnrestrictedModeEnabled(boolean enabled) {
+                throw new UnsupportedOperationException();
+            }
+        };
     }
 
     private static int count(Path database, String table) throws Exception {
@@ -147,7 +206,8 @@ class JdbcExercisePracticeServiceTest {
         return count(database, "student");
     }
 
-    private record Fixture(JdbcExercisePracticeService service, Path appDb, Path sessionDirectory) {
+    private record Fixture(JdbcExercisePracticeService service, Path appDb, Path sessionDirectory,
+                           JdbcConnectionFactory connections, SqlTeacherConfiguration configuration) {
         Path sessionDatabase(String sessionId) {
             return sessionDirectory.resolve(sessionId + ".db");
         }

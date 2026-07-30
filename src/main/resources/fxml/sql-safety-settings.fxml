@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.CheckBox?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.layout.VBox?>
+
+<VBox xmlns="http://javafx.com/javafx" xmlns:fx="http://javafx.com/fxml"
+      fx:controller="com.sqlteacher.desktop.controller.SqlSafetySettingsController"
+      spacing="18" styleClass="settings-section">
+    <padding><Insets top="24" right="28" bottom="24" left="28"/></padding>
+    <Label text="SQL 安全" styleClass="page-title"/>
+    <Label text="控制当前设备上手动 SQL 的应用层安全拦截。默认使用标准安全模式。"
+           wrapText="true" styleClass="page-subtitle"/>
+    <VBox spacing="12" styleClass="settings-grid, safety-settings-card">
+        <CheckBox fx:id="unrestrictedModeCheck" text="启用无限模式（关闭应用层 SQL 安全限制）"
+                  onAction="#onToggleUnrestrictedMode" styleClass="safety-mode-toggle"/>
+        <Label text="启用后将放行危险 SQL、多条语句，并跳过高危操作二次确认；练习数据也可能被修改或删除。"
+               wrapText="true" styleClass="safety-warning-text"/>
+        <Label text="此选项不会绕过数据库账号权限、JDBC 驱动或操作系统限制；AI 仍只生成待审查草稿。"
+               wrapText="true" styleClass="page-subtitle"/>
+    </VBox>
+    <Label fx:id="statusLabel" wrapText="true" styleClass="status-info"/>
+</VBox>

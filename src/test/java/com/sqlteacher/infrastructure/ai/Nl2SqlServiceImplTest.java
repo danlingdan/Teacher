@@ -146,7 +146,7 @@ class Nl2SqlServiceImplTest {
     @Test
     void shouldReturnStructurallyValidNonSelectDraftForApplicationSafetyAssessment() {
         AiModelProvider mockProvider = new MockProvider(AiCompletionResult.success(
-            "{\"sqlDraft\": \"INSERT INTO student (name) VALUES ('test')\", \"intent\": \"QUERY\", \"explanation\": \"插入学生\"}",
+            "{\"sqlDraft\": \"INSERT INTO student (name) VALUES ('test')\", \"intent\": \"INSERT\", \"explanation\": \"插入学生\"}",
             "test-model"
         ));
 
@@ -225,6 +225,22 @@ class Nl2SqlServiceImplTest {
     }
 
     @Test
+    void shouldLoadVersionedPromptThatAllowsDmlDraftsForJavaSafetyAssessment() {
+        MockProvider provider = new MockProvider(AiCompletionResult.success(
+            "{\"sqlDraft\":\"DELETE FROM student WHERE id = 1\",\"intent\":\"DELETE\",\"explanation\":\"删除指定学生\"}",
+            "test-model"
+        ));
+        Nl2SqlServiceImpl service = new Nl2SqlServiceImpl(provider, CONFIG, EMPTY_METADATA_SERVICE, NO_OP_EVENT_SERVICE);
+
+        Nl2SqlPlan result = service.generate(new Nl2SqlRequest("删除学号为 1 的学生", "demo"));
+
+        assertEquals("DELETE", result.intent());
+        assertTrue(provider.lastRequest.prompt().contains("SELECT, INSERT, UPDATE, DELETE, CREATE, and ALTER"));
+        assertTrue(provider.lastRequest.prompt().contains("untrusted draft"));
+        assertTrue(!provider.lastRequest.prompt().contains("ONLY generate SELECT"));
+    }
+
+    @Test
     void shouldReturnParsedSqlErrorExplanationWhenJsonIsValid() {
         AiModelProvider mockProvider = new MockProvider(AiCompletionResult.success(
             "{\"errorCause\":\"Unknown column nam\",\"correctionSuggestion\":\"Use name\","
@@ -284,6 +300,7 @@ class Nl2SqlServiceImplTest {
 
     private static class MockProvider implements AiModelProvider {
         private final AiCompletionResult result;
+        private AiCompletionRequest lastRequest;
 
         MockProvider(AiCompletionResult result) {
             this.result = result;
@@ -291,6 +308,7 @@ class Nl2SqlServiceImplTest {
 
         @Override
         public AiCompletionResult complete(AiCompletionRequest request) {
+            lastRequest = request;
             return result;
         }
 

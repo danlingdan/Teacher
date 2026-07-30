@@ -8,6 +8,7 @@ import com.sqlteacher.application.execution.SqlExecutionRequest;
 import com.sqlteacher.application.execution.SqlExecutionResult;
 import com.sqlteacher.application.mock.MockLearningEventService;
 import com.sqlteacher.domain.SqlTeacherException;
+import com.sqlteacher.application.risk.SqlSafetyModeService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -65,6 +66,28 @@ class JdbcSqlExecutionServiceTest {
         ));
         assertTrue(result.success());
         assertEquals(1, result.affectedRows());
+    }
+
+    @Test
+    void shouldBypassApplicationSafetyGatesInUnrestrictedMode(@TempDir Path tempDirectory) throws Exception {
+        JdbcConnectionFactory connectionFactory = createInitializedFactory(tempDirectory);
+        JdbcSqlExecutionService service = new JdbcSqlExecutionService(
+            (connectionId, timeout) -> connectionFactory.open(connectionId),
+            new SqlResultMapper(),
+            new DefaultSqlRiskAnalysisService(),
+            enabledSafetyMode(),
+            new DefaultLearningEventService(new JdbcLearningEventRecorder(connectionFactory))
+        );
+
+        SqlExecutionResult result = service.execute(new SqlExecutionRequest(
+            "demo", "DROP TABLE student", 100, Duration.ofSeconds(5)
+        ));
+
+        assertTrue(result.success());
+        try (Connection connection = connectionFactory.open("demo");
+             Statement statement = connection.createStatement()) {
+            assertThrows(SQLException.class, () -> statement.executeQuery("SELECT * FROM student"));
+        }
     }
 
     @Test
@@ -138,6 +161,20 @@ class JdbcSqlExecutionServiceTest {
             new DefaultSqlRiskAnalysisService(),
             eventService
         );
+    }
+
+    private static SqlSafetyModeService enabledSafetyMode() {
+        return new SqlSafetyModeService() {
+            @Override
+            public boolean isUnrestrictedModeEnabled() {
+                return true;
+            }
+
+            @Override
+            public void setUnrestrictedModeEnabled(boolean enabled) {
+                throw new UnsupportedOperationException();
+            }
+        };
     }
 
     private static JdbcConnectionFactory createInitializedFactory(Path tempDirectory) throws Exception {

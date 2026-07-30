@@ -35,20 +35,20 @@ class DefaultNl2SqlSafetyServiceTest {
     }
 
     @Test
-    void shouldPreserveAndMarkModifyingDraftAsUnsafe() {
+    void shouldAllowSingleModifyingDraftForReviewAndLeaveConfirmationToExecutionLayer() {
         RecordingLearningEventService events = new RecordingLearningEventService();
         Nl2SqlSafetyService service = serviceFor(
             plan("UPDATE student SET score = 0"),
-            sql -> analysis(SqlRiskLevel.MEDIUM, true, true, false, "UPDATE"),
+            sql -> analysis(SqlRiskLevel.HIGH, true, true, false, "UPDATE"),
             events
         );
 
         Nl2SqlSafetyResult result = service.generateAndAssess(request());
 
-        assertFalse(result.accepted());
+        assertTrue(result.accepted());
         assertTrue(result.draftAvailable());
         assertEquals("UPDATE student SET score = 0", result.plan().sqlDraft());
-        assertEquals(List.of("UPDATE:MEDIUM:false"), events.blockedEvents);
+        assertTrue(events.blockedEvents.isEmpty());
     }
 
     @Test

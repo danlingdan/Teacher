@@ -12,6 +12,9 @@ import com.sqlteacher.application.exercise.ExerciseCatalogService;
 import com.sqlteacher.application.exercise.ExerciseSummary;
 import com.sqlteacher.application.maintenance.DataMaintenanceService;
 import com.sqlteacher.application.maintenance.LearningDataResetResult;
+import com.sqlteacher.application.learning.InterventionCandidate;
+import com.sqlteacher.application.learning.InterventionService;
+import com.sqlteacher.application.learning.InterventionStatus;
 import com.sqlteacher.desktop.DesktopExecutors;
 import com.sqlteacher.desktop.GlobalLoading;
 import javafx.application.Platform;
@@ -45,6 +48,8 @@ public final class ExerciseProgressController {
     private final LearningAnalyticsService analyticsService;
     private final ExerciseCatalogService catalogService;
     private final DataMaintenanceService maintenanceService;
+    private final InterventionService interventionService;
+    private final Runnable openTeachingWorkspace;
     private final ApplicationExceptionMapper exceptionMapper;
 
     @FXML private DatePicker startDatePicker;
@@ -77,16 +82,27 @@ public final class ExerciseProgressController {
     @FXML private TableColumn<KnowledgePointAnalytics, String> pointFailuresColumn;
     @FXML private TableColumn<KnowledgePointAnalytics, String> pointCompletionColumn;
     @FXML private TableColumn<KnowledgePointAnalytics, String> weaknessColumn;
+    @FXML private TableView<InterventionCandidate> interventionTable;
+    @FXML private TableColumn<InterventionCandidate, String> interventionClassColumn;
+    @FXML private TableColumn<InterventionCandidate, String> interventionAssignmentColumn;
+    @FXML private TableColumn<InterventionCandidate, String> interventionStudentColumn;
+    @FXML private TableColumn<InterventionCandidate, String> interventionReasonColumn;
+    @FXML private TableColumn<InterventionCandidate, String> interventionEvidenceColumn;
+    @FXML private TableColumn<InterventionCandidate, String> interventionStatusColumn;
 
     public ExerciseProgressController(
         LearningAnalyticsService analyticsService,
         ExerciseCatalogService catalogService,
         DataMaintenanceService maintenanceService,
+        InterventionService interventionService,
+        Runnable openTeachingWorkspace,
         ApplicationExceptionMapper exceptionMapper
     ) {
         this.analyticsService = Objects.requireNonNull(analyticsService);
         this.catalogService = Objects.requireNonNull(catalogService);
         this.maintenanceService = Objects.requireNonNull(maintenanceService);
+        this.interventionService = Objects.requireNonNull(interventionService);
+        this.openTeachingWorkspace = Objects.requireNonNull(openTeachingWorkspace);
         this.exceptionMapper = Objects.requireNonNull(exceptionMapper);
     }
 
@@ -108,6 +124,12 @@ public final class ExerciseProgressController {
             cell.getValue().completedExercises() + "/" + cell.getValue().totalExercises()
         ));
         weaknessColumn.setCellValueFactory(cell -> text(percent(cell.getValue().weaknessRate())));
+        interventionClassColumn.setCellValueFactory(cell -> text(cell.getValue().classroomName()));
+        interventionAssignmentColumn.setCellValueFactory(cell -> text(cell.getValue().assignmentTitle()));
+        interventionStudentColumn.setCellValueFactory(cell -> text(cell.getValue().studentDisplayName()));
+        interventionReasonColumn.setCellValueFactory(cell -> text(reasonLabel(cell.getValue())));
+        interventionEvidenceColumn.setCellValueFactory(cell -> text(cell.getValue().evidenceSummary()));
+        interventionStatusColumn.setCellValueFactory(cell -> text(cell.getValue().status().name()));
         loadInitialData();
     }
 
@@ -193,6 +215,100 @@ public final class ExerciseProgressController {
                 Platform.runLater(() -> fail(error));
             }
         });
+        refreshInterventions();
+    }
+
+    @FXML
+    private void onRefreshInterventions() {
+        refreshInterventions();
+    }
+
+    @FXML
+    private void onAcknowledgeIntervention() {
+        updateSelectedIntervention(InterventionStatus.ACKNOWLEDGED);
+    }
+
+    @FXML
+    private void onResolveIntervention() {
+        updateSelectedIntervention(InterventionStatus.RESOLVED);
+    }
+
+    @FXML
+    private void onDismissIntervention() {
+        updateSelectedIntervention(InterventionStatus.DISMISSED);
+    }
+
+    @FXML
+    private void onOpenTeachingWorkspace() {
+        if (interventionTable.getSelectionModel().getSelectedItem() == null) {
+            showStatus("请先选择一条干预记录。", true);
+            return;
+        }
+        openTeachingWorkspace.run();
+    }
+
+    @FXML
+    private void onExportInterventions() {
+        String csv = interventionService.exportCsv(List.copyOf(interventionTable.getItems()));
+        FileChooser chooser = new FileChooser();
+        chooser.setTitle("导出教师干预队列");
+        chooser.setInitialFileName("sqlteacher-interventions.csv");
+        chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("CSV 文件", "*.csv"));
+        File target = chooser.showSaveDialog(interventionTable.getScene().getWindow());
+        if (target == null) return;
+        GlobalLoading.show("正在写入干预队列 CSV…");
+        DesktopExecutors.background().execute(() -> {
+            try {
+                Files.writeString(target.toPath(), csv, StandardCharsets.UTF_8);
+                Platform.runLater(() -> {
+                    GlobalLoading.hide();
+                    showStatus("干预队列已脱敏导出到 " + target.getAbsolutePath(), false);
+                });
+            } catch (Throwable error) {
+                Platform.runLater(() -> fail(error));
+            }
+        });
+    }
+
+    private void refreshInterventions() {
+        DesktopExecutors.background().execute(() -> {
+            try {
+                List<InterventionCandidate> items = interventionService.refreshAuthorized();
+                Platform.runLater(() -> interventionTable.getItems().setAll(items));
+            } catch (Throwable error) {
+                Platform.runLater(() -> showStatus("云端干预队列暂不可用："
+                    + exceptionMapper.map(error).userMessage(), true));
+            }
+        });
+    }
+
+    private void updateSelectedIntervention(InterventionStatus status) {
+        InterventionCandidate selected = interventionTable.getSelectionModel().getSelectedItem();
+        if (selected == null) {
+            showStatus("请先选择一条干预记录。", true);
+            return;
+        }
+        GlobalLoading.show("正在更新干预状态…");
+        DesktopExecutors.background().execute(() -> {
+            try {
+                interventionService.updateStatus(selected.id(), status);
+                Platform.runLater(() -> {
+                    GlobalLoading.hide();
+                    refreshInterventions();
+                });
+            } catch (Throwable error) {
+                Platform.runLater(() -> fail(error));
+            }
+        });
+    }
+
+    private static String reasonLabel(InterventionCandidate item) {
+        return switch (item.reason()) {
+            case OVERDUE_TASK -> "任务逾期";
+            case REPEATED_FAILURE -> "连续失败";
+            case STALE_PROGRESS -> "提交待跟进";
+            default -> item.reason().name();
+        };
     }
 
     private void refresh(AnalyticsFilter filter) {

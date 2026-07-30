@@ -1,0 +1,14 @@
+package com.sqlteacher.application.learning;
+
+public enum DiagnosisReasonCode {
+    INSUFFICIENT_EVIDENCE,
+    REPEATED_FAILURE,
+    HINT_DEPENDENCY,
+    DEVELOPING_PROGRESS,
+    CONSISTENT_SUCCESS,
+    INTERRUPTED_EXERCISE,
+    OVERDUE_TASK,
+    PENDING_ASSIGNMENT,
+    UNREAD_FEEDBACK,
+    STALE_PROGRESS
+}
