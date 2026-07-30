@@ -46,7 +46,7 @@ class Nl2SqlServiceImplTest {
         assertEquals("QUERY", result.intent());
         assertEquals("查询所有学生", result.explanation());
         assertEquals("test-model", result.model());
-        assertEquals("v3", result.promptVersion());
+        assertEquals("v5", result.promptVersion());
     }
 
     @Test
@@ -185,12 +185,12 @@ class Nl2SqlServiceImplTest {
     @Test
     void shouldRejectInvalidIntent() {
         AiModelProvider mockProvider = new MockProvider(AiCompletionResult.success(
-            "{\"sqlDraft\": \"SELECT * FROM student\", \"intent\": \"INSERT\", \"explanation\": \"查询学生\"}",
+            "{\"sqlDraft\": \"SELECT * FROM student\", \"intent\": \"DROP\", \"explanation\": \"删除表\"}",
             "test-model"
         ));
 
         Nl2SqlServiceImpl service = new Nl2SqlServiceImpl(mockProvider, CONFIG, EMPTY_METADATA_SERVICE, NO_OP_EVENT_SERVICE);
-        Nl2SqlPlan result = service.generate(new Nl2SqlRequest("查询学生", "demo"));
+        Nl2SqlPlan result = service.generate(new Nl2SqlRequest("删除表", "demo"));
 
         assertTrue(result.sqlDraft().isEmpty());
         assertTrue(result.explanation().contains("invalid intent"));

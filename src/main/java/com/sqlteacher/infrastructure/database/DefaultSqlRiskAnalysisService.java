@@ -81,22 +81,28 @@ public final class DefaultSqlRiskAnalysisService implements SqlRiskAnalysisServi
                     List.of("Read-only query.")
             );
 
-            case "INSERT", "UPDATE", "DELETE" -> new SqlRiskAnalysis(
+            case "INSERT", "CREATE" -> new SqlRiskAnalysis(
                     SqlRiskLevel.MEDIUM,
                     true,
                     true,
                     false,
                     statementType,
-                    List.of("This statement modifies data.")
+                    List.of("This statement modifies data or schema.")
             );
 
-            case "CREATE", "ALTER", "DROP", "TRUNCATE" -> new SqlRiskAnalysis(
+            case "UPDATE", "DELETE", "ALTER" -> new SqlRiskAnalysis(
                     SqlRiskLevel.HIGH,
                     true,
                     true,
                     false,
                     statementType,
-                    List.of("This statement modifies database schema.")
+                    List.of("This statement modifies data or schema and requires double confirmation.")
+            );
+
+            case "DROP", "TRUNCATE" -> forbidden(
+                    statementType,
+                    false,
+                    "DROP and TRUNCATE are not allowed for safety."
             );
 
             default -> forbidden(

@@ -31,7 +31,7 @@ class DefaultSqlRiskAnalysisServiceTest {
                 service.analyze("UPDATE student SET score=100");
 
         assertTrue(result.executable());
-        assertEquals(SqlRiskLevel.MEDIUM, result.level());
+        assertEquals(SqlRiskLevel.HIGH, result.level());
         assertTrue(result.confirmationRequired());
         assertEquals("UPDATE", result.statementType());
     }
@@ -42,9 +42,9 @@ class DefaultSqlRiskAnalysisServiceTest {
         SqlRiskAnalysis result =
                 service.analyze("DROP TABLE student");
 
-        assertTrue(result.executable());
-        assertEquals(SqlRiskLevel.HIGH, result.level());
-        assertTrue(result.confirmationRequired());
+        assertFalse(result.executable());
+        assertEquals(SqlRiskLevel.FORBIDDEN, result.level());
+        assertFalse(result.confirmationRequired());
     }
 
     @Test

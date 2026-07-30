@@ -23,12 +23,17 @@ import com.sqlteacher.domain.SqlTeacherException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 
 public final class Nl2SqlServiceImpl implements Nl2SqlService {
     private static final Logger log = LoggerFactory.getLogger(Nl2SqlServiceImpl.class);
-    private static final String PROMPT_VERSION = "v3";
+    private static final String PROMPT_VERSION = "v5";
+    private static final Set<String> VALID_INTENTS = Set.of("QUERY", "INSERT", "UPDATE", "DELETE", "CREATE", "ALTER");
     private final AiModelProvider aiModelProvider;
     private final AiConfiguration aiConfiguration;
     private final AiModelSelectionService modelSelectionService;
@@ -36,6 +41,8 @@ public final class Nl2SqlServiceImpl implements Nl2SqlService {
     private final LearningEventService learningEventService;
     private final ObjectMapper objectMapper;
     private final ConnectionManagementService connectionManagementService;
+    private final String nl2sqlPromptTemplate;
+    private final String errorPromptTemplate;
 
     public Nl2SqlServiceImpl(
         AiModelProvider aiModelProvider,
@@ -94,6 +101,21 @@ public final class Nl2SqlServiceImpl implements Nl2SqlService {
         );
         this.connectionManagementService = connectionManagementService;
         this.objectMapper = new ObjectMapper();
+        this.nl2sqlPromptTemplate = loadPromptTemplate("/prompts/nl2sql-prompt.txt");
+        this.errorPromptTemplate = loadPromptTemplate("/prompts/error-explanation-prompt.txt");
+    }
+
+    private String loadPromptTemplate(String path) {
+        try (InputStream is = getClass().getResourceAsStream(path)) {
+            if (is == null) {
+                log.error("Prompt template not found: {}", path);
+                throw new IllegalStateException("Prompt template not found: " + path);
+            }
+            return new String(is.readAllBytes(), StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            log.error("Failed to load prompt template: {}", path, e);
+            throw new IllegalStateException("Failed to load prompt template: " + path, e);
+        }
     }
 
     @Override
@@ -192,7 +214,7 @@ public final class Nl2SqlServiceImpl implements Nl2SqlService {
             return "AI generated empty SQL draft";
         }
 
-        if (!"QUERY".equalsIgnoreCase(response.intent())) {
+        if (response.intent() == null || !VALID_INTENTS.contains(response.intent().toUpperCase())) {
             return "AI generated invalid intent: " + response.intent();
         }
 
@@ -204,38 +226,13 @@ public final class Nl2SqlServiceImpl implements Nl2SqlService {
     }
 
     private String buildPrompt(String naturalLanguage, String connectionId) {
-        StringBuilder sb = new StringBuilder();
         String databaseName = databaseDialect(connectionId).name();
-        sb.append("You are a SQL teacher assistant. Convert the following natural language query into a valid ")
-            .append(databaseName).append(" SELECT statement.\n");
-        sb.append("\n");
-        sb.append("Database: ").append(databaseName).append("\n");
-        sb.append("Available tables:\n");
-        sb.append(buildTableSchema(connectionId));
-        sb.append("\n");
-        sb.append("IMPORTANT RULES:\n");
-        sb.append("- ONLY generate SELECT statements\n");
-        sb.append("- NO INSERT, UPDATE, DELETE, CREATE, DROP, ALTER, or any modifying statements\n");
-        sb.append("- NO multiple statements separated by semicolons\n");
-        sb.append("- Limit the result to at most 500 rows using a LIMIT clause\n");
-        sb.append("- If the user requests a smaller number of rows, preserve that smaller LIMIT\n");
-        sb.append("- Return ONLY a valid JSON object\n");
-        sb.append("\n");
-        sb.append("Natural language: ").append(naturalLanguage).append("\n");
-        sb.append("\n");
-        sb.append("Return ONLY a valid JSON object with these fields:\n");
-        sb.append("- sqlDraft: the generated SELECT SQL statement\n");
-        sb.append("- intent: must be \"QUERY\"\n");
-        sb.append("- explanation: detailed teaching explanation including:\n");
-        sb.append("  1. What the query does (purpose)\n");
-        sb.append("  2. Which tables are involved\n");
-        sb.append("  3. What conditions are used and why\n");
-        sb.append("  4. What columns are selected\n");
-        sb.append("  5. Expected result format\n");
-        sb.append("\n");
-        sb.append("Example output:\n");
-        sb.append("{\"sqlDraft\": \"SELECT name, score FROM student WHERE score >= 60 LIMIT 500\", \"intent\": \"QUERY\", \"explanation\": \"该查询从student表中选取成绩大于等于60的学生记录，返回姓名和分数两列，限制最多500条结果。WHERE子句用于过滤符合条件的行。\"}");
-        return sb.toString();
+        String schema = buildTableSchema(connectionId);
+        
+        return nl2sqlPromptTemplate
+            .replace("{database}", databaseName)
+            .replace("{schema}", schema)
+            .replace("{input}", naturalLanguage);
     }
 
     private String buildTableSchema(String connectionId) {
@@ -376,26 +373,13 @@ public final class Nl2SqlServiceImpl implements Nl2SqlService {
     }
 
     private String buildErrorExplanationPrompt(String sql, String errorMessage, String connectionId) {
-        StringBuilder sb = new StringBuilder();
-        sb.append("You are a SQL teacher assistant. Explain the following SQL error and provide a corrected SQL statement.\n");
-        sb.append("\n");
-        sb.append("Database: ").append(databaseDialect(connectionId).name()).append("\n");
-        sb.append("Available tables:\n");
-        sb.append(buildTableSchema(connectionId));
-        sb.append("\n");
-        sb.append("SQL statement that caused the error:\n");
-        sb.append(sql).append("\n");
-        sb.append("\n");
-        sb.append("Error message:\n");
-        sb.append(errorMessage).append("\n");
-        sb.append("\n");
-        sb.append("Return ONLY a valid JSON object with these fields:\n");
-        sb.append("- errorCause: explanation of what caused the error\n");
-        sb.append("- correctionSuggestion: suggestion for fixing the error\n");
-        sb.append("- correctedSql: the corrected SQL statement\n");
-        sb.append("\n");
-        sb.append("Example output:\n");
-        sb.append("{\"errorCause\": \"Unknown column 'nam' in 'field list'\", \"correctionSuggestion\": \"The column 'nam' does not exist. Did you mean 'name'?\", \"correctedSql\": \"SELECT name FROM student LIMIT 500\"}");
-        return sb.toString();
+        String databaseName = databaseDialect(connectionId).name();
+        String schema = buildTableSchema(connectionId);
+        
+        return errorPromptTemplate
+            .replace("{database}", databaseName)
+            .replace("{schema}", schema)
+            .replace("{sql}", sql)
+            .replace("{error}", errorMessage);
     }
 }
