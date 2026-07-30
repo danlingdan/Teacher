@@ -18,16 +18,16 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class DefaultStudentLearningQueueServiceTest {
     private static final Instant NOW = Instant.parse("2026-07-30T00:00:00Z");
+    private static final Clock FIXED_CLOCK = Clock.fixed(NOW, ZoneOffset.UTC);
 
     @Test
     void shouldMergeAssignmentsAndFeedbackAheadOfLocalSuggestions() {
         var diagnosis = new StubDiagnosis();
-        var sessions = new InMemoryCloudSessionService();
+        var sessions = new InMemoryCloudSessionService(FIXED_CLOCK);
         sessions.signIn(new CloudAuthenticationService.Session("token", NOW.plusSeconds(3600),
             new AuthenticatedUser("student-1", "s@example.com", "Student", Set.of(UserRole.STUDENT))));
         var api = new StubApi();
-        var service = new DefaultStudentLearningQueueService(diagnosis, api, sessions,
-            Clock.fixed(NOW, ZoneOffset.UTC));
+        var service = new DefaultStudentLearningQueueService(diagnosis, api, sessions, FIXED_CLOCK);
 
         StudentLearningQueue queue = service.refresh();
 
@@ -40,12 +40,11 @@ class DefaultStudentLearningQueueServiceTest {
     @Test
     void shouldDegradeToLocalQueueWhenCloudFails() {
         var diagnosis = new StubDiagnosis();
-        var sessions = new InMemoryCloudSessionService();
+        var sessions = new InMemoryCloudSessionService(FIXED_CLOCK);
         sessions.signIn(new CloudAuthenticationService.Session("token", NOW.plusSeconds(3600),
             new AuthenticatedUser("student-1", "s@example.com", "Student", Set.of(UserRole.STUDENT))));
         var api = new StubApi(); api.fail = true;
-        var service = new DefaultStudentLearningQueueService(diagnosis, api, sessions,
-            Clock.fixed(NOW, ZoneOffset.UTC));
+        var service = new DefaultStudentLearningQueueService(diagnosis, api, sessions, FIXED_CLOCK);
 
         StudentLearningQueue queue = service.refresh();
 

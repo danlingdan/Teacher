@@ -24,15 +24,15 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class DefaultInterventionServiceTest {
     @TempDir Path tempDir;
     private static final Instant NOW = Instant.parse("2026-07-30T00:00:00Z");
+    private static final Clock FIXED_CLOCK = Clock.fixed(NOW, ZoneOffset.UTC);
 
     @Test
     void shouldBuildAuthorizedQueueAndPersistResolution() {
         Path database = initialize();
-        var sessions = new InMemoryCloudSessionService();
+        var sessions = new InMemoryCloudSessionService(FIXED_CLOCK);
         var user = new AuthenticatedUser("teacher-1", "teacher@example.com", "Teacher", Set.of(UserRole.TEACHER));
         sessions.signIn(new CloudAuthenticationService.Session("token", NOW.plusSeconds(3600), user));
-        var service = new DefaultInterventionService(new StubApi(), sessions, database,
-            Clock.fixed(NOW, ZoneOffset.UTC));
+        var service = new DefaultInterventionService(new StubApi(), sessions, database, FIXED_CLOCK);
 
         var items = service.refreshAuthorized();
         assertEquals(1, items.size());
@@ -45,11 +45,10 @@ class DefaultInterventionServiceTest {
     @Test
     void shouldEscapeCsvFormulaFields() {
         Path database = initialize();
-        var sessions = new InMemoryCloudSessionService();
+        var sessions = new InMemoryCloudSessionService(FIXED_CLOCK);
         sessions.signIn(new CloudAuthenticationService.Session("token", NOW.plusSeconds(3600),
             new AuthenticatedUser("teacher-1", "t@example.com", "Teacher", Set.of(UserRole.TEACHER))));
-        var service = new DefaultInterventionService(new StubApi(), sessions, database,
-            Clock.fixed(NOW, ZoneOffset.UTC));
+        var service = new DefaultInterventionService(new StubApi(), sessions, database, FIXED_CLOCK);
         String csv = service.exportCsv(service.refreshAuthorized());
         assertTrue(csv.contains("\"'=Class\""));
     }
