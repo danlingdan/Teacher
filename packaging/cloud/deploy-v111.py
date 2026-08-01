@@ -1,30 +1,31 @@
 #!/usr/bin/env python3
-"""Production Cloud v1.11 deployment via SSH (paramiko).
+"""Production Cloud v1.11.x deployment via SSH (paramiko).
 
 Phases:
   1. probe: read-only environment inspection (current version, cloud.env, systemd, disk)
   2. backup: online SQLite backup + integrity check
-  3. upload: scp the release tarball, extract into /opt/sqlteacher/releases/1.11.0
-  4. swap: atomically switch /opt/sqlteacher/current -> 1.11.0, restart service
-  5. verify: /health apiVersion=1.11, schema migration, probe endpoints
+  3. upload: scp the release tarball, extract into /opt/sqlteacher/releases/<version>
+  4. swap: atomically switch /opt/sqlteacher/current -> <version>, restart service
+  5. verify: /health, capabilities, schema migration, probe endpoints
 
+Usage: deploy-v111.py [probe|backup|upload|swap|verify|full] [version]
 Secrets are read from .secrets/ecs.env only. Never printed.
 """
 import os
 import sys
-import stat
 import time
 import hashlib
-import tarfile
-import io
 
 import paramiko
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 SECRETS = os.path.join(ROOT, ".secrets", "ecs.env")
-LOCAL_TARBALL = os.path.join(ROOT, "target", "cloud-release-1.11.0.tgz")
 
 PHASE = sys.argv[1] if len(sys.argv) > 1 else "probe"
+VERSION = sys.argv[2] if len(sys.argv) > 2 else "1.11.1"
+LOCAL_TARBALL = os.path.join(ROOT, "target", f"cloud-release-{VERSION}.tgz")
+REMOTE_DIR = f"/opt/sqlteacher/releases/{VERSION}"
+REMOTE_TMP = f"/tmp/cloud-release-{VERSION}.tgz"
 
 
 def load_env():
@@ -91,7 +92,7 @@ def backup(client, env):
 
 
 def upload(client, env, sftp_path=None):
-    remote_tmp = "/tmp/cloud-release-1.11.0.tgz"
+    remote_tmp = REMOTE_TMP
     sftp = client.open_sftp()
     local_sha = hashlib.sha256(open(LOCAL_TARBALL, "rb").read()).hexdigest()
     print(f"local tarball sha256: {local_sha}")
@@ -103,11 +104,11 @@ def upload(client, env, sftp_path=None):
         print("FATAL: remote checksum mismatch, aborting")
         sys.exit(1)
     code, out, err = run(client,
-        "mkdir -p /opt/sqlteacher/releases/1.11.0 && "
-        "tar xzf " + remote_tmp + " -C /opt/sqlteacher/releases/1.11.0 && "
-        "rm -f " + remote_tmp + " && "
-        "ls /opt/sqlteacher/releases/1.11.0/ && "
-        "find /opt/sqlteacher/releases/1.11.0/lib -name '*.jar' | wc -l", timeout=300)
+        f"mkdir -p {REMOTE_DIR} && "
+        f"tar xzf {REMOTE_TMP} -C {REMOTE_DIR} && "
+        f"rm -f {REMOTE_TMP} && "
+        f"ls {REMOTE_DIR}/ && "
+        f"find {REMOTE_DIR}/lib -name '*.jar' | wc -l", timeout=300)
     print("== extract ==")
     print((out + err).strip())
     if code != 0:
@@ -115,12 +116,17 @@ def upload(client, env, sftp_path=None):
 
 
 def swap(client, env):
-    # Create an app/ layout matching run-cloud.sh (jar + lib under app/)
+    # Create an app/ layout matching run-cloud.sh (jar + lib under app/), then copy
+    # the ops scripts (bin/) from the current release so systemd ExecStart resolves.
     prep = (
-        "mkdir -p /opt/sqlteacher/releases/1.11.0/app && "
-        "mv /opt/sqlteacher/releases/1.11.0/Teacher-1.11.0.jar /opt/sqlteacher/releases/1.11.0/app/ && "
-        "mv /opt/sqlteacher/releases/1.11.0/lib /opt/sqlteacher/releases/1.11.0/app/lib && "
-        "ls /opt/sqlteacher/releases/1.11.0/app/"
+        "set -e; "
+        f"mkdir -p {REMOTE_DIR}/app && "
+        f"mv {REMOTE_DIR}/Teacher-{VERSION}.jar {REMOTE_DIR}/app/ && "
+        f"mv {REMOTE_DIR}/lib {REMOTE_DIR}/app/lib && "
+        f"if [ ! -d {REMOTE_DIR}/bin ] && [ -d /opt/sqlteacher/current/bin ]; then "
+        f"  cp -r /opt/sqlteacher/current/bin {REMOTE_DIR}/bin && chmod -R a+rx {REMOTE_DIR}/bin; "
+        f"fi && "
+        f"ls {REMOTE_DIR}/app/ && ls {REMOTE_DIR}/bin/ | head -5"
     )
     code, out, err = run(client, prep)
     print("== prep app layout ==")
@@ -129,19 +135,19 @@ def swap(client, env):
     # atomic swap with automatic rollback on startup failure
     swap_script = (
         "set -e; "
-        "ln -sfn /opt/sqlteacher/releases/1.11.0 /opt/sqlteacher/current.new; "
+        "systemctl reset-failed sqlteacher-cloud.service || true; "
+        f"ln -sfn {REMOTE_DIR} /opt/sqlteacher/current.new; "
         "systemctl stop sqlteacher-cloud.service || true; "
         "mv -T /opt/sqlteacher/current.new /opt/sqlteacher/current; "
         "systemctl start sqlteacher-cloud.service; "
-        "sleep 5; "
+        "sleep 12; "
         "if systemctl is-active --quiet sqlteacher-cloud.service; then "
         "  echo SWAP_OK; "
         "else "
-        "  echo SWAP_FAILED; systemctl start sqlteacher-cloud.service; sleep 3; "
-        "  systemctl status sqlteacher-cloud.service --no-pager | tail -5; exit 1; "
+        "  echo SWAP_FAILED; journalctl -u sqlteacher-cloud.service -n 10 --no-pager | tail -10; exit 1; "
         "fi"
     )
-    code, out, err = run(client, swap_script, timeout=120)
+    code, out, err = run(client, swap_script, timeout=180)
     print("== swap ==")
     print((out + err).strip()[-1500:])
     if "SWAP_OK" not in out:

@@ -40,3 +40,11 @@
 - **受控镜像站**：`mirror.sqlteacher.tech` / `download.sqlteacher.tech` 的 DNS 与静态文件同步未部署；当前客户端镜像开关默认关闭，官方 GitHub 下载不受影响。
 - **原生通知**：桌面侧使用白名单策略，未引入 SystemTray 原生依赖，失败静默降级应用内通知。
 - 回滚点保留为 `/opt/sqlteacher/releases/1.10.1` 与上线前 SQLite 备份。
+
+## 1.11.1 补丁部署（2026-08-02）
+
+- 修复设置页无法打开的桌面 bug（FXMLLoader 缺 ResourceBundle）后发布 v1.11.1，生产同步升级。
+- 部署脚本 `deploy-v111.py` 参数化版本（`deploy-v111.py full <version>`），并自动从当前 release 复制 `bin/` 运维脚本，避免 1.11.0 首次部署的 203/EXEC 布局问题。
+- 上线前备份：`/opt/sqlteacher/backups/cloud-20260801T203828Z.db`，integrity_check ok。
+- 一次切换成功：`/opt/sqlteacher/current` → `releases/1.11.1`，`/health` apiVersion=1.11，12 个能力位完整，`email_verifications`/`reset_tokens`/`account_tasks` 表存在。
+- 公网 HTTPS `/health` 与 `/api/v1/app/capabilities` 验证通过。
