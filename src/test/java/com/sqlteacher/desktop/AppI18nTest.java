@@ -41,6 +41,16 @@ class AppI18nTest {
         assertTrue(zhKeys.size() >= 90, "bundle should have grown beyond the v1.10 baseline, size=" + zhKeys.size());
     }
 
+    @Test void englishBundleMustNotContainChineseValues() throws Exception {
+        Properties en = load("messages_en.properties");
+        java.util.regex.Pattern cjk = java.util.regex.Pattern.compile("[\\u4e00-\\u9fff\\u3000-\\u303f\\uff00-\\uffef]");
+        java.util.List<String> offenders = en.stringPropertyNames().stream()
+            .filter(key -> cjk.matcher(en.getProperty(key)).find())
+            .map(key -> key + "=" + en.getProperty(key))
+            .toList();
+        assertTrue(offenders.isEmpty(), "English bundle must not contain Chinese values: " + offenders);
+    }
+
     @Test void everyFxmlKeyReferenceResolvesInBothBundles() throws Exception {
         Properties zh = load("messages_zh_CN.properties");
         Properties en = load("messages_en.properties");
