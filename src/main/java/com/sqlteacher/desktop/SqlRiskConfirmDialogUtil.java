@@ -242,7 +242,7 @@ public final class SqlRiskConfirmDialogUtil {
     public static void showRiskConfirmDialog(String sql, Runnable onConfirm, Window owner) {
         Platform.runLater(() -> {
             try {
-                FXMLLoader loader = new FXMLLoader(SqlRiskConfirmDialogUtil.class.getResource("/fxml/sql-risk-confirm-dialog.fxml"));
+                FXMLLoader loader = new FXMLLoader(SqlRiskConfirmDialogUtil.class.getResource("/fxml/sql-risk-confirm-dialog.fxml"), AppI18n.bundle());
                 Parent root = loader.load();
 
                 SqlRiskConfirmDialogController controller = loader.getController();

@@ -757,7 +757,7 @@ public final class MainWindowController {
         if (fxml == null) {
             throw new IllegalStateException("Missing FXML resource on classpath: " + SQL_PRACTICE_FXML);
         }
-        FXMLLoader loader = new FXMLLoader(fxml);
+        FXMLLoader loader = new FXMLLoader(fxml, AppI18n.bundle());
         loader.setControllerFactory(type -> {
             if (type == SqlPracticeController.class) {
                 sqlPracticeController = new SqlPracticeController(
@@ -790,7 +790,7 @@ public final class MainWindowController {
         if (fxml == null) {
             throw new IllegalStateException("Missing FXML resource on classpath: " + TABLE_SCHEMA_FXML);
         }
-        FXMLLoader loader = new FXMLLoader(fxml);
+        FXMLLoader loader = new FXMLLoader(fxml, AppI18n.bundle());
         loader.setControllerFactory(type -> {
             if (type == TableSchemaController.class) {
                 tableSchemaController = new TableSchemaController(
@@ -818,7 +818,7 @@ public final class MainWindowController {
         if (fxml == null) {
             throw new IllegalStateException("Missing FXML resource on classpath: " + AI_ASSISTANT_FXML);
         }
-        FXMLLoader loader = new FXMLLoader(fxml);
+        FXMLLoader loader = new FXMLLoader(fxml, AppI18n.bundle());
         loader.setControllerFactory(type -> {
             if (type == AiAssistantController.class) {
                 return new AiAssistantController(
@@ -872,7 +872,7 @@ public final class MainWindowController {
         if (settingsPage == null) {
             URL fxml = MainWindowController.class.getResource(SETTINGS_FXML);
             if (fxml == null) throw new IllegalStateException("Missing FXML resource: " + SETTINGS_FXML);
-            FXMLLoader loader = new FXMLLoader(fxml);
+            FXMLLoader loader = new FXMLLoader(fxml, AppI18n.bundle());
             loader.setControllerFactory(type -> {
                 if (type == SettingsController.class) {
                     return new SettingsController(
@@ -909,7 +909,7 @@ public final class MainWindowController {
         if (studentExercisePage == null) {
             URL fxml = MainWindowController.class.getResource(STUDENT_EXERCISE_FXML);
             if (fxml == null) throw new IllegalStateException("Missing FXML resource: " + STUDENT_EXERCISE_FXML);
-            FXMLLoader loader = new FXMLLoader(fxml);
+            FXMLLoader loader = new FXMLLoader(fxml, AppI18n.bundle());
             loader.setControllerFactory(type -> {
                 if (type == StudentExerciseController.class) {
                     studentExerciseController = new StudentExerciseController(
@@ -932,7 +932,7 @@ public final class MainWindowController {
         if (exerciseManagementPage == null) {
             URL fxml = MainWindowController.class.getResource(EXERCISE_MANAGEMENT_FXML);
             if (fxml == null) throw new IllegalStateException("Missing FXML resource: " + EXERCISE_MANAGEMENT_FXML);
-            FXMLLoader loader = new FXMLLoader(fxml);
+            FXMLLoader loader = new FXMLLoader(fxml, AppI18n.bundle());
             loader.setControllerFactory(type -> {
                 if (type == ExerciseManagementController.class) {
                     return new ExerciseManagementController(exerciseManagementService, applicationExceptionMapper);
@@ -952,7 +952,7 @@ public final class MainWindowController {
         if (exerciseProgressPage == null) {
             URL fxml = MainWindowController.class.getResource(EXERCISE_PROGRESS_FXML);
             if (fxml == null) throw new IllegalStateException("Missing FXML resource: " + EXERCISE_PROGRESS_FXML);
-            FXMLLoader loader = new FXMLLoader(fxml);
+            FXMLLoader loader = new FXMLLoader(fxml, AppI18n.bundle());
             loader.setControllerFactory(type -> {
                 if (type == ExerciseProgressController.class) {
                     return new ExerciseProgressController(
@@ -975,7 +975,7 @@ public final class MainWindowController {
         if (knowledgeCenterPage == null) {
             URL fxml = MainWindowController.class.getResource(KNOWLEDGE_CENTER_FXML);
             if (fxml == null) throw new IllegalStateException("Missing FXML resource: " + KNOWLEDGE_CENTER_FXML);
-            FXMLLoader loader = new FXMLLoader(fxml);
+            FXMLLoader loader = new FXMLLoader(fxml, AppI18n.bundle());
             loader.setControllerFactory(type -> {
                 if (type == KnowledgeCenterController.class) {
                     knowledgeCenterController = new KnowledgeCenterController(
@@ -1011,7 +1011,7 @@ public final class MainWindowController {
         if (cloudCenterPage == null) {
             URL fxml = MainWindowController.class.getResource(CLOUD_CENTER_FXML);
             if (fxml == null) throw new IllegalStateException("Missing FXML resource: " + CLOUD_CENTER_FXML);
-            FXMLLoader loader = new FXMLLoader(fxml);
+            FXMLLoader loader = new FXMLLoader(fxml, AppI18n.bundle());
             loader.setControllerFactory(type -> {
                 if (type == CloudCenterController.class) {
                     return new CloudCenterController(
@@ -1039,7 +1039,7 @@ public final class MainWindowController {
         if (teachingContentPage == null) {
             URL fxml = MainWindowController.class.getResource(TEACHING_CONTENT_FXML);
             if (fxml == null) throw new IllegalStateException("Missing FXML resource: " + TEACHING_CONTENT_FXML);
-            FXMLLoader loader = new FXMLLoader(fxml);
+            FXMLLoader loader = new FXMLLoader(fxml, AppI18n.bundle());
             loader.setControllerFactory(type -> {
                 if (type == TeachingContentController.class) {
                     return new TeachingContentController(cloudApiClient, cloudSessionService, accessProfile,
@@ -1072,7 +1072,7 @@ public final class MainWindowController {
         if (fxml == null) {
             throw new IllegalStateException("Missing FXML resource on classpath: " + HOME_FXML);
         }
-        FXMLLoader loader = new FXMLLoader(fxml);
+        FXMLLoader loader = new FXMLLoader(fxml, AppI18n.bundle());
         loader.setControllerFactory(type -> {
             if (type == HomeController.class) {
                 HomeController controller = new HomeController(studentLearningQueueService, applicationExceptionMapper);

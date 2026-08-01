@@ -96,7 +96,7 @@ public final class SettingsController {
         if (fxml == null) {
             throw new IllegalStateException("Missing FXML resource: " + resource);
         }
-        FXMLLoader loader = new FXMLLoader(fxml);
+        FXMLLoader loader = new FXMLLoader(fxml, com.sqlteacher.desktop.AppI18n.bundle());
         loader.setControllerFactory(type -> {
             if (type == AppearanceSettingsController.class && controllerType == type) {
                 return new AppearanceSettingsController(uiPreferences);
