@@ -17,6 +17,7 @@ import com.sqlteacher.application.event.LearningEventService;
 import com.sqlteacher.application.metadata.DatabaseMetadataService;
 import com.sqlteacher.application.knowledge.CourseKnowledgeService;
 import com.sqlteacher.application.knowledge.GroundedKnowledgeExplanationService;
+import com.sqlteacher.application.knowledge.HybridKnowledgeRetrievalService;
 import com.sqlteacher.application.nl2sql.DefaultNl2SqlSafetyService;
 import com.sqlteacher.application.nl2sql.Nl2SqlService;
 import com.sqlteacher.application.nl2sql.Nl2SqlSafetyService;
@@ -98,10 +99,11 @@ public class SqlTeacherApplicationConfig {
     @Bean
     public GroundedKnowledgeExplanationService groundedKnowledgeExplanationService(
         CourseKnowledgeService knowledgeService,
+        HybridKnowledgeRetrievalService retrievalService,
         AiTaskService taskService,
         AiContextPolicy contextPolicy
     ) {
-        return new DefaultGroundedKnowledgeExplanationService(knowledgeService, taskService, contextPolicy);
+        return new DefaultGroundedKnowledgeExplanationService(knowledgeService, retrievalService, taskService, contextPolicy);
     }
 
     @Bean

@@ -54,6 +54,13 @@ class V14CloudApiClientIntegrationTest {
         var course = client.createCourse(teacher, "SQL Client", "client mapping");
         var section = client.createCourseSection(teacher, course.id(), "SELECT", 1);
         var point = client.createKnowledgePoint(teacher, course.id(), section.id(), "过滤", "WHERE", 1);
+        var publishedKnowledge = client.publishCloudKnowledge(teacher, course.id(), section.id(), "WHERE 课程资料",
+            "WHERE 子句在聚合前筛选行。", "PUBLISHED");
+        client.publishCloudKnowledge(teacher, course.id(), section.id(), "教师私有草稿", "私有答案", "PRIVATE");
+        assertEquals(2, client.listCloudKnowledge(teacher, course.id()).size());
+        assertEquals(List.of(publishedKnowledge), client.listCloudKnowledge(student, course.id()));
+        assertEquals(1, client.searchCloudKnowledge(student, course.id(), "WHERE", 10).size());
+        assertTrue(client.searchCloudKnowledge(student, course.id(), "私有答案", 10).isEmpty());
         assertEquals(2, client.updateCourseSection(teacher, course.id(), section.id(), "SELECT 查询", 2,
             ContentStatus.ACTIVE, section.version()).version());
         assertEquals(2, client.updateKnowledgePoint(teacher, course.id(), point.id(), section.id(), "WHERE 过滤",
@@ -111,7 +118,7 @@ class V14CloudApiClientIntegrationTest {
         try (var connection = DriverManager.getConnection("jdbc:sqlite:" + database);
              var statement = connection.createStatement();
              var row = statement.executeQuery("select max(version) from cloud_schema_version")) {
-            assertEquals(2, row.getInt(1));
+            assertEquals(3, row.getInt(1));
         }
 
         try (var connection = DriverManager.getConnection("jdbc:sqlite:" + database);

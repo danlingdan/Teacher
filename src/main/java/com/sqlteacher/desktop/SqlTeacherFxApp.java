@@ -15,6 +15,11 @@ import com.sqlteacher.application.knowledge.KnowledgeDocumentService;
 import com.sqlteacher.application.knowledge.KnowledgeSearchService;
 import com.sqlteacher.application.knowledge.CourseKnowledgeService;
 import com.sqlteacher.application.knowledge.GroundedKnowledgeExplanationService;
+import com.sqlteacher.application.knowledge.HybridKnowledgeRetrievalService;
+import com.sqlteacher.application.knowledge.KnowledgeIndexService;
+import com.sqlteacher.application.knowledge.KnowledgeReadStateService;
+import com.sqlteacher.application.knowledge.SafeWebContentFetcher;
+import com.sqlteacher.application.knowledge.WebSearchProvider;
 import com.sqlteacher.application.maintenance.DataMaintenanceService;
 import com.sqlteacher.application.maintenance.ApplicationBackupService;
 import com.sqlteacher.application.config.SqlTeacherConfiguration;
@@ -95,6 +100,11 @@ public final class SqlTeacherFxApp extends Application {
     private KnowledgeSearchService knowledgeSearchService;
     private CourseKnowledgeService courseKnowledgeService;
     private GroundedKnowledgeExplanationService groundedKnowledgeExplanationService;
+    private HybridKnowledgeRetrievalService hybridKnowledgeRetrievalService;
+    private KnowledgeIndexService knowledgeIndexService;
+    private KnowledgeReadStateService knowledgeReadStateService;
+    private WebSearchProvider webSearchProvider;
+    private SafeWebContentFetcher safeWebContentFetcher;
     private ApplicationBackupService applicationBackupService;
     private SqlTeacherConfiguration configuration;
     private CloudApiClient cloudApiClient;
@@ -141,6 +151,11 @@ public final class SqlTeacherFxApp extends Application {
             knowledgeSearchService = context.getBean(KnowledgeSearchService.class);
             courseKnowledgeService = context.getBean(CourseKnowledgeService.class);
             groundedKnowledgeExplanationService = context.getBean(GroundedKnowledgeExplanationService.class);
+            hybridKnowledgeRetrievalService = context.getBean(HybridKnowledgeRetrievalService.class);
+            knowledgeIndexService = context.getBean(KnowledgeIndexService.class);
+            knowledgeReadStateService = context.getBean(KnowledgeReadStateService.class);
+            webSearchProvider = context.getBean(WebSearchProvider.class);
+            safeWebContentFetcher = context.getBean(SafeWebContentFetcher.class);
             applicationBackupService = context.getBean(ApplicationBackupService.class);
             configuration = context.getBean(SqlTeacherConfiguration.class);
             cloudApiClient = context.getBean(CloudApiClient.class);
@@ -257,6 +272,11 @@ public final class SqlTeacherFxApp extends Application {
                     knowledgeSearchService,
                     courseKnowledgeService,
                     groundedKnowledgeExplanationService,
+                    hybridKnowledgeRetrievalService,
+                    knowledgeIndexService,
+                    knowledgeReadStateService,
+                    webSearchProvider,
+                    safeWebContentFetcher,
                     applicationBackupService,
                     configuration,
                     cloudApiClient,

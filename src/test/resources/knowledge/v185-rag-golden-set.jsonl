@@ -1,0 +1,40 @@
+{"id":"sql-001","query":"SELECT 的基本语法是什么","expectedTopic":"SELECT","noAnswer":false}
+{"id":"sql-002","query":"WHERE 如何筛选行","expectedTopic":"WHERE","noAnswer":false}
+{"id":"sql-003","query":"ORDER BY 默认排序方向","expectedTopic":"ORDER BY","noAnswer":false}
+{"id":"sql-004","query":"GROUP BY 有什么作用","expectedTopic":"GROUP BY","noAnswer":false}
+{"id":"sql-005","query":"HAVING 与 WHERE 区别","expectedTopic":"HAVING","noAnswer":false}
+{"id":"sql-006","query":"INNER JOIN 如何匹配","expectedTopic":"JOIN","noAnswer":false}
+{"id":"sql-007","query":"LEFT JOIN 保留哪些行","expectedTopic":"JOIN","noAnswer":false}
+{"id":"sql-008","query":"COUNT 星号的含义","expectedTopic":"聚合函数","noAnswer":false}
+{"id":"sql-009","query":"NULL 能否用等号比较","expectedTopic":"NULL","noAnswer":false}
+{"id":"sql-010","query":"DISTINCT 如何去重","expectedTopic":"DISTINCT","noAnswer":false}
+{"id":"sql-011","query":"子查询可以放在哪里","expectedTopic":"子查询","noAnswer":false}
+{"id":"sql-012","query":"相关子查询是什么","expectedTopic":"子查询","noAnswer":false}
+{"id":"sql-013","query":"UNION 与 UNION ALL 区别","expectedTopic":"集合运算","noAnswer":false}
+{"id":"sql-014","query":"CASE WHEN 如何使用","expectedTopic":"条件表达式","noAnswer":false}
+{"id":"sql-015","query":"窗口函数的分区语法","expectedTopic":"窗口函数","noAnswer":false}
+{"id":"sql-016","query":"ROW NUMBER 如何编号","expectedTopic":"窗口函数","noAnswer":false}
+{"id":"sql-017","query":"CTE 的 WITH 语法","expectedTopic":"CTE","noAnswer":false}
+{"id":"sql-018","query":"主键约束的意义","expectedTopic":"约束","noAnswer":false}
+{"id":"sql-019","query":"外键如何维护引用完整性","expectedTopic":"约束","noAnswer":false}
+{"id":"sql-020","query":"唯一约束和主键区别","expectedTopic":"约束","noAnswer":false}
+{"id":"sql-021","query":"事务的 ACID 是什么","expectedTopic":"事务","noAnswer":false}
+{"id":"sql-022","query":"COMMIT 与 ROLLBACK","expectedTopic":"事务","noAnswer":false}
+{"id":"sql-023","query":"索引为何提升查询速度","expectedTopic":"索引","noAnswer":false}
+{"id":"sql-024","query":"复合索引最左前缀","expectedTopic":"索引","noAnswer":false}
+{"id":"sql-025","query":"视图与表的区别","expectedTopic":"视图","noAnswer":false}
+{"id":"sql-026","query":"规范化的目标是什么","expectedTopic":"数据库设计","noAnswer":false}
+{"id":"sql-027","query":"第一范式要求什么","expectedTopic":"数据库设计","noAnswer":false}
+{"id":"sql-028","query":"第二范式消除什么依赖","expectedTopic":"数据库设计","noAnswer":false}
+{"id":"sql-029","query":"第三范式消除什么依赖","expectedTopic":"数据库设计","noAnswer":false}
+{"id":"sql-030","query":"实体联系图如何表示多对多","expectedTopic":"ER 模型","noAnswer":false}
+{"id":"sql-031","query":"SQLite 的日期函数","expectedTopic":"SQLite","noAnswer":false}
+{"id":"sql-032","query":"SQLite 如何限制返回行数","expectedTopic":"SQLite","noAnswer":false}
+{"id":"sql-033","query":"SQL 注入是什么","expectedTopic":"SQL 安全","noAnswer":false}
+{"id":"sql-034","query":"为什么要用参数化查询","expectedTopic":"SQL 安全","noAnswer":false}
+{"id":"sql-035","query":"DROP DATABASE 为什么危险","expectedTopic":"SQL 安全","noAnswer":false}
+{"id":"sql-036","query":"多语句执行有什么风险","expectedTopic":"SQL 安全","noAnswer":false}
+{"id":"sql-037","query":"火星上数据库课程的教室编号","expectedTopic":"","noAnswer":true}
+{"id":"sql-038","query":"老师今天穿什么颜色衣服","expectedTopic":"","noAnswer":true}
+{"id":"sql-039","query":"课程资料没有提到的考试答案","expectedTopic":"","noAnswer":true}
+{"id":"sql-040","query":"预测明天随机生成的数据库密码","expectedTopic":"","noAnswer":true}

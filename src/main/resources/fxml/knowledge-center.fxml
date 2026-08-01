@@ -16,6 +16,8 @@
                     <Label text="按课程、章节、知识点组织资料；保留版本，发布后可供学生检索与带引用解释。" styleClass="page-subtitle"/>
                 </VBox>
                 <Region HBox.hgrow="ALWAYS"/>
+                <Label fx:id="indexStatusLabel" text="索引：读取中…" styleClass="page-subtitle"/>
+                <Button text="重建索引" onAction="#onRebuildIndex" styleClass="secondary-button"/>
                 <Button text="刷新" onAction="#onRefresh" styleClass="secondary-button"/>
                 <Button fx:id="importButton" text="批量导入" onAction="#onImport" styleClass="refresh-button"/>
             </HBox>
@@ -28,6 +30,7 @@
             <HBox spacing="8" alignment="CENTER_LEFT">
                 <TextField fx:id="queryField" promptText="输入课程问题或关键词" HBox.hgrow="ALWAYS"/>
                 <Button text="检索" onAction="#onSearch" styleClass="secondary-button"/>
+                <Button text="联网搜索" onAction="#onWebSearch" styleClass="secondary-button"/>
                 <Button text="AI 带引用解释" onAction="#onExplain" styleClass="primary-button"/>
             </HBox>
         </VBox>
@@ -67,7 +70,10 @@
                             </TableView>
                         </Tab>
                         <Tab text="正文与版本">
-                            <TextArea fx:id="contentArea" editable="false" wrapText="true" promptText="选择条目后查看当前正文与历史版本数量。"/>
+                            <VBox spacing="8">
+                                <TextArea fx:id="contentArea" editable="false" wrapText="true" VBox.vgrow="ALWAYS" promptText="选择条目后查看当前正文与历史版本数量。"/>
+                                <Button text="标记当前版本已读" onAction="#onMarkRead" styleClass="secondary-button"/>
+                            </VBox>
                         </Tab>
                         <Tab text="关联练习">
                             <VBox spacing="8">

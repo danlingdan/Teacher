@@ -25,6 +25,8 @@ import com.sqlteacher.application.collaboration.ClassLearningSummary;
 import com.sqlteacher.application.collaboration.UserRole;
 import com.sqlteacher.application.collaboration.AssignmentContentSnapshot;
 import com.sqlteacher.application.collaboration.CloudNotification;
+import com.sqlteacher.application.collaboration.CloudKnowledgeArticle;
+import com.sqlteacher.application.collaboration.CloudKnowledgeSearchHit;
 import com.sqlteacher.application.collaboration.ContentStatus;
 import com.sqlteacher.application.collaboration.CourseBundleImportResult;
 import com.sqlteacher.application.collaboration.CourseCatalog;
@@ -425,6 +427,30 @@ public final class HttpCloudApiClient implements CloudApiClient {
     public CourseBundleImportResult importCourseBundle(String token, String bundleJson, String operationId) {
         return request("v14/courses/import", "POST", Map.of("bundleJson", bundleJson,
             "operationId", operationId), token, CourseBundleImportResult.class);
+    }
+
+    @Override
+    public CloudKnowledgeArticle publishCloudKnowledge(String token, String courseId, String sectionId,
+                                                       String title, String content, String visibility) {
+        return request("v14/courses/" + courseId + "/knowledge", "POST", Map.of(
+            "sectionId", sectionId == null ? "" : sectionId, "title", title, "content", content,
+            "visibility", visibility), token, CloudKnowledgeArticle.class);
+    }
+
+    @Override
+    public List<CloudKnowledgeArticle> listCloudKnowledge(String token, String courseId) {
+        Map<String, List<CloudKnowledgeArticle>> result = request("v14/courses/" + courseId + "/knowledge",
+            "GET", null, token, new TypeReference<>() { });
+        return result.getOrDefault("articles", List.of());
+    }
+
+    @Override
+    public List<CloudKnowledgeSearchHit> searchCloudKnowledge(String token, String courseId, String query, int limit) {
+        String path = "v14/courses/" + courseId + "/knowledge?q="
+            + URLEncoder.encode(query, StandardCharsets.UTF_8) + "&limit=" + limit;
+        Map<String, List<CloudKnowledgeSearchHit>> result = request(path, "GET", null, token,
+            new TypeReference<>() { });
+        return result.getOrDefault("results", List.of());
     }
 
     private CloudAuthenticationService.Session authenticate(String path, Map<String, String> payload) {

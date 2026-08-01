@@ -14,6 +14,11 @@ import com.sqlteacher.application.knowledge.KnowledgeDocumentService;
 import com.sqlteacher.application.knowledge.KnowledgeSearchService;
 import com.sqlteacher.application.knowledge.CourseKnowledgeService;
 import com.sqlteacher.application.knowledge.GroundedKnowledgeExplanationService;
+import com.sqlteacher.application.knowledge.HybridKnowledgeRetrievalService;
+import com.sqlteacher.application.knowledge.KnowledgeIndexService;
+import com.sqlteacher.application.knowledge.KnowledgeReadStateService;
+import com.sqlteacher.application.knowledge.SafeWebContentFetcher;
+import com.sqlteacher.application.knowledge.WebSearchProvider;
 import com.sqlteacher.application.maintenance.DataMaintenanceService;
 import com.sqlteacher.application.maintenance.ApplicationBackupService;
 import com.sqlteacher.application.config.SqlTeacherConfiguration;
@@ -138,6 +143,11 @@ public final class MainWindowController {
     private final KnowledgeSearchService knowledgeSearchService;
     private final CourseKnowledgeService courseKnowledgeService;
     private final GroundedKnowledgeExplanationService groundedKnowledgeExplanationService;
+    private final HybridKnowledgeRetrievalService hybridKnowledgeRetrievalService;
+    private final KnowledgeIndexService knowledgeIndexService;
+    private final KnowledgeReadStateService knowledgeReadStateService;
+    private final WebSearchProvider webSearchProvider;
+    private final SafeWebContentFetcher safeWebContentFetcher;
     private final ApplicationBackupService applicationBackupService;
     private final SqlTeacherConfiguration configuration;
     private final CloudApiClient cloudApiClient;
@@ -287,6 +297,11 @@ public final class MainWindowController {
                                 KnowledgeSearchService knowledgeSearchService,
                                 CourseKnowledgeService courseKnowledgeService,
                                 GroundedKnowledgeExplanationService groundedKnowledgeExplanationService,
+                                HybridKnowledgeRetrievalService hybridKnowledgeRetrievalService,
+                                KnowledgeIndexService knowledgeIndexService,
+                                KnowledgeReadStateService knowledgeReadStateService,
+                                WebSearchProvider webSearchProvider,
+                                SafeWebContentFetcher safeWebContentFetcher,
                                 ApplicationBackupService applicationBackupService,
                                 SqlTeacherConfiguration configuration,
                                 CloudApiClient cloudApiClient,
@@ -327,6 +342,11 @@ public final class MainWindowController {
         this.knowledgeSearchService = Objects.requireNonNull(knowledgeSearchService);
         this.courseKnowledgeService = Objects.requireNonNull(courseKnowledgeService);
         this.groundedKnowledgeExplanationService = Objects.requireNonNull(groundedKnowledgeExplanationService);
+        this.hybridKnowledgeRetrievalService = Objects.requireNonNull(hybridKnowledgeRetrievalService);
+        this.knowledgeIndexService = Objects.requireNonNull(knowledgeIndexService);
+        this.knowledgeReadStateService = Objects.requireNonNull(knowledgeReadStateService);
+        this.webSearchProvider = Objects.requireNonNull(webSearchProvider);
+        this.safeWebContentFetcher = Objects.requireNonNull(safeWebContentFetcher);
         this.applicationBackupService = Objects.requireNonNull(applicationBackupService);
         this.configuration = Objects.requireNonNull(configuration);
         this.cloudApiClient = Objects.requireNonNull(cloudApiClient);
@@ -895,6 +915,11 @@ public final class MainWindowController {
                         knowledgeDocumentService,
                         courseKnowledgeService,
                         groundedKnowledgeExplanationService,
+                        hybridKnowledgeRetrievalService,
+                        knowledgeIndexService,
+                        knowledgeReadStateService,
+                        webSearchProvider,
+                        safeWebContentFetcher,
                         exerciseCatalogService,
                         this::openExercise,
                         accessProfile.kind() == DesktopAccessProfile.Kind.TEACHER

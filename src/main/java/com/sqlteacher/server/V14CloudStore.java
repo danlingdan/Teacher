@@ -23,6 +23,8 @@ import com.sqlteacher.application.collaboration.SharedExerciseVersion;
 import com.sqlteacher.application.collaboration.SubmissionFeedback;
 import com.sqlteacher.application.collaboration.UserRole;
 import com.sqlteacher.application.collaboration.AuthenticatedUser;
+import com.sqlteacher.application.collaboration.CloudKnowledgeArticle;
+import com.sqlteacher.application.collaboration.CloudKnowledgeSearchHit;
 
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
@@ -948,6 +950,90 @@ final class V14CloudStore {
         }
     }
 
+    CloudKnowledgeArticle publishKnowledge(AuthenticatedUser actor, String courseId, String sectionId,
+                                           String title, String content, String visibility) {
+        requireCourseOwner(actor, courseId);
+        String normalizedTitle = required(title, "title", 200);
+        String normalizedContent = required(content, "content", 2_000_000);
+        String normalizedVisibility = required(visibility, "visibility", 20).toUpperCase(Locale.ROOT);
+        if (!Set.of("PRIVATE", "PUBLISHED", "INACTIVE").contains(normalizedVisibility)) {
+            throw new IllegalArgumentException("visibility is invalid");
+        }
+        String id = UUID.randomUUID().toString();
+        String revisionId = UUID.randomUUID().toString();
+        Instant now = Instant.now();
+        String hash = sha256(normalizedContent);
+        try (Connection connection = open()) {
+            connection.setAutoCommit(false);
+            try (PreparedStatement article = connection.prepareStatement("""
+                     insert into cloud_knowledge_articles(id,course_id,section_id,title,visibility,current_revision,content_hash,created_by,created_at,updated_at)
+                     values(?,?,?,?,?,1,?,?,?,?)
+                     """);
+                 PreparedStatement revision = connection.prepareStatement("""
+                     insert into cloud_knowledge_revisions(id,article_id,revision,content,content_hash,created_by,created_at)
+                     values(?,?,1,?,?,?,?)
+                     """);
+                 PreparedStatement chunk = connection.prepareStatement("""
+                     insert into cloud_knowledge_chunks(id,article_id,revision_id,chunk_index,content,content_hash,index_status)
+                     values(?,?,?,?,?,?,'PENDING')
+                     """)) {
+                article.setString(1, id); article.setString(2, courseId); article.setString(3, blankToNull(sectionId));
+                article.setString(4, normalizedTitle); article.setString(5, normalizedVisibility); article.setString(6, hash);
+                article.setString(7, actor.id()); article.setString(8, now.toString()); article.setString(9, now.toString());
+                article.executeUpdate();
+                revision.setString(1, revisionId); revision.setString(2, id); revision.setString(3, normalizedContent);
+                revision.setString(4, hash); revision.setString(5, actor.id()); revision.setString(6, now.toString()); revision.executeUpdate();
+                List<String> chunks = cloudChunks(normalizedContent);
+                for (int index = 0; index < chunks.size(); index++) {
+                    String value = chunks.get(index);
+                    chunk.setString(1, UUID.randomUUID().toString()); chunk.setString(2, id); chunk.setString(3, revisionId);
+                    chunk.setInt(4, index); chunk.setString(5, value); chunk.setString(6, sha256(value)); chunk.addBatch();
+                }
+                chunk.executeBatch();
+                connection.commit();
+                return new CloudKnowledgeArticle(id, courseId, sectionId, normalizedTitle, hash,
+                    normalizedVisibility, 1, actor.id(), now);
+            } catch (SQLException | RuntimeException error) { connection.rollback(); throw error; }
+        } catch (SQLException error) { throw database(error); }
+    }
+
+    List<CloudKnowledgeArticle> listKnowledge(AuthenticatedUser actor, String courseId) {
+        requireKnowledgeCourseVisible(actor, courseId);
+        String sql = actor.hasRole(UserRole.ADMIN) || isCourseOwner(actor, courseId)
+            ? "select * from cloud_knowledge_articles where course_id=? order by updated_at desc"
+            : "select * from cloud_knowledge_articles where course_id=? and visibility='PUBLISHED' order by updated_at desc";
+        try (Connection connection = open(); PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, courseId);
+            List<CloudKnowledgeArticle> result = new ArrayList<>();
+            try (ResultSet rows = statement.executeQuery()) {
+                while (rows.next()) result.add(cloudArticle(rows));
+            }
+            return List.copyOf(result);
+        } catch (SQLException error) { throw database(error); }
+    }
+
+    List<CloudKnowledgeSearchHit> searchKnowledge(AuthenticatedUser actor, String courseId, String query, int limit) {
+        requireKnowledgeCourseVisible(actor, courseId);
+        String normalized = required(query, "query", 300);
+        if (limit < 1 || limit > 50) throw new IllegalArgumentException("limit must be between 1 and 50");
+        boolean owner = actor.hasRole(UserRole.ADMIN) || isCourseOwner(actor, courseId);
+        String sql = """
+            select a.id,a.title,a.current_revision,c.chunk_index,c.content
+            from cloud_knowledge_chunks c join cloud_knowledge_articles a on a.id=c.article_id
+            join cloud_knowledge_revisions r on r.id=c.revision_id and r.revision=a.current_revision
+            where a.course_id=? and instr(lower(c.content),lower(?))>0
+            """ + (owner ? "" : " and a.visibility='PUBLISHED'") + " order by a.updated_at desc,c.chunk_index limit ?";
+        try (Connection connection = open(); PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, courseId); statement.setString(2, normalized); statement.setInt(3, limit);
+            List<CloudKnowledgeSearchHit> result = new ArrayList<>();
+            try (ResultSet rows = statement.executeQuery()) {
+                while (rows.next()) result.add(new CloudKnowledgeSearchHit(rows.getString(1), rows.getString(2),
+                    rows.getInt(3), rows.getInt(4), excerpt(rows.getString(5), normalized), 1.0 / (result.size() + 1)));
+            }
+            return List.copyOf(result);
+        } catch (SQLException error) { throw database(error); }
+    }
+
     private void initialize() throws SQLException {
         try (Connection connection = open(); Statement statement = connection.createStatement()) {
             statement.executeUpdate("create table if not exists courses(id text primary key,name text not null,"
@@ -990,12 +1076,69 @@ final class V14CloudStore {
                 + "(1,'v1.3 cloud baseline',current_timestamp)");
             statement.executeUpdate("insert or ignore into cloud_schema_version(version,description,applied_at) values"
                 + "(2,'v1.4 course content and feedback',current_timestamp)");
+            statement.executeUpdate("create table if not exists cloud_knowledge_articles(id text primary key,course_id text not null references courses(id),"
+                + "section_id text references course_sections(id),title text not null,visibility text not null check(visibility in ('PRIVATE','PUBLISHED','INACTIVE')),"
+                + "current_revision integer not null,content_hash text not null,created_by text not null references users(id),created_at text not null,updated_at text not null)");
+            statement.executeUpdate("create table if not exists cloud_knowledge_revisions(id text primary key,article_id text not null references cloud_knowledge_articles(id) on delete cascade,"
+                + "revision integer not null,content text not null,content_hash text not null,created_by text not null references users(id),created_at text not null,unique(article_id,revision))");
+            statement.executeUpdate("create table if not exists cloud_knowledge_chunks(id text primary key,article_id text not null references cloud_knowledge_articles(id) on delete cascade,"
+                + "revision_id text not null references cloud_knowledge_revisions(id) on delete cascade,chunk_index integer not null,content text not null,content_hash text not null,"
+                + "index_status text not null check(index_status in ('PENDING','INDEXED','FAILED')),unique(revision_id,chunk_index))");
+            statement.executeUpdate("create table if not exists cloud_knowledge_sync_cursor(user_id text not null references users(id),course_id text not null references courses(id),"
+                + "cursor_version integer not null,updated_at text not null,primary key(user_id,course_id))");
+            statement.executeUpdate("insert or ignore into cloud_schema_version(version,description,applied_at) values"
+                + "(3,'v1.8.5 shared knowledge and vector indexing metadata',current_timestamp)");
             statement.executeUpdate("create index if not exists idx_course_sections_order on course_sections(course_id,sort_order,id)");
             statement.executeUpdate("create index if not exists idx_knowledge_points_order on knowledge_points(course_id,sort_order,id)");
             statement.executeUpdate("create index if not exists idx_shared_exercise_course on shared_exercises(course_id,status,updated_at desc)");
             statement.executeUpdate("create index if not exists idx_feedback_assignment on submission_feedback(assignment_id,updated_at desc)");
             statement.executeUpdate("create index if not exists idx_notification_recipient on cloud_notifications(recipient_user_id,created_at desc)");
+            statement.executeUpdate("create index if not exists idx_cloud_knowledge_scope on cloud_knowledge_articles(course_id,visibility,updated_at desc)");
+            statement.executeUpdate("create index if not exists idx_cloud_knowledge_chunks on cloud_knowledge_chunks(article_id,revision_id,chunk_index)");
         }
+    }
+
+    private boolean isCourseOwner(AuthenticatedUser actor, String courseId) {
+        try (Connection connection = open(); PreparedStatement statement = connection.prepareStatement(
+            "select 1 from courses where id=? and created_by=?")) {
+            statement.setString(1, courseId); statement.setString(2, actor.id());
+            try (ResultSet rows = statement.executeQuery()) { return rows.next(); }
+        } catch (SQLException error) { throw database(error); }
+    }
+
+    private void requireKnowledgeCourseVisible(AuthenticatedUser actor, String courseId) {
+        try (Connection connection = open(); PreparedStatement statement = connection.prepareStatement(
+            "select created_by,status from courses where id=?")) {
+            statement.setString(1, courseId);
+            try (ResultSet rows = statement.executeQuery()) {
+                if (!rows.next()) throw new IllegalArgumentException("Course not found");
+                boolean owner = actor.hasRole(UserRole.ADMIN) || actor.id().equals(rows.getString(1));
+                if (!owner && !ContentStatus.ACTIVE.name().equals(rows.getString(2))) {
+                    throw new SecurityException("course is not visible");
+                }
+            }
+        } catch (SQLException error) { throw database(error); }
+    }
+
+    private static CloudKnowledgeArticle cloudArticle(ResultSet rows) throws SQLException {
+        return new CloudKnowledgeArticle(rows.getString("id"), rows.getString("course_id"),
+            Objects.toString(rows.getString("section_id"), ""), rows.getString("title"), rows.getString("content_hash"),
+            rows.getString("visibility"), rows.getInt("current_revision"), rows.getString("created_by"),
+            Instant.parse(rows.getString("updated_at")));
+    }
+
+    private static List<String> cloudChunks(String content) {
+        List<String> result = new ArrayList<>();
+        for (int offset = 0; offset < content.length(); offset += 1_200) {
+            result.add(content.substring(offset, Math.min(content.length(), offset + 1_200)));
+        }
+        return List.copyOf(result);
+    }
+
+    private static String excerpt(String content, String query) {
+        int match = content.toLowerCase(Locale.ROOT).indexOf(query.toLowerCase(Locale.ROOT));
+        int start = Math.max(0, match - 120), end = Math.min(content.length(), match + query.length() + 240);
+        return (start > 0 ? "…" : "") + content.substring(start, end).replaceAll("\\s+", " ") + (end < content.length() ? "…" : "");
     }
 
     private Connection open() throws SQLException {

@@ -235,4 +235,18 @@ public interface CloudApiClient {
     default CourseBundleImportResult importCourseBundle(String accessToken, String bundleJson, String operationId) {
         throw new UnsupportedOperationException("Course import is unavailable");
     }
+
+    default CloudKnowledgeArticle publishCloudKnowledge(String accessToken, String courseId, String sectionId,
+                                                        String title, String content, String visibility) {
+        throw new UnsupportedOperationException("Cloud knowledge is unavailable");
+    }
+
+    default List<CloudKnowledgeArticle> listCloudKnowledge(String accessToken, String courseId) {
+        throw new UnsupportedOperationException("Cloud knowledge is unavailable");
+    }
+
+    default List<CloudKnowledgeSearchHit> searchCloudKnowledge(String accessToken, String courseId, String query,
+                                                               int limit) {
+        throw new UnsupportedOperationException("Cloud knowledge search is unavailable");
+    }
 }

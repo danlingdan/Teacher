@@ -13,6 +13,9 @@ import com.sqlteacher.application.knowledge.KnowledgeSearchResult;
 import com.sqlteacher.application.knowledge.KnowledgeSearchService;
 import com.sqlteacher.application.knowledge.KnowledgeVisibility;
 import com.sqlteacher.domain.SqlTeacherException;
+import org.apache.pdfbox.Loader;
+import org.apache.pdfbox.text.PDFTextStripper;
+import org.jsoup.Jsoup;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -37,13 +40,15 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipInputStream;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
 public final class SqliteKnowledgeService implements KnowledgeDocumentService, KnowledgeSearchService, CourseKnowledgeService {
-    static final long MAX_DOCUMENT_BYTES = 2 * 1024 * 1024;
+    static final long MAX_DOCUMENT_BYTES = 20 * 1024 * 1024;
     static final int MAX_CHUNK_CHARACTERS = 800;
-    private static final Set<String> ALLOWED_EXTENSIONS = Set.of("txt", "md", "markdown");
+    private static final Set<String> ALLOWED_EXTENSIONS = Set.of("txt", "md", "markdown", "pdf", "docx");
 
     private final JdbcConnectionFactory connectionFactory;
     private final LearningEventService eventService;
@@ -70,13 +75,13 @@ public final class SqliteKnowledgeService implements KnowledgeDocumentService, K
         try {
             long size = Files.size(path);
             if (size < 1 || size > MAX_DOCUMENT_BYTES) {
-                throw new IllegalArgumentException("Document must be between 1 byte and 2 MiB");
+                throw new IllegalArgumentException("Document must be between 1 byte and 20 MiB");
             }
             bytes = Files.readAllBytes(path);
         } catch (IOException error) {
             throw new SqlTeacherException("KNOWLEDGE_DOCUMENT_READ_FAILED", "Failed to read knowledge document", error);
         }
-        String content = decodeUtf8(bytes).replace("\u0000", "").trim();
+        String content = extractContent(path, bytes);
         if (content.isBlank()) {
             throw new IllegalArgumentException("Knowledge document must contain UTF-8 text");
         }
@@ -221,6 +226,9 @@ public final class SqliteKnowledgeService implements KnowledgeDocumentService, K
                 insertRevision(connection, revisionId, articleId, 1, document.title(), content, contentHash,
                     document.sourceName(), headingPath(content), now);
                 insertKnowledgePoints(connection, revisionId, knowledgePoints);
+                insertHybridChunks(connection, document.id(), articleId, revisionId, chunk(content),
+                    String.join("\n", headingPath(content)));
+                enqueueIndexJob(connection, articleId, revisionId, now);
                 connection.commit();
             } catch (SQLException | RuntimeException error) {
                 connection.rollback();
@@ -341,6 +349,9 @@ public final class SqliteKnowledgeService implements KnowledgeDocumentService, K
                 insertRevision(connection, revisionId, articleId, nextRevision, title, content, hash,
                     sourceName, headingPath(content), now);
                 insertKnowledgePoints(connection, revisionId, knowledgePoints);
+                insertHybridChunks(connection, state.documentId(), articleId, revisionId, chunks,
+                    String.join("\n", headingPath(content)));
+                enqueueIndexJob(connection, articleId, revisionId, now);
                 try (PreparedStatement updateArticle = connection.prepareStatement("""
                     update course_knowledge_articles
                     set current_revision = ?, visibility = 'PRIVATE', updated_at = ?
@@ -462,7 +473,7 @@ public final class SqliteKnowledgeService implements KnowledgeDocumentService, K
         int dot = name.lastIndexOf('.');
         String extension = dot < 0 ? "" : name.substring(dot + 1).toLowerCase(Locale.ROOT);
         if (!ALLOWED_EXTENSIONS.contains(extension)) {
-            throw new IllegalArgumentException("Only UTF-8 .txt, .md, and .markdown documents are supported");
+            throw new IllegalArgumentException("Only UTF-8 text, Markdown, PDF, and DOCX documents are supported");
         }
         return path;
     }
@@ -502,6 +513,63 @@ public final class SqliteKnowledgeService implements KnowledgeDocumentService, K
                 statement.addBatch();
             }
             statement.executeBatch();
+        }
+    }
+
+    private static void insertHybridChunks(
+        Connection connection,
+        String documentId,
+        String articleId,
+        String revisionId,
+        List<String> chunks,
+        String headingPath
+    ) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("""
+            insert into knowledge_chunks_v2(
+                id, document_id, article_id, revision_id, chunk_index, heading_path,
+                start_offset, end_offset, token_count, content, content_hash, index_status
+            ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING')
+            """)) {
+            int offset = 0;
+            for (int index = 0; index < chunks.size(); index++) {
+                String value = chunks.get(index);
+                statement.setString(1, UUID.randomUUID().toString());
+                statement.setString(2, documentId);
+                statement.setString(3, articleId);
+                statement.setString(4, revisionId);
+                statement.setInt(5, index);
+                statement.setString(6, headingPath == null ? "" : headingPath);
+                statement.setInt(7, offset);
+                statement.setInt(8, offset + value.length());
+                statement.setInt(9, Math.max(1, (value.length() + 3) / 4));
+                statement.setString(10, value);
+                statement.setString(11, sha256(value.getBytes(StandardCharsets.UTF_8)));
+                statement.addBatch();
+                offset += value.length();
+            }
+            statement.executeBatch();
+        }
+    }
+
+    private static void enqueueIndexJob(Connection connection, String articleId, String revisionId, Instant now)
+        throws SQLException {
+        try (PreparedStatement supersede = connection.prepareStatement("""
+                 update knowledge_index_jobs set status = 'COMPLETED', error_message = 'SUPERSEDED', updated_at = ?
+                 where article_id = ? and status in ('PENDING','RUNNING')
+                 """);
+             PreparedStatement statement = connection.prepareStatement("""
+            insert into knowledge_index_jobs(id, article_id, revision_id, status, created_at, updated_at)
+            values (?, ?, ?, 'PENDING', ?, ?)
+            """)) {
+            supersede.setString(1, now.toString());
+            supersede.setString(2, articleId);
+            supersede.executeUpdate();
+            statement.setString(1, UUID.randomUUID().toString());
+            statement.setString(2, articleId);
+            statement.setString(3, revisionId);
+            statement.setString(4, now.toString());
+            statement.setString(5, now.toString());
+            statement.executeUpdate();
         }
     }
 
@@ -664,9 +732,9 @@ public final class SqliteKnowledgeService implements KnowledgeDocumentService, K
         try {
             long size = Files.size(path);
             if (size < 1 || size > MAX_DOCUMENT_BYTES) {
-                throw new IllegalArgumentException("Document must be between 1 byte and 2 MiB");
+                throw new IllegalArgumentException("Document must be between 1 byte and 20 MiB");
             }
-            String content = decodeUtf8(Files.readAllBytes(path)).replace("\u0000", "").trim();
+            String content = extractContent(path, Files.readAllBytes(path));
             if (content.isBlank()) {
                 throw new IllegalArgumentException("Knowledge document must contain UTF-8 text");
             }
@@ -674,6 +742,42 @@ public final class SqliteKnowledgeService implements KnowledgeDocumentService, K
         } catch (IOException error) {
             throw new SqlTeacherException("KNOWLEDGE_DOCUMENT_READ_FAILED", "Failed to read knowledge document", error);
         }
+    }
+
+    private static String extractContent(Path path, byte[] bytes) {
+        String name = path.getFileName().toString().toLowerCase(Locale.ROOT);
+        try {
+            String content;
+            if (name.endsWith(".pdf")) {
+                try (var document = Loader.loadPDF(bytes)) {
+                    if (document.isEncrypted()) throw new IllegalArgumentException("Encrypted PDF documents are not supported");
+                    content = new PDFTextStripper().getText(document);
+                }
+            } else if (name.endsWith(".docx")) {
+                content = extractDocx(bytes);
+            } else {
+                content = decodeUtf8(bytes);
+            }
+            content = content.replace("\u0000", "").replace("\r\n", "\n").trim();
+            if (content.isBlank()) throw new IllegalArgumentException("Knowledge document has no readable text");
+            return content;
+        } catch (IOException error) {
+            throw new SqlTeacherException("KNOWLEDGE_DOCUMENT_PARSE_FAILED", "Failed to parse knowledge document", error);
+        }
+    }
+
+    private static String extractDocx(byte[] bytes) throws IOException {
+        try (ZipInputStream zip = new ZipInputStream(new java.io.ByteArrayInputStream(bytes), StandardCharsets.UTF_8)) {
+            for (ZipEntry entry; (entry = zip.getNextEntry()) != null;) {
+                if ("word/document.xml".equals(entry.getName())) {
+                    byte[] xmlBytes = zip.readNBytes((int) Math.min(MAX_DOCUMENT_BYTES + 1, Integer.MAX_VALUE));
+                    if (xmlBytes.length > MAX_DOCUMENT_BYTES) throw new IllegalArgumentException("DOCX text payload is too large");
+                    String xml = decodeUtf8(xmlBytes).replaceAll("(?i)</w:p>", "\n").replaceAll("(?i)<w:tab[^>]*/>", "\t");
+                    return Jsoup.parse(xml).text().trim();
+                }
+            }
+        }
+        throw new IllegalArgumentException("DOCX document.xml is missing");
     }
 
     private static List<String> headingPath(String content) {

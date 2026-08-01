@@ -332,6 +332,24 @@ public final class SqlTeacherCloudServer {
             if (segments.length == 7 && "courses".equals(segments[4])) {
                 String courseId = segments[5];
                 String action = segments[6];
+                if ("knowledge".equals(action)) {
+                    if ("GET".equals(method)) {
+                        String query = queryValue(exchange.getRequestURI().getRawQuery(), "q");
+                        if (query == null || query.isBlank()) {
+                            respond(exchange, 200, Map.of("articles", v14Store.listKnowledge(actor, courseId)));
+                        } else {
+                            respond(exchange, 200, Map.of("results", v14Store.searchKnowledge(actor, courseId, query,
+                                (int) queryLong(exchange.getRequestURI().getRawQuery(), "limit", 20))));
+                        }
+                        return;
+                    }
+                    if ("POST".equals(method)) {
+                        Map<String, Object> body = objectRequest(exchange);
+                        respond(exchange, 201, v14Store.publishKnowledge(actor, courseId, string(body, "sectionId"),
+                            string(body, "title"), string(body, "content"), string(body, "visibility")));
+                        return;
+                    }
+                }
                 if ("sections".equals(action)) {
                     if ("GET".equals(method)) {
                         respond(exchange, 200, Map.of("sections", v14Store.listSections(actor, courseId)));

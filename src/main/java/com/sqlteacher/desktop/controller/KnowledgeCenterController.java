@@ -10,9 +10,14 @@ import com.sqlteacher.application.knowledge.CourseKnowledgeSearchFilter;
 import com.sqlteacher.application.knowledge.CourseKnowledgeService;
 import com.sqlteacher.application.knowledge.GroundedKnowledgeAnswer;
 import com.sqlteacher.application.knowledge.GroundedKnowledgeExplanationService;
+import com.sqlteacher.application.knowledge.HybridKnowledgeRetrievalService;
+import com.sqlteacher.application.knowledge.KnowledgeIndexService;
+import com.sqlteacher.application.knowledge.KnowledgeReadStateService;
 import com.sqlteacher.application.knowledge.KnowledgeDocumentService;
 import com.sqlteacher.application.knowledge.KnowledgeSearchResult;
 import com.sqlteacher.application.knowledge.KnowledgeVisibility;
+import com.sqlteacher.application.knowledge.SafeWebContentFetcher;
+import com.sqlteacher.application.knowledge.WebSearchProvider;
 import com.sqlteacher.desktop.DesktopExecutors;
 import com.sqlteacher.desktop.GlobalLoading;
 import javafx.application.Platform;
@@ -39,6 +44,11 @@ public final class KnowledgeCenterController {
     private final KnowledgeDocumentService documentService;
     private final CourseKnowledgeService knowledgeService;
     private final GroundedKnowledgeExplanationService explanationService;
+    private final HybridKnowledgeRetrievalService retrievalService;
+    private final KnowledgeIndexService indexService;
+    private final KnowledgeReadStateService readStateService;
+    private final WebSearchProvider webSearchProvider;
+    private final SafeWebContentFetcher webContentFetcher;
     private final ExerciseCatalogService exerciseCatalogService;
     private final Consumer<String> openExercise;
     private final ApplicationExceptionMapper exceptionMapper;
@@ -56,6 +66,7 @@ public final class KnowledgeCenterController {
     @FXML private Button inactivateButton;
     @FXML private Button deleteButton;
     @FXML private Label statusLabel;
+    @FXML private Label indexStatusLabel;
     @FXML private TableView<CourseKnowledgeArticle> articleTable;
     @FXML private TableColumn<CourseKnowledgeArticle, String> articleTitleColumn;
     @FXML private TableColumn<CourseKnowledgeArticle, String> courseColumn;
@@ -76,6 +87,11 @@ public final class KnowledgeCenterController {
         KnowledgeDocumentService documentService,
         CourseKnowledgeService knowledgeService,
         GroundedKnowledgeExplanationService explanationService,
+        HybridKnowledgeRetrievalService retrievalService,
+        KnowledgeIndexService indexService,
+        KnowledgeReadStateService readStateService,
+        WebSearchProvider webSearchProvider,
+        SafeWebContentFetcher webContentFetcher,
         ExerciseCatalogService exerciseCatalogService,
         Consumer<String> openExercise,
         boolean authoringAllowed,
@@ -84,6 +100,11 @@ public final class KnowledgeCenterController {
         this.documentService = Objects.requireNonNull(documentService);
         this.knowledgeService = Objects.requireNonNull(knowledgeService);
         this.explanationService = Objects.requireNonNull(explanationService);
+        this.retrievalService = Objects.requireNonNull(retrievalService);
+        this.indexService = Objects.requireNonNull(indexService);
+        this.readStateService = Objects.requireNonNull(readStateService);
+        this.webSearchProvider = Objects.requireNonNull(webSearchProvider);
+        this.webContentFetcher = Objects.requireNonNull(webContentFetcher);
         this.exerciseCatalogService = Objects.requireNonNull(exerciseCatalogService);
         this.openExercise = Objects.requireNonNull(openExercise);
         this.authoringAllowed = authoringAllowed;
@@ -108,6 +129,7 @@ public final class KnowledgeCenterController {
             .forEach(button -> button.setDisable(!authoringAllowed));
         includePrivateCheck.setSelected(authoringAllowed);
         includePrivateCheck.setDisable(!authoringAllowed);
+        refreshIndexStatus();
         refreshArticles("正在加载课程知识库…");
     }
 
@@ -132,11 +154,13 @@ public final class KnowledgeCenterController {
                 for (File file : files) {
                     imported.add(knowledgeService.importArticle(file.toPath(), course, section, points).title());
                 }
+                KnowledgeIndexService.IndexReport indexReport = indexService.rebuildPending();
                 List<CourseKnowledgeArticle> articles = visibleArticles();
                 Platform.runLater(() -> {
                     GlobalLoading.hide();
                     articleTable.getItems().setAll(articles);
-                    showStatus("已导入 " + imported.size() + " 份资料，默认保持私有草稿。", false);
+                    refreshIndexStatus();
+                    showStatus("已导入 " + imported.size() + " 份资料，默认保持私有草稿。" + indexReport.message(), false);
                 });
             } catch (Throwable error) {
                 Platform.runLater(() -> fail(error));
@@ -196,16 +220,73 @@ public final class KnowledgeCenterController {
         GlobalLoading.show("正在按课程、章节与知识点检索…");
         DesktopExecutors.background().execute(() -> {
             try {
-                List<KnowledgeSearchResult> results = knowledgeService.search(query, currentFilter(), 20);
+                HybridKnowledgeRetrievalService.RetrievalResponse response = retrievalService.retrieve(query, currentFilter(), 20);
+                List<KnowledgeSearchResult> results = response.results();
                 Platform.runLater(() -> {
                     GlobalLoading.hide();
                     resultTable.getItems().setAll(results);
-                    showStatus(results.isEmpty() ? "未找到符合筛选条件的资料。" : "找到 " + results.size() + " 个可追溯片段。", false);
+                    showStatus(results.isEmpty() ? "未找到符合筛选条件的资料。" : "找到 " + results.size()
+                        + " 个可追溯片段（" + response.mode() + "）。" + (response.degraded() ? response.message() : ""), false);
                 });
             } catch (Throwable error) {
                 Platform.runLater(() -> fail(error));
             }
         });
+    }
+
+    @FXML
+    private void onWebSearch() {
+        String query = field(queryField);
+        if (query.isBlank()) { showStatus("请输入需要联网查找的问题。", true); return; }
+        if (!webSearchProvider.enabled()) {
+            showStatus("联网知识搜索默认关闭；请通过 SQLTEACHER_BRAVE_API_KEY 配置 Brave Search 后重启。", true);
+            return;
+        }
+        Alert confirm = new Alert(Alert.AlertType.CONFIRMATION,
+            "将把以下查询发送给 Brave Search：\n\n" + query, ButtonType.CANCEL, ButtonType.OK);
+        confirm.setTitle("确认联网知识搜索"); confirm.setHeaderText("联网结果不是课程知识库内容，请独立核验来源");
+        if (confirm.showAndWait().orElse(ButtonType.CANCEL) != ButtonType.OK) return;
+        GlobalLoading.show("正在安全获取联网知识来源…");
+        DesktopExecutors.background().execute(() -> {
+            try {
+                List<WebSearchProvider.WebSearchResult> searchResults = webSearchProvider.search(query, 5);
+                List<KnowledgeSearchResult> results = new ArrayList<>();
+                for (int index = 0; index < searchResults.size(); index++) {
+                    WebSearchProvider.WebSearchResult item = searchResults.get(index);
+                    String snippet = item.snippet();
+                    if (index < 3) {
+                        try { snippet = summarize(webContentFetcher.fetch(item.uri()).text()); }
+                        catch (RuntimeException ignored) { /* Search snippet remains visible and attributed. */ }
+                    }
+                    if (snippet.isBlank()) snippet = "仅提供来源链接，请打开后核验。";
+                    results.add(new KnowledgeSearchResult("web:" + Integer.toUnsignedString(item.uri().hashCode()), item.title(),
+                        item.uri().toString(), index, snippet, Math.max(0, searchResults.size() - index)));
+                }
+                Platform.runLater(() -> {
+                    GlobalLoading.hide(); resultTable.getItems().setAll(results);
+                    showStatus(results.isEmpty() ? "联网搜索未返回结果。" : "已获取 " + results.size() + " 个联网来源；未写入课程知识库。", false);
+                });
+            } catch (Throwable error) { Platform.runLater(() -> fail(error)); }
+        });
+    }
+
+    @FXML
+    private void onRebuildIndex() {
+        GlobalLoading.show("正在重建本地向量索引…");
+        DesktopExecutors.background().execute(() -> {
+            try {
+                KnowledgeIndexService.IndexReport report = indexService.rebuildAll();
+                Platform.runLater(() -> { GlobalLoading.hide(); refreshIndexStatus(); showStatus(report.message(), report.failedJobs() > 0); });
+            } catch (Throwable error) { Platform.runLater(() -> fail(error)); }
+        });
+    }
+
+    @FXML
+    private void onMarkRead() {
+        CourseKnowledgeArticle selected = selectedArticle("请先选择要标记已读的知识条目。");
+        if (selected == null) return;
+        readStateService.save(selected.id(), selected.currentRevision(), 100);
+        showStatus("已记录当前版本的阅读进度。", false);
     }
 
     @FXML
@@ -301,12 +382,14 @@ public final class KnowledgeCenterController {
         DesktopExecutors.background().execute(() -> {
             try {
                 CourseKnowledgeArticle changed = change.run();
+                KnowledgeIndexService.IndexReport indexReport = indexService.rebuildPending();
                 List<CourseKnowledgeArticle> articles = visibleArticles();
                 Platform.runLater(() -> {
                     GlobalLoading.hide();
                     articleTable.getItems().setAll(articles);
                     articleTable.getSelectionModel().select(changed);
-                    showStatus(successMessage, false);
+                    refreshIndexStatus();
+                    showStatus(successMessage + indexReport.message(), indexReport.failedJobs() > 0);
                 });
             } catch (Throwable error) {
                 Platform.runLater(() -> fail(error));
@@ -361,7 +444,7 @@ public final class KnowledgeCenterController {
     private static FileChooser knowledgeFileChooser(String title) {
         FileChooser chooser = new FileChooser();
         chooser.setTitle(title);
-        chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("UTF-8 文本或 Markdown", "*.txt", "*.md", "*.markdown"));
+        chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("课程资料", "*.txt", "*.md", "*.markdown", "*.pdf", "*.docx"));
         return chooser;
     }
 
@@ -393,6 +476,17 @@ public final class KnowledgeCenterController {
         statusLabel.getStyleClass().add(error ? "sql-error-hint" : "sql-result-hint");
         statusLabel.setVisible(true);
         statusLabel.setManaged(true);
+    }
+
+    private void refreshIndexStatus() {
+        KnowledgeIndexService.IndexStatus status = indexService.status();
+        indexStatusLabel.setText("索引：" + status.mode() + "｜待处理 " + status.pendingJobs()
+            + "｜已索引 " + status.indexedChunks() + "｜失败 " + status.failedChunks());
+    }
+
+    private static String summarize(String value) {
+        String clean = value.replaceAll("\\s+", " ").trim();
+        return clean.length() <= 500 ? clean : clean.substring(0, 497) + "…";
     }
 
     private static String field(TextField field) { return field.getText() == null ? "" : field.getText().trim(); }

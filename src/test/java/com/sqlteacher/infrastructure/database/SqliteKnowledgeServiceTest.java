@@ -44,14 +44,17 @@ class SqliteKnowledgeServiceTest {
     }
 
     @Test
-    void shouldRejectMalformedUtf8AndUnsupportedFilesWithoutPartialRows() throws Exception {
+    void shouldRejectMalformedUtf8InvalidPdfAndUnsupportedFilesWithoutPartialRows() throws Exception {
         SqliteKnowledgeService service = initialize();
         Path malformed = tempDir.resolve("bad.txt");
         Files.write(malformed, new byte[]{(byte) 0xC3, (byte) 0x28});
-        Path unsupported = tempDir.resolve("bad.pdf");
-        Files.writeString(unsupported, "not a PDF", StandardCharsets.UTF_8);
+        Path invalidPdf = tempDir.resolve("bad.pdf");
+        Files.writeString(invalidPdf, "not a PDF", StandardCharsets.UTF_8);
+        Path unsupported = tempDir.resolve("bad.exe");
+        Files.writeString(unsupported, "not supported", StandardCharsets.UTF_8);
 
         assertThrows(IllegalArgumentException.class, () -> service.importDocument(malformed));
+        assertThrows(SqlTeacherException.class, () -> service.importDocument(invalidPdf));
         assertThrows(IllegalArgumentException.class, () -> service.importDocument(unsupported));
         assertTrue(service.listDocuments().isEmpty());
     }

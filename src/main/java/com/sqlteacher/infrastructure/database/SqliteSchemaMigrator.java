@@ -336,6 +336,112 @@ final class SqliteSchemaMigrator {
                     """,
                 "create index course_knowledge_point_lookup on course_knowledge_point_links(knowledge_point, revision_id)"
             )
+        ),
+        new Migration(
+            9,
+            "Create v1.8.5 hybrid retrieval, indexing, read state, and feedback tables",
+            List.of(
+                """
+                    create table knowledge_chunks_v2 (
+                        id text primary key,
+                        document_id text not null,
+                        article_id text not null,
+                        revision_id text not null,
+                        chunk_index integer not null check (chunk_index >= 0),
+                        parent_chunk_id text,
+                        heading_path text not null default '',
+                        start_offset integer not null default 0 check (start_offset >= 0),
+                        end_offset integer not null check (end_offset >= start_offset),
+                        token_count integer not null check (token_count > 0),
+                        content text not null,
+                        content_hash text not null,
+                        index_status text not null default 'PENDING' check (index_status in ('PENDING','INDEXED','FAILED')),
+                        unique(revision_id, chunk_index),
+                        foreign key(document_id) references knowledge_documents(id) on delete cascade,
+                        foreign key(article_id) references course_knowledge_articles(id) on delete cascade,
+                        foreign key(revision_id) references course_knowledge_revisions(id) on delete cascade
+                    )
+                    """,
+                "create index knowledge_chunks_v2_scope on knowledge_chunks_v2(article_id, revision_id, chunk_index)",
+                """
+                    create table knowledge_index_jobs (
+                        id text primary key,
+                        article_id text not null,
+                        revision_id text not null,
+                        status text not null check (status in ('PENDING','RUNNING','COMPLETED','FAILED')),
+                        attempt_count integer not null default 0 check (attempt_count >= 0),
+                        error_message text,
+                        created_at text not null,
+                        updated_at text not null,
+                        foreign key(article_id) references course_knowledge_articles(id) on delete cascade,
+                        foreign key(revision_id) references course_knowledge_revisions(id) on delete cascade
+                    )
+                    """,
+                "create index knowledge_index_jobs_status on knowledge_index_jobs(status, updated_at)",
+                """
+                    create table knowledge_embedding_profiles (
+                        profile_id text primary key,
+                        provider text not null,
+                        model text not null,
+                        dimensions integer not null check (dimensions > 0),
+                        content_fingerprint text not null,
+                        updated_at text not null
+                    )
+                    """,
+                """
+                    create table knowledge_read_state (
+                        owner_id text not null,
+                        article_id text not null,
+                        revision integer not null check (revision > 0),
+                        progress_percent integer not null check (progress_percent between 0 and 100),
+                        last_read_at text not null,
+                        primary key(owner_id, article_id),
+                        foreign key(article_id) references course_knowledge_articles(id) on delete cascade
+                    )
+                    """,
+                """
+                    create table knowledge_web_sources (
+                        id text primary key,
+                        owner_id text not null,
+                        query_text text not null,
+                        title text not null,
+                        source_url text not null,
+                        content_hash text not null,
+                        fetched_at text not null,
+                        expires_at text not null
+                    )
+                    """,
+                "create index knowledge_web_sources_owner_expiry on knowledge_web_sources(owner_id, expires_at)",
+                """
+                    create table retrieval_feedback (
+                        id text primary key,
+                        owner_id text not null,
+                        query_hash text not null,
+                        document_id text not null,
+                        chunk_index integer not null,
+                        helpful integer not null check (helpful in (0, 1)),
+                        created_at text not null
+                    )
+                    """,
+                """
+                    insert into knowledge_chunks_v2(
+                        id, document_id, article_id, revision_id, chunk_index, heading_path,
+                        start_offset, end_offset, token_count, content, content_hash, index_status
+                    )
+                    select c.id, c.document_id, a.id, r.id, c.chunk_index, r.heading_path,
+                        0, length(c.content), max(1, (length(c.content) + 3) / 4), c.content,
+                        lower(hex(cast(c.content as blob))), 'PENDING'
+                    from knowledge_chunks c
+                    join course_knowledge_articles a on a.document_id = c.document_id
+                    join course_knowledge_revisions r on r.article_id = a.id and r.revision = a.current_revision
+                    """,
+                """
+                    insert into knowledge_index_jobs(id, article_id, revision_id, status, created_at, updated_at)
+                    select lower(hex(randomblob(16))), a.id, r.id, 'PENDING', current_timestamp, current_timestamp
+                    from course_knowledge_articles a
+                    join course_knowledge_revisions r on r.article_id = a.id and r.revision = a.current_revision
+                    """
+            )
         )
     );
 

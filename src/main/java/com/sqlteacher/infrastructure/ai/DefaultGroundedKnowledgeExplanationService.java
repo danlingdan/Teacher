@@ -16,6 +16,7 @@ import com.sqlteacher.application.knowledge.CourseKnowledgeSearchFilter;
 import com.sqlteacher.application.knowledge.CourseKnowledgeService;
 import com.sqlteacher.application.knowledge.GroundedKnowledgeAnswer;
 import com.sqlteacher.application.knowledge.GroundedKnowledgeExplanationService;
+import com.sqlteacher.application.knowledge.HybridKnowledgeRetrievalService;
 import com.sqlteacher.application.knowledge.KnowledgeSearchResult;
 
 import java.util.ArrayList;
@@ -30,6 +31,7 @@ public final class DefaultGroundedKnowledgeExplanationService implements Grounde
     private static final int MAX_CITATIONS = 5;
 
     private final CourseKnowledgeService knowledgeService;
+    private final HybridKnowledgeRetrievalService retrievalService;
     private final AiTaskService aiTaskService;
     private final AiContextPolicy contextPolicy;
     private final ObjectMapper mapper;
@@ -39,7 +41,18 @@ public final class DefaultGroundedKnowledgeExplanationService implements Grounde
         AiTaskService aiTaskService,
         AiContextPolicy contextPolicy
     ) {
+        this(knowledgeService, (query, filter, limit) -> new HybridKnowledgeRetrievalService.RetrievalResponse(
+            knowledgeService.search(query, filter, limit), "FTS5", false, ""), aiTaskService, contextPolicy);
+    }
+
+    public DefaultGroundedKnowledgeExplanationService(
+        CourseKnowledgeService knowledgeService,
+        HybridKnowledgeRetrievalService retrievalService,
+        AiTaskService aiTaskService,
+        AiContextPolicy contextPolicy
+    ) {
         this.knowledgeService = Objects.requireNonNull(knowledgeService);
+        this.retrievalService = Objects.requireNonNull(retrievalService);
         this.aiTaskService = Objects.requireNonNull(aiTaskService);
         this.contextPolicy = Objects.requireNonNull(contextPolicy);
         this.mapper = new ObjectMapper();
@@ -98,7 +111,7 @@ public final class DefaultGroundedKnowledgeExplanationService implements Grounde
         String question = requireQuestion(requestedQuestion);
         CourseKnowledgeSearchFilter filter = requestedFilter == null
             ? CourseKnowledgeSearchFilter.published() : requestedFilter;
-        List<KnowledgeSearchResult> results = knowledgeService.search(question, filter, MAX_CITATIONS);
+        List<KnowledgeSearchResult> results = retrievalService.retrieve(question, filter, MAX_CITATIONS).results();
         Map<String, CourseKnowledgeArticle> articles = knowledgeService.listArticles().stream()
             .collect(Collectors.toMap(CourseKnowledgeArticle::documentId, Function.identity()));
         List<GroundedKnowledgeAnswer.Citation> citations = new ArrayList<>();
