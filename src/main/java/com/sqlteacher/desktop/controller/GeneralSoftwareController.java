@@ -7,6 +7,8 @@ import com.sqlteacher.application.system.*;
 import com.sqlteacher.application.update.*;
 import com.sqlteacher.desktop.AppI18n;
 import com.sqlteacher.desktop.DesktopExecutors;
+import com.sqlteacher.desktop.NativeNotifier;
+import com.sqlteacher.infrastructure.support.ImageMetadataSanitizer;
 import javafx.application.Platform;
 import javafx.collections.FXCollections;
 import javafx.fxml.FXML;
@@ -16,6 +18,7 @@ import javafx.stage.DirectoryChooser;
 import javafx.stage.FileChooser;
 
 import java.io.File;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.Map;
@@ -49,6 +52,7 @@ public final class GeneralSoftwareController {
     @FXML private CheckBox highContrastCheck;
     @FXML private CheckBox supportLoggingCheck;
     @FXML private ComboBox<String> languageCombo;
+    @FXML private CheckBox nativeNotificationsCheck;
     @FXML private Label connectivityLabel;
     @FXML private Label storageLabel;
     @FXML private ListView<String> taskList;
@@ -65,12 +69,23 @@ public final class GeneralSoftwareController {
     @FXML private CheckBox updateStateCheck;
     @FXML private TextArea diagnosticPreviewArea;
     @FXML private Label reportStatusLabel;
+    @FXML private Label screenshotLabel;
+    @FXML private TextField reportIdField;
+    @FXML private TextField reportTokenField;
+    @FXML private TextField resetEmailField;
+    @FXML private ListView<String> sessionList;
+    @FXML private Label accountDataLabel;
+    private ScreenshotAttachment selectedScreenshot;
+    private java.util.List<com.sqlteacher.application.collaboration.ActiveSession> activeSessions = java.util.List.of();
     @FXML private PasswordField currentPasswordField;
     @FXML private PasswordField newPasswordField;
     @FXML private PasswordField confirmPasswordField;
     @FXML private Label accountStatusLabel;
     @FXML private ComboBox<String> helpTopicCombo;
     @FXML private TextArea helpTextArea;
+    @FXML private Label integrityLabel;
+    @FXML private Button repairGuideButton;
+    @FXML private CheckBox updateMirrorsCheck;
 
     public GeneralSoftwareController(UpdateService updates, ProblemReportService reports,
                                      DiagnosticBundleService diagnostics, GeneralSoftwareService system,
@@ -136,7 +151,7 @@ public final class GeneralSoftwareController {
         try {
             system.saveSettings(new GeneralSoftwareSettings(1, automaticUpdatesCheck.isSelected(), old.skippedVersion(), proxyModeCombo.getValue(),
                 proxyHostField.getText(), proxyPortSpinner.getValue(), reducedMotionCheck.isSelected(), highContrastCheck.isSelected(),
-                supportLoggingCheck.isSelected(), supportExpiry, old.updateMirrorsEnabled(), language));
+                supportLoggingCheck.isSelected(), supportExpiry, updateMirrorsCheck.isSelected(), language, nativeNotificationsCheck.isSelected()));
             AppI18n.applyLanguage(language);
             applyAccessibility();
             connectivityLabel.setText(AppI18n.get("GeneralSoftwareController.16"));
@@ -173,13 +188,14 @@ public final class GeneralSoftwareController {
         try {
             ProblemReportDraft draft = new ProblemReportDraft(reportDraftId, reportTypeCombo.getValue(), reportSeverityCombo.getValue(),
                 reportSummaryField.getText(), reportDescriptionArea.getText(), reportStepsArea.getText(), "", "", reportContactField.getText(), selection(), null);
+            final ProblemReportDraft finalDraft = selectedScreenshot != null ? draft.withScreenshot(selectedScreenshot) : draft;
             Map<String, Object> preview = diagnostics.preview(selection()); diagnosticPreviewArea.setText(pretty(preview));
             Alert confirmation = new Alert(Alert.AlertType.CONFIRMATION, AppI18n.get("GeneralSoftwareController.31"), ButtonType.CANCEL, ButtonType.OK);
             confirmation.setHeaderText(AppI18n.get("GeneralSoftwareController.32"));
             if (confirmation.showAndWait().orElse(ButtonType.CANCEL) != ButtonType.OK) return;
             String token = sessions.refresh().map(value -> value.accessToken()).orElse(null);
             reportStatusLabel.setText(AppI18n.get("GeneralSoftwareController.33"));
-            run(() -> reports.submit(draft, preview, token), receipt -> {
+            run(() -> reports.submit(finalDraft, preview, token), receipt -> {
                 reportStatusLabel.setText(AppI18n.get("GeneralSoftwareController.34") + receipt.reportId());
                 reportDraftId = UUID.randomUUID().toString();
                 system.notify(AppNotification.Category.SUPPORT, AppI18n.get("GeneralSoftwareController.35"), AppI18n.get("GeneralSoftwareController.36") + receipt.reportId(), "support"); refreshSystemViews();
@@ -197,10 +213,160 @@ public final class GeneralSoftwareController {
         }, error -> { java.util.Arrays.fill(current, '\0'); java.util.Arrays.fill(replacement, '\0'); accountStatusLabel.setText(AppI18n.get("GeneralSoftwareController.43") + safe(error)); });
     }
 
+    /** Picks a screenshot, strips EXIF/GPS metadata via re-encode, and previews it before submit. */
+    @FXML private void onChooseScreenshot() {
+        FileChooser chooser = new FileChooser();
+        chooser.setTitle(AppI18n.get("GeneralSoftwareController.screenshotPickTitle"));
+        chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("PNG / JPEG", "*.png", "*.jpg", "*.jpeg"));
+        File selected = chooser.showOpenDialog(root.getScene().getWindow());
+        if (selected == null) return;
+        try {
+            byte[] raw = Files.readAllBytes(selected.toPath());
+            String mime = selected.getName().toLowerCase(java.util.Locale.ROOT).endsWith(".png") ? "image/png" : "image/jpeg";
+            selectedScreenshot = ImageMetadataSanitizer.sanitize(selected.getName(), mime, raw);
+            screenshotLabel.setText(AppI18n.get("GeneralSoftwareController.screenshotSelected") + selected.getName()
+                + " · " + formatBytes(selectedScreenshot.data().length));
+        } catch (Exception error) {
+            selectedScreenshot = null;
+            screenshotLabel.setText(AppI18n.get("GeneralSoftwareController.screenshotRejected") + safe(error));
+        }
+    }
+
+    /** Withdraws an own report that has not been processed, using its query token. */
+    @FXML private void onWithdrawReport() {
+        if (reportIdField.getText().isBlank() || reportTokenField.getText().isBlank()) {
+            reportStatusLabel.setText(AppI18n.get("GeneralSoftwareController.reportCredentialsRequired")); return;
+        }
+        run(() -> { reports.withdraw(reportIdField.getText().strip(), reportTokenField.getText().strip()); return true; },
+            ignored -> reportStatusLabel.setText(AppI18n.get("GeneralSoftwareController.reportWithdrawn")),
+            error -> reportStatusLabel.setText(AppI18n.get("GeneralSoftwareController.37") + safe(error)));
+    }
+
+    /** Exports the caller's own report metadata to a local JSON file. */
+    @FXML private void onExportReport() {
+        if (reportIdField.getText().isBlank() || reportTokenField.getText().isBlank()) {
+            reportStatusLabel.setText(AppI18n.get("GeneralSoftwareController.reportCredentialsRequired")); return;
+        }
+        FileChooser chooser = new FileChooser();
+        chooser.setTitle(AppI18n.get("GeneralSoftwareController.reportExportTitle"));
+        chooser.setInitialFileName("report-" + reportIdField.getText().strip() + ".json");
+        File target = chooser.showSaveDialog(root.getScene().getWindow());
+        if (target == null) return;
+        run(() -> reports.export(reportIdField.getText().strip(), reportTokenField.getText().strip()), export -> {
+            try { Files.writeString(target.toPath(), new com.fasterxml.jackson.databind.ObjectMapper().findAndRegisterModules().writerWithDefaultPrettyPrinter().writeValueAsString(export), java.nio.charset.StandardCharsets.UTF_8);
+                  reportStatusLabel.setText(AppI18n.get("GeneralSoftwareController.reportExported") + target.getName());
+            } catch (Exception error) { reportStatusLabel.setText(AppI18n.get("GeneralSoftwareController.30") + safe(error)); }
+        }, error -> reportStatusLabel.setText(AppI18n.get("GeneralSoftwareController.30") + safe(error)));
+    }
+
+    /** Requests a password-reset email; always returns the same message to avoid account enumeration. */
+    @FXML private void onRequestPasswordReset() {
+        if (resetEmailField.getText().isBlank()) { accountStatusLabel.setText(AppI18n.get("GeneralSoftwareController.resetEmailRequired")); return; }
+        run(() -> { cloudApi.requestPasswordReset(resetEmailField.getText().strip()); return true; },
+            ignored -> accountStatusLabel.setText(AppI18n.get("GeneralSoftwareController.resetEmailSent")),
+            error -> accountStatusLabel.setText(AppI18n.get("GeneralSoftwareController.43") + safe(error)));
+    }
+
+    /** Refreshes the list of the user's active sessions. */
+    @FXML private void onRefreshSessions() {
+        if (sessions.current().isEmpty()) { accountStatusLabel.setText(AppI18n.get("GeneralSoftwareController.39")); return; }
+        String token = sessions.current().orElseThrow().accessToken();
+        run(() -> cloudApi.listSessions(token), list -> {
+            activeSessions = list;
+            sessionList.setItems(FXCollections.observableArrayList(list.stream()
+                .map(s -> s.deviceLabel() + " · " + s.createdAt()).toList()));
+            accountStatusLabel.setText(AppI18n.get("GeneralSoftwareController.sessionsLoaded") + list.size());
+        }, error -> accountStatusLabel.setText(AppI18n.get("GeneralSoftwareController.43") + safe(error)));
+    }
+
+    /** Revokes the selected session (never the current one). */
+    @FXML private void onRevokeSession() {
+        if (sessions.current().isEmpty()) { accountStatusLabel.setText(AppI18n.get("GeneralSoftwareController.39")); return; }
+        int index = sessionList.getSelectionModel().getSelectedIndex();
+        if (index < 0 || index >= activeSessions.size()) { accountStatusLabel.setText(AppI18n.get("GeneralSoftwareController.sessionSelectRequired")); return; }
+        String token = sessions.current().orElseThrow().accessToken();
+        String sessionId = activeSessions.get(index).id();
+        run(() -> { cloudApi.revokeSession(token, sessionId); return true; }, ignored -> {
+            accountStatusLabel.setText(AppI18n.get("GeneralSoftwareController.sessionRevoked"));
+            onRefreshSessions();
+        }, error -> accountStatusLabel.setText(AppI18n.get("GeneralSoftwareController.43") + safe(error)));
+    }
+
+    /** Exports the caller's own cloud data (synchronous READY task) to a local JSON file. */
+    @FXML private void onExportAccountData() {
+        if (sessions.current().isEmpty()) { accountStatusLabel.setText(AppI18n.get("GeneralSoftwareController.39")); return; }
+        String token = sessions.current().orElseThrow().accessToken();
+        run(() -> {
+            var task = cloudApi.requestAccountExport(token);
+            return cloudApi.getAccountExport(token, task.taskId());
+        }, payload -> {
+            FileChooser chooser = new FileChooser();
+            chooser.setTitle(AppI18n.get("GeneralSoftwareController.accountExportTitle"));
+            chooser.setInitialFileName("account-data.json");
+            File target = chooser.showSaveDialog(root.getScene().getWindow());
+            if (target == null) return;
+            try { Files.writeString(target.toPath(), payload, java.nio.charset.StandardCharsets.UTF_8);
+                  accountStatusLabel.setText(AppI18n.get("GeneralSoftwareController.accountDataExported") + target.getName());
+            } catch (Exception error) { accountStatusLabel.setText(AppI18n.get("GeneralSoftwareController.43") + safe(error)); }
+        }, error -> accountStatusLabel.setText(AppI18n.get("GeneralSoftwareController.43") + safe(error)));
+    }
+
+    /** Starts account deletion with a 7-day cancel window; shows the deadline. */
+    @FXML private void onRequestAccountDeletion() {
+        if (sessions.current().isEmpty()) { accountStatusLabel.setText(AppI18n.get("GeneralSoftwareController.39")); return; }
+        Alert confirm = new Alert(Alert.AlertType.CONFIRMATION, AppI18n.get("GeneralSoftwareController.deletionImpact"), ButtonType.CANCEL, ButtonType.OK);
+        confirm.setHeaderText(AppI18n.get("GeneralSoftwareController.deletionConfirmTitle"));
+        if (confirm.showAndWait().orElse(ButtonType.CANCEL) != ButtonType.OK) return;
+        String token = sessions.current().orElseThrow().accessToken();
+        run(() -> cloudApi.requestAccountDeletion(token), state -> accountStatusLabel.setText(
+                AppI18n.get("GeneralSoftwareController.deletionRequested") + (state.cancelBefore() == null ? "" : " · " + state.cancelBefore())),
+            error -> accountStatusLabel.setText(AppI18n.get("GeneralSoftwareController.43") + safe(error)));
+    }
+
+    /** Cancels a pending account deletion within its cancel window. */
+    @FXML private void onCancelAccountDeletion() {
+        if (sessions.current().isEmpty()) { accountStatusLabel.setText(AppI18n.get("GeneralSoftwareController.39")); return; }
+        String token = sessions.current().orElseThrow().accessToken();
+        run(() -> cloudApi.cancelAccountDeletion(token), state -> accountStatusLabel.setText(AppI18n.get("GeneralSoftwareController.deletionCancelled")),
+            error -> accountStatusLabel.setText(AppI18n.get("GeneralSoftwareController.43") + safe(error)));
+    }
+
+    /** Detects missing or tampered program files and guides the user to re-run the installer. */
+    @FXML private void onCheckIntegrity() {
+        java.nio.file.Path base = Path.of(System.getProperty("user.dir", "."));
+        // The packaged app-image layout has the jar under <base>/app; only check what we know.
+        java.nio.file.Path appDir = Files.isDirectory(base.resolve("app")) ? base.resolve("app") : base;
+        java.util.Map<String, String> expected = new java.util.LinkedHashMap<>();
+        try (var jars = Files.list(appDir)) {
+            jars.filter(p -> p.getFileName().toString().endsWith(".jar")).forEach(p -> expected.put("app/" + p.getFileName().toString(), InstallIntegrityChecker.sha256(p)));
+        } catch (Exception error) {
+            integrityLabel.setText(AppI18n.get("GeneralSoftwareController.integrityError") + safe(error));
+            return;
+        }
+        var issues = InstallIntegrityChecker.check(base, expected);
+        if (issues.isEmpty()) {
+            integrityLabel.setText(AppI18n.get("GeneralSoftwareController.integrityOk"));
+            repairGuideButton.setDisable(true);
+        } else {
+            integrityLabel.setText(AppI18n.get("GeneralSoftwareController.integrityBroken") + issues.size());
+            repairGuideButton.setDisable(false);
+        }
+    }
+
+    /** Explains how to repair: re-run the installer; never downloads arbitrary files. */
+    @FXML private void onRepairGuide() {
+        Alert alert = new Alert(Alert.AlertType.INFORMATION, AppI18n.get("GeneralSoftwareController.repairGuideBody"), ButtonType.OK);
+        alert.setHeaderText(AppI18n.get("GeneralSoftwareController.repairGuideTitle"));
+        alert.showAndWait();
+    }
+
     private void loadSettings() {
         GeneralSoftwareSettings value = system.settings(); automaticUpdatesCheck.setSelected(value.automaticUpdateChecks());
         proxyModeCombo.setValue(value.proxyMode()); proxyHostField.setText(value.proxyHost()); proxyPortSpinner.getValueFactory().setValue(value.proxyPort());
         reducedMotionCheck.setSelected(value.reducedMotion()); highContrastCheck.setSelected(value.highContrast()); supportLoggingCheck.setSelected(value.supportLogging());
+        nativeNotificationsCheck.setSelected(value.nativeNotificationsEnabled());
+        updateMirrorsCheck.setSelected(value.updateMirrorsEnabled());
+        NativeNotifier.instance().setEnabled(value.nativeNotificationsEnabled());
         languageCombo.setValue("en".equalsIgnoreCase(value.language()) ? "English" : AppI18n.get("GeneralSoftwareController.44"));
         applyAccessibility();
     }

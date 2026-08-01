@@ -3,7 +3,8 @@ package com.sqlteacher.application.system;
 public record GeneralSoftwareSettings(int formatVersion, boolean automaticUpdateChecks, String skippedVersion,
                                       ProxyMode proxyMode, String proxyHost, int proxyPort,
                                       boolean reducedMotion, boolean highContrast, boolean supportLogging,
-                                      long supportLoggingExpiresAt, boolean updateMirrorsEnabled, String language) {
+                                      long supportLoggingExpiresAt, boolean updateMirrorsEnabled, String language,
+                                      boolean nativeNotificationsEnabled) {
     public enum ProxyMode { DIRECT, SYSTEM, MANUAL }
     public GeneralSoftwareSettings {
         if (formatVersion != 1) throw new IllegalArgumentException("unsupported settings format");
@@ -18,6 +19,6 @@ public record GeneralSoftwareSettings(int formatVersion, boolean automaticUpdate
         if (!"zh".equals(language) && !"en".equals(language)) throw new IllegalArgumentException("language must be zh or en");
     }
     public static GeneralSoftwareSettings defaults() {
-        return new GeneralSoftwareSettings(1, true, "", ProxyMode.SYSTEM, "", 0, false, false, false, 0, false, "zh");
+        return new GeneralSoftwareSettings(1, true, "", ProxyMode.SYSTEM, "", 0, false, false, false, 0, false, "zh", false);
     }
 }

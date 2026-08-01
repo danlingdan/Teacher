@@ -38,7 +38,7 @@ public final class FileGeneralSoftwareService implements GeneralSoftwareService 
         if (value.supportLogging() && value.supportLoggingExpiresAt() < System.currentTimeMillis()) {
             value = new GeneralSoftwareSettings(1, value.automaticUpdateChecks(), value.skippedVersion(), value.proxyMode(),
                 value.proxyHost(), value.proxyPort(), value.reducedMotion(), value.highContrast(), false, 0,
-                value.updateMirrorsEnabled(), value.language());
+                value.updateMirrorsEnabled(), value.language(), value.nativeNotificationsEnabled());
             saveSettings(value);
         }
         return value;
