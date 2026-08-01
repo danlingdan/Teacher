@@ -1,4 +1,4 @@
-# v1.4 云端服务部署
+# v1.10 云端服务部署
 
 目标服务器：`8.130.47.235`（阿里云 ECS，Ubuntu 24.04）。云服务处理账号、角色、班级成员关系、任务与提交、课程题库版本、任务快照、教师反馈、通知和同步 API；桌面端数据库密码、本地数据库文件及用户自带网络 AI API Key 不上传至服务端。
 
@@ -20,6 +20,7 @@ apt-get update
 apt-get install -y openjdk-21-jre-headless nginx certbot python3-certbot-nginx sqlite3
 adduser --system --group --home /opt/sqlteacher sqlteacher
 install -d -o sqlteacher -g sqlteacher -m 0750 /opt/sqlteacher/data
+install -d -o root -g sqlteacher -m 0750 /opt/sqlteacher/shared
 install -d -o root -g sqlteacher -m 0750 /etc/sqlteacher
 ```
 
@@ -28,6 +29,8 @@ install -d -o root -g sqlteacher -m 0750 /etc/sqlteacher
 ```ini
 SQLTEACHER_CLOUD_PORT=18080
 SQLTEACHER_CLOUD_DB=/opt/sqlteacher/data/cloud.db
+SQLTEACHER_UPDATE_MANIFEST=/opt/sqlteacher/shared/update-manifest.json
+SQLTEACHER_FEEDBACK_HASH_SECRET=<至少 32 字符的独立随机值>
 SQLTEACHER_CLOUD_BOOTSTRAP_ADMIN_EMAIL=admin@your-school.example
 SQLTEACHER_CLOUD_BOOTSTRAP_ADMIN_PASSWORD=<随机强密码>
 ```
@@ -37,6 +40,7 @@ SQLTEACHER_CLOUD_BOOTSTRAP_ADMIN_PASSWORD=<随机强密码>
 ## 应用与 systemd
 
 将构建产物部署到 `/opt/sqlteacher/releases/<version>/app/`，其中包含应用 JAR 和 `lib/` 依赖目录；将 `packaging/cloud/run-cloud.sh` 放入对应版本的 `bin/`。
+正式发布后，将 Release 生成的 `update-manifest.json` 以 `root:sqlteacher`、`0640` 原子替换到 `/opt/sqlteacher/shared/update-manifest.json`。该文件仅包含签名信封，发布私钥不得上传服务器。
 
 ```bash
 ln -sfn /opt/sqlteacher/releases/<version> /opt/sqlteacher/current

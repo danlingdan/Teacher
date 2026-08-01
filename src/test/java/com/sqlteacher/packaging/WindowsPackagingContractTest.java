@@ -22,6 +22,8 @@ class WindowsPackagingContractTest {
         assertTrue(content.contains("https://api.sqlteacher.tech"));
         assertTrue(content.contains("-Dsqlteacher.cloud.base-url="));
         assertTrue(content.contains("CloudBaseUrl must be an absolute HTTPS URL"));
+        assertTrue(content.contains("sqlteacher-sbom.json"));
+        assertTrue(content.contains("update-manifest.json"));
         assertTrue(Files.size(Path.of("packaging", "sqlteacher.ico")) > 0);
         assertTrue(Files.size(Path.of("src", "main", "resources", "images", "sqlteacher-icon.png")) > 0);
     }
@@ -36,6 +38,10 @@ class WindowsPackagingContractTest {
         assertTrue(workflow.contains("package-stage1.ps1"));
         assertTrue(workflow.contains("gh release create"));
         assertTrue(workflow.contains("gh release upload"));
+        assertTrue(workflow.contains("SQLTEACHER_UPDATE_SIGNING_KEY"));
+        assertTrue(workflow.contains("UpdateManifestTool.java sign"));
+        assertTrue(workflow.contains("sqlteacher-sbom.json"));
+        assertTrue(workflow.contains("update-manifest.json"));
         assertTrue(workflow.contains("--draft=false"));
     }
 }

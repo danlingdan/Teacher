@@ -42,12 +42,21 @@ import com.sqlteacher.application.risk.SqlSafetyModeService;
 import com.sqlteacher.application.learning.LearningDiagnosisService;
 import com.sqlteacher.application.learning.InterventionService;
 import com.sqlteacher.application.learning.StudentLearningQueueService;
+import com.sqlteacher.application.support.DiagnosticBundleService;
+import com.sqlteacher.application.support.ProblemReportService;
+import com.sqlteacher.application.system.GeneralSoftwareService;
+import com.sqlteacher.application.update.UpdateCheckResult;
+import com.sqlteacher.application.update.UpdateService;
 import com.sqlteacher.desktop.controller.MainWindowController;
 import com.sqlteacher.desktop.controller.LoginGateController;
 import com.sqlteacher.desktop.appearance.UiPreferencesService;
 import com.sqlteacher.infrastructure.spring.SqlTeacherApplicationConfig;
 import com.sqlteacher.infrastructure.cloud.InMemoryLearningEventOwnerContext;
+import com.sqlteacher.infrastructure.system.ApplicationInstanceCoordinator;
+import com.sqlteacher.infrastructure.config.PropertiesAppConfigurationService;
+import com.sqlteacher.desktop.lifecycle.WindowStateService;
 import javafx.application.Application;
+import javafx.application.Platform;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
@@ -124,15 +133,31 @@ public final class SqlTeacherFxApp extends Application {
     private StudentLearningQueueService studentLearningQueueService;
     private InMemoryLearningEventOwnerContext learningEventOwnerContext;
     private UiPreferencesService uiPreferencesService;
+    private UpdateService updateService;
+    private ProblemReportService problemReportService;
+    private DiagnosticBundleService diagnosticBundleService;
+    private GeneralSoftwareService generalSoftwareService;
+    private ApplicationInstanceCoordinator instanceCoordinator;
+    private WindowStateService windowStateService;
+    private Stage primaryStage;
+    private boolean primaryInstance = true;
 
     /**
      * JavaFX 在非 Application Thread 上调用本方法，数据库初始化不会阻塞界面线程。
      */
     @Override
     public void init() {
-        AnnotationConfigApplicationContext context =
-            new AnnotationConfigApplicationContext(SqlTeacherApplicationConfig.class);
+        configuration = new PropertiesAppConfigurationService().current();
+        instanceCoordinator = new ApplicationInstanceCoordinator(configuration.dataDirectory());
+        if (!instanceCoordinator.acquire()) {
+            primaryInstance = false;
+            return;
+        }
+        AnnotationConfigApplicationContext context = null;
         try {
+            context = new AnnotationConfigApplicationContext(SqlTeacherApplicationConfig.class);
+            configuration = context.getBean(SqlTeacherConfiguration.class);
+            windowStateService = new WindowStateService(configuration.dataDirectory());
             context.getBean(DatabaseInitializationService.class).initialize();
             sqlExecutionService = context.getBean(SqlExecutionService.class);
             databaseMetadataService = context.getBean(DatabaseMetadataService.class);
@@ -160,7 +185,6 @@ public final class SqlTeacherFxApp extends Application {
             webSearchProvider = context.getBean(WebSearchProvider.class);
             safeWebContentFetcher = context.getBean(SafeWebContentFetcher.class);
             applicationBackupService = context.getBean(ApplicationBackupService.class);
-            configuration = context.getBean(SqlTeacherConfiguration.class);
             cloudApiClient = context.getBean(CloudApiClient.class);
             cloudSessionService = context.getBean(CloudSessionService.class);
             cloudLearningSyncService = context.getBean(CloudLearningSyncService.class);
@@ -176,15 +200,29 @@ public final class SqlTeacherFxApp extends Application {
             studentLearningQueueService = context.getBean(StudentLearningQueueService.class);
             learningEventOwnerContext = context.getBean(InMemoryLearningEventOwnerContext.class);
             uiPreferencesService = UiPreferencesService.shared();
+            updateService = context.getBean(UpdateService.class);
+            problemReportService = context.getBean(ProblemReportService.class);
+            diagnosticBundleService = context.getBean(DiagnosticBundleService.class);
+            generalSoftwareService = context.getBean(GeneralSoftwareService.class);
+            Thread.setDefaultUncaughtExceptionHandler((thread, error) -> {
+                diagnosticBundleService.recordFailure(error, thread.getName());
+                LOG.error("Unhandled application failure, thread={}, exceptionType={}", thread.getName(), error.getClass().getSimpleName());
+            });
             applicationContext = context;
         } catch (RuntimeException error) {
-            context.close();
+            if (context != null) context.close();
+            if (instanceCoordinator != null) { instanceCoordinator.close(); instanceCoordinator = null; }
             throw error;
         }
     }
 
     @Override
     public void start(Stage stage) throws IOException {
+        if (!primaryInstance) { Platform.exit(); return; }
+        primaryStage = stage;
+        instanceCoordinator.onActivate(() -> Platform.runLater(() -> {
+            stage.show(); stage.setIconified(false); stage.toFront(); stage.requestFocus();
+        }));
         if (sqlExecutionService == null || databaseMetadataService == null
             || nl2SqlSafetyService == null || aiModelSelectionService == null
             || sqlRiskAnalysisService == null || connectionManagementService == null
@@ -201,7 +239,8 @@ public final class SqlTeacherFxApp extends Application {
             || networkAiSettingsService == null || aiProviderProfileService == null
             || aiProviderProbeService == null || aiTaskHistoryService == null || learningEventOwnerContext == null
             || learningDiagnosisService == null || interventionService == null || studentLearningQueueService == null
-            || uiPreferencesService == null) {
+            || uiPreferencesService == null || updateService == null || problemReportService == null
+            || diagnosticBundleService == null || generalSoftwareService == null) {
             throw new IllegalStateException("Services are unavailable because application initialization did not complete");
         }
 
@@ -241,8 +280,9 @@ public final class SqlTeacherFxApp extends Application {
             stage.setMinWidth(880.0);
             stage.setMinHeight(600.0);
             stage.setScene(scene);
-            stage.centerOnScreen();
+            windowStateService.restore(stage, 1020.0, 650.0);
             stage.show();
+            diagnosticBundleService.markUiReady();
         } catch (IOException error) {
             throw new IllegalStateException("Failed to load " + LOGIN_GATE_FXML, error);
         }
@@ -297,6 +337,10 @@ public final class SqlTeacherFxApp extends Application {
                     interventionService,
                     studentLearningQueueService,
                     uiPreferencesService,
+                    updateService,
+                    problemReportService,
+                    diagnosticBundleService,
+                    generalSoftwareService,
                     accessProfile,
                     () -> switchToLogin(stage)
                 );
@@ -311,8 +355,15 @@ public final class SqlTeacherFxApp extends Application {
             stage.setMinWidth(840.0);
             stage.setMinHeight(600.0);
             stage.setScene(scene);
-            stage.centerOnScreen();
+            windowStateService.restore(stage, DEFAULT_WIDTH, DEFAULT_HEIGHT);
             stage.show();
+            diagnosticBundleService.markUiReady();
+            if (generalSoftwareService.settings().automaticUpdateChecks() && !diagnosticBundleService.previousRunCrashed()) {
+                DesktopExecutors.background().execute(() -> {
+                    UpdateCheckResult result = updateService.check(false);
+                    if (result.status() == UpdateCheckResult.Status.FAILED) LOG.info("Automatic update check did not complete");
+                });
+            }
         } catch (IOException error) {
             throw new IllegalStateException("Failed to load " + MAIN_WINDOW_FXML, error);
         }
@@ -345,6 +396,8 @@ public final class SqlTeacherFxApp extends Application {
 
     @Override
     public void stop() {
+        if (windowStateService != null && primaryStage != null) windowStateService.save(primaryStage);
+        if (diagnosticBundleService != null) diagnosticBundleService.markCleanShutdown();
         if (applicationContext != null) {
             applicationContext.close();
             applicationContext = null;
@@ -379,6 +432,14 @@ public final class SqlTeacherFxApp extends Application {
         interventionService = null;
         studentLearningQueueService = null;
         uiPreferencesService = null;
+        updateService = null;
+        problemReportService = null;
+        diagnosticBundleService = null;
+        generalSoftwareService = null;
+        if (instanceCoordinator != null) { instanceCoordinator.close(); instanceCoordinator = null; }
+        windowStateService = null;
+        primaryStage = null;
+        DesktopExecutors.shutdown();
     }
 
     public static void main(String[] args) {

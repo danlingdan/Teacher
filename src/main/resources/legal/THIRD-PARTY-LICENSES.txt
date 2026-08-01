@@ -1,0 +1,17 @@
+SQLTeacher third-party runtime components
+Generated and reviewed for SQLTeacher 1.10.0. The component SBOM is distributed separately.
+
+OpenJFX / JavaFX — GPL-2.0 with Classpath Exception
+AtlantaFX — Apache-2.0
+Xerial sqlite-jdbc — Apache-2.0
+MySQL Connector/J — GPL-2.0 with Universal FOSS Exception
+MariaDB Connector/J — LGPL-2.1-or-later
+Jackson Databind and JSR310 — Apache-2.0
+Spring Context — Apache-2.0
+SLF4J — MIT
+Logback — EPL-1.0 or LGPL-2.1-or-later
+Apache Lucene — Apache-2.0
+jsoup — MIT
+Apache PDFBox — Apache-2.0
+
+This notice is informational. The complete license texts supplied by each dependency remain authoritative.

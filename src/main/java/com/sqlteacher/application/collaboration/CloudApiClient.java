@@ -28,6 +28,10 @@ public interface CloudApiClient {
         logout(accessToken);
     }
 
+    default void changePassword(String accessToken, char[] currentPassword, char[] newPassword) {
+        throw new UnsupportedOperationException("Password changes are unavailable");
+    }
+
     List<ClassroomService.Classroom> listClasses(String accessToken);
 
     ClassroomService.Classroom createClass(String accessToken, String name);

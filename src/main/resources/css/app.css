@@ -1814,3 +1814,7 @@
     -fx-font-size: 12px;
 }
 .teaching-tabs { -fx-tab-min-width: 128; }
+.high-contrast .label { -fx-text-fill: white; }
+.high-contrast .page-subtitle, .high-contrast .status-info { -fx-text-fill: #dce7ff; }
+.high-contrast .button:disabled { -fx-opacity: 0.65; }
+.reduced-motion .progress-bar .bar { -fx-background-insets: 0; }

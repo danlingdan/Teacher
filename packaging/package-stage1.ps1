@@ -33,6 +33,9 @@ $appImageDir = Join-Path $outputPath $appName
 $archivePath = Join-Path $outputPath "$appName-$projectVersion-windows-x64.zip"
 $installerPath = Join-Path $outputPath "$appName-$projectVersion.exe"
 $checksumPath = Join-Path $outputPath "SHA256SUMS.txt"
+$sbomPath = Join-Path $outputPath "sqlteacher-sbom.json"
+$updatePayloadPath = Join-Path $outputPath "update-payload.json"
+$updateManifestPath = Join-Path $outputPath "update-manifest.json"
 $iconPath = Join-Path $projectRoot "packaging\sqlteacher.ico"
 $wixVersion = "3.14.1"
 $wixArchiveHash = "6AC824E1642D6F7277D0ED7EA09411A508F6116BA6FAE0AA5F2C7DAA2FF43D31"
@@ -63,6 +66,9 @@ Assert-ChildPath -Candidate $appImageDir -Parent $outputPath
 Assert-ChildPath -Candidate $archivePath -Parent $outputPath
 Assert-ChildPath -Candidate $installerPath -Parent $outputPath
 Assert-ChildPath -Candidate $checksumPath -Parent $outputPath
+Assert-ChildPath -Candidate $sbomPath -Parent $outputPath
+Assert-ChildPath -Candidate $updatePayloadPath -Parent $outputPath
+Assert-ChildPath -Candidate $updateManifestPath -Parent $outputPath
 
 if (-not (Get-Command jpackage -ErrorAction SilentlyContinue)) {
     throw "jpackage was not found. Use JDK 21 or newer with jpackage available on PATH."
@@ -116,6 +122,10 @@ function Ensure-WixToolset {
 
 Push-Location $projectRoot
 try {
+    if ([string]::IsNullOrWhiteSpace($env:GITHUB_SHA)) {
+        $env:GITHUB_SHA = (git rev-parse HEAD).Trim()
+        if ($LASTEXITCODE -ne 0 -or $env:GITHUB_SHA -notmatch '^[0-9a-f]{40}$') { throw "Unable to determine the build commit." }
+    }
     if (Test-Path -LiteralPath $inputDir) {
         Remove-Item -LiteralPath $inputDir -Recurse -Force
     }
@@ -155,6 +165,12 @@ try {
     if (Test-Path -LiteralPath $checksumPath) {
         Remove-Item -LiteralPath $checksumPath -Force
     }
+    if (Test-Path -LiteralPath $sbomPath) {
+        Remove-Item -LiteralPath $sbomPath -Force
+    }
+    foreach ($staleUpdateMetadata in @($updatePayloadPath, $updateManifestPath)) {
+        if (Test-Path -LiteralPath $staleUpdateMetadata) { Remove-Item -LiteralPath $staleUpdateMetadata -Force }
+    }
 
     jpackage `
         --type app-image `
@@ -181,6 +197,14 @@ try {
     if (-not (Test-Path -LiteralPath $launcher)) {
         throw "App-image launcher was not created: $launcher"
     }
+    $generatedSbom = Join-Path $targetRoot "sqlteacher-sbom.json"
+    if (-not (Test-Path -LiteralPath $generatedSbom)) { throw "CycloneDX SBOM was not generated: $generatedSbom" }
+    $legalDirectory = Join-Path $appImageDir "app\legal"
+    New-Item -ItemType Directory -Force -Path $legalDirectory | Out-Null
+    Copy-Item -LiteralPath $generatedSbom -Destination (Join-Path $legalDirectory "sqlteacher-sbom.json") -Force
+    Copy-Item -LiteralPath $generatedSbom -Destination $sbomPath -Force
+    Copy-Item -LiteralPath (Join-Path $projectRoot "src\main\resources\legal\THIRD-PARTY-LICENSES.txt") -Destination $legalDirectory -Force
+    Copy-Item -LiteralPath (Join-Path $projectRoot "src\main\resources\legal\PRIVACY.md") -Destination $legalDirectory -Force
     $launcherConfig = Join-Path $appImageDir "app\$appName.cfg"
     if (-not (Test-Path -LiteralPath $launcherConfig) -or
         -not (Select-String -LiteralPath $launcherConfig -SimpleMatch $cloudJavaOption -Quiet)) {
@@ -233,6 +257,7 @@ try {
         Write-Host "Created Windows installer: $installerPath"
     }
     Write-Host "Created checksums: $checksumPath"
+    Write-Host "Created SBOM: $sbomPath"
 } finally {
     Pop-Location
 }

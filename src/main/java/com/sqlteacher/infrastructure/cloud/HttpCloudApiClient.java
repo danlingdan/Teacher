@@ -107,6 +107,10 @@ public final class HttpCloudApiClient implements CloudApiClient {
 
     @Override public void logout(String accessToken){send("auth/logout","POST",Map.of(),accessToken);}
     @Override public void logout(String accessToken,String refreshToken){send("auth/logout","POST",refreshToken==null?Map.of():Map.of("refreshToken",refreshToken),accessToken);}
+    @Override public void changePassword(String accessToken, char[] currentPassword, char[] newPassword) {
+        try { send("auth/change-password", "POST", Map.of("currentPassword", new String(currentPassword), "newPassword", new String(newPassword)), accessToken); }
+        finally { java.util.Arrays.fill(currentPassword, '\0'); java.util.Arrays.fill(newPassword, '\0'); }
+    }
 
     @Override
     public List<ClassroomService.Classroom> listClasses(String accessToken) {

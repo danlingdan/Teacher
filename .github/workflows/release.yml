@@ -52,13 +52,36 @@ jobs:
           $installer = "target/installer/SQLTeacher-$env:PROJECT_VERSION.exe"
           $archive = "target/installer/SQLTeacher-$env:PROJECT_VERSION-windows-x64.zip"
           $checksums = "target/installer/SHA256SUMS.txt"
+          $sbom = "target/installer/sqlteacher-sbom.json"
           $config = "target/installer/SQLTeacher/app/SQLTeacher.cfg"
-          foreach ($file in @($installer, $archive, $checksums, $config)) {
+          foreach ($file in @($installer, $archive, $checksums, $sbom, $config)) {
               if (-not (Test-Path -LiteralPath $file)) { throw "Missing release artifact: $file" }
           }
           if (-not (Select-String -LiteralPath $config -SimpleMatch '-Dsqlteacher.cloud.base-url=https://api.sqlteacher.tech' -Quiet)) {
               throw 'Packaged launcher does not contain the production cloud API URL.'
           }
+
+      - name: Create signed stable update manifest
+        shell: pwsh
+        env:
+          SQLTEACHER_UPDATE_SIGNING_KEY: ${{ secrets.SQLTEACHER_UPDATE_SIGNING_KEY }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:SQLTEACHER_UPDATE_SIGNING_KEY)) { throw 'Release signing key is not configured.' }
+          $installer = Get-Item -LiteralPath "target/installer/SQLTeacher-$env:PROJECT_VERSION.exe"
+          $archive = Get-Item -LiteralPath "target/installer/SQLTeacher-$env:PROJECT_VERSION-windows-x64.zip"
+          $payload = [ordered]@{
+              schemaVersion = 1; product = 'SQLTeacher'; channel = 'stable'; version = $env:PROJECT_VERSION
+              platform = 'windows'; architecture = 'x64'; publishedAt = [DateTimeOffset]::UtcNow.ToString('o')
+              releaseNotesUrl = "https://github.com/${{ github.repository }}/releases/tag/$env:GITHUB_REF_NAME"
+              installerUrl = "https://github.com/${{ github.repository }}/releases/download/$env:GITHUB_REF_NAME/$($installer.Name)"
+              installerSize = $installer.Length; installerSha256 = (Get-FileHash -LiteralPath $installer.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+              portableUrl = "https://github.com/${{ github.repository }}/releases/download/$env:GITHUB_REF_NAME/$($archive.Name)"
+              portableSize = $archive.Length; portableSha256 = (Get-FileHash -LiteralPath $archive.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+              minimumSupportedVersion = '1.9.0'
+          }
+          $payload | ConvertTo-Json -Compress | Set-Content -LiteralPath target/installer/update-payload.json -Encoding utf8
+          java packaging/UpdateManifestTool.java sign target/installer/update-payload.json target/installer/update-manifest.json release-2026-01
+          if ($LASTEXITCODE -ne 0) { throw 'Unable to sign update manifest.' }
 
       - name: Preserve workflow artifacts
         uses: actions/upload-artifact@v7
@@ -68,6 +91,8 @@ jobs:
             target/installer/SQLTeacher-${{ env.PROJECT_VERSION }}.exe
             target/installer/SQLTeacher-${{ env.PROJECT_VERSION }}-windows-x64.zip
             target/installer/SHA256SUMS.txt
+            target/installer/sqlteacher-sbom.json
+            target/installer/update-manifest.json
           if-no-files-found: error
           retention-days: 30
 
@@ -91,7 +116,9 @@ jobs:
           gh release upload $env:GITHUB_REF_NAME `
               "target/installer/SQLTeacher-$env:PROJECT_VERSION.exe" `
               "target/installer/SQLTeacher-$env:PROJECT_VERSION-windows-x64.zip" `
-              "target/installer/SHA256SUMS.txt" --clobber
+              "target/installer/SHA256SUMS.txt" `
+              "target/installer/sqlteacher-sbom.json" `
+              "target/installer/update-manifest.json" --clobber
           if ($LASTEXITCODE -ne 0) { throw 'Unable to upload GitHub Release assets.' }
 
       - name: Publish complete release

@@ -6,7 +6,7 @@
 
     <groupId>org.hjh.JavaWork</groupId>
     <artifactId>Teacher</artifactId>
-    <version>1.9.0</version>
+    <version>1.10.0</version>
     <name>SQLTeacher</name>
 
     <properties>
@@ -19,10 +19,10 @@
         <sqlite-jdbc.version>3.50.3.0</sqlite-jdbc.version>
         <mysql-connector-j.version>9.4.0</mysql-connector-j.version>
         <mariadb-connector-j.version>3.5.9</mariadb-connector-j.version>
-        <jackson.version>2.19.2</jackson.version>
-        <spring.version>6.1.14</spring.version>
+        <jackson.version>2.22.1</jackson.version>
+        <spring.version>6.2.19</spring.version>
         <slf4j.version>2.0.16</slf4j.version>
-        <logback.version>1.5.8</logback.version>
+        <logback.version>1.5.38</logback.version>
         <lucene.version>10.4.0</lucene.version>
         <jsoup.version>1.22.2</jsoup.version>
         <pdfbox.version>3.0.7</pdfbox.version>
@@ -144,6 +144,10 @@
                         <manifestEntries>
                             <Implementation-Title>SQLTeacher</Implementation-Title>
                             <Implementation-Version>${project.version}</Implementation-Version>
+                            <Implementation-Vendor>${env.GITHUB_SHA}</Implementation-Vendor>
+                            <Specification-Version>${maven.build.timestamp}</Specification-Version>
+                            <Build-Commit>${env.GITHUB_SHA}</Build-Commit>
+                            <Build-Time>${maven.build.timestamp}</Build-Time>
                         </manifestEntries>
                     </archive>
                 </configuration>
@@ -162,6 +166,26 @@
                 <version>0.0.8</version>
                 <configuration>
                     <mainClass>com.sqlteacher.desktop.SqlTeacherFxApp</mainClass>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.cyclonedx</groupId>
+                <artifactId>cyclonedx-maven-plugin</artifactId>
+                <version>2.9.2</version>
+                <executions>
+                    <execution>
+                        <phase>package</phase>
+                        <goals><goal>makeAggregateBom</goal></goals>
+                    </execution>
+                </executions>
+                <configuration>
+                    <outputFormat>json</outputFormat>
+                    <outputDirectory>${project.build.directory}</outputDirectory>
+                    <outputName>sqlteacher-sbom</outputName>
+                    <includeBomSerialNumber>true</includeBomSerialNumber>
+                    <includeCompileScope>true</includeCompileScope>
+                    <includeRuntimeScope>true</includeRuntimeScope>
+                    <includeTestScope>false</includeTestScope>
                 </configuration>
             </plugin>
         </plugins>

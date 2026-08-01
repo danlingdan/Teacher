@@ -11,5 +11,6 @@
         <Tab fx:id="sqlSafetyTab" text="SQL 安全"/>
         <Tab fx:id="connectionsTab" text="数据库连接"/>
         <Tab fx:id="dataTab" text="版本、备份与恢复"/>
+        <Tab fx:id="generalSoftwareTab" text="更新与支持"/>
     </tabs>
 </TabPane>

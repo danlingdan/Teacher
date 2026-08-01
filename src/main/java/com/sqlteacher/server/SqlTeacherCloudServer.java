@@ -85,6 +85,7 @@ public final class SqlTeacherCloudServer {
     private final CloudStore store;
     private final V14CloudStore v14Store;
     private final V19CloudStore v19Store;
+    private final V110SupportStore v110SupportStore;
     private final CloudKnowledgeIndexService knowledgeIndex;
     private final HttpServer server;
 
@@ -92,6 +93,7 @@ public final class SqlTeacherCloudServer {
         this.store = new CloudStore(databasePath);
         this.v14Store = new V14CloudStore(databasePath);
         this.v19Store = new V19CloudStore(databasePath);
+        this.v110SupportStore = new V110SupportStore(databasePath);
         this.knowledgeIndex = CloudKnowledgeIndexService.fromEnvironment(v14Store);
         String bootstrapEmail = System.getenv("SQLTEACHER_CLOUD_BOOTSTRAP_ADMIN_EMAIL");
         String bootstrapPassword = System.getenv("SQLTEACHER_CLOUD_BOOTSTRAP_ADMIN_PASSWORD");
@@ -105,6 +107,9 @@ public final class SqlTeacherCloudServer {
         this.server.createContext("/api/v1/auth/login", this::login);
         this.server.createContext("/api/v1/auth/refresh", this::refresh);
         this.server.createContext("/api/v1/auth/logout", this::logout);
+        this.server.createContext("/api/v1/auth/change-password", this::changePassword);
+        this.server.createContext("/api/v1/app", this::appSupport);
+        this.server.createContext("/api/v1/support", this::support);
         this.server.createContext("/api/v1/classes", this::classes);
         this.server.createContext("/api/v1/sync/events", this::syncEvents);
         this.server.createContext("/api/v1/admin", this::admin);
@@ -130,6 +135,7 @@ public final class SqlTeacherCloudServer {
         if (!"GET".equals(exchange.getRequestMethod())) { methodNotAllowed(exchange); return; }
         CloudKnowledgeIndexService.Health index = knowledgeIndex.health();
         respond(exchange, 200, Map.of("status", "ok", "time", Instant.now().toString(),
+            "apiVersion", "1.10", "problemReports", "available", "signedUpdates", "available",
             "knowledgeIndex", index.status(), "knowledgeIndexBacklog", index.backlog()));
     }
 
@@ -600,6 +606,80 @@ public final class SqlTeacherCloudServer {
         return defaultValue;
     }
 
+    private void changePassword(HttpExchange exchange) throws IOException {
+        if (!"POST".equals(exchange.getRequestMethod())) { methodNotAllowed(exchange); return; }
+        Map<String, String> body = new LinkedHashMap<>();
+        try {
+            body = request(exchange);
+            store.changePassword(token(exchange), body.getOrDefault("currentPassword", "").toCharArray(),
+                body.getOrDefault("newPassword", "").toCharArray());
+            exchange.sendResponseHeaders(204, -1);
+        } catch (IllegalArgumentException error) { respond(exchange, 400, errorResponse("INVALID_PASSWORD", error.getMessage())); }
+        catch (SecurityException error) { respond(exchange, 401, errorResponse("REAUTHENTICATION_FAILED", "Current password is incorrect.")); }
+        catch (RuntimeException error) { logUnexpectedFailure("password change", error); respond(exchange, 500, errorResponse("SERVER_ERROR", "Password change failed.")); }
+        finally {
+            body.replaceAll((key, value) -> "");
+        }
+    }
+
+    private void appSupport(HttpExchange exchange) throws IOException {
+        String path = exchange.getRequestURI().getPath();
+        if ("/api/v1/app/capabilities".equals(path) && "GET".equals(exchange.getRequestMethod())) {
+            respond(exchange, 200, Map.of("apiVersion", "1.10", "minimumClientVersion", "1.9.0",
+                "serverTime", Instant.now().toString(), "maintenance", false,
+                "capabilities", List.of("SIGNED_UPDATES", "PROBLEM_REPORTS", "CHANGE_PASSWORD", "REPORT_STATUS")));
+            return;
+        }
+        if ("/api/v1/app/update-manifest".equals(path) && "GET".equals(exchange.getRequestMethod())) {
+            try {
+                String configured = System.getenv("SQLTEACHER_UPDATE_MANIFEST");
+                if (configured == null || configured.isBlank()) { respond(exchange, 404, errorResponse("UPDATE_MANIFEST_UNAVAILABLE", "No stable update is published.")); return; }
+                Path manifest = Path.of(configured).toAbsolutePath().normalize();
+                if (!Files.isRegularFile(manifest) || Files.size(manifest) > 128 * 1024) { respond(exchange, 503, errorResponse("UPDATE_MANIFEST_UNAVAILABLE", "Update metadata is unavailable.")); return; }
+                byte[] bytes = Files.readAllBytes(manifest);
+                var envelope = JSON.readTree(bytes);
+                if (!envelope.isObject() || !envelope.hasNonNull("keyId") || !envelope.hasNonNull("payload") || !envelope.hasNonNull("signature")) {
+                    throw new IOException("Update envelope is invalid");
+                }
+                respondJsonBytes(exchange, 200, bytes, "public, max-age=300");
+            } catch (RuntimeException | IOException error) {
+                log.warn("Stable update manifest could not be served: {}", error.getClass().getSimpleName());
+                respond(exchange, 503, errorResponse("UPDATE_MANIFEST_UNAVAILABLE", "Update metadata is unavailable."));
+            }
+            return;
+        }
+        respond(exchange, 404, errorResponse("NOT_FOUND", "Application service endpoint not found."));
+    }
+
+    private void support(HttpExchange exchange) throws IOException {
+        String path = exchange.getRequestURI().getPath();
+        try {
+            if ("/api/v1/support/reports".equals(path) && "POST".equals(exchange.getRequestMethod())) {
+                String userId = null;
+                String authorization = exchange.getRequestHeaders().getFirst("Authorization");
+                if (authorization != null && !authorization.isBlank()) userId = store.authenticate(token(exchange)).id();
+                Map<String, Object> body = objectRequest(exchange);
+                String remote = exchange.getRemoteAddress() == null ? "unknown" : exchange.getRemoteAddress().getAddress().getHostAddress();
+                respond(exchange, 201, v110SupportStore.submit(body, userId, remote));
+                return;
+            }
+            String[] segments = path.split("/");
+            if (segments.length == 6 && "GET".equals(exchange.getRequestMethod())) {
+                String queryToken = queryValue(exchange.getRequestURI().getRawQuery(), "queryToken");
+                respond(exchange, 200, v110SupportStore.status(segments[5], queryToken));
+                return;
+            }
+            respond(exchange, 404, errorResponse("NOT_FOUND", "Support endpoint not found."));
+        } catch (V110SupportStore.RateLimitException error) {
+            exchange.getResponseHeaders().set("Retry-After", "3600");
+            respond(exchange, 429, errorResponse("REPORT_RATE_LIMITED", "Too many reports. Try again later."));
+        } catch (PayloadTooLargeException error) {
+            respond(exchange, 413, errorResponse("REQUEST_TOO_LARGE", "Request body is too large."));
+        } catch (IllegalArgumentException error) { respond(exchange, 400, errorResponse("INVALID_REPORT", error.getMessage())); }
+        catch (SecurityException error) { respond(exchange, 401, errorResponse("REPORT_ACCESS_DENIED", "Report access denied.")); }
+        catch (RuntimeException error) { logUnexpectedFailure("problem report", error); respond(exchange, 500, errorResponse("SERVER_ERROR", "Problem report operation failed.")); }
+    }
+
     private void v19(HttpExchange exchange) throws IOException {
         try {
             AuthenticatedUser actor = store.authenticate(token(exchange));
@@ -775,7 +855,7 @@ public final class SqlTeacherCloudServer {
     }
 
     private static Map<String, String> request(HttpExchange exchange) throws IOException {
-        Map<String, Object> decoded = JSON.readValue(exchange.getRequestBody(), new TypeReference<>() { });
+        Map<String, Object> decoded = JSON.readValue(requestBytes(exchange), new TypeReference<>() { });
         Map<String, String> result = new LinkedHashMap<>();
         decoded.forEach((key, value) -> result.put(key, value == null ? "" : String.valueOf(value)));
         return result;
@@ -788,8 +868,16 @@ public final class SqlTeacherCloudServer {
     }
 
     private static Map<String, Object> objectRequest(HttpExchange exchange) throws IOException {
-        return JSON.readValue(exchange.getRequestBody(), new TypeReference<>() { });
+        return JSON.readValue(requestBytes(exchange), new TypeReference<>() { });
     }
+
+    private static byte[] requestBytes(HttpExchange exchange) throws IOException {
+        byte[] bytes = exchange.getRequestBody().readNBytes(64 * 1024 + 1);
+        if (bytes.length > 64 * 1024) throw new PayloadTooLargeException();
+        return bytes;
+    }
+
+    private static final class PayloadTooLargeException extends IllegalArgumentException { }
 
     private static String string(Map<String, Object> body, String name) {
         Object value = body.get(name);
@@ -833,6 +921,15 @@ public final class SqlTeacherCloudServer {
         byte[] bytes = JSON.writeValueAsBytes(body);
         exchange.getResponseHeaders().set("Content-Type", "application/json; charset=utf-8");
         exchange.getResponseHeaders().set("Cache-Control", "no-store");
+        exchange.sendResponseHeaders(status, bytes.length);
+        exchange.getResponseBody().write(bytes);
+        exchange.close();
+    }
+
+    private static void respondJsonBytes(HttpExchange exchange, int status, byte[] bytes, String cacheControl) throws IOException {
+        exchange.getResponseHeaders().set("Content-Type", "application/json; charset=utf-8");
+        exchange.getResponseHeaders().set("Cache-Control", cacheControl);
+        exchange.getResponseHeaders().set("X-Content-Type-Options", "nosniff");
         exchange.sendResponseHeaders(status, bytes.length);
         exchange.getResponseBody().write(bytes);
         exchange.close();
@@ -884,6 +981,33 @@ public final class SqlTeacherCloudServer {
         @Override public AuthenticatedUser authenticate(String accessToken) { return authenticateData(accessToken); }
         @Override public void logout(String accessToken) { logout(accessToken, null); }
         void logout(String accessToken,String refreshToken){try(Connection c=open()){c.setAutoCommit(false);revoke(c,"access_tokens",accessToken);if(refreshToken!=null&&!refreshToken.isBlank())revoke(c,"refresh_tokens",refreshToken);c.commit();}catch(SQLException e){throw database(e);}}
+
+        void changePassword(String accessToken, char[] currentPassword, char[] newPassword) {
+            AuthenticatedUser actor = authenticateData(accessToken);
+            validatePassword(currentPassword); validatePassword(newPassword);
+            try (Connection connection = open(); PreparedStatement read = connection.prepareStatement(
+                "select password_hash,password_salt from users where id=?")) {
+                read.setString(1, actor.id());
+                try (ResultSet row = read.executeQuery()) {
+                    if (!row.next() || !constantTimeEquals(row.getBytes(1), hash(currentPassword, row.getBytes(2)))) {
+                        throw new SecurityException("current password is incorrect");
+                    }
+                }
+                byte[] salt = bytes(SALT_BYTES); byte[] passwordHash = hash(newPassword, salt);
+                connection.setAutoCommit(false);
+                try (PreparedStatement update = connection.prepareStatement("update users set password_hash=?,password_salt=? where id=?")) {
+                    update.setBytes(1, passwordHash); update.setBytes(2, salt); update.setString(3, actor.id()); update.executeUpdate();
+                }
+                try (PreparedStatement revokeAccess = connection.prepareStatement("update access_tokens set revoked_at=? where user_id=? and revoked_at is null" );
+                     PreparedStatement revokeRefresh = connection.prepareStatement("update refresh_tokens set revoked_at=? where user_id=? and revoked_at is null")) {
+                    String now = Instant.now().toString(); revokeAccess.setString(1, now); revokeAccess.setString(2, actor.id()); revokeAccess.executeUpdate();
+                    revokeRefresh.setString(1, now); revokeRefresh.setString(2, actor.id()); revokeRefresh.executeUpdate();
+                }
+                audit(connection, actor.id(), "AUTH_PASSWORD_CHANGED", "USER", actor.id(), "SUCCESS", "SELF_SERVICE");
+                connection.commit();
+            } catch (SQLException error) { throw database(error); }
+            finally { java.util.Arrays.fill(currentPassword, '\0'); java.util.Arrays.fill(newPassword, '\0'); }
+        }
 
         SessionData registerData(String email, String displayName, char[] password) {
             String normalizedEmail = validateEmail(email);

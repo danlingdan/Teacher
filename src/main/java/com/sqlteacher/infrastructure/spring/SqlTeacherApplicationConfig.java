@@ -22,6 +22,10 @@ import com.sqlteacher.application.nl2sql.DefaultNl2SqlSafetyService;
 import com.sqlteacher.application.nl2sql.Nl2SqlService;
 import com.sqlteacher.application.nl2sql.Nl2SqlSafetyService;
 import com.sqlteacher.application.risk.SqlRiskAnalysisService;
+import com.sqlteacher.application.support.DiagnosticBundleService;
+import com.sqlteacher.application.support.ProblemReportService;
+import com.sqlteacher.application.system.GeneralSoftwareService;
+import com.sqlteacher.application.update.UpdateService;
 import com.sqlteacher.infrastructure.ai.*;
 import com.sqlteacher.infrastructure.config.PropertiesAppConfigurationService;
 import com.sqlteacher.infrastructure.cloud.HttpCloudApiClient;
@@ -33,6 +37,10 @@ import com.sqlteacher.infrastructure.database.DatabaseServiceConfig;
 import com.sqlteacher.infrastructure.database.SqliteAppDatabaseInitializer;
 import com.sqlteacher.infrastructure.database.JdbcConnectionFactory;
 import com.sqlteacher.infrastructure.database.JdbcGroundedTutorService;
+import com.sqlteacher.infrastructure.support.FileDiagnosticBundleService;
+import com.sqlteacher.infrastructure.support.HttpProblemReportService;
+import com.sqlteacher.infrastructure.system.FileGeneralSoftwareService;
+import com.sqlteacher.infrastructure.update.SecureUpdateService;
 import com.sqlteacher.application.event.LearningEventOwnerProvider;
 import com.sqlteacher.application.planning.GroundedTutorService;
 import org.springframework.context.annotation.Bean;
@@ -165,10 +173,33 @@ public class SqlTeacherApplicationConfig {
     }
 
     @Bean
-    public CloudApiClient cloudApiClient() {
-        return new HttpCloudApiClient(URI.create(System.getProperty(
+    public URI cloudBaseUri() {
+        return URI.create(System.getProperty(
             "sqlteacher.cloud.base-url", DEFAULT_CLOUD_BASE_URL
-        )));
+        ));
+    }
+
+    @Bean
+    public CloudApiClient cloudApiClient(URI cloudBaseUri) {
+        return new HttpCloudApiClient(cloudBaseUri);
+    }
+
+    @Bean public GeneralSoftwareService generalSoftwareService(SqlTeacherConfiguration configuration, URI cloudBaseUri) {
+        return new FileGeneralSoftwareService(configuration.dataDirectory(), cloudBaseUri);
+    }
+
+    @Bean public DiagnosticBundleService diagnosticBundleService(SqlTeacherConfiguration configuration) {
+        return new FileDiagnosticBundleService(configuration.dataDirectory());
+    }
+
+    @Bean public ProblemReportService problemReportService(SqlTeacherConfiguration configuration, URI cloudBaseUri,
+                                                            GeneralSoftwareService generalSoftwareService) {
+        return new HttpProblemReportService(cloudBaseUri, configuration.dataDirectory(), generalSoftwareService);
+    }
+
+    @Bean public UpdateService updateService(SqlTeacherConfiguration configuration, URI cloudBaseUri,
+                                              GeneralSoftwareService generalSoftwareService) {
+        return new SecureUpdateService(cloudBaseUri, configuration.dataDirectory(), generalSoftwareService);
     }
 
     @Bean

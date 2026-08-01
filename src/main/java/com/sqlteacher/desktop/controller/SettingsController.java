@@ -8,6 +8,10 @@ import com.sqlteacher.application.connection.DatabaseConnectionTestService;
 import com.sqlteacher.application.connection.DatabaseCredentialSession;
 import com.sqlteacher.application.error.ApplicationExceptionMapper;
 import com.sqlteacher.application.maintenance.ApplicationBackupService;
+import com.sqlteacher.application.support.DiagnosticBundleService;
+import com.sqlteacher.application.support.ProblemReportService;
+import com.sqlteacher.application.system.GeneralSoftwareService;
+import com.sqlteacher.application.update.UpdateService;
 import com.sqlteacher.desktop.appearance.UiPreferencesService;
 import com.sqlteacher.application.risk.SqlSafetyModeService;
 import javafx.fxml.FXML;
@@ -29,11 +33,19 @@ public final class SettingsController {
     private final DesktopAccessProfile accessProfile;
     private final UiPreferencesService uiPreferences;
     private final SqlSafetyModeService sqlSafetyModeService;
+    private final UpdateService updateService;
+    private final ProblemReportService problemReportService;
+    private final DiagnosticBundleService diagnosticBundleService;
+    private final GeneralSoftwareService generalSoftwareService;
+    private final com.sqlteacher.application.collaboration.CloudApiClient cloudApiClient;
+    private final com.sqlteacher.application.collaboration.CloudSessionService cloudSessionService;
+    private final Runnable switchIdentityAction;
 
     @FXML private Tab appearanceTab;
     @FXML private Tab sqlSafetyTab;
     @FXML private Tab connectionsTab;
     @FXML private Tab dataTab;
+    @FXML private Tab generalSoftwareTab;
 
     public SettingsController(
             ConnectionManagementService connectionManagementService,
@@ -44,7 +56,14 @@ public final class SettingsController {
             SqlTeacherConfiguration configuration,
             DesktopAccessProfile accessProfile,
             UiPreferencesService uiPreferences,
-            SqlSafetyModeService sqlSafetyModeService) {
+            SqlSafetyModeService sqlSafetyModeService,
+            UpdateService updateService,
+            ProblemReportService problemReportService,
+            DiagnosticBundleService diagnosticBundleService,
+            GeneralSoftwareService generalSoftwareService,
+            com.sqlteacher.application.collaboration.CloudApiClient cloudApiClient,
+            com.sqlteacher.application.collaboration.CloudSessionService cloudSessionService,
+            Runnable switchIdentityAction) {
         this.connectionManagementService = Objects.requireNonNull(connectionManagementService);
         this.databaseConnectionTestService = Objects.requireNonNull(databaseConnectionTestService);
         this.applicationExceptionMapper = Objects.requireNonNull(applicationExceptionMapper);
@@ -54,6 +73,13 @@ public final class SettingsController {
         this.accessProfile = Objects.requireNonNull(accessProfile);
         this.uiPreferences = Objects.requireNonNull(uiPreferences);
         this.sqlSafetyModeService = Objects.requireNonNull(sqlSafetyModeService);
+        this.updateService = Objects.requireNonNull(updateService);
+        this.problemReportService = Objects.requireNonNull(problemReportService);
+        this.diagnosticBundleService = Objects.requireNonNull(diagnosticBundleService);
+        this.generalSoftwareService = Objects.requireNonNull(generalSoftwareService);
+        this.cloudApiClient = Objects.requireNonNull(cloudApiClient);
+        this.cloudSessionService = Objects.requireNonNull(cloudSessionService);
+        this.switchIdentityAction = Objects.requireNonNull(switchIdentityAction);
     }
 
     @FXML
@@ -62,6 +88,7 @@ public final class SettingsController {
         sqlSafetyTab.setContent(load("/fxml/sql-safety-settings.fxml", SqlSafetySettingsController.class));
         connectionsTab.setContent(load("/fxml/connection-settings.fxml", ConnectionSettingsController.class));
         dataTab.setContent(load("/fxml/data-maintenance.fxml", DataMaintenanceController.class));
+        generalSoftwareTab.setContent(load("/fxml/general-software.fxml", GeneralSoftwareController.class));
     }
 
     private Node load(String resource, Class<?> controllerType) {
@@ -91,6 +118,10 @@ public final class SettingsController {
                     configuration,
                     accessProfile.canConfigure(DesktopSettingPermission.LOCAL_DATA_MAINTENANCE)
                 );
+            }
+            if (type == GeneralSoftwareController.class && controllerType == type) {
+                return new GeneralSoftwareController(updateService, problemReportService, diagnosticBundleService,
+                    generalSoftwareService, cloudApiClient, cloudSessionService, switchIdentityAction);
             }
             throw new IllegalStateException("Unexpected controller type: " + type);
         });
