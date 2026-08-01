@@ -1,5 +1,11 @@
 package com.sqlteacher.application.collaboration;
 
+import com.sqlteacher.application.planning.CourseObjective;
+import com.sqlteacher.application.planning.ObjectivePrerequisite;
+import com.sqlteacher.application.planning.ObjectiveResourceLink;
+import com.sqlteacher.application.planning.ObjectiveResourceType;
+import com.sqlteacher.application.planning.StudyPlanSnapshot;
+
 import java.util.List;
 import java.time.Instant;
 
@@ -248,5 +254,28 @@ public interface CloudApiClient {
     default List<CloudKnowledgeSearchHit> searchCloudKnowledge(String accessToken, String courseId, String query,
                                                                int limit) {
         throw new UnsupportedOperationException("Cloud knowledge search is unavailable");
+    }
+
+    default CourseObjective createCourseObjective(String accessToken, String courseId, String title,
+                                                   String description, String completionCriteria, int sortOrder) {
+        throw new UnsupportedOperationException("Course objectives are unavailable");
+    }
+
+    default List<CourseObjective> listCourseObjectives(String accessToken, String courseId) {
+        throw new UnsupportedOperationException("Course objectives are unavailable");
+    }
+
+    default ObjectivePrerequisite addObjectivePrerequisite(String accessToken, String courseId,
+                                                            String objectiveId, String prerequisiteObjectiveId) {
+        throw new UnsupportedOperationException("Objective prerequisites are unavailable");
+    }
+
+    default ObjectiveResourceLink addObjectiveResource(String accessToken, String courseId, String objectiveId,
+                                                        ObjectiveResourceType resourceType, String resourceId) {
+        throw new UnsupportedOperationException("Objective resources are unavailable");
+    }
+
+    default StudyPlanSnapshot getStudyPlan(String accessToken, String courseId) {
+        throw new UnsupportedOperationException("Study planning is unavailable");
     }
 }

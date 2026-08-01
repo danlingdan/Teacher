@@ -31,6 +31,7 @@ import com.sqlteacher.application.collaboration.RetentionPreview;
 import com.sqlteacher.application.collaboration.UserRole;
 import com.sqlteacher.application.collaboration.ContentStatus;
 import com.sqlteacher.application.collaboration.FeedbackStatus;
+import com.sqlteacher.application.planning.ObjectiveResourceType;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import org.slf4j.Logger;
@@ -82,12 +83,14 @@ public final class SqlTeacherCloudServer {
 
     private final CloudStore store;
     private final V14CloudStore v14Store;
+    private final V19CloudStore v19Store;
     private final CloudKnowledgeIndexService knowledgeIndex;
     private final HttpServer server;
 
     SqlTeacherCloudServer(Path databasePath, int port) throws IOException, SQLException {
         this.store = new CloudStore(databasePath);
         this.v14Store = new V14CloudStore(databasePath);
+        this.v19Store = new V19CloudStore(databasePath);
         this.knowledgeIndex = CloudKnowledgeIndexService.fromEnvironment(v14Store);
         String bootstrapEmail = System.getenv("SQLTEACHER_CLOUD_BOOTSTRAP_ADMIN_EMAIL");
         String bootstrapPassword = System.getenv("SQLTEACHER_CLOUD_BOOTSTRAP_ADMIN_PASSWORD");
@@ -105,6 +108,7 @@ public final class SqlTeacherCloudServer {
         this.server.createContext("/api/v1/sync/events", this::syncEvents);
         this.server.createContext("/api/v1/admin", this::admin);
         this.server.createContext("/api/v1/v14", this::v14);
+        this.server.createContext("/api/v1/v19", this::v19);
         this.server.setExecutor(Executors.newVirtualThreadPerTaskExecutor());
     }
 
@@ -593,6 +597,58 @@ public final class SqlTeacherCloudServer {
             if (parts.length == 2 && name.equals(parts[0])) return Long.parseLong(parts[1]);
         }
         return defaultValue;
+    }
+
+    private void v19(HttpExchange exchange) throws IOException {
+        try {
+            AuthenticatedUser actor = store.authenticate(token(exchange));
+            String[] segments = exchange.getRequestURI().getPath().split("/");
+            String method = exchange.getRequestMethod();
+            if (segments.length == 7 && "courses".equals(segments[4])) {
+                String courseId = segments[5];
+                if ("objectives".equals(segments[6])) {
+                    if ("GET".equals(method)) {
+                        respond(exchange, 200, Map.of("objectives", v19Store.listObjectives(actor, courseId)));
+                        return;
+                    }
+                    if ("POST".equals(method)) {
+                        Map<String, Object> body = objectRequest(exchange);
+                        respond(exchange, 201, v19Store.createObjective(actor, courseId, string(body, "title"),
+                            string(body, "description"), string(body, "completionCriteria"),
+                            integer(body, "sortOrder", 0)));
+                        return;
+                    }
+                }
+                if ("study-plan".equals(segments[6]) && "GET".equals(method)) {
+                    respond(exchange, 200, v19Store.studyPlan(actor, courseId));
+                    return;
+                }
+            }
+            if (segments.length == 9 && "courses".equals(segments[4])
+                && "objectives".equals(segments[6]) && "POST".equals(method)) {
+                Map<String, Object> body = objectRequest(exchange);
+                if ("prerequisites".equals(segments[8])) {
+                    respond(exchange, 201, v19Store.addPrerequisite(actor, segments[5], segments[7],
+                        string(body, "prerequisiteObjectiveId")));
+                    return;
+                }
+                if ("resources".equals(segments[8])) {
+                    ObjectiveResourceType type = ObjectiveResourceType.valueOf(
+                        string(body, "resourceType").toUpperCase(Locale.ROOT));
+                    respond(exchange, 201, v19Store.addResource(actor, segments[5], segments[7], type,
+                        string(body, "resourceId")));
+                    return;
+                }
+            }
+            respond(exchange, 404, errorResponse("NOT_FOUND", "API endpoint was not found."));
+        } catch (SecurityException error) {
+            respond(exchange, 403, errorResponse("FORBIDDEN", "You do not have access to this resource."));
+        } catch (IllegalArgumentException error) {
+            respond(exchange, 400, errorResponse("INVALID_REQUEST", error.getMessage()));
+        } catch (RuntimeException error) {
+            logUnexpectedFailure("v1.9 operation", error);
+            respond(exchange, 500, errorResponse("SERVER_ERROR", "v1.9 operation failed."));
+        }
     }
 
     private static void logUnexpectedFailure(String operation, RuntimeException error) {

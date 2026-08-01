@@ -37,6 +37,11 @@ import com.sqlteacher.application.collaboration.KnowledgeMastery;
 import com.sqlteacher.application.collaboration.KnowledgePoint;
 import com.sqlteacher.application.collaboration.SharedExerciseVersion;
 import com.sqlteacher.application.collaboration.SubmissionFeedback;
+import com.sqlteacher.application.planning.CourseObjective;
+import com.sqlteacher.application.planning.ObjectivePrerequisite;
+import com.sqlteacher.application.planning.ObjectiveResourceLink;
+import com.sqlteacher.application.planning.ObjectiveResourceType;
+import com.sqlteacher.application.planning.StudyPlanSnapshot;
 
 import java.io.IOException;
 import java.net.URI;
@@ -451,6 +456,41 @@ public final class HttpCloudApiClient implements CloudApiClient {
         Map<String, List<CloudKnowledgeSearchHit>> result = request(path, "GET", null, token,
             new TypeReference<>() { });
         return result.getOrDefault("results", List.of());
+    }
+
+    @Override
+    public CourseObjective createCourseObjective(String token, String courseId, String title, String description,
+                                                 String completionCriteria, int sortOrder) {
+        return request("v19/courses/" + courseId + "/objectives", "POST", Map.of(
+            "title", title, "description", description == null ? "" : description,
+            "completionCriteria", completionCriteria, "sortOrder", sortOrder), token, CourseObjective.class);
+    }
+
+    @Override
+    public List<CourseObjective> listCourseObjectives(String token, String courseId) {
+        Map<String, List<CourseObjective>> result = request("v19/courses/" + courseId + "/objectives",
+            "GET", null, token, new TypeReference<>() { });
+        return result.getOrDefault("objectives", List.of());
+    }
+
+    @Override
+    public ObjectivePrerequisite addObjectivePrerequisite(String token, String courseId, String objectiveId,
+                                                           String prerequisiteObjectiveId) {
+        return request("v19/courses/" + courseId + "/objectives/" + objectiveId + "/prerequisites", "POST",
+            Map.of("prerequisiteObjectiveId", prerequisiteObjectiveId), token, ObjectivePrerequisite.class);
+    }
+
+    @Override
+    public ObjectiveResourceLink addObjectiveResource(String token, String courseId, String objectiveId,
+                                                       ObjectiveResourceType resourceType, String resourceId) {
+        return request("v19/courses/" + courseId + "/objectives/" + objectiveId + "/resources", "POST",
+            Map.of("resourceType", resourceType.name(), "resourceId", resourceId), token,
+            ObjectiveResourceLink.class);
+    }
+
+    @Override
+    public StudyPlanSnapshot getStudyPlan(String token, String courseId) {
+        return request("v19/courses/" + courseId + "/study-plan", "GET", null, token, StudyPlanSnapshot.class);
     }
 
     private CloudAuthenticationService.Session authenticate(String path, Map<String, String> payload) {

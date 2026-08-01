@@ -6,6 +6,8 @@ import com.sqlteacher.application.collaboration.ContentStatus;
 import com.sqlteacher.application.collaboration.CloudApiRequestException;
 import com.sqlteacher.application.collaboration.NotificationType;
 import com.sqlteacher.application.collaboration.UserRole;
+import com.sqlteacher.application.planning.ObjectiveResourceType;
+import com.sqlteacher.application.planning.StudyPlanReasonCode;
 import com.sqlteacher.infrastructure.cloud.HttpCloudApiClient;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.AfterEach;
@@ -74,6 +76,23 @@ class V14CloudApiClientIntegrationTest {
             UUID.randomUUID().toString()));
         client.setSharedExerciseStatus(teacher, course.id(), version.exerciseId(), ContentStatus.ACTIVE);
 
+        var basicsObjective = client.createCourseObjective(teacher, course.id(), "掌握 WHERE 过滤", "理解条件筛选",
+            "能够完成 WHERE 练习", 1);
+        var advancedObjective = client.createCourseObjective(teacher, course.id(), "组合过滤条件", "组合多个条件",
+            "能够完成组合过滤练习", 2);
+        client.addObjectiveResource(teacher, course.id(), basicsObjective.id(),
+            ObjectiveResourceType.KNOWLEDGE_ARTICLE, publishedKnowledge.id());
+        client.addObjectiveResource(teacher, course.id(), advancedObjective.id(),
+            ObjectiveResourceType.EXERCISE_VERSION, version.id());
+        client.addObjectivePrerequisite(teacher, course.id(), advancedObjective.id(), basicsObjective.id());
+        assertThrows(CloudApiRequestException.class, () -> client.addObjectivePrerequisite(teacher, course.id(),
+            basicsObjective.id(), advancedObjective.id()));
+        assertEquals(2, client.listCourseObjectives(student, course.id()).size());
+        var studentPlan = client.getStudyPlan(student, course.id());
+        assertEquals("v1.9.0-r1", studentPlan.policyVersion());
+        assertEquals(basicsObjective.id(), studentPlan.actions().getFirst().objectiveId());
+        assertEquals(StudyPlanReasonCode.PREREQUISITE_GAP, studentPlan.actions().getFirst().reasonCode());
+
         var assignment = client.createAssignmentFromVersion(teacher, classroom.id(), version.id(),
             "客户端任务", "验证映射", Instant.now().plusSeconds(3_600), UUID.randomUUID().toString());
         assertEquals(version.id(), client.getAssignmentContentSnapshot(student, classroom.id(), assignment.id())
@@ -118,7 +137,7 @@ class V14CloudApiClientIntegrationTest {
         try (var connection = DriverManager.getConnection("jdbc:sqlite:" + database);
              var statement = connection.createStatement();
              var row = statement.executeQuery("select max(version) from cloud_schema_version")) {
-            assertEquals(4, row.getInt(1));
+            assertEquals(5, row.getInt(1));
         }
 
         try (var connection = DriverManager.getConnection("jdbc:sqlite:" + database);

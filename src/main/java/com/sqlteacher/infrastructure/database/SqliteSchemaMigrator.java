@@ -442,6 +442,114 @@ final class SqliteSchemaMigrator {
                     join course_knowledge_revisions r on r.article_id = a.id and r.revision = a.current_revision
                     """
             )
+        ),
+        new Migration(
+            10,
+            "Create v1.9 course objective and deterministic study plan state",
+            List.of(
+                """
+                    create table course_objective_cache (
+                        account_id text not null,
+                        course_id text not null,
+                        objective_id text not null,
+                        title text not null,
+                        description text not null,
+                        completion_criteria text not null,
+                        sort_order integer not null check (sort_order >= 0),
+                        status text not null check (status in ('ACTIVE','INACTIVE')),
+                        version integer not null check (version > 0),
+                        updated_at text not null,
+                        primary key(account_id, course_id, objective_id)
+                    )
+                    """,
+                "create index course_objective_cache_scope on course_objective_cache(account_id, course_id, status, sort_order)",
+                """
+                    create table objective_resource_cache (
+                        account_id text not null,
+                        course_id text not null,
+                        objective_id text not null,
+                        resource_type text not null check (resource_type in ('KNOWLEDGE_POINT','KNOWLEDGE_ARTICLE','EXERCISE_VERSION')),
+                        resource_id text not null,
+                        updated_at text not null,
+                        primary key(account_id, course_id, objective_id, resource_type, resource_id)
+                    )
+                    """,
+                """
+                    create table study_plan_snapshot (
+                        id text primary key,
+                        owner_id text not null,
+                        course_id text not null,
+                        policy_version text not null,
+                        fact_watermark text not null,
+                        generated_at text not null,
+                        expires_at text not null,
+                        status text not null check (status in ('ACTIVE','EXPIRED','INVALIDATED'))
+                    )
+                    """,
+                "create index study_plan_snapshot_owner on study_plan_snapshot(owner_id, course_id, status, generated_at desc)",
+                """
+                    create table study_plan_action (
+                        id text primary key,
+                        snapshot_id text not null references study_plan_snapshot(id) on delete cascade,
+                        objective_id text not null,
+                        action_type text not null check (action_type in ('REVIEW_KNOWLEDGE','PRACTICE_EXERCISE')),
+                        resource_type text not null check (resource_type in ('KNOWLEDGE_POINT','KNOWLEDGE_ARTICLE','EXERCISE_VERSION')),
+                        resource_id text not null,
+                        reason_code text not null,
+                        priority integer not null check (priority between 1 and 100),
+                        state text not null check (state in ('OPEN','STARTED','COMPLETED','DISMISSED','INVALIDATED')),
+                        updated_at text not null
+                    )
+                    """,
+                "create index study_plan_action_snapshot_order on study_plan_action(snapshot_id, state, priority desc, id)",
+                """
+                    create table study_plan_evidence (
+                        action_id text not null references study_plan_action(id) on delete cascade,
+                        evidence_type text not null,
+                        evidence_id text not null,
+                        evidence_version text not null,
+                        evidence_hash text not null,
+                        primary key(action_id, evidence_type, evidence_id)
+                    )
+                    """,
+                """
+                    create table study_plan_outbox (
+                        operation_id text primary key,
+                        owner_id text not null,
+                        action_id text not null,
+                        requested_state text not null check (requested_state in ('STARTED','COMPLETED','DISMISSED')),
+                        status text not null check (status in ('PENDING','DELIVERED','REJECTED')),
+                        attempt_count integer not null default 0 check (attempt_count >= 0),
+                        next_attempt_at text not null,
+                        last_error_code text,
+                        created_at text not null,
+                        updated_at text not null
+                    )
+                    """,
+                "create index study_plan_outbox_pending on study_plan_outbox(owner_id, status, next_attempt_at)",
+                """
+                    create table grounded_tutor_session (
+                        id text primary key,
+                        owner_id text not null,
+                        course_id text not null,
+                        objective_id text not null,
+                        retrieval_snapshot_hash text not null,
+                        provider text not null,
+                        model text not null,
+                        result_code text not null,
+                        degraded integer not null check (degraded in (0, 1)),
+                        created_at text not null
+                    )
+                    """,
+                """
+                    create table grounded_tutor_feedback (
+                        session_id text primary key references grounded_tutor_session(id) on delete cascade,
+                        feedback_type text not null check (feedback_type in ('HELPFUL','CITATION_ERROR','STILL_CONFUSED','INAPPROPRIATE_ANSWER')),
+                        note text not null default '',
+                        created_at text not null
+                    )
+                    """
+            )
         )
     );
 
