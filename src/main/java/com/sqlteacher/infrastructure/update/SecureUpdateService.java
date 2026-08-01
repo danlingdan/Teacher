@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sqlteacher.application.system.AppNotification;
 import com.sqlteacher.application.system.GeneralSoftwareService;
 import com.sqlteacher.application.system.GeneralSoftwareSettings;
+import com.sqlteacher.application.system.ResourcePolicy;
 import com.sqlteacher.application.update.*;
 import com.sqlteacher.infrastructure.system.AtomicJsonFile;
 import com.sqlteacher.infrastructure.system.ConfiguredHttpClient;
@@ -74,6 +75,15 @@ public final class SecureUpdateService implements UpdateService {
         UpdateState state = AtomicJsonFile.read(stateFile, UpdateState.class, new UpdateState(null, ""));
         if (!manual && state.lastCheckedAt() != null && state.lastCheckedAt().isAfter(Instant.now().minus(Duration.ofHours(24)))) {
             return new UpdateCheckResult(UpdateCheckResult.Status.UP_TO_DATE, current, null, "自动检查已在 24 小时内完成");
+        }
+        if (!manual) {
+            ResourcePolicy.Decision policy = ResourcePolicy.evaluate(
+                system.settings().meteredNetwork() ? ResourcePolicy.NetworkMode.METERED : ResourcePolicy.NetworkMode.UNMETERED,
+                ResourcePolicy.BatteryLevel.NORMAL, false);
+            if (policy.pauseUpdateDownload()) {
+                return new UpdateCheckResult(UpdateCheckResult.Status.UP_TO_DATE, current, null,
+                    system.settings().meteredNetwork() ? "按流量计费网络下已暂停自动更新检查，手动检查仍可用" : "低电量策略已暂停自动更新检查，手动检查仍可用");
+            }
         }
         String task = system.startTask("UPDATE_CHECK", "检查软件更新", false);
         try {
@@ -222,7 +232,7 @@ public final class SecureUpdateService implements UpdateService {
         GeneralSoftwareSettings old = system.settings();
             system.saveSettings(new GeneralSoftwareSettings(1, old.automaticUpdateChecks(), version.toString(), old.proxyMode(),
                 old.proxyHost(), old.proxyPort(), old.reducedMotion(), old.highContrast(), old.supportLogging(),
-                old.supportLoggingExpiresAt(), old.updateMirrorsEnabled(), old.language(), old.nativeNotificationsEnabled()));
+                old.supportLoggingExpiresAt(), old.updateMirrorsEnabled(), old.language(), old.nativeNotificationsEnabled(), old.meteredNetwork()));
     }
     @Override public void clearDownloadedUpdates() { system.clearRebuildableFiles(); }
 

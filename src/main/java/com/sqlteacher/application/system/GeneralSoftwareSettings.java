@@ -4,7 +4,7 @@ public record GeneralSoftwareSettings(int formatVersion, boolean automaticUpdate
                                       ProxyMode proxyMode, String proxyHost, int proxyPort,
                                       boolean reducedMotion, boolean highContrast, boolean supportLogging,
                                       long supportLoggingExpiresAt, boolean updateMirrorsEnabled, String language,
-                                      boolean nativeNotificationsEnabled) {
+                                      boolean nativeNotificationsEnabled, boolean meteredNetwork) {
     public enum ProxyMode { DIRECT, SYSTEM, MANUAL }
     public GeneralSoftwareSettings {
         if (formatVersion != 1) throw new IllegalArgumentException("unsupported settings format");
@@ -19,6 +19,6 @@ public record GeneralSoftwareSettings(int formatVersion, boolean automaticUpdate
         if (!"zh".equals(language) && !"en".equals(language)) throw new IllegalArgumentException("language must be zh or en");
     }
     public static GeneralSoftwareSettings defaults() {
-        return new GeneralSoftwareSettings(1, true, "", ProxyMode.SYSTEM, "", 0, false, false, false, 0, false, "zh", false);
+        return new GeneralSoftwareSettings(1, true, "", ProxyMode.SYSTEM, "", 0, false, false, false, 0, false, "zh", false, false);
     }
 }

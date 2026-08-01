@@ -14,6 +14,7 @@
             <VBox spacing="10" styleClass="settings-section">
                 <CheckBox fx:id="automaticUpdatesCheck" text="%gs.autoCheck"/>
                 <CheckBox fx:id="updateMirrorsCheck" text="%gs.updateMirrors"/>
+                <CheckBox fx:id="meteredNetworkCheck" text="%gs.meteredNetwork"/>
                 <HBox spacing="8"><Button text="%gs.check" onAction="#onCheckUpdates"/><Button fx:id="downloadButton" text="%gs.download" onAction="#onDownloadUpdate"/><Button fx:id="installButton" text="%gs.install" onAction="#onInstallUpdate" styleClass="sql-execute-button"/><Button text="%gs.skip" onAction="#onSkipUpdate"/></HBox>
                 <ProgressBar fx:id="updateProgress" prefWidth="480"/>
                 <Label fx:id="updateStatusLabel" text="%gs.notChecked" wrapText="true"/>

@@ -18,7 +18,7 @@ class FileGeneralSoftwareServiceTest {
     @Test void persistsWhitelistedSettingsAndQuarantinesCorruption() throws Exception {
         FileGeneralSoftwareService service = new FileGeneralSoftwareService(directory, URI.create("https://api.sqlteacher.tech"));
         GeneralSoftwareSettings changed = new GeneralSoftwareSettings(1, false, "1.10.1", GeneralSoftwareSettings.ProxyMode.MANUAL,
-            "127.0.0.1", 8080, true, true, false, 0, true, "en", true);
+            "127.0.0.1", 8080, true, true, false, 0, true, "en", true, true);
         service.saveSettings(changed);
         assertEquals(changed, service.settings());
         Path file = directory.resolve("support/general-settings.json");

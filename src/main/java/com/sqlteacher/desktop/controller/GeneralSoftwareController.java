@@ -53,6 +53,7 @@ public final class GeneralSoftwareController {
     @FXML private CheckBox supportLoggingCheck;
     @FXML private ComboBox<String> languageCombo;
     @FXML private CheckBox nativeNotificationsCheck;
+    @FXML private CheckBox meteredNetworkCheck;
     @FXML private Label connectivityLabel;
     @FXML private Label storageLabel;
     @FXML private ListView<String> taskList;
@@ -120,6 +121,10 @@ public final class GeneralSoftwareController {
             downloadButton.setDisable(result.status() != UpdateCheckResult.Status.AVAILABLE && result.status() != UpdateCheckResult.Status.UNSUPPORTED);
             updateDetailsLabel.setText(available == null ? "" : AppI18n.get("GeneralSoftwareController.4") + available.publishedAt() + AppI18n.get("GeneralSoftwareController.5") + available.releaseNotesUrl()
                 + AppI18n.get("GeneralSoftwareController.6") + formatBytes(available.installerSize()));
+            if (result.status() == UpdateCheckResult.Status.AVAILABLE && available != null) {
+                NativeNotifier.instance().notify(AppI18n.get("GeneralSoftwareController.updateAvailableTitle"),
+                    AppI18n.get("GeneralSoftwareController.updateAvailableBody") + available.version(), "updates", null);
+            }
             refreshSystemViews();
         }, error -> updateStatusLabel.setText(AppI18n.get("GeneralSoftwareController.7") + safe(error)));
     }
@@ -151,7 +156,7 @@ public final class GeneralSoftwareController {
         try {
             system.saveSettings(new GeneralSoftwareSettings(1, automaticUpdatesCheck.isSelected(), old.skippedVersion(), proxyModeCombo.getValue(),
                 proxyHostField.getText(), proxyPortSpinner.getValue(), reducedMotionCheck.isSelected(), highContrastCheck.isSelected(),
-                supportLoggingCheck.isSelected(), supportExpiry, updateMirrorsCheck.isSelected(), language, nativeNotificationsCheck.isSelected()));
+                supportLoggingCheck.isSelected(), supportExpiry, updateMirrorsCheck.isSelected(), language, nativeNotificationsCheck.isSelected(), meteredNetworkCheck.isSelected()));
             AppI18n.applyLanguage(language);
             applyAccessibility();
             connectivityLabel.setText(AppI18n.get("GeneralSoftwareController.16"));
@@ -365,6 +370,7 @@ public final class GeneralSoftwareController {
         proxyModeCombo.setValue(value.proxyMode()); proxyHostField.setText(value.proxyHost()); proxyPortSpinner.getValueFactory().setValue(value.proxyPort());
         reducedMotionCheck.setSelected(value.reducedMotion()); highContrastCheck.setSelected(value.highContrast()); supportLoggingCheck.setSelected(value.supportLogging());
         nativeNotificationsCheck.setSelected(value.nativeNotificationsEnabled());
+        meteredNetworkCheck.setSelected(value.meteredNetwork());
         updateMirrorsCheck.setSelected(value.updateMirrorsEnabled());
         NativeNotifier.instance().setEnabled(value.nativeNotificationsEnabled());
         languageCombo.setValue("en".equalsIgnoreCase(value.language()) ? "English" : AppI18n.get("GeneralSoftwareController.44"));
