@@ -491,17 +491,23 @@ final class SqliteSchemaMigrator {
                     create table study_plan_action (
                         id text primary key,
                         snapshot_id text not null references study_plan_snapshot(id) on delete cascade,
+                        action_key text not null,
                         objective_id text not null,
                         action_type text not null check (action_type in ('REVIEW_KNOWLEDGE','PRACTICE_EXERCISE')),
+                        title text not null,
+                        description text not null,
                         resource_type text not null check (resource_type in ('KNOWLEDGE_POINT','KNOWLEDGE_ARTICLE','EXERCISE_VERSION')),
                         resource_id text not null,
                         reason_code text not null,
+                        resolution_condition text not null,
                         priority integer not null check (priority between 1 and 100),
                         state text not null check (state in ('OPEN','STARTED','COMPLETED','DISMISSED','INVALIDATED')),
+                        sync_version integer not null default 0 check (sync_version >= 0),
                         updated_at text not null
                     )
                     """,
                 "create index study_plan_action_snapshot_order on study_plan_action(snapshot_id, state, priority desc, id)",
+                "create unique index study_plan_action_key on study_plan_action(snapshot_id, action_key)",
                 """
                     create table study_plan_evidence (
                         action_id text not null references study_plan_action(id) on delete cascade,

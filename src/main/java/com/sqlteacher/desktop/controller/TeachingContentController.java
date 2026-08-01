@@ -18,6 +18,10 @@ import com.sqlteacher.application.collaboration.SharedExerciseVersion;
 import com.sqlteacher.application.collaboration.SubmissionFeedback;
 import com.sqlteacher.application.collaboration.TeachingContentCache;
 import com.sqlteacher.application.collaboration.CachedCourseContent;
+import com.sqlteacher.application.planning.CourseObjective;
+import com.sqlteacher.application.planning.ObjectiveResourceType;
+import com.sqlteacher.application.planning.ObjectiveClassSummary;
+import com.sqlteacher.application.planning.ObjectiveInterventionDraft;
 import com.sqlteacher.desktop.DesktopExecutors;
 import com.sqlteacher.desktop.DeadlineValueConverter;
 import javafx.application.Platform;
@@ -72,6 +76,14 @@ public final class TeachingContentController {
     @FXML private TextField datasetVersionField;
     @FXML private TextField evaluationRuleField;
     @FXML private ListView<String> exerciseList;
+    @FXML private TextField objectiveTitleField;
+    @FXML private TextArea objectiveDescriptionField;
+    @FXML private TextField objectiveCriteriaField;
+    @FXML private TextField objectiveOrderField;
+    @FXML private ListView<String> objectiveList;
+    @FXML private ComboBox<SelectionOption> prerequisiteObjectiveCombo;
+    @FXML private ComboBox<ObjectiveResourceType> objectiveResourceTypeCombo;
+    @FXML private TextField objectiveResourceIdField;
     @FXML private ComboBox<SelectionOption> assignmentClassroomCombo;
     @FXML private ComboBox<SelectionOption> learningClassroomCombo;
     @FXML private TextField assignmentTitleField;
@@ -87,14 +99,19 @@ public final class TeachingContentController {
     @FXML private ListView<String> masteryList;
     @FXML private ListView<String> notificationList;
     @FXML private Button markReadButton;
+    @FXML private ListView<String> objectiveSummaryList;
+    @FXML private TextArea interventionActionField;
+    @FXML private Button confirmInterventionButton;
 
     private List<CourseCatalog> courses = List.of();
     private List<CourseSection> sections = List.of();
     private List<KnowledgePoint> knowledgePoints = List.of();
     private List<SharedExerciseVersion> exercises = List.of();
+    private List<CourseObjective> objectives = List.of();
     private List<SubmissionFeedback> feedback = List.of();
     private List<CloudNotification> notifications = List.of();
     private List<ClassroomService.Classroom> learningClassrooms = List.of();
+    private ObjectiveInterventionDraft pendingIntervention;
 
     public TeachingContentController(CloudApiClient api, CloudSessionService sessions,
                                      DesktopAccessProfile accessProfile, FeedbackDraftEnhancer feedbackDraftEnhancer,
@@ -128,9 +145,14 @@ public final class TeachingContentController {
         sectionList.setPlaceholder(new Label("暂无章节"));
         knowledgePointList.setPlaceholder(new Label("暂无知识点"));
         exerciseList.setPlaceholder(new Label("暂无已发布题目版本"));
+        objectiveList.setPlaceholder(new Label("暂无课程目标"));
+        objectiveResourceTypeCombo.getItems().setAll(ObjectiveResourceType.values());
+        objectiveResourceTypeCombo.setValue(ObjectiveResourceType.KNOWLEDGE_POINT);
         feedbackList.setPlaceholder(new Label("输入班级和任务后刷新反馈"));
         masteryList.setPlaceholder(new Label("输入班级后查看薄弱点建议"));
         notificationList.setPlaceholder(new Label("暂无站内通知"));
+        objectiveSummaryList.setPlaceholder(new Label("选择课程和班级后刷新目标分布"));
+        confirmInterventionButton.setDisable(true);
         courseList.getSelectionModel().selectedIndexProperty().addListener((ignored, oldValue, newValue) -> {
             int index = newValue.intValue();
             if (index >= 0 && index < courses.size()) {
@@ -176,6 +198,16 @@ public final class TeachingContentController {
         learningClassroomCombo.valueProperty().addListener((ignored, oldValue, selected) -> {
             applyLearningStudents(selected == null ? null : selected.id());
             if (selected != null && !running.get()) loadLearningAssignments(selected.id());
+        });
+        objectiveList.getSelectionModel().selectedIndexProperty().addListener((ignored, oldValue, newValue) -> {
+            int index = newValue.intValue();
+            if (index >= 0 && index < objectives.size()) {
+                CourseObjective selected = objectives.get(index);
+                objectiveTitleField.setText(selected.title());
+                objectiveDescriptionField.setText(selected.description());
+                objectiveCriteriaField.setText(selected.completionCriteria());
+                objectiveOrderField.setText(Integer.toString(selected.sortOrder()));
+            }
         });
         onRefresh();
     }
@@ -495,6 +527,142 @@ public final class TeachingContentController {
     }
 
     @FXML
+    private void onRefreshObjectiveSummary() {
+        requireTeacher();
+        CourseCatalog course = selectedCourse();
+        String classroomId = selectedId(learningClassroomCombo, "请选择班级");
+        if (course == null || classroomId == null) return;
+        run("正在按课程目标汇总班级事实…", () -> {
+            List<ObjectiveClassSummary> loaded = api.getObjectiveClassSummary(token(), course.id(), classroomId);
+            Platform.runLater(() -> {
+                objectiveSummaryList.getItems().setAll(loaded.stream().map(item -> item.objectiveTitle()
+                    + " · 未知 " + item.unknown() + " · 需支持 " + item.needsSupport() + " · 发展中 "
+                    + item.developing() + " · 已掌握 " + item.mastered()).toList());
+                showStatus("目标分布只描述现有证据，不生成教师评分", false);
+            });
+        });
+    }
+
+    @FXML
+    private void onPrepareObjectiveIntervention() {
+        requireTeacher();
+        CourseCatalog course = selectedCourse();
+        CourseObjective objective = selectedObjective();
+        String classroomId = selectedId(learningClassroomCombo, "请选择班级");
+        String action = required(interventionActionField.getText(), "请输入复习或反馈动作草稿");
+        if (course == null || objective == null || classroomId == null || action == null) return;
+        run("正在生成干预影响预览…", () -> {
+            ObjectiveInterventionDraft draft = api.createObjectiveInterventionDraft(token(), course.id(), classroomId,
+                objective.id(), "OBJECTIVE_EVIDENCE_GAP", action);
+            Platform.runLater(() -> {
+                pendingIntervention = draft;
+                confirmInterventionButton.setDisable(false);
+                showStatus("草稿已生成，影响 " + draft.impactCount() + " 名学生；请核对后明确确认", false);
+            });
+        });
+    }
+
+    @FXML
+    private void onConfirmObjectiveIntervention() {
+        requireTeacher();
+        CourseCatalog course = selectedCourse();
+        ObjectiveInterventionDraft draft = pendingIntervention;
+        if (course == null || draft == null) {
+            showStatus("请先生成干预影响预览", true); return;
+        }
+        run("正在复核目标版本并确认干预…", () -> {
+            api.confirmObjectiveInterventionDraft(token(), course.id(), draft.id(), draft.confirmationToken());
+            Platform.runLater(() -> {
+                pendingIntervention = null;
+                confirmInterventionButton.setDisable(true);
+                showStatus("干预已人工确认并写入审计；后续仅展示事实变化", false);
+            });
+        });
+    }
+
+    @FXML
+    private void onCreateObjective() {
+        requireTeacher();
+        CourseCatalog course = selectedCourse();
+        String title = required(objectiveTitleField.getText(), "请输入课程目标标题");
+        String criteria = required(objectiveCriteriaField.getText(), "请输入可验证完成条件");
+        if (course == null || title == null || criteria == null) return;
+        run("正在创建课程目标…", () -> {
+            api.createCourseObjective(token(), course.id(), title, objectiveDescriptionField.getText(), criteria,
+                nonNegativeOrder(objectiveOrderField.getText(), objectives.size()));
+            loadCourseDetails(course.id(), "课程目标已创建");
+        });
+    }
+
+    @FXML
+    private void onSaveObjective() {
+        requireTeacher();
+        CourseCatalog course = selectedCourse();
+        CourseObjective objective = selectedObjective();
+        String title = required(objectiveTitleField.getText(), "请输入课程目标标题");
+        String criteria = required(objectiveCriteriaField.getText(), "请输入可验证完成条件");
+        if (course == null || objective == null || title == null || criteria == null) return;
+        run("正在保存课程目标…", () -> {
+            api.updateCourseObjective(token(), course.id(), objective.id(), title, objectiveDescriptionField.getText(),
+                criteria, nonNegativeOrder(objectiveOrderField.getText(), objective.sortOrder()), objective.status(),
+                objective.version());
+            loadCourseDetails(course.id(), "课程目标已保存");
+        });
+    }
+
+    @FXML
+    private void onToggleObjectiveStatus() {
+        requireTeacher();
+        CourseCatalog course = selectedCourse();
+        CourseObjective objective = selectedObjective();
+        if (course == null || objective == null) return;
+        ContentStatus next = objective.status() == ContentStatus.ACTIVE ? ContentStatus.INACTIVE : ContentStatus.ACTIVE;
+        run("正在更新课程目标状态…", () -> {
+            api.updateCourseObjective(token(), course.id(), objective.id(), objective.title(), objective.description(),
+                objective.completionCriteria(), objective.sortOrder(), next, objective.version());
+            loadCourseDetails(course.id(), next == ContentStatus.ACTIVE ? "课程目标已恢复" : "课程目标已停用");
+        });
+    }
+
+    @FXML
+    private void onAddObjectivePrerequisite() {
+        requireTeacher();
+        CourseCatalog course = selectedCourse();
+        CourseObjective objective = selectedObjective();
+        SelectionOption prerequisite = prerequisiteObjectiveCombo.getValue();
+        if (course == null || objective == null || prerequisite == null) {
+            showStatus("请选择当前目标和先修目标", true); return;
+        }
+        run("正在校验先修关系…", () -> {
+            api.addObjectivePrerequisite(token(), course.id(), objective.id(), prerequisite.id());
+            Platform.runLater(() -> showStatus("先修关系已添加；环路与跨课程关系会由服务端拒绝", false));
+        });
+    }
+
+    @FXML
+    private void onBindObjectiveResource() {
+        requireTeacher();
+        CourseCatalog course = selectedCourse();
+        CourseObjective objective = selectedObjective();
+        ObjectiveResourceType type = objectiveResourceTypeCombo.getValue();
+        String resourceId = blankToNull(objectiveResourceIdField.getText());
+        if (resourceId == null && type == ObjectiveResourceType.KNOWLEDGE_POINT && selectedKnowledgePoint() != null) {
+            resourceId = selectedKnowledgePoint().id();
+        }
+        if (resourceId == null && type == ObjectiveResourceType.EXERCISE_VERSION && selectedExercise() != null) {
+            resourceId = selectedExercise().id();
+        }
+        if (course == null || objective == null || type == null || resourceId == null) {
+            showStatus("请选择目标并提供同课程资源 ID", true); return;
+        }
+        String selectedResourceId = resourceId;
+        run("正在关联课程资源…", () -> {
+            api.addObjectiveResource(token(), course.id(), objective.id(), type, selectedResourceId);
+            Platform.runLater(() -> showStatus("资源已关联到课程目标", false));
+        });
+    }
+
+    @FXML
     private void onSaveFeedback() {
         requireTeacher();
         String classroomId = selectedId(learningClassroomCombo, "请选择班级");
@@ -607,11 +775,13 @@ public final class TeachingContentController {
         List<CourseSection> loadedSections;
         List<KnowledgePoint> loadedPoints;
         List<SharedExerciseVersion> loadedExercises;
+        List<CourseObjective> loadedObjectives;
         boolean offline = false;
         try {
             loadedSections = api.listCourseSections(token(), courseId);
             loadedPoints = api.listKnowledgePoints(token(), courseId);
             loadedExercises = api.listSharedExercises(token(), courseId, null);
+            loadedObjectives = api.listCourseObjectives(token(), courseId);
             cache.saveCourseContent(accountId(), courseId,
                 new CachedCourseContent(loadedSections, loadedPoints, loadedExercises));
         } catch (RuntimeException error) {
@@ -619,20 +789,27 @@ public final class TeachingContentController {
             loadedSections = cached.sections();
             loadedPoints = cached.knowledgePoints();
             loadedExercises = cached.exercises();
+            loadedObjectives = List.of();
             offline = true;
         }
         boolean cached = offline;
         List<CourseSection> uiSections = List.copyOf(loadedSections);
         List<KnowledgePoint> uiPoints = List.copyOf(loadedPoints);
         List<SharedExerciseVersion> uiExercises = List.copyOf(loadedExercises);
+        List<CourseObjective> uiObjectives = List.copyOf(loadedObjectives);
         Platform.runLater(() -> {
             sections = uiSections;
             knowledgePoints = uiPoints;
             exercises = uiExercises;
+            objectives = uiObjectives;
             sectionList.getItems().setAll(uiSections.stream().map(item -> item.sortOrder() + " · " + item.name()).toList());
             knowledgePointList.getItems().setAll(uiPoints.stream().map(item -> item.sortOrder() + " · " + item.name()).toList());
             exerciseList.getItems().setAll(uiExercises.stream()
                 .map(item -> item.title() + " · v" + item.version() + " · " + item.contentHash().substring(0, 8)).toList());
+            objectiveList.getItems().setAll(uiObjectives.stream().map(item -> item.sortOrder() + " · "
+                + item.title() + " · " + item.status() + " · v" + item.version()).toList());
+            prerequisiteObjectiveCombo.getItems().setAll(uiObjectives.stream()
+                .map(item -> new SelectionOption(item.id(), item.title())).toList());
             showStatus(cached ? "云端不可用，已加载该课程的本地缓存" : message, false);
         });
     }
@@ -835,6 +1012,15 @@ public final class TeachingContentController {
     @FunctionalInterface
     private interface CheckedRunnable {
         void run() throws Exception;
+    }
+
+    private CourseObjective selectedObjective() {
+        int index = objectiveList.getSelectionModel().getSelectedIndex();
+        if (index < 0 || index >= objectives.size()) {
+            showStatus("请先选择课程目标", true);
+            return null;
+        }
+        return objectives.get(index);
     }
 
     private record SelectionOption(String id, String label) {

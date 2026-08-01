@@ -82,6 +82,7 @@ class DefaultStudentLearningQueueServiceTest {
             return List.of(new CloudNotification("notice-1", NotificationType.FEEDBACK_PUBLISHED,
                 "ASSIGNMENT", "assignment-1", "查看反馈", "教师已发布反馈", null, NOW.minusSeconds(20)));
         }
+        @Override public List<CourseCatalog> listCourses(String token) { return List.of(); }
         @Override public CloudNotification markNotificationRead(String token,String id){throw unsupported();}
         @Override public CloudAuthenticationService.Session login(String e,char[] p){throw unsupported();}
         @Override public CloudAuthenticationService.Session register(String e,String n,char[] p){throw unsupported();}

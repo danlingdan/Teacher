@@ -6,4 +6,7 @@ public interface StudentLearningQueueService {
     void dismiss(StudentLearningQueueItem item);
 
     void complete(StudentLearningQueueItem item);
+
+    default void start(StudentLearningQueueItem item) {
+    }
 }

@@ -42,6 +42,11 @@ import com.sqlteacher.application.planning.ObjectivePrerequisite;
 import com.sqlteacher.application.planning.ObjectiveResourceLink;
 import com.sqlteacher.application.planning.ObjectiveResourceType;
 import com.sqlteacher.application.planning.StudyPlanSnapshot;
+import com.sqlteacher.application.planning.StudyPlanActionState;
+import com.sqlteacher.application.planning.StudyPlanActionStateRecord;
+import com.sqlteacher.application.planning.ObjectiveClassSummary;
+import com.sqlteacher.application.planning.ObjectiveInterventionDraft;
+import com.sqlteacher.application.planning.PlanningHealthSummary;
 
 import java.io.IOException;
 import java.net.URI;
@@ -474,6 +479,16 @@ public final class HttpCloudApiClient implements CloudApiClient {
     }
 
     @Override
+    public CourseObjective updateCourseObjective(String token, String courseId, String objectiveId, String title,
+                                                 String description, String completionCriteria, int sortOrder,
+                                                 ContentStatus status, long expectedVersion) {
+        return request("v19/courses/" + courseId + "/objectives/" + objectiveId, "POST", Map.of(
+            "title", title, "description", description == null ? "" : description,
+            "completionCriteria", completionCriteria, "sortOrder", sortOrder,
+            "status", status.name(), "expectedVersion", expectedVersion), token, CourseObjective.class);
+    }
+
+    @Override
     public ObjectivePrerequisite addObjectivePrerequisite(String token, String courseId, String objectiveId,
                                                            String prerequisiteObjectiveId) {
         return request("v19/courses/" + courseId + "/objectives/" + objectiveId + "/prerequisites", "POST",
@@ -491,6 +506,44 @@ public final class HttpCloudApiClient implements CloudApiClient {
     @Override
     public StudyPlanSnapshot getStudyPlan(String token, String courseId) {
         return request("v19/courses/" + courseId + "/study-plan", "GET", null, token, StudyPlanSnapshot.class);
+    }
+
+    @Override
+    public StudyPlanActionStateRecord updateStudyPlanAction(String token, String courseId, String actionId,
+                                                            StudyPlanActionState state, long expectedVersion,
+                                                            String operationId) {
+        return request("v19/courses/" + courseId + "/study-plan/actions/" + actionId + "/state", "POST",
+            Map.of("state", state.name(), "expectedVersion", expectedVersion, "operationId", operationId), token,
+            StudyPlanActionStateRecord.class);
+    }
+
+    @Override
+    public List<ObjectiveClassSummary> getObjectiveClassSummary(String token, String courseId, String classroomId) {
+        Map<String, List<ObjectiveClassSummary>> result = request("v19/courses/" + courseId
+            + "/classrooms/" + classroomId + "/objective-summary", "GET", null, token, new TypeReference<>() { });
+        return result.getOrDefault("objectives", List.of());
+    }
+
+    @Override
+    public ObjectiveInterventionDraft createObjectiveInterventionDraft(String token, String courseId,
+                                                                        String classroomId, String objectiveId,
+                                                                        String reasonCode, String action) {
+        return request("v19/courses/" + courseId + "/interventions", "POST", Map.of(
+            "classroomId", classroomId, "objectiveId", objectiveId, "reasonCode", reasonCode, "action", action),
+            token, ObjectiveInterventionDraft.class);
+    }
+
+    @Override
+    public ObjectiveInterventionDraft confirmObjectiveInterventionDraft(String token, String courseId,
+                                                                         String draftId,
+                                                                         String confirmationToken) {
+        return request("v19/courses/" + courseId + "/interventions/" + draftId + "/confirm", "POST",
+            Map.of("confirmationToken", confirmationToken), token, ObjectiveInterventionDraft.class);
+    }
+
+    @Override
+    public PlanningHealthSummary getPlanningHealth(String token) {
+        return request("v19/operations-health", "GET", null, token, PlanningHealthSummary.class);
     }
 
     private CloudAuthenticationService.Session authenticate(String path, Map<String, String> payload) {

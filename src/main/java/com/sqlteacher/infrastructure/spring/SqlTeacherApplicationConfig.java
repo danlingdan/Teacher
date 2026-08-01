@@ -31,6 +31,10 @@ import com.sqlteacher.infrastructure.security.WindowsDpapiSecretStore;
 import com.sqlteacher.infrastructure.cloud.DefaultCloudLearningSyncService;
 import com.sqlteacher.infrastructure.database.DatabaseServiceConfig;
 import com.sqlteacher.infrastructure.database.SqliteAppDatabaseInitializer;
+import com.sqlteacher.infrastructure.database.JdbcConnectionFactory;
+import com.sqlteacher.infrastructure.database.JdbcGroundedTutorService;
+import com.sqlteacher.application.event.LearningEventOwnerProvider;
+import com.sqlteacher.application.planning.GroundedTutorService;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
@@ -104,6 +108,13 @@ public class SqlTeacherApplicationConfig {
         AiContextPolicy contextPolicy
     ) {
         return new DefaultGroundedKnowledgeExplanationService(knowledgeService, retrievalService, taskService, contextPolicy);
+    }
+
+    @Bean
+    public GroundedTutorService groundedTutorService(GroundedKnowledgeExplanationService explanations,
+                                                      JdbcConnectionFactory connections,
+                                                      LearningEventOwnerProvider owners) {
+        return new JdbcGroundedTutorService(explanations, connections, owners);
     }
 
     @Bean

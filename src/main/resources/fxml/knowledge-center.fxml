@@ -25,6 +25,7 @@
                 <TextField fx:id="courseField" promptText="课程（必填）" prefWidth="180"/>
                 <TextField fx:id="sectionField" promptText="章节（必填）" prefWidth="180"/>
                 <TextField fx:id="knowledgePointsField" promptText="知识点，逗号分隔" HBox.hgrow="ALWAYS"/>
+                <TextField fx:id="objectiveField" promptText="课程目标 ID/稳定标识" prefWidth="210"/>
                 <CheckBox fx:id="includePrivateCheck" text="含私有" selected="true"/>
             </HBox>
             <HBox spacing="8" alignment="CENTER_LEFT">
@@ -87,7 +88,15 @@
                             </VBox>
                         </Tab>
                         <Tab text="AI 解释">
-                            <TextArea fx:id="answerArea" editable="false" wrapText="true" promptText="确认发送上下文后，在这里显示答案和引用。"/>
+                            <VBox spacing="8">
+                                <TextArea fx:id="answerArea" editable="false" wrapText="true" VBox.vgrow="ALWAYS" promptText="确认发送上下文后，在这里显示答案和引用。"/>
+                                <HBox spacing="8" alignment="CENTER_RIGHT">
+                                    <Label text="本次辅导反馈：" styleClass="page-subtitle"/>
+                                    <Button text="有帮助" onAction="#onTutorHelpful" styleClass="secondary-button"/>
+                                    <Button text="仍不理解" onAction="#onTutorStillConfused" styleClass="secondary-button"/>
+                                    <Button text="引用有误" onAction="#onTutorCitationError" styleClass="secondary-button"/>
+                                </HBox>
+                            </VBox>
                         </Tab>
                     </tabs>
                 </TabPane>

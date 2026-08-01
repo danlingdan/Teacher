@@ -103,6 +103,9 @@ public final class HomeController {
     private void onContinueLearning() {
         StudentLearningQueueItem selected = learningQueue.getSelectionModel().getSelectedItem();
         if (selected == null) return;
+        if (selected.studyPlanAction() != null) {
+            DesktopExecutors.background().execute(() -> queueService.start(selected));
+        }
         if (selected.assignmentTask() != null && onOpenAssignment != null) {
             onOpenAssignment.accept(selected.assignmentTask());
         } else if (!selected.notificationId().isBlank() && onReviewFeedback != null) {

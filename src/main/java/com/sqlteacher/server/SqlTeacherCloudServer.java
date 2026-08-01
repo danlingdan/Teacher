@@ -32,6 +32,7 @@ import com.sqlteacher.application.collaboration.UserRole;
 import com.sqlteacher.application.collaboration.ContentStatus;
 import com.sqlteacher.application.collaboration.FeedbackStatus;
 import com.sqlteacher.application.planning.ObjectiveResourceType;
+import com.sqlteacher.application.planning.StudyPlanActionState;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import org.slf4j.Logger;
@@ -604,6 +605,10 @@ public final class SqlTeacherCloudServer {
             AuthenticatedUser actor = store.authenticate(token(exchange));
             String[] segments = exchange.getRequestURI().getPath().split("/");
             String method = exchange.getRequestMethod();
+            if (segments.length == 5 && "operations-health".equals(segments[4]) && "GET".equals(method)) {
+                respond(exchange, 200, v19Store.health(actor));
+                return;
+            }
             if (segments.length == 7 && "courses".equals(segments[4])) {
                 String courseId = segments[5];
                 if ("objectives".equals(segments[6])) {
@@ -623,6 +628,13 @@ public final class SqlTeacherCloudServer {
                     respond(exchange, 200, v19Store.studyPlan(actor, courseId));
                     return;
                 }
+                if ("interventions".equals(segments[6]) && "POST".equals(method)) {
+                    Map<String, Object> body = objectRequest(exchange);
+                    respond(exchange, 201, v19Store.createInterventionDraft(actor, courseId,
+                        string(body, "classroomId"), string(body, "objectiveId"), string(body, "reasonCode"),
+                        string(body, "action"), v14Store));
+                    return;
+                }
             }
             if (segments.length == 9 && "courses".equals(segments[4])
                 && "objectives".equals(segments[6]) && "POST".equals(method)) {
@@ -640,7 +652,43 @@ public final class SqlTeacherCloudServer {
                     return;
                 }
             }
+            if (segments.length == 8 && "courses".equals(segments[4])
+                && "objectives".equals(segments[6]) && "POST".equals(method)) {
+                Map<String, Object> body = objectRequest(exchange);
+                respond(exchange, 200, v19Store.updateObjective(actor, segments[5], segments[7],
+                    string(body, "title"), string(body, "description"), string(body, "completionCriteria"),
+                    integer(body, "sortOrder", 0),
+                    ContentStatus.valueOf(string(body, "status").toUpperCase(Locale.ROOT)),
+                    longValue(body, "expectedVersion", 0)));
+                return;
+            }
+            if (segments.length == 10 && "courses".equals(segments[4])
+                && "study-plan".equals(segments[6]) && "actions".equals(segments[7])
+                && "state".equals(segments[9]) && "POST".equals(method)) {
+                Map<String, Object> body = objectRequest(exchange);
+                respond(exchange, 200, v19Store.updateActionState(actor, segments[5], segments[8],
+                    StudyPlanActionState.valueOf(string(body, "state").toUpperCase(Locale.ROOT)),
+                    longValue(body, "expectedVersion", 0), string(body, "operationId")));
+                return;
+            }
+            if (segments.length == 9 && "courses".equals(segments[4])
+                && "classrooms".equals(segments[6]) && "objective-summary".equals(segments[8])
+                && "GET".equals(method)) {
+                respond(exchange, 200, Map.of("objectives",
+                    v19Store.objectiveSummaries(actor, segments[5], segments[7], v14Store)));
+                return;
+            }
+            if (segments.length == 9 && "courses".equals(segments[4])
+                && "interventions".equals(segments[6]) && "confirm".equals(segments[8])
+                && "POST".equals(method)) {
+                Map<String, Object> body = objectRequest(exchange);
+                respond(exchange, 200, v19Store.confirmIntervention(actor, segments[5], segments[7],
+                    string(body, "confirmationToken")));
+                return;
+            }
             respond(exchange, 404, errorResponse("NOT_FOUND", "API endpoint was not found."));
+        } catch (V19VersionConflictException error) {
+            respond(exchange, 409, errorResponse("PLANNING_VERSION_CONFLICT", error.getMessage()));
         } catch (SecurityException error) {
             respond(exchange, 403, errorResponse("FORBIDDEN", "You do not have access to this resource."));
         } catch (IllegalArgumentException error) {

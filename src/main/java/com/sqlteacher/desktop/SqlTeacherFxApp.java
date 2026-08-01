@@ -15,6 +15,7 @@ import com.sqlteacher.application.knowledge.KnowledgeDocumentService;
 import com.sqlteacher.application.knowledge.KnowledgeSearchService;
 import com.sqlteacher.application.knowledge.CourseKnowledgeService;
 import com.sqlteacher.application.knowledge.GroundedKnowledgeExplanationService;
+import com.sqlteacher.application.planning.GroundedTutorService;
 import com.sqlteacher.application.knowledge.HybridKnowledgeRetrievalService;
 import com.sqlteacher.application.knowledge.KnowledgeIndexService;
 import com.sqlteacher.application.knowledge.KnowledgeReadStateService;
@@ -100,6 +101,7 @@ public final class SqlTeacherFxApp extends Application {
     private KnowledgeSearchService knowledgeSearchService;
     private CourseKnowledgeService courseKnowledgeService;
     private GroundedKnowledgeExplanationService groundedKnowledgeExplanationService;
+    private GroundedTutorService groundedTutorService;
     private HybridKnowledgeRetrievalService hybridKnowledgeRetrievalService;
     private KnowledgeIndexService knowledgeIndexService;
     private KnowledgeReadStateService knowledgeReadStateService;
@@ -151,6 +153,7 @@ public final class SqlTeacherFxApp extends Application {
             knowledgeSearchService = context.getBean(KnowledgeSearchService.class);
             courseKnowledgeService = context.getBean(CourseKnowledgeService.class);
             groundedKnowledgeExplanationService = context.getBean(GroundedKnowledgeExplanationService.class);
+            groundedTutorService = context.getBean(GroundedTutorService.class);
             hybridKnowledgeRetrievalService = context.getBean(HybridKnowledgeRetrievalService.class);
             knowledgeIndexService = context.getBean(KnowledgeIndexService.class);
             knowledgeReadStateService = context.getBean(KnowledgeReadStateService.class);
@@ -272,6 +275,7 @@ public final class SqlTeacherFxApp extends Application {
                     knowledgeSearchService,
                     courseKnowledgeService,
                     groundedKnowledgeExplanationService,
+                    groundedTutorService,
                     hybridKnowledgeRetrievalService,
                     knowledgeIndexService,
                     knowledgeReadStateService,

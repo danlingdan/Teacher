@@ -1,5 +1,8 @@
 # v1.9 课程目标与确定性学习计划首个纵向闭环
 
+> 后续状态：本记录的“当前边界”已由完整功能收敛实现覆盖，最终结果见
+> `docs/stage6/2026-08-01-v19-teaching-orchestration-implementation.md`。
+
 > 实施日期：2026-08-01  
 > 本地数据库版本：app schema 10  
 > 云端数据库版本：Cloud schema 5  

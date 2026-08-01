@@ -62,7 +62,32 @@
                                 </VBox>
 
                                 <VBox spacing="10" styleClass="panel-card">
-                                    <Label text="2. 发布不可变题目版本" styleClass="section-title"/>
+                                    <Label text="2. 编排可验证课程目标" styleClass="section-title"/>
+                                    <Label text="目标包含完成条件、先修关系和已有知识/题目资源；服务端会拒绝环路与跨课程引用。"
+                                           wrapText="true" styleClass="page-subtitle"/>
+                                    <FlowPane hgap="10" vgap="10">
+                                        <TextField fx:id="objectiveTitleField" promptText="目标标题" prefWidth="240"/>
+                                        <TextField fx:id="objectiveCriteriaField" promptText="可验证完成条件" prefWidth="330"/>
+                                        <TextField fx:id="objectiveOrderField" promptText="排序" prefWidth="90"/>
+                                    </FlowPane>
+                                    <TextArea fx:id="objectiveDescriptionField" promptText="目标说明" prefRowCount="2" wrapText="true"/>
+                                    <HBox spacing="10" alignment="CENTER_RIGHT">
+                                        <Button text="停用/恢复" onAction="#onToggleObjectiveStatus" styleClass="secondary-button"/>
+                                        <Button text="保存目标" onAction="#onSaveObjective" styleClass="secondary-button"/>
+                                        <Button text="创建目标" onAction="#onCreateObjective" styleClass="primary-button"/>
+                                    </HBox>
+                                    <ListView fx:id="objectiveList" prefHeight="126"/>
+                                    <FlowPane hgap="10" vgap="10">
+                                        <ComboBox fx:id="prerequisiteObjectiveCombo" promptText="选择先修目标" prefWidth="240"/>
+                                        <Button text="添加先修关系" onAction="#onAddObjectivePrerequisite" styleClass="secondary-button"/>
+                                        <ComboBox fx:id="objectiveResourceTypeCombo" prefWidth="190"/>
+                                        <TextField fx:id="objectiveResourceIdField" promptText="资源 ID；知识点/题目可留空用当前所选" prefWidth="300"/>
+                                        <Button text="关联资源" onAction="#onBindObjectiveResource" styleClass="primary-button"/>
+                                    </FlowPane>
+                                </VBox>
+
+                                <VBox spacing="10" styleClass="panel-card">
+                                    <Label text="3. 发布不可变题目版本" styleClass="section-title"/>
                                     <Label text="先选择上方课程与知识点；已发布版本不会被后续编辑覆盖。" styleClass="page-subtitle"/>
                                     <FlowPane hgap="10" vgap="10">
                                         <TextField fx:id="localExerciseIdField" promptText="本地题目 ID（可选）" prefWidth="210"/>
@@ -79,7 +104,7 @@
                                 </VBox>
 
                                 <VBox spacing="10" styleClass="panel-card">
-                                    <Label text="3. 从所选题目发布任务快照" styleClass="section-title"/>
+                                    <Label text="4. 从所选题目发布任务快照" styleClass="section-title"/>
                                     <FlowPane hgap="10" vgap="10">
                                         <ComboBox fx:id="assignmentClassroomCombo" prefWidth="240"/>
                                         <TextField fx:id="assignmentTitleField" promptText="任务标题" prefWidth="250"/>
@@ -108,6 +133,18 @@
                                         <ComboBox fx:id="learningStudentCombo" prefWidth="220"/>
                                         <Button text="刷新反馈与建议" onAction="#onRefreshLearning" styleClass="primary-button"/>
                                     </FlowPane>
+                                </VBox>
+                                <VBox spacing="10" styleClass="panel-card">
+                                    <Label text="按课程目标编排教学干预" styleClass="section-title"/>
+                                    <Label text="先在教师页选择课程目标，再选择班级；系统只汇总证据并生成草稿，正式确认必须由教师执行。"
+                                           wrapText="true" styleClass="page-subtitle"/>
+                                    <HBox spacing="10" alignment="CENTER_LEFT">
+                                        <Button text="刷新目标分布" onAction="#onRefreshObjectiveSummary" styleClass="secondary-button"/>
+                                        <Button text="生成影响预览" onAction="#onPrepareObjectiveIntervention" styleClass="secondary-button"/>
+                                        <Button fx:id="confirmInterventionButton" text="明确确认干预" onAction="#onConfirmObjectiveIntervention" styleClass="primary-button"/>
+                                    </HBox>
+                                    <ListView fx:id="objectiveSummaryList" prefHeight="120"/>
+                                    <TextArea fx:id="interventionActionField" promptText="复习任务或反馈动作草稿；确认前可编辑" prefRowCount="2" wrapText="true"/>
                                 </VBox>
                                 <SplitPane dividerPositions="0.46" VBox.vgrow="ALWAYS">
                                     <VBox spacing="8" styleClass="panel-card">

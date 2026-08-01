@@ -5,6 +5,11 @@ import com.sqlteacher.application.planning.ObjectivePrerequisite;
 import com.sqlteacher.application.planning.ObjectiveResourceLink;
 import com.sqlteacher.application.planning.ObjectiveResourceType;
 import com.sqlteacher.application.planning.StudyPlanSnapshot;
+import com.sqlteacher.application.planning.StudyPlanActionState;
+import com.sqlteacher.application.planning.StudyPlanActionStateRecord;
+import com.sqlteacher.application.planning.ObjectiveClassSummary;
+import com.sqlteacher.application.planning.ObjectiveInterventionDraft;
+import com.sqlteacher.application.planning.PlanningHealthSummary;
 
 import java.util.List;
 import java.time.Instant;
@@ -265,6 +270,12 @@ public interface CloudApiClient {
         throw new UnsupportedOperationException("Course objectives are unavailable");
     }
 
+    default CourseObjective updateCourseObjective(String accessToken, String courseId, String objectiveId,
+                                                   String title, String description, String completionCriteria,
+                                                   int sortOrder, ContentStatus status, long expectedVersion) {
+        throw new UnsupportedOperationException("Course objectives are unavailable");
+    }
+
     default ObjectivePrerequisite addObjectivePrerequisite(String accessToken, String courseId,
                                                             String objectiveId, String prerequisiteObjectiveId) {
         throw new UnsupportedOperationException("Objective prerequisites are unavailable");
@@ -277,5 +288,32 @@ public interface CloudApiClient {
 
     default StudyPlanSnapshot getStudyPlan(String accessToken, String courseId) {
         throw new UnsupportedOperationException("Study planning is unavailable");
+    }
+
+    default StudyPlanActionStateRecord updateStudyPlanAction(String accessToken, String courseId, String actionId,
+                                                              StudyPlanActionState state, long expectedVersion,
+                                                              String operationId) {
+        throw new UnsupportedOperationException("Study plan synchronization is unavailable");
+    }
+
+    default List<ObjectiveClassSummary> getObjectiveClassSummary(String accessToken, String courseId,
+                                                                  String classroomId) {
+        throw new UnsupportedOperationException("Objective teaching orchestration is unavailable");
+    }
+
+    default ObjectiveInterventionDraft createObjectiveInterventionDraft(String accessToken, String courseId,
+                                                                          String classroomId, String objectiveId,
+                                                                          String reasonCode, String action) {
+        throw new UnsupportedOperationException("Objective interventions are unavailable");
+    }
+
+    default ObjectiveInterventionDraft confirmObjectiveInterventionDraft(String accessToken, String courseId,
+                                                                           String draftId,
+                                                                           String confirmationToken) {
+        throw new UnsupportedOperationException("Objective interventions are unavailable");
+    }
+
+    default PlanningHealthSummary getPlanningHealth(String accessToken) {
+        throw new UnsupportedOperationException("Planning operations health is unavailable");
     }
 }

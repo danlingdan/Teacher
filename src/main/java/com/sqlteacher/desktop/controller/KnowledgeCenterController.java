@@ -10,6 +10,8 @@ import com.sqlteacher.application.knowledge.CourseKnowledgeSearchFilter;
 import com.sqlteacher.application.knowledge.CourseKnowledgeService;
 import com.sqlteacher.application.knowledge.GroundedKnowledgeAnswer;
 import com.sqlteacher.application.knowledge.GroundedKnowledgeExplanationService;
+import com.sqlteacher.application.planning.GroundedTutorService;
+import com.sqlteacher.application.planning.TutorFeedbackType;
 import com.sqlteacher.application.knowledge.HybridKnowledgeRetrievalService;
 import com.sqlteacher.application.knowledge.KnowledgeIndexService;
 import com.sqlteacher.application.knowledge.KnowledgeReadStateService;
@@ -43,7 +45,7 @@ import java.util.function.Consumer;
 public final class KnowledgeCenterController {
     private final KnowledgeDocumentService documentService;
     private final CourseKnowledgeService knowledgeService;
-    private final GroundedKnowledgeExplanationService explanationService;
+    private final GroundedTutorService tutorService;
     private final HybridKnowledgeRetrievalService retrievalService;
     private final KnowledgeIndexService indexService;
     private final KnowledgeReadStateService readStateService;
@@ -58,6 +60,7 @@ public final class KnowledgeCenterController {
     @FXML private TextField sectionField;
     @FXML private TextField knowledgePointsField;
     @FXML private TextField queryField;
+    @FXML private TextField objectiveField;
     @FXML private CheckBox includePrivateCheck;
     @FXML private Button importButton;
     @FXML private Button reviseButton;
@@ -82,11 +85,13 @@ public final class KnowledgeCenterController {
     @FXML private TableColumn<ExerciseSummary, String> exercisePointColumn;
     @FXML private TextArea contentArea;
     @FXML private TextArea answerArea;
+    private String lastTutorSessionId = "";
 
     public KnowledgeCenterController(
         KnowledgeDocumentService documentService,
         CourseKnowledgeService knowledgeService,
         GroundedKnowledgeExplanationService explanationService,
+        GroundedTutorService tutorService,
         HybridKnowledgeRetrievalService retrievalService,
         KnowledgeIndexService indexService,
         KnowledgeReadStateService readStateService,
@@ -99,7 +104,8 @@ public final class KnowledgeCenterController {
     ) {
         this.documentService = Objects.requireNonNull(documentService);
         this.knowledgeService = Objects.requireNonNull(knowledgeService);
-        this.explanationService = Objects.requireNonNull(explanationService);
+        Objects.requireNonNull(explanationService);
+        this.tutorService = Objects.requireNonNull(tutorService);
         this.retrievalService = Objects.requireNonNull(retrievalService);
         this.indexService = Objects.requireNonNull(indexService);
         this.readStateService = Objects.requireNonNull(readStateService);
@@ -297,7 +303,12 @@ public final class KnowledgeCenterController {
             return;
         }
         try {
-            AiContextPreview preview = explanationService.preview(question, currentFilter());
+            String objective = field(objectiveField);
+            if (objective.isBlank()) {
+                showStatus("请先填写当前课程目标 ID 或稳定标识。", true);
+                return;
+            }
+            AiContextPreview preview = tutorService.preview(question, currentFilter());
             Alert confirm = new Alert(Alert.AlertType.CONFIRMATION,
                 "将发送 " + preview.characterCount() + " 个字符；来源：\n" + String.join("\n", preview.sources()),
                 ButtonType.CANCEL, ButtonType.OK);
@@ -311,9 +322,11 @@ public final class KnowledgeCenterController {
         GlobalLoading.show("正在生成带引用的课程解释…");
         DesktopExecutors.background().execute(() -> {
             try {
-                GroundedKnowledgeAnswer answer = explanationService.explain(question, currentFilter());
+                var result = tutorService.ask(field(courseField), field(objectiveField), question, currentFilter());
+                GroundedKnowledgeAnswer answer = result.answer();
                 Platform.runLater(() -> {
                     GlobalLoading.hide();
+                    lastTutorSessionId = result.sessionId();
                     answerArea.setText(formatAnswer(answer));
                     showStatus(answer.message(), !answer.aiGenerated());
                 });
@@ -321,6 +334,23 @@ public final class KnowledgeCenterController {
                 Platform.runLater(() -> fail(error));
             }
         });
+    }
+
+    @FXML private void onTutorHelpful() { saveTutorFeedback(TutorFeedbackType.HELPFUL); }
+    @FXML private void onTutorStillConfused() { saveTutorFeedback(TutorFeedbackType.STILL_CONFUSED); }
+    @FXML private void onTutorCitationError() { saveTutorFeedback(TutorFeedbackType.CITATION_ERROR); }
+
+    private void saveTutorFeedback(TutorFeedbackType type) {
+        if (lastTutorSessionId.isBlank()) {
+            showStatus("请先完成一次带引用辅导。", true);
+            return;
+        }
+        try {
+            tutorService.feedback(lastTutorSessionId, type, "");
+            showStatus("已记录枚举反馈，不保存完整问答正文。", false);
+        } catch (Throwable error) {
+            fail(error);
+        }
     }
 
     @FXML

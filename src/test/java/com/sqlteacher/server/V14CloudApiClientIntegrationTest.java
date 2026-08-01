@@ -8,6 +8,7 @@ import com.sqlteacher.application.collaboration.NotificationType;
 import com.sqlteacher.application.collaboration.UserRole;
 import com.sqlteacher.application.planning.ObjectiveResourceType;
 import com.sqlteacher.application.planning.StudyPlanReasonCode;
+import com.sqlteacher.application.planning.StudyPlanActionState;
 import com.sqlteacher.infrastructure.cloud.HttpCloudApiClient;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.AfterEach;
@@ -80,18 +81,34 @@ class V14CloudApiClientIntegrationTest {
             "能够完成 WHERE 练习", 1);
         var advancedObjective = client.createCourseObjective(teacher, course.id(), "组合过滤条件", "组合多个条件",
             "能够完成组合过滤练习", 2);
+        String basicsObjectiveId = basicsObjective.id();
         client.addObjectiveResource(teacher, course.id(), basicsObjective.id(),
             ObjectiveResourceType.KNOWLEDGE_ARTICLE, publishedKnowledge.id());
+        client.addObjectiveResource(teacher, course.id(), basicsObjective.id(),
+            ObjectiveResourceType.KNOWLEDGE_POINT, point.id());
         client.addObjectiveResource(teacher, course.id(), advancedObjective.id(),
             ObjectiveResourceType.EXERCISE_VERSION, version.id());
         client.addObjectivePrerequisite(teacher, course.id(), advancedObjective.id(), basicsObjective.id());
         assertThrows(CloudApiRequestException.class, () -> client.addObjectivePrerequisite(teacher, course.id(),
-            basicsObjective.id(), advancedObjective.id()));
+            basicsObjectiveId, advancedObjective.id()));
         assertEquals(2, client.listCourseObjectives(student, course.id()).size());
         var studentPlan = client.getStudyPlan(student, course.id());
         assertEquals("v1.9.0-r1", studentPlan.policyVersion());
         assertEquals(basicsObjective.id(), studentPlan.actions().getFirst().objectiveId());
         assertEquals(StudyPlanReasonCode.PREREQUISITE_GAP, studentPlan.actions().getFirst().reasonCode());
+        var startedPlanAction = client.updateStudyPlanAction(student, course.id(),
+            studentPlan.actions().getFirst().id(), StudyPlanActionState.STARTED, 0, UUID.randomUUID().toString());
+        assertEquals(1, startedPlanAction.version());
+        assertEquals(StudyPlanActionState.STARTED, client.getStudyPlan(student, course.id()).actions().getFirst().state());
+        var originalObjective = basicsObjective;
+        basicsObjective = client.updateCourseObjective(teacher, course.id(), basicsObjective.id(),
+            "掌握 WHERE 条件过滤", basicsObjective.description(), basicsObjective.completionCriteria(),
+            basicsObjective.sortOrder(), ContentStatus.ACTIVE, basicsObjective.version());
+        assertEquals(2, basicsObjective.version());
+        assertThrows(CloudApiRequestException.class, () -> client.updateCourseObjective(teacher, course.id(),
+            originalObjective.id(), originalObjective.title(), originalObjective.description(),
+            originalObjective.completionCriteria(), originalObjective.sortOrder(), ContentStatus.ACTIVE,
+            originalObjective.version()));
 
         var assignment = client.createAssignmentFromVersion(teacher, classroom.id(), version.id(),
             "客户端任务", "验证映射", Instant.now().plusSeconds(3_600), UUID.randomUUID().toString());
@@ -112,6 +129,32 @@ class V14CloudApiClientIntegrationTest {
         assertEquals(1, feedback.version());
         assertEquals(1, client.listSubmissionFeedback(student, classroom.id(), assignment.id()).size());
         assertEquals(0, client.getKnowledgeMastery(student, classroom.id(), null).getFirst().masteryPercent());
+
+        var objectiveSummary = client.getObjectiveClassSummary(teacher, course.id(), classroom.id());
+        assertEquals(1, objectiveSummary.getFirst().totalStudents());
+        assertEquals(1, objectiveSummary.stream().filter(item -> item.objectiveId().equals(basicsObjectiveId))
+            .findFirst().orElseThrow().needsSupport());
+        var staleDraft = client.createObjectiveInterventionDraft(teacher, course.id(), classroom.id(),
+            basicsObjective.id(), "OBJECTIVE_EVIDENCE_GAP", "发布 WHERE 复习资料草稿");
+        basicsObjective = client.updateCourseObjective(teacher, course.id(), basicsObjective.id(),
+            basicsObjective.title(), basicsObjective.description(), basicsObjective.completionCriteria(),
+            basicsObjective.sortOrder(), ContentStatus.ACTIVE, basicsObjective.version());
+        var invalidatedDraft = staleDraft;
+        assertThrows(CloudApiRequestException.class, () -> client.confirmObjectiveInterventionDraft(teacher,
+            course.id(), invalidatedDraft.id(), invalidatedDraft.confirmationToken()));
+        var currentDraft = client.createObjectiveInterventionDraft(teacher, course.id(), classroom.id(),
+            basicsObjective.id(), "OBJECTIVE_EVIDENCE_GAP", "发布 WHERE 复习资料草稿");
+        assertEquals("CONFIRMED", client.confirmObjectiveInterventionDraft(teacher, course.id(), currentDraft.id(),
+            currentDraft.confirmationToken()).status());
+        addSyntheticStudents(database, classroom.id(), 499);
+        long summaryStarted = System.nanoTime();
+        var capacitySummary = client.getObjectiveClassSummary(teacher, course.id(), classroom.id());
+        long summaryMillis = java.time.Duration.ofNanos(System.nanoTime() - summaryStarted).toMillis();
+        assertEquals(500, capacitySummary.getFirst().totalStudents());
+        assertTrue(summaryMillis < 2_000, "500-student objective summary took " + summaryMillis + " ms");
+        promoteAdmin(database, teacherSession.user().id());
+        assertEquals(2, client.getPlanningHealth(teacher).activeObjectives());
+        assertEquals(1, client.getPlanningHealth(teacher).confirmedInterventions());
 
         var notifications = client.listNotifications(student, 0, 50);
         assertTrue(notifications.stream().anyMatch(item -> item.type() == NotificationType.ASSIGNMENT_PUBLISHED));
@@ -166,6 +209,39 @@ class V14CloudApiClientIntegrationTest {
              var statement = connection.createStatement();
              var row = statement.executeQuery("select count(*) from " + table)) {
             return row.getInt(1);
+        }
+    }
+
+    private void promoteAdmin(Path database, String userId) throws Exception {
+        try (var connection = DriverManager.getConnection("jdbc:sqlite:" + database);
+             var statement = connection.prepareStatement(
+                 "insert or ignore into user_roles(user_id,role) values(?, 'ADMIN')")) {
+            statement.setString(1, userId);
+            statement.executeUpdate();
+        }
+    }
+
+    private void addSyntheticStudents(Path database, String classroomId, int count) throws Exception {
+        try (var connection = DriverManager.getConnection("jdbc:sqlite:" + database)) {
+            connection.setAutoCommit(false);
+            try (var user = connection.prepareStatement("""
+                    insert into users(id,email,display_name,password_hash,password_salt,disabled,created_at)
+                    values(?,?,?,?,?,0,?)
+                    """);
+                 var role = connection.prepareStatement(
+                     "insert into user_roles(user_id,role) values(?,'STUDENT')");
+                 var member = connection.prepareStatement(
+                     "insert into classroom_members(classroom_id,user_id,role) values(?,?,'STUDENT')")) {
+                for (int index = 0; index < count; index++) {
+                    String id = "synthetic-student-" + index;
+                    user.setString(1, id); user.setString(2, id + "@example.invalid");
+                    user.setString(3, "Synthetic " + index); user.setBytes(4, new byte[]{1});
+                    user.setBytes(5, new byte[]{1}); user.setString(6, Instant.EPOCH.toString()); user.addBatch();
+                    role.setString(1, id); role.addBatch();
+                    member.setString(1, classroomId); member.setString(2, id); member.addBatch();
+                }
+                user.executeBatch(); role.executeBatch(); member.executeBatch(); connection.commit();
+            }
         }
     }
 }

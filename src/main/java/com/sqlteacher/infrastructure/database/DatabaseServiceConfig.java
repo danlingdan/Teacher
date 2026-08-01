@@ -20,6 +20,7 @@ import com.sqlteacher.application.maintenance.ApplicationBackupService;
 import com.sqlteacher.application.learning.LearningDiagnosisService;
 import com.sqlteacher.application.learning.InterventionService;
 import com.sqlteacher.application.learning.StudentLearningQueueService;
+import com.sqlteacher.application.planning.StudyPlanCache;
 import com.sqlteacher.application.knowledge.EmbeddingProvider;
 import com.sqlteacher.application.knowledge.HybridKnowledgeRetrievalService;
 import com.sqlteacher.application.knowledge.KnowledgeIndexService;
@@ -194,6 +195,12 @@ public class DatabaseServiceConfig {
     }
 
     @Bean
+    public StudyPlanCache studyPlanCache(JdbcConnectionFactory connectionFactory,
+                                         LearningEventOwnerProvider ownerProvider) {
+        return new JdbcStudyPlanCache(connectionFactory, ownerProvider);
+    }
+
+    @Bean
     public ExerciseProgressService exerciseProgressService(JdbcConnectionFactory connectionFactory) {
         return new JdbcExerciseProgressService(connectionFactory);
     }
@@ -337,7 +344,8 @@ public class DatabaseServiceConfig {
     @Bean
     public StudentLearningQueueService studentLearningQueueService(LearningDiagnosisService diagnosis,
                                                                    ObjectProvider<CloudApiClient> apiProvider,
-                                                                   ObjectProvider<CloudSessionService> sessionProvider) {
+                                                                   ObjectProvider<CloudSessionService> sessionProvider,
+                                                                   StudyPlanCache planCache) {
         return new StudentLearningQueueService() {
             @Override public com.sqlteacher.application.learning.StudentLearningQueue refresh() {
                 return delegate().refresh();
@@ -367,7 +375,7 @@ public class DatabaseServiceConfig {
                         }
                     };
                 }
-                return new DefaultStudentLearningQueueService(diagnosis, api, sessions);
+                return new DefaultStudentLearningQueueService(diagnosis, api, sessions, planCache);
             }
         };
     }

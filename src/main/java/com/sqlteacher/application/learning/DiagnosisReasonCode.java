@@ -10,5 +10,6 @@ public enum DiagnosisReasonCode {
     OVERDUE_TASK,
     PENDING_ASSIGNMENT,
     UNREAD_FEEDBACK,
-    STALE_PROGRESS
+    STALE_PROGRESS,
+    PREREQUISITE_GAP
 }

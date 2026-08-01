@@ -62,7 +62,7 @@ public final class DeterministicStudyPlanService implements StudyPlanService {
             StudyPlanReasonCode reason = unmet == null ? StudyPlanReasonCode.INSUFFICIENT_EVIDENCE
                 : StudyPlanReasonCode.PREREQUISITE_GAP;
             int priority = unmet == null ? Math.max(40, 75 - objective.sortOrder()) : 90;
-            StudyPlanAction candidate = new StudyPlanAction(stableId(normalizedOwner, normalizedCourse, target.id(), resource),
+            StudyPlanAction candidate = new StudyPlanAction(stableId(normalizedOwner, normalizedCourse, target, resource),
                 target.id(), actionType(resource.resourceType()), target.title(), description(target, reason),
                 resource.resourceType(), resource.resourceId(), reason, priority);
             actionsByObjective.merge(target.id(), candidate,
@@ -84,8 +84,8 @@ public final class DeterministicStudyPlanService implements StudyPlanService {
     private static int resourceRank(ObjectiveResourceLink item) {
         return switch (item.resourceType()) {
             case EXERCISE_VERSION -> 0;
-            case KNOWLEDGE_ARTICLE -> 1;
-            case KNOWLEDGE_POINT -> 2;
+            case KNOWLEDGE_POINT -> 1;
+            case KNOWLEDGE_ARTICLE -> 2;
         };
     }
 
@@ -95,9 +95,10 @@ public final class DeterministicStudyPlanService implements StudyPlanService {
             : "当前证据不足，从课程目标的关联资源开始学习。";
     }
 
-    private static String stableId(String ownerId, String courseId, String objectiveId,
+    private static String stableId(String ownerId, String courseId, CourseObjective objective,
                                    ObjectiveResourceLink resource) {
-        String value = ownerId + ':' + courseId + ':' + objectiveId + ':' + resource.resourceType() + ':'
+        String value = ownerId + ':' + courseId + ':' + objective.id() + ':' + objective.version() + ':'
+            + resource.resourceType() + ':'
             + resource.resourceId() + ':' + POLICY_VERSION;
         return UUID.nameUUIDFromBytes(value.getBytes(StandardCharsets.UTF_8)).toString();
     }

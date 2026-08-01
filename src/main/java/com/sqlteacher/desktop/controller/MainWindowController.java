@@ -14,6 +14,7 @@ import com.sqlteacher.application.knowledge.KnowledgeDocumentService;
 import com.sqlteacher.application.knowledge.KnowledgeSearchService;
 import com.sqlteacher.application.knowledge.CourseKnowledgeService;
 import com.sqlteacher.application.knowledge.GroundedKnowledgeExplanationService;
+import com.sqlteacher.application.planning.GroundedTutorService;
 import com.sqlteacher.application.knowledge.HybridKnowledgeRetrievalService;
 import com.sqlteacher.application.knowledge.KnowledgeIndexService;
 import com.sqlteacher.application.knowledge.KnowledgeReadStateService;
@@ -143,6 +144,7 @@ public final class MainWindowController {
     private final KnowledgeSearchService knowledgeSearchService;
     private final CourseKnowledgeService courseKnowledgeService;
     private final GroundedKnowledgeExplanationService groundedKnowledgeExplanationService;
+    private final GroundedTutorService groundedTutorService;
     private final HybridKnowledgeRetrievalService hybridKnowledgeRetrievalService;
     private final KnowledgeIndexService knowledgeIndexService;
     private final KnowledgeReadStateService knowledgeReadStateService;
@@ -297,6 +299,7 @@ public final class MainWindowController {
                                 KnowledgeSearchService knowledgeSearchService,
                                 CourseKnowledgeService courseKnowledgeService,
                                 GroundedKnowledgeExplanationService groundedKnowledgeExplanationService,
+                                GroundedTutorService groundedTutorService,
                                 HybridKnowledgeRetrievalService hybridKnowledgeRetrievalService,
                                 KnowledgeIndexService knowledgeIndexService,
                                 KnowledgeReadStateService knowledgeReadStateService,
@@ -342,6 +345,7 @@ public final class MainWindowController {
         this.knowledgeSearchService = Objects.requireNonNull(knowledgeSearchService);
         this.courseKnowledgeService = Objects.requireNonNull(courseKnowledgeService);
         this.groundedKnowledgeExplanationService = Objects.requireNonNull(groundedKnowledgeExplanationService);
+        this.groundedTutorService = Objects.requireNonNull(groundedTutorService);
         this.hybridKnowledgeRetrievalService = Objects.requireNonNull(hybridKnowledgeRetrievalService);
         this.knowledgeIndexService = Objects.requireNonNull(knowledgeIndexService);
         this.knowledgeReadStateService = Objects.requireNonNull(knowledgeReadStateService);
@@ -915,6 +919,7 @@ public final class MainWindowController {
                         knowledgeDocumentService,
                         courseKnowledgeService,
                         groundedKnowledgeExplanationService,
+                        groundedTutorService,
                         hybridKnowledgeRetrievalService,
                         knowledgeIndexService,
                         knowledgeReadStateService,
