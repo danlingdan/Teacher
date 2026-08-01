@@ -5,6 +5,7 @@ import com.sqlteacher.application.collaboration.CloudSessionService;
 import com.sqlteacher.application.support.*;
 import com.sqlteacher.application.system.*;
 import com.sqlteacher.application.update.*;
+import com.sqlteacher.desktop.AppI18n;
 import com.sqlteacher.desktop.DesktopExecutors;
 import javafx.application.Platform;
 import javafx.collections.FXCollections;
@@ -47,6 +48,7 @@ public final class GeneralSoftwareController {
     @FXML private CheckBox reducedMotionCheck;
     @FXML private CheckBox highContrastCheck;
     @FXML private CheckBox supportLoggingCheck;
+    @FXML private ComboBox<String> languageCombo;
     @FXML private Label connectivityLabel;
     @FXML private Label storageLabel;
     @FXML private ListView<String> taskList;
@@ -82,6 +84,7 @@ public final class GeneralSoftwareController {
     @FXML private void initialize() {
         buildInfoLabel.setText(ApplicationBuildInfo.current().supportSummary());
         proxyModeCombo.setItems(FXCollections.observableArrayList(GeneralSoftwareSettings.ProxyMode.values()));
+        languageCombo.setItems(FXCollections.observableArrayList("简体中文", "English"));
         proxyPortSpinner.setValueFactory(new SpinnerValueFactory.IntegerSpinnerValueFactory(0, 65535, 0));
         reportTypeCombo.setItems(FXCollections.observableArrayList(ProblemReportDraft.Type.values()));
         reportSeverityCombo.setItems(FXCollections.observableArrayList(ProblemReportDraft.Severity.values()));
@@ -129,12 +132,14 @@ public final class GeneralSoftwareController {
     @FXML private void onSaveGeneralSettings() {
         GeneralSoftwareSettings old = system.settings();
         long supportExpiry = supportLoggingCheck.isSelected() ? Instant.now().plusSeconds(30 * 60).toEpochMilli() : 0;
+        String language = "English".equals(languageCombo.getValue()) ? "en" : "zh";
         try {
             system.saveSettings(new GeneralSoftwareSettings(1, automaticUpdatesCheck.isSelected(), old.skippedVersion(), proxyModeCombo.getValue(),
                 proxyHostField.getText(), proxyPortSpinner.getValue(), reducedMotionCheck.isSelected(), highContrastCheck.isSelected(),
-                supportLoggingCheck.isSelected(), supportExpiry, old.updateMirrorsEnabled()));
+                supportLoggingCheck.isSelected(), supportExpiry, old.updateMirrorsEnabled(), language));
+            AppI18n.applyLanguage(language);
             applyAccessibility();
-            connectivityLabel.setText("通用设置已原子保存。网络代理将在下次启动时应用；代理密码不会写入此设置文件。");
+            connectivityLabel.setText("通用设置已原子保存。界面语言已切换，请重启应用后完整生效；代理将在下次启动时应用；代理密码不会写入此设置文件。");
         } catch (RuntimeException error) { connectivityLabel.setText("设置未保存：" + safe(error)); }
     }
 
@@ -196,6 +201,7 @@ public final class GeneralSoftwareController {
         GeneralSoftwareSettings value = system.settings(); automaticUpdatesCheck.setSelected(value.automaticUpdateChecks());
         proxyModeCombo.setValue(value.proxyMode()); proxyHostField.setText(value.proxyHost()); proxyPortSpinner.getValueFactory().setValue(value.proxyPort());
         reducedMotionCheck.setSelected(value.reducedMotion()); highContrastCheck.setSelected(value.highContrast()); supportLoggingCheck.setSelected(value.supportLogging());
+        languageCombo.setValue("en".equalsIgnoreCase(value.language()) ? "English" : "简体中文");
         applyAccessibility();
     }
     private void refreshSystemViews() {

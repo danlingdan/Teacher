@@ -244,6 +244,9 @@ public final class SqlTeacherFxApp extends Application {
             throw new IllegalStateException("Services are unavailable because application initialization did not complete");
         }
 
+        // Apply the persisted UI language before any FXML is loaded so %key
+        // references resolve in the user's chosen language (default: Simplified Chinese).
+        AppI18n.applyLanguage(generalSoftwareService.settings().language());
         stage.setTitle("SQLTeacher");
         URL icon = SqlTeacherFxApp.class.getResource("/images/sqlteacher-icon.png");
         if (icon != null) {

@@ -30,6 +30,7 @@
                 <CheckBox fx:id="supportLoggingCheck" text="%gs.supportLogging" GridPane.rowIndex="5" GridPane.columnSpan="2"/>
                 <HBox spacing="8" GridPane.rowIndex="6" GridPane.columnSpan="2"><Button text="%gs.save" onAction="#onSaveGeneralSettings"/><Button text="%gs.exportSettings" onAction="#onExportSettings"/><Button text="%gs.import" onAction="#onImportSettings"/><Button text="%gs.reset" onAction="#onResetSettings"/></HBox>
                 <HBox spacing="8" GridPane.rowIndex="7" GridPane.columnSpan="2"><Button text="%gs.checkConnectivity" onAction="#onConnectivityCheck"/><Label fx:id="connectivityLabel" text="%gs.proxyNote" wrapText="true"/></HBox>
+                <Label text="%gs.language" GridPane.rowIndex="8"/><ComboBox fx:id="languageCombo" GridPane.columnIndex="1" GridPane.rowIndex="8"/>
             </GridPane>
         </TitledPane>
 

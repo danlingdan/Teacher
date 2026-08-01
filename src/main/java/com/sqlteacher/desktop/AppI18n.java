@@ -12,7 +12,10 @@ import java.util.ResourceBundle;
  */
 public final class AppI18n {
     private static final Locale FALLBACK = Locale.SIMPLIFIED_CHINESE;
-    private static volatile Locale activeLocale = currentDefault();
+    // The default UI language is Simplified Chinese, independent of the OS locale,
+    // so the product does not silently switch languages. The user can override it
+    // explicitly in the "Updates & Support" settings page.
+    private static volatile Locale activeLocale = FALLBACK;
     private static volatile ResourceBundle bundle = load(activeLocale);
 
     private AppI18n() { }
@@ -25,6 +28,15 @@ public final class AppI18n {
         bundle = load(next);
     }
 
+    /** Applies the persisted language preference ({@code "zh"} or {@code "en"}). */
+    public static void applyLanguage(String language) {
+        if (language != null && "en".equalsIgnoreCase(language.strip())) {
+            setLocale(Locale.ENGLISH);
+        } else {
+            setLocale(FALLBACK);
+        }
+    }
+
     public static ResourceBundle bundle() { return bundle; }
 
     public static String get(String key) {
@@ -34,12 +46,6 @@ public final class AppI18n {
 
     public static String format(String key, Object... args) {
         return MessageFormat.format(get(key), args);
-    }
-
-    private static Locale currentDefault() {
-        Locale system = Locale.getDefault();
-        String language = system.getLanguage().toLowerCase(Locale.ROOT);
-        return "en".equals(language) ? Locale.ENGLISH : FALLBACK;
     }
 
     private static ResourceBundle load(Locale locale) {

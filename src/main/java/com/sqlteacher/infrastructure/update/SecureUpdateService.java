@@ -220,9 +220,9 @@ public final class SecureUpdateService implements UpdateService {
 
     @Override public void skip(SemanticVersion version) {
         GeneralSoftwareSettings old = system.settings();
-        system.saveSettings(new GeneralSoftwareSettings(1, old.automaticUpdateChecks(), version.toString(), old.proxyMode(),
-            old.proxyHost(), old.proxyPort(), old.reducedMotion(), old.highContrast(), old.supportLogging(),
-            old.supportLoggingExpiresAt(), old.updateMirrorsEnabled()));
+            system.saveSettings(new GeneralSoftwareSettings(1, old.automaticUpdateChecks(), version.toString(), old.proxyMode(),
+                old.proxyHost(), old.proxyPort(), old.reducedMotion(), old.highContrast(), old.supportLogging(),
+                old.supportLoggingExpiresAt(), old.updateMirrorsEnabled(), old.language()));
     }
     @Override public void clearDownloadedUpdates() { system.clearRebuildableFiles(); }
 

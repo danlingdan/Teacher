@@ -75,6 +75,25 @@ class AppI18nTest {
         AppI18n.setLocale(Locale.SIMPLIFIED_CHINESE);
     }
 
+    @Test void defaultsToSimplifiedChineseIndependentOfSystemLocale() {
+        AppI18n.applyLanguage(null);
+        assertEquals("首页", AppI18n.get("nav.home"));
+        AppI18n.applyLanguage("");
+        assertEquals("首页", AppI18n.get("nav.home"));
+        AppI18n.applyLanguage("zh");
+        assertEquals("首页", AppI18n.get("nav.home"));
+    }
+
+    @Test void applyLanguageSwitchesToEnglishAndBack() {
+        AppI18n.applyLanguage("en");
+        assertEquals("Home", AppI18n.get("nav.home"));
+        AppI18n.applyLanguage("zh");
+        assertEquals("首页", AppI18n.get("nav.home"));
+        AppI18n.applyLanguage("EN"); // case-insensitive
+        assertEquals("Home", AppI18n.get("nav.home"));
+        AppI18n.applyLanguage("zh");
+    }
+
     private static Properties load(String file) throws IOException {
         try (InputStream stream = AppI18nTest.class.getResourceAsStream("/i18n/" + file)) {
             assertNotNull(stream, "missing bundle resource: " + file);
