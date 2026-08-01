@@ -78,6 +78,7 @@ jobs:
               portableUrl = "https://github.com/${{ github.repository }}/releases/download/$env:GITHUB_REF_NAME/$($archive.Name)"
               portableSize = $archive.Length; portableSha256 = (Get-FileHash -LiteralPath $archive.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
               minimumSupportedVersion = '1.9.0'
+              rollout = @{ percentage = 100; paused = $false }
           }
           $payload | ConvertTo-Json -Compress | Set-Content -LiteralPath target/installer/update-payload.json -Encoding utf8
           java packaging/UpdateManifestTool.java sign target/installer/update-payload.json target/installer/update-manifest.json release-2026-01

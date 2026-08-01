@@ -12,7 +12,9 @@ public final class UpdateManifestTool {
     public static void main(String[] args) throws Exception {
         if (args.length == 3 && "generate-key".equals(args[0])) { generate(Path.of(args[1]), Path.of(args[2])); return; }
         if (args.length == 4 && "sign".equals(args[0])) { sign(Path.of(args[1]), Path.of(args[2]), args[3]); return; }
-        throw new IllegalArgumentException("Usage: generate-key <private-file> <public-file> | sign <payload> <envelope> <key-id>");
+        if (args.length == 5 && "set-rollout".equals(args[0])) { setRollout(Path.of(args[1]), Path.of(args[2]), args[3], args[4]); return; }
+        if (args.length == 4 && "pause".equals(args[0])) { setRollout(Path.of(args[1]), Path.of(args[2]), args[3], "paused"); return; }
+        throw new IllegalArgumentException("Usage: generate-key <private-file> <public-file> | sign <payload> <envelope> <key-id> | set-rollout <payload> <envelope> <key-id> <percent|paused> | pause <payload> <envelope> <key-id>");
     }
 
     private static void generate(Path privateFile, Path publicFile) throws Exception {
@@ -38,5 +40,31 @@ public final class UpdateManifestTool {
         Path parent = envelopeFile.toAbsolutePath().normalize().getParent();
         if (parent != null) Files.createDirectories(parent);
         Files.writeString(envelopeFile, envelope, StandardCharsets.US_ASCII);
+    }
+
+    /**
+     * Re-signs a manifest with an adjusted rollout field for controlled release:
+     * {@code value} is either a percentage 0-100 or the literal "paused". The
+     * signature is recomputed with the same key, so clients keep trusting it.
+     */
+    private static void setRollout(Path payloadFile, Path envelopeFile, String keyId, String value) throws Exception {
+        String payload = Files.readString(payloadFile, StandardCharsets.UTF_8).strip();
+        if (payload.isEmpty() || payload.length() > 64 * 1024) throw new IllegalArgumentException("payload size is invalid");
+        boolean paused = value.equalsIgnoreCase("paused");
+        int percent = 100;
+        if (!paused) {
+            try { percent = Integer.parseInt(value); } catch (NumberFormatException error) { throw new IllegalArgumentException("percent must be 0-100 or 'paused'"); }
+            if (percent < 0 || percent > 100) throw new IllegalArgumentException("percent must be 0-100");
+        }
+        String rolloutJson = "\"rollout\":{\"percentage\":" + percent + ",\"paused\":" + paused + "}";
+        // Drop any existing rollout field (with its leading comma) so no double comma remains.
+        payload = payload.replaceAll(",\\s*\"rollout\"\\s*:\\s*\\{[^}]*}", "");
+        int closing = payload.lastIndexOf('}');
+        if (closing < 0) throw new IllegalArgumentException("payload is not a JSON object");
+        String prefix = payload.substring(0, closing).stripTrailing();
+        String updated = prefix + (prefix.endsWith("{") || prefix.endsWith(",") ? "" : ",") + rolloutJson + "}";
+        Files.writeString(payloadFile, updated, StandardCharsets.US_ASCII);
+        sign(payloadFile, envelopeFile, keyId);
+        System.out.println("rollout updated to " + (paused ? "paused" : percent + "%") + " and envelope re-signed");
     }
 }
