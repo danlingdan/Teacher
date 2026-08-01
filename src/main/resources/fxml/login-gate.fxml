@@ -59,7 +59,7 @@
                         <VBox spacing="7">
                             <children>
                                 <Label text="密码" styleClass="login-field-label"/>
-                                <PasswordField fx:id="passwordField" promptText="至少 12 位"/>
+                                <PasswordField fx:id="passwordField" promptText="登录密码 / 注册至少 12 位"/>
                             </children>
                         </VBox>
                         <Button fx:id="loginButton" text="登录并进入" onAction="#onLogin" defaultButton="true" maxWidth="Infinity" styleClass="login-primary-button"/>

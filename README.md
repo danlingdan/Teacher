@@ -13,7 +13,7 @@
   [![Platform](https://img.shields.io/badge/Windows-10%20%7C%2011-0078D4?logo=windows11&logoColor=white)](https://github.com/danlingdan/Teacher/releases/latest)
   [![License](https://img.shields.io/badge/License-Apache%202.0-4D7A97.svg)](LICENSE)
 
-  [下载最新版](https://github.com/danlingdan/Teacher/releases/latest) · [使用指南](docs/guide/) · [更新日志](docs/releases/v1.10.0.md) · [问题反馈](https://github.com/danlingdan/Teacher/issues)
+  [下载最新版](https://github.com/danlingdan/Teacher/releases/latest) · [使用指南](docs/guide/) · [更新日志](docs/releases/v1.10.1.md) · [问题反馈](https://github.com/danlingdan/Teacher/issues)
 </div>
 
 ---
@@ -31,7 +31,9 @@ SQLTeacher 面向数据库课程教学与自主练习。它把 SQL 执行、确�
 | 👩‍🏫 教学协作 | 班级、任务、提交、教师反馈、学情看板、干预队列和脱敏 CSV 导出 |
 | 🛡️ 通用软件能力 | 可信更新、问题反馈、诊断包、备份恢复、代理、无障碍和隐私说明 |
 
-## v1.10.0 亮点
+## v1.10.1 亮点
+
+- **预置账号登录修复**：管理员预置的兼容账号可以正常登录；公开注册和新密码仍保持至少 12 位要求。
 
 - **可信软件更新**：稳定版检查、Ed25519 签名清单验证、受控下载、大小与 SHA-256 复核、跳过版本和安装器交接。
 - **隐私友好的反馈**：访客与登录用户均可反馈；发送前预览最小诊断信息，支持本地诊断 ZIP、回执查询、幂等与限流。
@@ -39,7 +41,7 @@ SQLTeacher 面向数据库课程教学与自主练习。它把 SQL 执行、确�
 - **完善的设置治理**：设置原子存储、损坏隔离、非敏感配置导入导出、代理、高对比度和减少动态效果。
 - **透明发布**：内置离线帮助、隐私说明、第三方许可证与 CycloneDX SBOM。
 
-完整变更见 [v1.10.0 发布说明](docs/releases/v1.10.0.md)和 [v1.10 实施计划](docs/plans/2026-08-02-v1.10-general-software-capabilities-plan.md)。
+完整变更见 [v1.10.1 发布说明](docs/releases/v1.10.1.md)和 [v1.10 实施计划](docs/plans/2026-08-02-v1.10-general-software-capabilities-plan.md)。
 
 ## 安全设计
 
@@ -65,8 +67,8 @@ flowchart LR
 
 前往 [GitHub Releases](https://github.com/danlingdan/Teacher/releases/latest) 下载：
 
-- `SQLTeacher-1.10.0.exe`：推荐，标准 Windows 安装器；
-- `SQLTeacher-1.10.0-windows-x64.zip`：免安装便携版；
+- `SQLTeacher-1.10.1.exe`：推荐，标准 Windows 安装器；
+- `SQLTeacher-1.10.1-windows-x64.zip`：免安装便携版；
 - `SHA256SUMS.txt`：发布文件完整性校验值。
 
 正式包自带 Java 运行时，无需另装 JDK。用户数据默认保存在 `%LOCALAPPDATA%\SQLTeacher`，升级应用不会覆盖该目录。
