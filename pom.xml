@@ -6,7 +6,7 @@
 
     <groupId>org.hjh.JavaWork</groupId>
     <artifactId>Teacher</artifactId>
-    <version>1.11.2</version>
+    <version>1.11.3</version>
     <name>SQLTeacher</name>
 
     <properties>
