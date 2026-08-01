@@ -225,4 +225,33 @@ P1 处置：V111-16 帮助文档英文化（可 P1，界面文案必须完整）
 
 - 13 项 P0 全部以正式入口交付并通过测试；Cloud 1.11 部署生效；v1.10 能力无回归（417 项测试）；`main`、`v1.11.0` 标签、Maven 版本、更新清单、Release 指向同一提交 `571cbd8` 与产物。
 
+## 8. 缺口补齐记录（1.11.3）
+
+### 8.1 完整英文（V111-05）
+
+- 迁移全部 18 个 FXML + 19 个控制器硬编码文案至 ResourceBundle；zh 包 1261 键、en 包完整对应；`AppI18nTest` 键完整性门禁（含 FXML `%key` 可解析）；`DesktopVisualResourceTest` 断言更新为键引用；硬编码中文字符串残留归零。
+- 中文为默认语言（不随 OS Locale），设置页可切换中/英文。
+
+### 8.2 桌面 UI 接线（此前缺失，现全部落入口）
+
+- 截图附件：设置页「选择截图」→ `ImageMetadataSanitizer`（EXIF/GPS 清理）→ 提交带截图（`withScreenshot`）。
+- 反馈撤回/导出：设置页输入反馈编号+查询凭据 → `reports.withdraw/export`。
+- 密码重置：设置页输入绑定邮箱 → `cloudApi.requestPasswordReset`（防枚举文案）。
+- 活跃会话：`cloudApi.listSessions` 列表 + 按索引撤销（`activeSessions` 记录 id，当前会话受保护）。
+- 账号数据导出：`requestAccountExport` + `getAccountExport` → 本地 JSON。
+- 账号注销：确认弹窗 → `requestAccountDeletion`（冷静期展示）→ `cancelAccountDeletion`。
+
+### 8.3 原生通知 / 安装修复 / 镜像 / 分阶段
+
+- `NativeNotifier`（SystemTray 气泡，默认关闭、白名单门禁、失败降级）+ 设置复选框持久化。
+- 安装完整性：设置页「检查程序文件完整性」→ `InstallIntegrityChecker` + 修复指引弹窗。
+- 受控镜像：设置页复选框 → `updateMirrorsEnabled` 落库（下载回退已实现）。
+- 分阶段发布：`UpdateManifestTool set-rollout/pause`（重新签名）；release.yml 清单含 `rollout=100`；`cloud.env.example` 补 SMTP 中继配置。
+
+### 8.4 验证
+
+- 全量 `mvn test`：420 项，0 失败，0 错误，2 跳过。
+- rollout 工具 round-trip（50% → paused → 100%）验证通过，签名可继续被客户端接受。
+- 本地 1.11.3 打包 + 签名清单 + Release 发布完成。
+
 v1.11 通用能力收尾交付完成。
