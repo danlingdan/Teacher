@@ -1,6 +1,6 @@
 [Unit]
 Description=SQLTeacher Cloud operations health check
-After=network-online.target sqlteacher-cloud.service
+After=network-online.target sqlteacher-cloud.service sqlteacher-qdrant.service
 Wants=network-online.target
 ConditionPathExists=/opt/sqlteacher/current/bin/check-cloud-operations.sh
 
@@ -8,11 +8,12 @@ ConditionPathExists=/opt/sqlteacher/current/bin/check-cloud-operations.sh
 Type=oneshot
 User=root
 Group=root
+EnvironmentFile=/etc/qdrant/qdrant.env
 ExecStart=/opt/sqlteacher/current/bin/check-cloud-operations.sh
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectHome=true
 ProtectSystem=strict
-ReadWritePaths=/run/nginx.pid /var/log/nginx
+ReadWritePaths=/run/nginx.pid /var/log/nginx /var/lib/qdrant
 UMask=0027
 TimeoutStartSec=2min

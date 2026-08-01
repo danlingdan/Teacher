@@ -32,7 +32,8 @@
 
 ## 运行边界
 
-- 生产 Qdrant 尚未配置，服务端共享知识检索使用 Cloud schema 3 的关键词降级路径。
-- v1.8.5 的 Qdrant 交付范围是仅服务端可访问的适配边界；桌面客户端不会直连 Qdrant。
+- 生产 Qdrant 已在后续运维步骤完成部署、安全加固、快照和恢复演练，详见
+  `docs/operations/2026-08-01-qdrant-deployment.md`。
+- Cloud API 仍使用 Cloud schema 3 的关键词降级路径；服务端 Embedding 与索引 Outbox 接线不属于本次基础设施部署，桌面客户端不会直连 Qdrant。
 - 桌面本地语义检索使用 Ollama embedding 与 Lucene HNSW；Ollama 不可用时自动降级到 FTS5。
 - 回滚点保留为 `/opt/sqlteacher/releases/1.4.0` 与上线前 SQLite 备份。

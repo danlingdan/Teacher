@@ -1,0 +1,19 @@
+storage:
+  storage_path: /var/lib/qdrant/storage
+  snapshots_path: /var/lib/qdrant/snapshots
+
+service:
+  host: 127.0.0.1
+  http_port: 6333
+  grpc_port: 6334
+  enable_cors: false
+  max_request_size_mb: 16
+
+telemetry_disabled: true
+
+audit:
+  enabled: true
+  dir: /var/lib/qdrant/audit
+  rotation: daily
+  max_log_files: 7
+  trust_forwarded_headers: false

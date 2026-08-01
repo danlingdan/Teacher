@@ -1,0 +1,23 @@
+[Unit]
+Description=SQLTeacher Qdrant collection snapshot
+After=sqlteacher-qdrant.service
+Requires=sqlteacher-qdrant.service
+ConditionPathExists=/usr/local/libexec/sqlteacher/backup-qdrant.sh
+ConditionPathExists=/etc/qdrant/qdrant.env
+
+[Service]
+Type=oneshot
+User=qdrant
+Group=qdrant
+EnvironmentFile=/etc/qdrant/qdrant.env
+ExecStart=/usr/local/libexec/sqlteacher/backup-qdrant.sh
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/qdrant
+UMask=0027
+TimeoutStartSec=10min
