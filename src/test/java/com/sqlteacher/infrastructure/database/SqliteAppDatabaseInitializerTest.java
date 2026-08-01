@@ -107,6 +107,22 @@ class SqliteAppDatabaseInitializerTest {
         }
     }
 
+    @Test
+    void shouldPreserveFilesCreatedDuringLegacyDataMigration() throws Exception {
+        Path legacy = tempDir.resolve("legacy");
+        Path target = tempDir.resolve("target");
+        Files.createDirectories(legacy.resolve("logs"));
+        Files.createDirectories(target.resolve("logs"));
+        Files.writeString(legacy.resolve("app.db"), "legacy-database");
+        Files.writeString(legacy.resolve("logs/sqlteacher.log"), "legacy-log");
+        Files.writeString(target.resolve("logs/sqlteacher.log"), "active-log");
+
+        SqliteAppDatabaseInitializer.copyMissingLegacyFiles(legacy, target);
+
+        assertEquals("legacy-database", Files.readString(target.resolve("app.db")));
+        assertEquals("active-log", Files.readString(target.resolve("logs/sqlteacher.log")));
+    }
+
     private static int countExercisesWithThreeHints(Path appDb) throws Exception {
         try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + appDb);
              Statement statement = connection.createStatement();

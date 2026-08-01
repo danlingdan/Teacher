@@ -133,21 +133,27 @@ public final class SqliteAppDatabaseInitializer implements DatabaseInitializatio
             || Files.exists(target.resolve("app.db"))) {
             return;
         }
-        Files.createDirectories(target);
-        try (var paths = Files.walk(legacy)) {
+        copyMissingLegacyFiles(legacy, target);
+        log.info("Migrated legacy SQLTeacher data directory from {} to {}", legacy, target);
+    }
+
+    static void copyMissingLegacyFiles(Path legacy, Path target) throws IOException {
+        Path normalizedLegacy = legacy.toAbsolutePath().normalize();
+        Path normalizedTarget = target.toAbsolutePath().normalize();
+        Files.createDirectories(normalizedTarget);
+        try (var paths = Files.walk(normalizedLegacy)) {
             for (Path source : paths.toList()) {
-                Path relative = legacy.relativize(source);
-                Path destination = target.resolve(relative).normalize();
-                if (!destination.startsWith(target)) {
+                Path relative = normalizedLegacy.relativize(source);
+                Path destination = normalizedTarget.resolve(relative).normalize();
+                if (!destination.startsWith(normalizedTarget)) {
                     throw new IOException("Legacy data path escaped target directory");
                 }
                 if (Files.isDirectory(source)) {
                     Files.createDirectories(destination);
-                } else {
+                } else if (Files.notExists(destination)) {
                     Files.copy(source, destination, java.nio.file.StandardCopyOption.COPY_ATTRIBUTES);
                 }
             }
         }
-        log.info("Migrated legacy SQLTeacher data directory from {} to {}", legacy, target);
     }
 }

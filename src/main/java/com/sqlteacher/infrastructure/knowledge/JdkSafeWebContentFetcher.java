@@ -34,7 +34,7 @@ public final class JdkSafeWebContentFetcher implements SafeWebContentFetcher {
             for (int redirect = 0; redirect <= MAX_REDIRECTS; redirect++) {
                 validateResolvedAddresses(uri);
                 HttpRequest request = HttpRequest.newBuilder(uri).timeout(Duration.ofSeconds(12))
-                    .header("Accept", "text/html,text/plain;q=0.9").header("User-Agent", "SQLTeacher/1.8.5 knowledge-fetcher").GET().build();
+                    .header("Accept", "text/html,text/plain;q=0.9").header("User-Agent", "SQLTeacher/1.8.6 knowledge-fetcher").GET().build();
                 HttpResponse<byte[]> response = client.send(request, HttpResponse.BodyHandlers.ofByteArray());
                 if (response.statusCode() >= 300 && response.statusCode() < 400) {
                     if (redirect == MAX_REDIRECTS) throw new SqlTeacherException("WEB_FETCH_REDIRECT_LIMIT", "Too many web redirects");
