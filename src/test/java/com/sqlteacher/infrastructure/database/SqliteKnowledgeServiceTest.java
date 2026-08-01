@@ -4,6 +4,8 @@ import com.sqlteacher.application.config.AiConfiguration;
 import com.sqlteacher.application.config.DatabaseConfiguration;
 import com.sqlteacher.application.config.SqlTeacherConfiguration;
 import com.sqlteacher.application.knowledge.KnowledgeDocument;
+import com.sqlteacher.application.knowledge.CourseKnowledgeSearchFilter;
+import com.sqlteacher.application.knowledge.KnowledgeVisibility;
 import com.sqlteacher.application.mock.MockLearningEventService;
 import com.sqlteacher.domain.SqlTeacherException;
 import org.junit.jupiter.api.Test;
@@ -54,12 +56,65 @@ class SqliteKnowledgeServiceTest {
         assertTrue(service.listDocuments().isEmpty());
     }
 
+    @Test
+    void shouldVersionPublishFilterAndPreserveCourseKnowledgeHistory() throws Exception {
+        SqliteKnowledgeService service = initialize();
+        Path document = tempDir.resolve("joins.md");
+        Files.writeString(document, "# 表连接\n\nINNER JOIN 只保留匹配行。", StandardCharsets.UTF_8);
+
+        var article = service.importArticle(document, "SQL 基础", "多表查询", java.util.List.of("表连接"));
+
+        assertEquals(KnowledgeVisibility.PRIVATE, article.visibility());
+        assertTrue(service.search("INNER JOIN", CourseKnowledgeSearchFilter.published(), 10).isEmpty());
+        article = service.changeVisibility(article.id(), KnowledgeVisibility.PUBLISHED);
+        assertEquals(1, service.search("INNER JOIN", CourseKnowledgeSearchFilter.published(), 10).size());
+
+        Files.writeString(document, "# 表连接进阶\n\nLEFT JOIN 保留左表全部行。", StandardCharsets.UTF_8);
+        article = service.reviseArticle(article.id(), document, java.util.List.of("表连接", "外连接"));
+        var detail = service.getArticle(article.id());
+
+        assertEquals(2, article.currentRevision());
+        assertEquals(KnowledgeVisibility.PRIVATE, article.visibility());
+        assertEquals(2, detail.history().size());
+        assertEquals(java.util.List.of("外连接", "表连接"), article.knowledgePoints());
+        assertTrue(service.search("LEFT JOIN", CourseKnowledgeSearchFilter.published(), 10).isEmpty());
+    }
+
+    @Test
+    void shouldIsolatePrivateArticlesByOwnerAndShareOnlyPublishedArticles() throws Exception {
+        var owner = new java.util.concurrent.atomic.AtomicReference<>("teacher-a");
+        SqliteKnowledgeService service = initialize(owner::get);
+        Path document = tempDir.resolve("private.md");
+        Files.writeString(document, "# 私有讲义\n\nHAVING filters grouped rows.", StandardCharsets.UTF_8);
+        var article = service.importArticle(document, "SQL", "聚合", java.util.List.of("HAVING"));
+        String articleId = article.id();
+
+        owner.set("student-b");
+        assertTrue(service.listArticles().isEmpty());
+        assertThrows(SqlTeacherException.class, () -> service.getArticle(articleId));
+
+        owner.set("teacher-a");
+        Files.writeString(document, "# 已发布讲义\n\nHAVING filters grouped rows after aggregation.", StandardCharsets.UTF_8);
+        article = service.reviseArticle(article.id(), document, java.util.List.of("HAVING"));
+        service.changeVisibility(article.id(), KnowledgeVisibility.PUBLISHED);
+        owner.set("student-b");
+        assertEquals(1, service.listArticles().size());
+        var studentDetail = service.getArticle(article.id());
+        assertEquals(article.id(), studentDetail.article().id());
+        assertEquals(1, studentDetail.history().size());
+        assertEquals(2, studentDetail.revision().revision());
+    }
+
     private SqliteKnowledgeService initialize() {
+        return initialize(() -> "guest");
+    }
+
+    private SqliteKnowledgeService initialize(com.sqlteacher.application.event.LearningEventOwnerProvider ownerProvider) {
         DatabaseConfiguration databases = new DatabaseConfiguration(tempDir.resolve("app.db"), tempDir.resolve("demo.db"));
         new SqliteAppDatabaseInitializer(new SqlTeacherConfiguration(
             "SQLTeacher", tempDir, databases,
             new AiConfiguration(URI.create("http://localhost:11434"), Duration.ofSeconds(1), Duration.ofSeconds(1), "test")
         )).initialize();
-        return new SqliteKnowledgeService(new JdbcConnectionFactory(databases), new MockLearningEventService());
+        return new SqliteKnowledgeService(new JdbcConnectionFactory(databases), new MockLearningEventService(), ownerProvider);
     }
 }

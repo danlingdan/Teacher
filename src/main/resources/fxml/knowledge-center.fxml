@@ -8,57 +8,89 @@
             fx:controller="com.sqlteacher.desktop.controller.KnowledgeCenterController"
             styleClass="exercise-page">
     <top>
-        <VBox spacing="12" styleClass="title-area">
-            <padding><Insets top="18" right="24" bottom="12" left="24"/></padding>
-            <HBox alignment="CENTER_LEFT">
-                <VBox spacing="5">
-                    <Label text="课程知识检索" styleClass="page-title"/>
-                    <Label text="资料仅保存在本机，通过 SQLite FTS5 检索并始终展示标题、来源和命中片段。" styleClass="page-subtitle"/>
+        <VBox spacing="10" styleClass="title-area">
+            <padding><Insets top="16" right="20" bottom="10" left="20"/></padding>
+            <HBox alignment="CENTER_LEFT" spacing="8">
+                <VBox spacing="4">
+                    <Label text="课程知识中心" styleClass="page-title"/>
+                    <Label text="按课程、章节、知识点组织资料；保留版本，发布后可供学生检索与带引用解释。" styleClass="page-subtitle"/>
                 </VBox>
                 <Region HBox.hgrow="ALWAYS"/>
                 <Button text="刷新" onAction="#onRefresh" styleClass="secondary-button"/>
-                <Button fx:id="importButton" text="导入文档" onAction="#onImport" styleClass="refresh-button"/>
+                <Button fx:id="importButton" text="批量导入" onAction="#onImport" styleClass="refresh-button"/>
             </HBox>
             <HBox spacing="8" alignment="CENTER_LEFT">
-                <TextField fx:id="queryField" promptText="输入课程概念、SQL 关键字或错误名称" HBox.hgrow="ALWAYS"/>
-                <Button text="本地检索" onAction="#onSearch" styleClass="primary-button"/>
+                <TextField fx:id="courseField" promptText="课程（必填）" prefWidth="180"/>
+                <TextField fx:id="sectionField" promptText="章节（必填）" prefWidth="180"/>
+                <TextField fx:id="knowledgePointsField" promptText="知识点，逗号分隔" HBox.hgrow="ALWAYS"/>
+                <CheckBox fx:id="includePrivateCheck" text="含私有" selected="true"/>
+            </HBox>
+            <HBox spacing="8" alignment="CENTER_LEFT">
+                <TextField fx:id="queryField" promptText="输入课程问题或关键词" HBox.hgrow="ALWAYS"/>
+                <Button text="检索" onAction="#onSearch" styleClass="secondary-button"/>
+                <Button text="AI 带引用解释" onAction="#onExplain" styleClass="primary-button"/>
             </HBox>
         </VBox>
     </top>
     <center>
-        <SplitPane dividerPositions="0.38" styleClass="knowledge-split">
+        <SplitPane dividerPositions="0.43">
             <items>
                 <VBox spacing="8" styleClass="progress-content">
-                    <HBox alignment="CENTER_LEFT">
-                        <Label text="已导入文档" styleClass="section-title"/>
+                    <HBox alignment="CENTER_LEFT" spacing="6">
+                        <Label text="知识条目" styleClass="section-title"/>
                         <Region HBox.hgrow="ALWAYS"/>
-                        <Button text="删除" onAction="#onDelete" styleClass="danger-outline-button"/>
+                        <Button fx:id="reviseButton" text="新版本" onAction="#onRevise" styleClass="secondary-button"/>
+                        <Button fx:id="publishButton" text="发布" onAction="#onPublish" styleClass="primary-button"/>
+                        <Button fx:id="privateButton" text="私有" onAction="#onMakePrivate" styleClass="secondary-button"/>
+                        <Button fx:id="inactivateButton" text="停用" onAction="#onInactivate" styleClass="secondary-button"/>
+                        <Button fx:id="deleteButton" text="删除" onAction="#onDelete" styleClass="danger-outline-button"/>
                     </HBox>
-                    <TableView fx:id="documentTable" styleClass="result-table" VBox.vgrow="ALWAYS">
+                    <TableView fx:id="articleTable" styleClass="result-table" VBox.vgrow="ALWAYS">
                         <columns>
-                            <TableColumn fx:id="documentTitleColumn" text="标题" prefWidth="180"/>
-                            <TableColumn fx:id="sourceColumn" text="来源" prefWidth="130"/>
-                            <TableColumn fx:id="chunksColumn" text="片段" prefWidth="65"/>
-                            <TableColumn fx:id="importedColumn" text="导入时间" prefWidth="130"/>
+                            <TableColumn fx:id="articleTitleColumn" text="标题" prefWidth="170"/>
+                            <TableColumn fx:id="courseColumn" text="课程" prefWidth="100"/>
+                            <TableColumn fx:id="sectionColumn" text="章节" prefWidth="100"/>
+                            <TableColumn fx:id="visibilityColumn" text="状态" prefWidth="70"/>
+                            <TableColumn fx:id="revisionColumn" text="版本" prefWidth="55"/>
                         </columns>
                     </TableView>
                 </VBox>
-                <VBox spacing="8" styleClass="progress-content">
-                    <Label text="检索结果" styleClass="section-title"/>
-                    <TableView fx:id="resultTable" styleClass="result-table" VBox.vgrow="ALWAYS">
-                        <columns>
-                            <TableColumn fx:id="resultTitleColumn" text="标题" prefWidth="160"/>
-                            <TableColumn fx:id="resultSourceColumn" text="来源" prefWidth="120"/>
-                            <TableColumn fx:id="resultSnippetColumn" text="命中片段" prefWidth="430"/>
-                        </columns>
-                    </TableView>
-                </VBox>
+                <TabPane tabClosingPolicy="UNAVAILABLE" styleClass="progress-content">
+                    <tabs>
+                        <Tab text="检索结果">
+                            <TableView fx:id="resultTable" styleClass="result-table">
+                                <columns>
+                                    <TableColumn fx:id="resultTitleColumn" text="标题" prefWidth="150"/>
+                                    <TableColumn fx:id="resultSourceColumn" text="来源" prefWidth="105"/>
+                                    <TableColumn fx:id="resultSnippetColumn" text="命中片段" prefWidth="420"/>
+                                </columns>
+                            </TableView>
+                        </Tab>
+                        <Tab text="正文与版本">
+                            <TextArea fx:id="contentArea" editable="false" wrapText="true" promptText="选择条目后查看当前正文与历史版本数量。"/>
+                        </Tab>
+                        <Tab text="关联练习">
+                            <VBox spacing="8">
+                                <TableView fx:id="exerciseTable" VBox.vgrow="ALWAYS">
+                                    <columns>
+                                        <TableColumn fx:id="exerciseTitleColumn" text="练习" prefWidth="300"/>
+                                        <TableColumn fx:id="exercisePointColumn" text="知识点" prefWidth="220"/>
+                                    </columns>
+                                </TableView>
+                                <Button text="打开选中练习" onAction="#onOpenExercise" styleClass="primary-button"/>
+                            </VBox>
+                        </Tab>
+                        <Tab text="AI 解释">
+                            <TextArea fx:id="answerArea" editable="false" wrapText="true" promptText="确认发送上下文后，在这里显示答案和引用。"/>
+                        </Tab>
+                    </tabs>
+                </TabPane>
             </items>
         </SplitPane>
     </center>
     <bottom>
         <Label fx:id="statusLabel" visible="false" managed="false" wrapText="true">
-            <BorderPane.margin><Insets top="6" right="24" bottom="14" left="24"/></BorderPane.margin>
+            <BorderPane.margin><Insets top="6" right="20" bottom="12" left="20"/></BorderPane.margin>
         </Label>
     </bottom>
 </BorderPane>

@@ -13,6 +13,8 @@ import com.sqlteacher.application.exercise.ExerciseManagementService;
 import com.sqlteacher.application.exercise.ExercisePracticeService;
 import com.sqlteacher.application.knowledge.KnowledgeDocumentService;
 import com.sqlteacher.application.knowledge.KnowledgeSearchService;
+import com.sqlteacher.application.knowledge.CourseKnowledgeService;
+import com.sqlteacher.application.knowledge.GroundedKnowledgeExplanationService;
 import com.sqlteacher.application.maintenance.DataMaintenanceService;
 import com.sqlteacher.application.maintenance.ApplicationBackupService;
 import com.sqlteacher.application.config.SqlTeacherConfiguration;
@@ -91,6 +93,8 @@ public final class SqlTeacherFxApp extends Application {
     private DataMaintenanceService dataMaintenanceService;
     private KnowledgeDocumentService knowledgeDocumentService;
     private KnowledgeSearchService knowledgeSearchService;
+    private CourseKnowledgeService courseKnowledgeService;
+    private GroundedKnowledgeExplanationService groundedKnowledgeExplanationService;
     private ApplicationBackupService applicationBackupService;
     private SqlTeacherConfiguration configuration;
     private CloudApiClient cloudApiClient;
@@ -135,6 +139,8 @@ public final class SqlTeacherFxApp extends Application {
             dataMaintenanceService = context.getBean(DataMaintenanceService.class);
             knowledgeDocumentService = context.getBean(KnowledgeDocumentService.class);
             knowledgeSearchService = context.getBean(KnowledgeSearchService.class);
+            courseKnowledgeService = context.getBean(CourseKnowledgeService.class);
+            groundedKnowledgeExplanationService = context.getBean(GroundedKnowledgeExplanationService.class);
             applicationBackupService = context.getBean(ApplicationBackupService.class);
             configuration = context.getBean(SqlTeacherConfiguration.class);
             cloudApiClient = context.getBean(CloudApiClient.class);
@@ -170,6 +176,7 @@ public final class SqlTeacherFxApp extends Application {
             || exercisePracticeService == null || exerciseManagementService == null
             || learningAnalyticsService == null || dataMaintenanceService == null
             || knowledgeDocumentService == null || knowledgeSearchService == null
+            || courseKnowledgeService == null || groundedKnowledgeExplanationService == null
             || applicationBackupService == null || configuration == null
             || cloudApiClient == null || cloudSessionService == null || cloudLearningSyncService == null
             || assignmentDeliveryService == null
@@ -248,6 +255,8 @@ public final class SqlTeacherFxApp extends Application {
                     dataMaintenanceService,
                     knowledgeDocumentService,
                     knowledgeSearchService,
+                    courseKnowledgeService,
+                    groundedKnowledgeExplanationService,
                     applicationBackupService,
                     configuration,
                     cloudApiClient,
@@ -332,6 +341,8 @@ public final class SqlTeacherFxApp extends Application {
         dataMaintenanceService = null;
         knowledgeDocumentService = null;
         knowledgeSearchService = null;
+        courseKnowledgeService = null;
+        groundedKnowledgeExplanationService = null;
         cloudApiClient = null;
         cloudSessionService = null;
         cloudLearningSyncService = null;

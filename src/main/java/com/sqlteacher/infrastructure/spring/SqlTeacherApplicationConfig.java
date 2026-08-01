@@ -15,6 +15,8 @@ import com.sqlteacher.application.error.ApplicationExceptionMapper;
 import com.sqlteacher.application.error.DefaultApplicationExceptionMapper;
 import com.sqlteacher.application.event.LearningEventService;
 import com.sqlteacher.application.metadata.DatabaseMetadataService;
+import com.sqlteacher.application.knowledge.CourseKnowledgeService;
+import com.sqlteacher.application.knowledge.GroundedKnowledgeExplanationService;
 import com.sqlteacher.application.nl2sql.DefaultNl2SqlSafetyService;
 import com.sqlteacher.application.nl2sql.Nl2SqlService;
 import com.sqlteacher.application.nl2sql.Nl2SqlSafetyService;
@@ -91,6 +93,15 @@ public class SqlTeacherApplicationConfig {
     @Bean public AiTaskService aiTaskService(AiModelProvider provider, AiUsagePolicy usagePolicy,
             AiTaskHistoryService historyService) {
         return new DefaultAiTaskService(provider, usagePolicy, historyService);
+    }
+
+    @Bean
+    public GroundedKnowledgeExplanationService groundedKnowledgeExplanationService(
+        CourseKnowledgeService knowledgeService,
+        AiTaskService taskService,
+        AiContextPolicy contextPolicy
+    ) {
+        return new DefaultGroundedKnowledgeExplanationService(knowledgeService, taskService, contextPolicy);
     }
 
     @Bean

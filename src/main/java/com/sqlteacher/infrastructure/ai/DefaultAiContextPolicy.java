@@ -58,6 +58,8 @@ public final class DefaultAiContextPolicy implements AiContextPolicy {
                 AiContextCategory.SQL_DRAFT, AiContextCategory.SQL_ERROR);
             case FEEDBACK_DRAFT -> EnumSet.of(AiContextCategory.DETERMINISTIC_RESULT,
                 AiContextCategory.EXERCISE_DEFINITION, AiContextCategory.KNOWLEDGE_EXCERPT);
+            case KNOWLEDGE_EXPLANATION -> EnumSet.of(AiContextCategory.USER_REQUEST,
+                AiContextCategory.KNOWLEDGE_EXCERPT);
         };
     }
 }

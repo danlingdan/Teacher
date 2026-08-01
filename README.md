@@ -1,6 +1,6 @@
 # SQLTeacher
 
-SQLTeacher 是一款面向数据库课程教学与 SQL 练习的本地优先 Java 桌面应用。`v1.7.0` 将练习事实、班级任务、教师反馈和学情统计连接成可解释的学习诊断闭环；所有掌握度与推荐均由 Java 确定性规则生成，AI 仍只生成待审查草稿。
+SQLTeacher 是一款面向数据库课程教学与 SQL 练习的本地优先 Java 桌面应用。`v1.8.0` 新增课程知识中心：教师可按课程、章节和知识点批量导入资料，保留不可变修订历史并显式发布；学生可检索已发布内容、进入关联练习，并在确认最小上下文后获得带可校验引用的 AI 解释。
 
 ## 当前功能
 
@@ -87,6 +87,7 @@ docs                                         架构、计划、验收与软著�
 
 ## 版本
 
+- `v1.8.0`：新增 schema 8 课程知识文章与修订历史、课程/章节/知识点范围检索、身份隔离的私有草稿与显式发布、关联练习、诊断回链，以及带发送确认、引用校验和确定性降级的 AI 解释。详见 [`v1.8.0 发布说明`](docs/releases/v1.8.0.md)与[`实施计划`](docs/plans/2026-07-31-v1.8-course-knowledge-plan.md)。
 - `v1.7.0`：新增确定性知识点掌握快照、学生下一步学习队列、云端任务/反馈合并、教师授权干预队列、身份隔离、可重算派生状态和脱敏 CSV。详见 [`v1.7.0 发布说明`](docs/releases/v1.7.0.md)与[`实施计划`](docs/plans/2026-07-30-v1.7-learning-diagnosis-loop-plan.md)。
 - `v1.6.1`：兼容网络 AI 根地址和 `/v1` 地址，失败时显示真实脱敏原因并取消模拟 SQL 兜底。详见 [`v1.6.1 发布说明`](docs/releases/v1.6.1.md)。
 - `v1.6.0`：统一 AI 教学工作区，包含 DPAPI Provider Profile、统一探测与任务编排、隐私预览、SQL 草稿修订、用量/历史、教师模板和 Ollama 模型切换自动卸载。详见 [`v1.6 发布说明`](docs/releases/v1.6.0.md)、[`实施计划`](docs/plans/2026-07-30-v1.6-controlled-ai-workspace-plan.md)与[`实施记录`](docs/stage5/2026-07-30-v16-controlled-ai-workspace-implementation.md)。

@@ -290,6 +290,52 @@ final class SqliteSchemaMigrator {
                     )
                     """
             )
+        ),
+        new Migration(
+            8,
+            "Create v1.8 course knowledge articles and revision history",
+            List.of(
+                """
+                    create table course_knowledge_articles (
+                        id text primary key,
+                        document_id text not null unique,
+                        owner_id text not null,
+                        course_title text not null,
+                        section_title text not null,
+                        visibility text not null check (visibility in ('PRIVATE','PUBLISHED','INACTIVE')),
+                        current_revision integer not null check (current_revision > 0),
+                        created_at text not null,
+                        updated_at text not null,
+                        foreign key(document_id) references knowledge_documents(id) on delete cascade
+                    )
+                    """,
+                "create index course_knowledge_articles_scope on course_knowledge_articles(owner_id, course_title, section_title, visibility, updated_at desc)",
+                """
+                    create table course_knowledge_revisions (
+                        id text primary key,
+                        article_id text not null,
+                        revision integer not null check (revision > 0),
+                        title text not null,
+                        content text not null,
+                        content_hash text not null,
+                        source_name text not null,
+                        heading_path text not null,
+                        created_at text not null,
+                        unique(article_id, revision),
+                        foreign key(article_id) references course_knowledge_articles(id) on delete cascade
+                    )
+                    """,
+                "create index course_knowledge_revisions_article on course_knowledge_revisions(article_id, revision desc)",
+                """
+                    create table course_knowledge_point_links (
+                        revision_id text not null,
+                        knowledge_point text not null,
+                        primary key(revision_id, knowledge_point),
+                        foreign key(revision_id) references course_knowledge_revisions(id) on delete cascade
+                    )
+                    """,
+                "create index course_knowledge_point_lookup on course_knowledge_point_links(knowledge_point, revision_id)"
+            )
         )
     );
 

@@ -12,6 +12,8 @@ import com.sqlteacher.application.exercise.ExerciseManagementService;
 import com.sqlteacher.application.exercise.ExercisePracticeService;
 import com.sqlteacher.application.knowledge.KnowledgeDocumentService;
 import com.sqlteacher.application.knowledge.KnowledgeSearchService;
+import com.sqlteacher.application.knowledge.CourseKnowledgeService;
+import com.sqlteacher.application.knowledge.GroundedKnowledgeExplanationService;
 import com.sqlteacher.application.maintenance.DataMaintenanceService;
 import com.sqlteacher.application.maintenance.ApplicationBackupService;
 import com.sqlteacher.application.config.SqlTeacherConfiguration;
@@ -134,6 +136,8 @@ public final class MainWindowController {
     private final DataMaintenanceService dataMaintenanceService;
     private final KnowledgeDocumentService knowledgeDocumentService;
     private final KnowledgeSearchService knowledgeSearchService;
+    private final CourseKnowledgeService courseKnowledgeService;
+    private final GroundedKnowledgeExplanationService groundedKnowledgeExplanationService;
     private final ApplicationBackupService applicationBackupService;
     private final SqlTeacherConfiguration configuration;
     private final CloudApiClient cloudApiClient;
@@ -252,6 +256,7 @@ public final class MainWindowController {
     private Node exerciseManagementPage;
     private Node exerciseProgressPage;
     private Node knowledgeCenterPage;
+    private KnowledgeCenterController knowledgeCenterController;
     private Node cloudCenterPage;
     private Node teachingContentPage;
 
@@ -280,6 +285,8 @@ public final class MainWindowController {
                                 DataMaintenanceService dataMaintenanceService,
                                 KnowledgeDocumentService knowledgeDocumentService,
                                 KnowledgeSearchService knowledgeSearchService,
+                                CourseKnowledgeService courseKnowledgeService,
+                                GroundedKnowledgeExplanationService groundedKnowledgeExplanationService,
                                 ApplicationBackupService applicationBackupService,
                                 SqlTeacherConfiguration configuration,
                                 CloudApiClient cloudApiClient,
@@ -318,6 +325,8 @@ public final class MainWindowController {
         this.dataMaintenanceService = Objects.requireNonNull(dataMaintenanceService);
         this.knowledgeDocumentService = Objects.requireNonNull(knowledgeDocumentService);
         this.knowledgeSearchService = Objects.requireNonNull(knowledgeSearchService);
+        this.courseKnowledgeService = Objects.requireNonNull(courseKnowledgeService);
+        this.groundedKnowledgeExplanationService = Objects.requireNonNull(groundedKnowledgeExplanationService);
         this.applicationBackupService = Objects.requireNonNull(applicationBackupService);
         this.configuration = Objects.requireNonNull(configuration);
         this.cloudApiClient = Objects.requireNonNull(cloudApiClient);
@@ -882,9 +891,17 @@ public final class MainWindowController {
             FXMLLoader loader = new FXMLLoader(fxml);
             loader.setControllerFactory(type -> {
                 if (type == KnowledgeCenterController.class) {
-                    return new KnowledgeCenterController(
-                        knowledgeDocumentService, knowledgeSearchService, applicationExceptionMapper
+                    knowledgeCenterController = new KnowledgeCenterController(
+                        knowledgeDocumentService,
+                        courseKnowledgeService,
+                        groundedKnowledgeExplanationService,
+                        exerciseCatalogService,
+                        this::openExercise,
+                        accessProfile.kind() == DesktopAccessProfile.Kind.TEACHER
+                            || accessProfile.kind() == DesktopAccessProfile.Kind.ADMIN,
+                        applicationExceptionMapper
                     );
+                    return knowledgeCenterController;
                 }
                 throw new IllegalStateException("Unexpected controller type for knowledge center: " + type);
             });
@@ -970,6 +987,7 @@ public final class MainWindowController {
                 controller.setOnNavigateSqlPractice(this::onNavigateSqlPractice);
                 controller.setOnNavigateTableSchema(this::onNavigateTableSchema);
                 controller.setOnOpenExercise(this::openExercise);
+                controller.setOnOpenKnowledge(this::openKnowledgePoint);
                 controller.setOnOpenAssignment(this::openAssignment);
                 controller.setOnReviewFeedback(this::onNavigateTeachingContent);
                 return controller;
@@ -988,6 +1006,14 @@ public final class MainWindowController {
         Node page = studentExercisePage();
         studentExerciseController.openExercise(exerciseId);
         selectNav(studentExerciseNavButton);
+        showPage(page);
+    }
+
+    private void openKnowledgePoint(String knowledgePoint) {
+        requireCapability(DesktopCapability.KNOWLEDGE_CENTER);
+        Node page = knowledgeCenterPage();
+        knowledgeCenterController.focusKnowledgePoint(knowledgePoint);
+        selectNav(knowledgeCenterNavButton);
         showPage(page);
     }
 }

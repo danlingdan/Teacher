@@ -192,8 +192,9 @@ public class DatabaseServiceConfig {
     @Bean
     public SqliteKnowledgeService sqliteKnowledgeService(
             JdbcConnectionFactory connectionFactory,
-            LearningEventService learningEventService) {
-        return new SqliteKnowledgeService(connectionFactory, learningEventService);
+            LearningEventService learningEventService,
+            LearningEventOwnerProvider ownerProvider) {
+        return new SqliteKnowledgeService(connectionFactory, learningEventService, ownerProvider);
     }
 
     @Bean

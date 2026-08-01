@@ -36,6 +36,7 @@ public final class HomeController {
     private Runnable onNavigateSqlPractice;
     private Runnable onNavigateTableSchema;
     private Consumer<String> onOpenExercise;
+    private Consumer<String> onOpenKnowledge;
     private Consumer<AssignmentTaskContext> onOpenAssignment;
     private Runnable onReviewFeedback;
 
@@ -58,6 +59,7 @@ public final class HomeController {
         learningQueue.getSelectionModel().selectedItemProperty().addListener((ignored, oldItem, newItem) -> {
             boolean unavailable = newItem == null;
             continueLearningButton.setDisable(unavailable || (newItem.action().exerciseId().isBlank()
+                && newItem.action().knowledgePoint().isBlank()
                 && newItem.assignmentTask() == null && newItem.notificationId().isBlank()));
             dismissActionButton.setDisable(unavailable);
         });
@@ -78,6 +80,10 @@ public final class HomeController {
 
     public void setOnOpenExercise(Consumer<String> onOpenExercise) {
         this.onOpenExercise = onOpenExercise;
+    }
+
+    public void setOnOpenKnowledge(Consumer<String> onOpenKnowledge) {
+        this.onOpenKnowledge = onOpenKnowledge;
     }
 
     public void setOnOpenAssignment(Consumer<AssignmentTaskContext> onOpenAssignment) {
@@ -103,6 +109,8 @@ public final class HomeController {
             onReviewFeedback.run();
         } else if (!selected.action().exerciseId().isBlank() && onOpenExercise != null) {
             onOpenExercise.accept(selected.action().exerciseId());
+        } else if (!selected.action().knowledgePoint().isBlank() && onOpenKnowledge != null) {
+            onOpenKnowledge.accept(selected.action().knowledgePoint());
         }
     }
 
