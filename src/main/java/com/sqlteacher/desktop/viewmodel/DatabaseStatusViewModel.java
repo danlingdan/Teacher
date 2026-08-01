@@ -1,6 +1,7 @@
 package com.sqlteacher.desktop.viewmodel;
 
 import com.sqlteacher.application.database.DatabaseInitializationResult;
+import com.sqlteacher.desktop.AppI18n;
 
 /**
  * ViewModel for the SQLite database initialization status shown on the home page.
@@ -26,8 +27,9 @@ public record DatabaseStatusViewModel(
     public static DatabaseStatusViewModel from(DatabaseInitializationResult result) {
         String appPath = result.appDatabasePath() == null ? "" : result.appDatabasePath().toString();
         String demoPath = result.demoDatabasePath() == null ? "" : result.demoDatabasePath().toString();
-        String summary = "app.db " + (result.appDatabaseCreated() ? "已创建" : "已存在")
-            + " / demo.db " + (result.demoDatabaseCreated() ? "已创建" : "已存在");
+        String appState = result.appDatabaseCreated() ? AppI18n.get("db.created") : AppI18n.get("db.exists");
+        String demoState = result.demoDatabaseCreated() ? AppI18n.get("db.created") : AppI18n.get("db.exists");
+        String summary = AppI18n.format("db.statusSummary", "app.db " + appState, "demo.db " + demoState);
         return new DatabaseStatusViewModel(
             appPath,
             demoPath,

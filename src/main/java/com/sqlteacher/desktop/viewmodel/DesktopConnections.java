@@ -27,7 +27,7 @@ public final class DesktopConnections {
             .filter(profile -> profile.enabled())
             .orElseThrow(() -> new SqlTeacherException(
                 "DATABASE_CONNECTION_NOT_FOUND",
-                "找不到可用的当前数据库连接，请在设置页重新选择。"
+                com.sqlteacher.desktop.AppI18n.get("db.connectionNotFound")
             ));
     }
 

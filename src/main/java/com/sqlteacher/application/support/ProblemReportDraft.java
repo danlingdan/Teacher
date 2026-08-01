@@ -4,7 +4,8 @@ import java.util.Objects;
 
 public record ProblemReportDraft(String idempotencyKey, Type type, Severity severity, String summary,
                                  String description, String reproductionSteps, String expectedResult,
-                                 String actualResult, String contact, DiagnosticSelection diagnostics) {
+                                 String actualResult, String contact, DiagnosticSelection diagnostics,
+                                 ScreenshotAttachment screenshot) {
     public enum Type { BUG, UPDATE_PROBLEM, USABILITY, SUGGESTION, OTHER }
     public enum Severity { DATA_OR_STARTUP_RISK, MAIN_FLOW_BLOCKED, PARTIAL_FAILURE, MINOR }
 
@@ -18,6 +19,11 @@ public record ProblemReportDraft(String idempotencyKey, Type type, Severity seve
         actualResult = optional(actualResult, 2000);
         contact = optional(contact, 254);
         diagnostics = diagnostics == null ? DiagnosticSelection.minimum() : diagnostics;
+    }
+
+    public ProblemReportDraft withScreenshot(ScreenshotAttachment value) {
+        return new ProblemReportDraft(idempotencyKey, type, severity, summary, description, reproductionSteps,
+            expectedResult, actualResult, contact, diagnostics, value);
     }
 
     private static String required(String value, int max, String name) {

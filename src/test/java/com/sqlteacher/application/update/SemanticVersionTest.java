@@ -27,6 +27,6 @@ class SemanticVersionTest {
         String hash = "a".repeat(64);
         return new UpdateManifest(1, "SQLTeacher", "stable", SemanticVersion.parse("1.10.0"), "windows", "x64",
             Instant.parse("2026-08-02T00:00:00Z"), URI.create("https://github.com/danlingdan/Teacher/releases/tag/v1.10.0"),
-            installer, size, hash, URI.create("https://github.com/portable.zip"), 10, hash, SemanticVersion.parse("1.9.0"));
+            installer, size, hash, URI.create("https://github.com/portable.zip"), 10, hash, SemanticVersion.parse("1.9.0"), null);
     }
 }

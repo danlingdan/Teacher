@@ -7,7 +7,7 @@ public record UpdateManifest(int schemaVersion, String product, String channel, 
                              String platform, String architecture, Instant publishedAt, URI releaseNotesUrl,
                              URI installerUrl, long installerSize, String installerSha256,
                              URI portableUrl, long portableSize, String portableSha256,
-                             SemanticVersion minimumSupportedVersion) {
+                             SemanticVersion minimumSupportedVersion, Rollout rollout) {
     public UpdateManifest {
         if (schemaVersion != 1) throw new IllegalArgumentException("unsupported update schema");
         if (!"SQLTeacher".equals(product) || !"stable".equals(channel)) throw new IllegalArgumentException("unsupported update product or channel");
@@ -16,6 +16,11 @@ public record UpdateManifest(int schemaVersion, String product, String channel, 
         }
         validateHash(installerSha256); validateHash(portableSha256);
         validateHttps(releaseNotesUrl); validateHttps(installerUrl); validateHttps(portableUrl);
+    }
+
+    /** Rollout is optional; a {@code null} value means fully visible and not paused. */
+    public boolean rolloutRestrictsVisibility() {
+        return rollout != null && (rollout.paused() || rollout.percentage() < 100);
     }
 
     private static void validateHash(String value) {

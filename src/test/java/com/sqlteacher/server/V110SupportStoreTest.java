@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Path;
+import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -30,6 +31,42 @@ class V110SupportStoreTest {
         assertDoesNotThrow(() -> store.submit(allowed, "user-1", "127.0.0.1"));
         Map<String, Object> forbidden = validBody(); forbidden.put("idempotencyKey", "another"); forbidden.put("diagnostics", Map.of("accessToken", "secret"));
         assertThrows(IllegalArgumentException.class, () -> store.submit(forbidden, "user-1", "127.0.0.1"));
+    }
+
+    @Test void withdrawsOnlyOwnUnprocessedReportsAndIsIdempotent() throws Exception {
+        V110SupportStore store = new V110SupportStore(directory.resolve("cloud.db"));
+        ProblemReportReceipt receipt = store.submit(validBody(), null, "127.0.0.1");
+        assertThrows(SecurityException.class, () -> store.withdraw(receipt.reportId(), "wrong-token"));
+        store.withdraw(receipt.reportId(), receipt.queryToken());
+        assertEquals(ProblemReportReceipt.Status.WITHDRAWN, store.status(receipt.reportId(), receipt.queryToken()).status());
+        store.withdraw(receipt.reportId(), receipt.queryToken());
+    }
+
+    @Test void exportsOnlyOwnReportMetadata() throws Exception {
+        V110SupportStore store = new V110SupportStore(directory.resolve("cloud.db"));
+        ProblemReportReceipt receipt = store.submit(validBody(), "user-1", "127.0.0.1");
+        assertThrows(SecurityException.class, () -> store.export(receipt.reportId(), "wrong-token"));
+        var export = store.export(receipt.reportId(), receipt.queryToken());
+        assertEquals(receipt.reportId(), export.reportId());
+        assertEquals("BUG", export.type());
+        assertEquals("Update failed", export.summary());
+        assertEquals(1, export.history().size());
+        assertEquals("RECEIVED", export.history().getFirst().status());
+    }
+
+    @Test void rejectsInvalidOrOversizedScreenshotsButStoresValidOnes() throws Exception {
+        V110SupportStore store = new V110SupportStore(directory.resolve("cloud.db"));
+        Map<String, Object> oversized = validBody(); oversized.put("idempotencyKey", "oversized");
+        oversized.put("screenshot", Map.of("filename", "shot.png", "mimeType", "image/png", "data", Base64.getEncoder().encodeToString(new byte[2 * 1024 * 1024 + 1])));
+        assertThrows(IllegalArgumentException.class, () -> store.submit(oversized, null, "127.0.0.1"));
+
+        Map<String, Object> badMime = validBody(); badMime.put("idempotencyKey", "badmime");
+        badMime.put("screenshot", Map.of("filename", "shot.bmp", "mimeType", "image/bmp", "data", Base64.getEncoder().encodeToString(new byte[8])));
+        assertThrows(IllegalArgumentException.class, () -> store.submit(badMime, null, "127.0.0.1"));
+
+        Map<String, Object> valid = validBody(); valid.put("idempotencyKey", "withshot");
+        valid.put("screenshot", Map.of("filename", "shot.png", "mimeType", "image/png", "data", Base64.getEncoder().encodeToString(new byte[64])));
+        assertDoesNotThrow(() -> store.submit(valid, null, "127.0.0.1"));
     }
 
     private static Map<String, Object> validBody() {

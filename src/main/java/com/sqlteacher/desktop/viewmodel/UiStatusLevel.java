@@ -1,5 +1,7 @@
 package com.sqlteacher.desktop.viewmodel;
 
+import com.sqlteacher.desktop.AppI18n;
+
 /**
  * UI-facing status level used by every desktop ViewModel.
  *
@@ -7,21 +9,15 @@ package com.sqlteacher.desktop.viewmodel;
  * {@code com.sqlteacher.application.ai.AiAvailability}. ViewModels never import that enum
  * directly; instead they map through the string-based {@link #fromStatusName(String)} bridge
  * so that a change in the upstream enum only affects this single conversion point.
+ *
+ * <p>Display labels come from {@link AppI18n} ({@code status.*} keys) so they follow the
+ * active locale instead of being hard-coded Chinese.</p>
  */
 public enum UiStatusLevel {
-    SUCCESS("正常"),
-    WARNING("警告"),
-    ERROR("异常"),
-    UNKNOWN("未知");
-
-    private final String displayLabel;
-
-    UiStatusLevel(String displayLabel) {
-        this.displayLabel = displayLabel;
-    }
+    SUCCESS, WARNING, ERROR, UNKNOWN;
 
     public String displayLabel() {
-        return displayLabel;
+        return AppI18n.get("status." + name().toLowerCase(java.util.Locale.ROOT));
     }
 
     /**

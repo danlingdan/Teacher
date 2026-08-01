@@ -132,7 +132,7 @@ public final class GeneralSoftwareController {
         try {
             system.saveSettings(new GeneralSoftwareSettings(1, automaticUpdatesCheck.isSelected(), old.skippedVersion(), proxyModeCombo.getValue(),
                 proxyHostField.getText(), proxyPortSpinner.getValue(), reducedMotionCheck.isSelected(), highContrastCheck.isSelected(),
-                supportLoggingCheck.isSelected(), supportExpiry));
+                supportLoggingCheck.isSelected(), supportExpiry, old.updateMirrorsEnabled()));
             applyAccessibility();
             connectivityLabel.setText("通用设置已原子保存。网络代理将在下次启动时应用；代理密码不会写入此设置文件。");
         } catch (RuntimeException error) { connectivityLabel.setText("设置未保存：" + safe(error)); }
@@ -167,7 +167,7 @@ public final class GeneralSoftwareController {
     @FXML private void onSubmitReport() {
         try {
             ProblemReportDraft draft = new ProblemReportDraft(reportDraftId, reportTypeCombo.getValue(), reportSeverityCombo.getValue(),
-                reportSummaryField.getText(), reportDescriptionArea.getText(), reportStepsArea.getText(), "", "", reportContactField.getText(), selection());
+                reportSummaryField.getText(), reportDescriptionArea.getText(), reportStepsArea.getText(), "", "", reportContactField.getText(), selection(), null);
             Map<String, Object> preview = diagnostics.preview(selection()); diagnosticPreviewArea.setText(pretty(preview));
             Alert confirmation = new Alert(Alert.AlertType.CONFIRMATION, "将发送表单内容和右侧预览的诊断字段。不会发送数据库、SQL、Prompt、密码、Token 或 AI Key。", ButtonType.CANCEL, ButtonType.OK);
             confirmation.setHeaderText("确认提交问题反馈？");

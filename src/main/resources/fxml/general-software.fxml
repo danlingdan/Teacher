@@ -7,52 +7,52 @@
             fitToWidth="true" styleClass="connection-form-scroll">
     <VBox fx:id="root" spacing="16" styleClass="panel-card">
         <padding><Insets top="20" right="24" bottom="24" left="24"/></padding>
-        <Label text="更新与支持" styleClass="card-title"/>
+        <Label text="%gs.title" styleClass="card-title"/>
         <Label fx:id="buildInfoLabel" wrapText="true" styleClass="page-subtitle"/>
 
-        <TitledPane text="可信软件更新" expanded="true">
+        <TitledPane text="%gs.trustedUpdates" expanded="true">
             <VBox spacing="10" styleClass="settings-section">
-                <CheckBox fx:id="automaticUpdatesCheck" text="启动完成后每天最多自动检查一次稳定版更新"/>
-                <HBox spacing="8"><Button text="检查更新" onAction="#onCheckUpdates"/><Button fx:id="downloadButton" text="下载并验证" onAction="#onDownloadUpdate"/><Button fx:id="installButton" text="退出并安装" onAction="#onInstallUpdate" styleClass="sql-execute-button"/><Button text="跳过此版本" onAction="#onSkipUpdate"/></HBox>
+                <CheckBox fx:id="automaticUpdatesCheck" text="%gs.autoCheck"/>
+                <HBox spacing="8"><Button text="%gs.check" onAction="#onCheckUpdates"/><Button fx:id="downloadButton" text="%gs.download" onAction="#onDownloadUpdate"/><Button fx:id="installButton" text="%gs.install" onAction="#onInstallUpdate" styleClass="sql-execute-button"/><Button text="%gs.skip" onAction="#onSkipUpdate"/></HBox>
                 <ProgressBar fx:id="updateProgress" prefWidth="480"/>
-                <Label fx:id="updateStatusLabel" text="尚未检查。" wrapText="true"/>
+                <Label fx:id="updateStatusLabel" text="%gs.notChecked" wrapText="true"/>
                 <Label fx:id="updateDetailsLabel" wrapText="true" styleClass="page-subtitle"/>
             </VBox>
         </TitledPane>
 
-        <TitledPane text="网络、外观与通用设置" expanded="false">
+        <TitledPane text="%gs.networkAppearance" expanded="false">
             <GridPane hgap="10" vgap="10">
-                <Label text="代理模式"/><ComboBox fx:id="proxyModeCombo" GridPane.columnIndex="1"/>
-                <Label text="代理主机" GridPane.rowIndex="1"/><TextField fx:id="proxyHostField" promptText="仅手动代理需要" GridPane.columnIndex="1" GridPane.rowIndex="1"/>
-                <Label text="代理端口" GridPane.rowIndex="2"/><Spinner fx:id="proxyPortSpinner" editable="true" GridPane.columnIndex="1" GridPane.rowIndex="2"/>
-                <CheckBox fx:id="reducedMotionCheck" text="减少动态效果" GridPane.rowIndex="3" GridPane.columnSpan="2"/>
-                <CheckBox fx:id="highContrastCheck" text="增强状态对比度" GridPane.rowIndex="4" GridPane.columnSpan="2"/>
-                <CheckBox fx:id="supportLoggingCheck" text="临时支持日志（30 分钟后自动关闭，仍不记录敏感正文）" GridPane.rowIndex="5" GridPane.columnSpan="2"/>
-                <HBox spacing="8" GridPane.rowIndex="6" GridPane.columnSpan="2"><Button text="保存" onAction="#onSaveGeneralSettings"/><Button text="导出非敏感设置" onAction="#onExportSettings"/><Button text="导入" onAction="#onImportSettings"/><Button text="恢复默认" onAction="#onResetSettings"/></HBox>
-                <HBox spacing="8" GridPane.rowIndex="7" GridPane.columnSpan="2"><Button text="检查 Cloud HTTPS" onAction="#onConnectivityCheck"/><Label fx:id="connectivityLabel" text="代理凭据不会写入设置或诊断。" wrapText="true"/></HBox>
+                <Label text="%gs.proxyMode"/><ComboBox fx:id="proxyModeCombo" GridPane.columnIndex="1"/>
+                <Label text="%gs.proxyHost" GridPane.rowIndex="1"/><TextField fx:id="proxyHostField" promptText="%gs.proxyManualHint" GridPane.columnIndex="1" GridPane.rowIndex="1"/>
+                <Label text="%gs.proxyPort" GridPane.rowIndex="2"/><Spinner fx:id="proxyPortSpinner" editable="true" GridPane.columnIndex="1" GridPane.rowIndex="2"/>
+                <CheckBox fx:id="reducedMotionCheck" text="%gs.reducedMotion" GridPane.rowIndex="3" GridPane.columnSpan="2"/>
+                <CheckBox fx:id="highContrastCheck" text="%gs.highContrast" GridPane.rowIndex="4" GridPane.columnSpan="2"/>
+                <CheckBox fx:id="supportLoggingCheck" text="%gs.supportLogging" GridPane.rowIndex="5" GridPane.columnSpan="2"/>
+                <HBox spacing="8" GridPane.rowIndex="6" GridPane.columnSpan="2"><Button text="%gs.save" onAction="#onSaveGeneralSettings"/><Button text="%gs.exportSettings" onAction="#onExportSettings"/><Button text="%gs.import" onAction="#onImportSettings"/><Button text="%gs.reset" onAction="#onResetSettings"/></HBox>
+                <HBox spacing="8" GridPane.rowIndex="7" GridPane.columnSpan="2"><Button text="%gs.checkConnectivity" onAction="#onConnectivityCheck"/><Label fx:id="connectivityLabel" text="%gs.proxyNote" wrapText="true"/></HBox>
             </GridPane>
         </TitledPane>
 
-        <TitledPane text="空间、任务与通知" expanded="false">
-            <VBox spacing="10"><Label fx:id="storageLabel" wrapText="true"/><HBox spacing="8"><Button text="刷新占用" onAction="#onRefreshStorage"/><Button text="清理可重建文件" onAction="#onClearRebuildable"/></HBox><Label text="后台任务" styleClass="form-label"/><ListView fx:id="taskList" prefHeight="120"/><Label text="应用内通知" styleClass="form-label"/><ListView fx:id="notificationList" prefHeight="120"/></VBox>
+        <TitledPane text="%gs.spaceTasks" expanded="false">
+            <VBox spacing="10"><Label fx:id="storageLabel" wrapText="true"/><HBox spacing="8"><Button text="%gs.refreshStorage" onAction="#onRefreshStorage"/><Button text="%gs.clearRebuildable" onAction="#onClearRebuildable"/></HBox><Label text="%gs.tasks" styleClass="form-label"/><ListView fx:id="taskList" prefHeight="120"/><Label text="%gs.notifications" styleClass="form-label"/><ListView fx:id="notificationList" prefHeight="120"/></VBox>
         </TitledPane>
 
-        <TitledPane text="问题反馈与诊断" expanded="false">
+        <TitledPane text="%gs.feedbackDiagnostics" expanded="false">
             <VBox spacing="10">
-                <HBox spacing="8"><ComboBox fx:id="reportTypeCombo"/><ComboBox fx:id="reportSeverityCombo"/><TextField fx:id="reportSummaryField" promptText="问题摘要" HBox.hgrow="ALWAYS"/></HBox>
-                <TextArea fx:id="reportDescriptionArea" promptText="问题描述（必填）" prefRowCount="4" wrapText="true"/><TextArea fx:id="reportStepsArea" promptText="复现步骤（可选）" prefRowCount="3" wrapText="true"/><TextField fx:id="reportContactField" promptText="联系方式（可选，不自动带入账号邮箱）"/>
-                <Label text="可选诊断字段（发送前可预览）"/><HBox spacing="8"><CheckBox fx:id="environmentCheck" text="运行环境" onAction="#onPreviewDiagnostics"/><CheckBox fx:id="errorsCheck" text="最近错误摘要" onAction="#onPreviewDiagnostics"/><CheckBox fx:id="networkCheck" text="网络状态类别" onAction="#onPreviewDiagnostics"/><CheckBox fx:id="updateStateCheck" text="更新状态" onAction="#onPreviewDiagnostics"/></HBox>
+                <HBox spacing="8"><ComboBox fx:id="reportTypeCombo"/><ComboBox fx:id="reportSeverityCombo"/><TextField fx:id="reportSummaryField" promptText="%gs.reportSummaryHint" HBox.hgrow="ALWAYS"/></HBox>
+                <TextArea fx:id="reportDescriptionArea" promptText="%gs.reportDescriptionHint" prefRowCount="4" wrapText="true"/><TextArea fx:id="reportStepsArea" promptText="%gs.reportStepsHint" prefRowCount="3" wrapText="true"/><TextField fx:id="reportContactField" promptText="%gs.reportContactHint"/>
+                <Label text="%gs.diagnosticFields"/><HBox spacing="8"><CheckBox fx:id="environmentCheck" text="%gs.diagnosticEnv" onAction="#onPreviewDiagnostics"/><CheckBox fx:id="errorsCheck" text="%gs.diagnosticErrors" onAction="#onPreviewDiagnostics"/><CheckBox fx:id="networkCheck" text="%gs.diagnosticNetwork" onAction="#onPreviewDiagnostics"/><CheckBox fx:id="updateStateCheck" text="%gs.diagnosticUpdate" onAction="#onPreviewDiagnostics"/></HBox>
                 <TextArea fx:id="diagnosticPreviewArea" editable="false" prefRowCount="8" wrapText="true"/>
-                <HBox spacing="8"><Button text="刷新预览" onAction="#onPreviewDiagnostics"/><Button text="导出本地诊断包" onAction="#onExportDiagnostics"/><Button text="确认并提交反馈" onAction="#onSubmitReport" styleClass="sql-execute-button"/></HBox><Label fx:id="reportStatusLabel" text="不会自动上传日志、数据库、SQL、Prompt、Token 或 AI Key。" wrapText="true"/>
+                <HBox spacing="8"><Button text="%gs.refreshPreview" onAction="#onPreviewDiagnostics"/><Button text="%gs.exportDiagnostics" onAction="#onExportDiagnostics"/><Button text="%gs.submitReport" onAction="#onSubmitReport" styleClass="sql-execute-button"/></HBox><Label fx:id="reportStatusLabel" text="%gs.privacyNote" wrapText="true"/>
             </VBox>
         </TitledPane>
 
-        <TitledPane text="账号安全" expanded="false">
-            <VBox spacing="8"><PasswordField fx:id="currentPasswordField" promptText="当前密码"/><PasswordField fx:id="newPasswordField" promptText="新密码（12～128 字符）"/><PasswordField fx:id="confirmPasswordField" promptText="再次输入新密码"/><Button text="修改密码并撤销所有会话" onAction="#onChangePassword"/><Label fx:id="accountStatusLabel" text="访客可忽略此区域。" wrapText="true"/></VBox>
+        <TitledPane text="%gs.accountSecurity" expanded="false">
+            <VBox spacing="8"><PasswordField fx:id="currentPasswordField" promptText="%gs.currentPassword"/><PasswordField fx:id="newPasswordField" promptText="%gs.newPassword"/><PasswordField fx:id="confirmPasswordField" promptText="%gs.confirmPassword"/><Button text="%gs.changePassword" onAction="#onChangePassword"/><Label fx:id="accountStatusLabel" text="%gs.guestIgnore" wrapText="true"/></VBox>
         </TitledPane>
 
-        <TitledPane text="离线帮助、隐私与许可证" expanded="false">
-            <VBox spacing="8"><ComboBox fx:id="helpTopicCombo"/><TextArea fx:id="helpTextArea" editable="false" prefRowCount="7" wrapText="true"/><Label text="隐私：默认不收集使用遥测；反馈和诊断仅在明确操作后发送或导出。" wrapText="true"/><Label text="第三方组件及许可证清单随正式包发布；详细 SBOM 作为 Release 资产提供。" wrapText="true"/></VBox>
+        <TitledPane text="%gs.helpPrivacy" expanded="false">
+            <VBox spacing="8"><ComboBox fx:id="helpTopicCombo"/><TextArea fx:id="helpTextArea" editable="false" prefRowCount="7" wrapText="true"/><Label text="%gs.privacyStatement" wrapText="true"/><Label text="%gs.licenseStatement" wrapText="true"/></VBox>
         </TitledPane>
     </VBox>
 </ScrollPane>

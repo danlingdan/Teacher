@@ -15,6 +15,7 @@ import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
@@ -39,12 +40,27 @@ public final class HttpProblemReportService implements ProblemReportService {
         body.put("type", draft.type().name()); body.put("severity", draft.severity().name()); body.put("summary", draft.summary());
         body.put("description", draft.description()); body.put("reproductionSteps", draft.reproductionSteps());
         body.put("expectedResult", draft.expectedResult()); body.put("actualResult", draft.actualResult()); body.put("contact", draft.contact());
+        if (draft.screenshot() != null) {
+            Map<String, Object> screenshot = new LinkedHashMap<>();
+            screenshot.put("filename", draft.screenshot().filename());
+            screenshot.put("mimeType", draft.screenshot().mimeType());
+            screenshot.put("data", Base64.getEncoder().encodeToString(draft.screenshot().data()));
+            body.put("screenshot", screenshot);
+        }
         body.put("application", ApplicationBuildInfo.current()); body.put("diagnostics", diagnostics);
         return request("support/reports", "POST", body, accessToken, ProblemReportReceipt.class);
     }
 
     @Override public ProblemReportReceipt status(String reportId, String queryToken) {
         return request("support/reports/" + encodeSegment(reportId) + "?queryToken=" + encodeSegment(queryToken), "GET", null, null, ProblemReportReceipt.class);
+    }
+
+    @Override public void withdraw(String reportId, String queryToken) {
+        request("support/reports/" + encodeSegment(reportId) + "/withdraw?queryToken=" + encodeSegment(queryToken), "POST", null, null, ProblemReportReceipt.class);
+    }
+
+    @Override public ProblemReportExport export(String reportId, String queryToken) {
+        return request("support/reports/" + encodeSegment(reportId) + "/export?queryToken=" + encodeSegment(queryToken), "GET", null, null, ProblemReportExport.class);
     }
 
     private <T> T request(String path, String method, Object payload, String accessToken, Class<T> type) {

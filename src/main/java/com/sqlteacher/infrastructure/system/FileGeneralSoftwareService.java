@@ -37,7 +37,7 @@ public final class FileGeneralSoftwareService implements GeneralSoftwareService 
         GeneralSoftwareSettings value = AtomicJsonFile.read(settingsFile, GeneralSoftwareSettings.class, GeneralSoftwareSettings.defaults());
         if (value.supportLogging() && value.supportLoggingExpiresAt() < System.currentTimeMillis()) {
             value = new GeneralSoftwareSettings(1, value.automaticUpdateChecks(), value.skippedVersion(), value.proxyMode(),
-                value.proxyHost(), value.proxyPort(), value.reducedMotion(), value.highContrast(), false, 0);
+                value.proxyHost(), value.proxyPort(), value.reducedMotion(), value.highContrast(), false, 0, value.updateMirrorsEnabled());
             saveSettings(value);
         }
         return value;

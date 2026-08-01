@@ -3,6 +3,8 @@ package com.sqlteacher.infrastructure.cloud;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
+import com.sqlteacher.application.collaboration.AccountTaskState;
+import com.sqlteacher.application.collaboration.ActiveSession;
 import com.sqlteacher.application.collaboration.AuthenticatedUser;
 import com.sqlteacher.application.collaboration.AdminAuditPage;
 import com.sqlteacher.application.collaboration.AdminHealthSummary;
@@ -110,6 +112,48 @@ public final class HttpCloudApiClient implements CloudApiClient {
     @Override public void changePassword(String accessToken, char[] currentPassword, char[] newPassword) {
         try { send("auth/change-password", "POST", Map.of("currentPassword", new String(currentPassword), "newPassword", new String(newPassword)), accessToken); }
         finally { java.util.Arrays.fill(currentPassword, '\0'); java.util.Arrays.fill(newPassword, '\0'); }
+    }
+
+    @Override public void requestPasswordReset(String email) {
+        send("auth/request-password-reset", "POST", Map.of("email", email), null);
+    }
+
+    @Override public void resetPassword(String token, char[] newPassword) {
+        try { send("auth/reset-password", "POST", Map.of("token", token, "newPassword", new String(newPassword)), null); }
+        finally { java.util.Arrays.fill(newPassword, '\0'); }
+    }
+
+    @Override public java.util.List<ActiveSession> listSessions(String accessToken) {
+        return request("sessions", "GET", null, accessToken, new TypeReference<Map<String, java.util.List<ActiveSession>>>() { })
+            .getOrDefault("sessions", java.util.List.of());
+    }
+
+    @Override public void revokeSession(String accessToken, String sessionId) {
+        send("sessions/" + encodeSegment(sessionId) + "/revoke", "POST", Map.of(), accessToken);
+    }
+
+    @Override public AccountTaskState requestAccountExport(String accessToken) {
+        return request("account/export", "POST", Map.of(), accessToken, AccountTaskState.class);
+    }
+
+    @Override public String getAccountExport(String accessToken, String taskId) {
+        return request("account/export/" + encodeSegment(taskId), "GET", null, accessToken, new TypeReference<Map<String, String>>() { }).get("payload");
+    }
+
+    @Override public AccountTaskState requestAccountDeletion(String accessToken) {
+        return request("account/delete", "POST", Map.of(), accessToken, AccountTaskState.class);
+    }
+
+    @Override public AccountTaskState cancelAccountDeletion(String accessToken) {
+        return request("account/delete", "DELETE", Map.of(), accessToken, AccountTaskState.class);
+    }
+
+    @Override public AccountTaskState getAccountDeletionStatus(String accessToken) {
+        return request("account/delete", "GET", null, accessToken, AccountTaskState.class);
+    }
+
+    private static String encodeSegment(String value) {
+        return java.net.URLEncoder.encode(value, StandardCharsets.UTF_8);
     }
 
     @Override

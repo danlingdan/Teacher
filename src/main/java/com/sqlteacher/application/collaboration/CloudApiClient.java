@@ -32,6 +32,48 @@ public interface CloudApiClient {
         throw new UnsupportedOperationException("Password changes are unavailable");
     }
 
+    /** Requests a password-reset email for an account. Always returns normally to avoid account enumeration. */
+    default void requestPasswordReset(String email) {
+        throw new UnsupportedOperationException("Password reset is unavailable");
+    }
+
+    /** Resets the account password using a one-time token from the reset email; revokes all sessions on success. */
+    default void resetPassword(String token, char[] newPassword) {
+        throw new UnsupportedOperationException("Password reset is unavailable");
+    }
+
+    default java.util.List<ActiveSession> listSessions(String accessToken) {
+        throw new UnsupportedOperationException("Session management is unavailable");
+    }
+
+    /** Revokes another session by its hashed id; the current session is protected. */
+    default void revokeSession(String accessToken, String sessionId) {
+        throw new UnsupportedOperationException("Session management is unavailable");
+    }
+
+    /** Starts an async export of the caller's own cloud data. */
+    default AccountTaskState requestAccountExport(String accessToken) {
+        throw new UnsupportedOperationException("Account export is unavailable");
+    }
+
+    /** Returns the exported payload JSON once the task is ready; throws when not ready or owned by someone else. */
+    default String getAccountExport(String accessToken, String taskId) {
+        throw new UnsupportedOperationException("Account export is unavailable");
+    }
+
+    /** Starts account deletion with a cancel window; the account stays usable until the window closes. */
+    default AccountTaskState requestAccountDeletion(String accessToken) {
+        throw new UnsupportedOperationException("Account deletion is unavailable");
+    }
+
+    default AccountTaskState cancelAccountDeletion(String accessToken) {
+        throw new UnsupportedOperationException("Account deletion is unavailable");
+    }
+
+    default AccountTaskState getAccountDeletionStatus(String accessToken) {
+        throw new UnsupportedOperationException("Account deletion is unavailable");
+    }
+
     List<ClassroomService.Classroom> listClasses(String accessToken);
 
     ClassroomService.Classroom createClass(String accessToken, String name);

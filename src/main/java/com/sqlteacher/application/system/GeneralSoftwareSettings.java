@@ -3,7 +3,7 @@ package com.sqlteacher.application.system;
 public record GeneralSoftwareSettings(int formatVersion, boolean automaticUpdateChecks, String skippedVersion,
                                       ProxyMode proxyMode, String proxyHost, int proxyPort,
                                       boolean reducedMotion, boolean highContrast, boolean supportLogging,
-                                      long supportLoggingExpiresAt) {
+                                      long supportLoggingExpiresAt, boolean updateMirrorsEnabled) {
     public enum ProxyMode { DIRECT, SYSTEM, MANUAL }
     public GeneralSoftwareSettings {
         if (formatVersion != 1) throw new IllegalArgumentException("unsupported settings format");
@@ -16,6 +16,6 @@ public record GeneralSoftwareSettings(int formatVersion, boolean automaticUpdate
         }
     }
     public static GeneralSoftwareSettings defaults() {
-        return new GeneralSoftwareSettings(1, true, "", ProxyMode.SYSTEM, "", 0, false, false, false, 0);
+        return new GeneralSoftwareSettings(1, true, "", ProxyMode.SYSTEM, "", 0, false, false, false, 0, false);
     }
 }

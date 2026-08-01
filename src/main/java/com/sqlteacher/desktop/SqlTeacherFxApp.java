@@ -262,7 +262,7 @@ public final class SqlTeacherFxApp extends Application {
 
     private void showLoginGateContent(Stage stage) {
         URL fxml = requiredResource(LOGIN_GATE_FXML);
-        FXMLLoader loader = new FXMLLoader(fxml);
+        FXMLLoader loader = new FXMLLoader(fxml, AppI18n.bundle());
         loader.setControllerFactory(type -> {
             if (type == LoginGateController.class) {
                 return new LoginGateController(
@@ -292,7 +292,7 @@ public final class SqlTeacherFxApp extends Application {
         if (accessProfile.isGuest()) learningEventOwnerContext.useGuest();
         else learningEventOwnerContext.useAuthenticatedUser(accessProfile.userId());
         URL fxml = requiredResource(MAIN_WINDOW_FXML);
-        FXMLLoader loader = new FXMLLoader(fxml);
+        FXMLLoader loader = new FXMLLoader(fxml, AppI18n.bundle());
         loader.setControllerFactory(type -> {
             if (type == MainWindowController.class) {
                 return new MainWindowController(

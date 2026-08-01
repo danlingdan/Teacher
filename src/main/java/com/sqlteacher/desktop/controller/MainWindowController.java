@@ -45,7 +45,9 @@ import com.sqlteacher.application.learning.InterventionService;
 import com.sqlteacher.application.learning.StudentLearningQueueService;
 import com.sqlteacher.application.support.DiagnosticBundleService;
 import com.sqlteacher.application.support.ProblemReportService;
+import com.sqlteacher.application.system.CommandPaletteModel;
 import com.sqlteacher.application.system.GeneralSoftwareService;
+import com.sqlteacher.desktop.AppI18n;
 import com.sqlteacher.application.update.UpdateService;
 import com.sqlteacher.desktop.GlobalLoading;
 import com.sqlteacher.desktop.appearance.UiIcon;
@@ -60,6 +62,7 @@ import javafx.scene.control.Button;
 import javafx.scene.control.ButtonBase;
 import javafx.scene.control.ContentDisplay;
 import javafx.scene.control.Label;
+import javafx.scene.control.TextInputDialog;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
@@ -593,6 +596,43 @@ public final class MainWindowController {
                 button::fire
             );
         }
+        scene.getAccelerators().put(new KeyCodeCombination(KeyCode.K, KeyCombination.CONTROL_DOWN), this::onCommandPalette);
+    }
+
+    /** Opens the command palette (Ctrl+K). Destructive actions are never executed here, only navigated to. */
+    private void onCommandPalette() {
+        CommandPaletteModel model = new CommandPaletteModel();
+        model.register("home", "首页", "home", false, "home");
+        model.register("practice", "SQL 练习", "sql practice editor", false, "practice");
+        model.register("student", "学生练习", "student practice", false, "student");
+        model.register("teaching", "题库管理", "exercise management", false, "teaching");
+        model.register("progress", "学情看板", "learning analytics dashboard", false, "progress");
+        model.register("knowledge", "课程知识", "course knowledge", false, "knowledge");
+        model.register("ai", "AI 助手", "ai assistant", false, "ai");
+        model.register("schema", "表结构", "table schema", false, "schema");
+        model.register("settings", "设置", "settings", false, "settings");
+        TextInputDialog dialog = new TextInputDialog();
+        dialog.setTitle(AppI18n.get("app.name"));
+        dialog.setHeaderText("命令面板 · Command Palette");
+        dialog.setContentText("输入页面或命令（输入命令 / Command）：");
+        dialog.showAndWait().ifPresent(query -> {
+            var matches = model.search(query, 5);
+            if (matches.isEmpty()) return;
+            CommandPaletteModel.Command command = matches.getFirst();
+            Button target = switch (command.target()) {
+                case "home" -> homeNavButton;
+                case "practice" -> sqlPracticeNavButton;
+                case "student" -> studentExerciseNavButton;
+                case "teaching" -> exerciseManagementNavButton;
+                case "progress" -> exerciseProgressNavButton;
+                case "knowledge" -> knowledgeCenterNavButton;
+                case "ai" -> aiAssistantNavButton;
+                case "schema" -> tableSchemaNavButton;
+                case "settings" -> settingsNavButton;
+                default -> null;
+            };
+            if (target != null && target.isVisible()) target.fire();
+        });
     }
 
     @FXML
