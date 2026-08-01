@@ -348,6 +348,9 @@ class SqlTeacherCloudServerTest {
         assertEquals(0, health.get("disabledUsers").asInt());
         assertTrue(health.get("activeAccessSessions").asInt() >= 2);
         assertEquals(403, getStatus("admin/health", userToken));
+        JsonNode knowledgeIndex = JSON.readTree(getText("admin/knowledge-index", adminToken));
+        assertEquals("disabled", knowledgeIndex.get("status").asText());
+        assertEquals(403, getStatus("admin/knowledge-index", userToken));
         assertEquals(2, JSON.readTree(getText("admin/users", adminToken)).get("users").size());
 
         JsonNode disabled = post("admin/users/" + userId + "/disable", adminToken,

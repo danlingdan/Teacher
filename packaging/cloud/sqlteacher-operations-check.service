@@ -1,6 +1,6 @@
 [Unit]
 Description=SQLTeacher Cloud operations health check
-After=network-online.target sqlteacher-cloud.service sqlteacher-qdrant.service
+After=network-online.target sqlteacher-cloud.service sqlteacher-qdrant.service sqlteacher-embedding.service
 Wants=network-online.target
 ConditionPathExists=/opt/sqlteacher/current/bin/check-cloud-operations.sh
 

@@ -16,7 +16,7 @@ import java.util.List;
 import java.util.Map;
 
 /** Optional server-side Qdrant boundary. Desktop clients never connect to Qdrant directly. */
-public final class QdrantVectorClient {
+public final class QdrantVectorClient implements CloudKnowledgeVectorClient {
     private final URI baseUri;
     private final String collection;
     private final String apiKey;
@@ -32,27 +32,54 @@ public final class QdrantVectorClient {
 
     public boolean enabled() { return baseUri != null; }
 
+    @Override
+    public void validateCollection(int expectedDimension) {
+        if (expectedDimension < 1) throw new IllegalArgumentException("expectedDimension must be positive");
+        JsonNode result = send("/collections/" + encodedCollection(), "GET", null).path("result");
+        JsonNode vectors = result.path("config").path("params").path("vectors");
+        if (!"green".equals(result.path("status").asText()) || vectors.path("size").asInt(-1) != expectedDimension
+            || !"Cosine".equalsIgnoreCase(vectors.path("distance").asText())) {
+            throw new SqlTeacherException("QDRANT_COLLECTION_INVALID",
+                "Qdrant collection is unavailable or incompatible with the embedding profile");
+        }
+    }
+
+    @Override
     public void upsert(List<Point> points) {
         if (!enabled()) throw new IllegalStateException("Qdrant is not configured");
         if (points == null || points.isEmpty()) throw new IllegalArgumentException("points must not be empty");
         send("/collections/" + encodedCollection() + "/points?wait=true", "PUT", Map.of("points", points));
     }
 
-    public List<SearchHit> search(float[] vector, String courseId, String visibility, int limit) {
+    @Override
+    public List<SearchHit> search(float[] vector, String courseId, List<String> requestedVisibility, int limit) {
         if (!enabled()) return List.of();
         if (vector == null || vector.length == 0 || limit < 1 || limit > 100) throw new IllegalArgumentException("invalid Qdrant search request");
+        List<String> visibility = requestedVisibility == null ? List.of() : requestedVisibility.stream()
+            .map(value -> require(value, "visibility")).distinct().toList();
+        if (visibility.isEmpty()) throw new IllegalArgumentException("visibility must not be empty");
         Map<String, Object> filter = Map.of("must", List.of(
             Map.of("key", "courseId", "match", Map.of("value", require(courseId, "courseId"))),
-            Map.of("key", "visibility", "match", Map.of("value", require(visibility, "visibility")))
+            Map.of("key", "visibility", "match", Map.of("any", visibility))
         ));
-        JsonNode root = send("/collections/" + encodedCollection() + "/points/search", "POST",
-            Map.of("vector", vector, "filter", filter, "limit", limit, "with_payload", true));
+        JsonNode root = send("/collections/" + encodedCollection() + "/points/query", "POST",
+            Map.of("query", vector, "filter", filter, "limit", limit, "with_payload", true));
         List<SearchHit> hits = new ArrayList<>();
-        for (JsonNode item : root.path("result")) {
+        for (JsonNode item : root.path("result").path("points")) {
             hits.add(new SearchHit(item.path("id").asText(), item.path("score").asDouble(),
                 mapper.convertValue(item.path("payload"), Map.class)));
         }
         return List.copyOf(hits);
+    }
+
+    @Override
+    public boolean ready() {
+        if (!enabled()) return false;
+        try {
+            return request("/readyz", "GET", null).statusCode() == 200;
+        } catch (RuntimeException error) {
+            return false;
+        }
     }
 
     public String createSnapshot() {
@@ -61,17 +88,27 @@ public final class QdrantVectorClient {
     }
 
     private JsonNode send(String path, String method, Object body) {
+        HttpResponse<String> response = request(path, method, body);
+        try {
+            return mapper.readTree(response.body());
+        } catch (Exception error) {
+            throw new SqlTeacherException("QDRANT_RESPONSE_INVALID", "Qdrant returned invalid JSON", error);
+        }
+    }
+
+    private HttpResponse<String> request(String path, String method, Object body) {
         try {
             HttpRequest.Builder builder = HttpRequest.newBuilder(baseUri.resolve(path)).timeout(Duration.ofSeconds(20))
                 .header("Accept", "application/json").header("Content-Type", "application/json");
             if (!apiKey.isBlank()) builder.header("api-key", apiKey);
-            HttpRequest request = builder.method(method,
-                HttpRequest.BodyPublishers.ofString(mapper.writeValueAsString(body), StandardCharsets.UTF_8)).build();
+            HttpRequest.BodyPublisher publisher = body == null ? HttpRequest.BodyPublishers.noBody()
+                : HttpRequest.BodyPublishers.ofString(mapper.writeValueAsString(body), StandardCharsets.UTF_8);
+            HttpRequest request = builder.method(method, publisher).build();
             HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() < 200 || response.statusCode() >= 300) {
                 throw new SqlTeacherException("QDRANT_REQUEST_FAILED", "Qdrant returned HTTP " + response.statusCode());
             }
-            return mapper.readTree(response.body());
+            return response;
         } catch (InterruptedException error) {
             Thread.currentThread().interrupt();
             throw new SqlTeacherException("QDRANT_REQUEST_INTERRUPTED", "Qdrant request was interrupted", error);
@@ -92,6 +129,9 @@ public final class QdrantVectorClient {
         }
     }
     public record SearchHit(String id, double score, Map<String, Object> payload) {
-        public SearchHit { payload = payload == null ? Map.of() : Map.copyOf(payload); }
+        public SearchHit {
+            if (id == null || id.isBlank() || !Double.isFinite(score)) throw new IllegalArgumentException("invalid Qdrant search hit");
+            payload = payload == null ? Map.of() : Map.copyOf(payload);
+        }
     }
 }

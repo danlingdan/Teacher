@@ -2,7 +2,7 @@
 
 > 日期：2026-08-01
 > 应用数据库：schema 9
-> 云数据库：schema 3
+> 云数据库：schema 4
 
 ## 已实施
 
@@ -12,8 +12,10 @@
 - 混合检索以 FTS5 为稳定基线，用 RRF 合并向量候选；查询前后的身份与课程范围过滤保持在 Java 侧。
 - 文档导入上限提升为 20 MiB，支持 UTF-8 文本、Markdown、PDF 与 DOCX；加密 PDF 和无可读正文文件拒绝导入。
 - 联网搜索默认关闭、查询前确认；安全抓取阻断 SSRF、限制 3 次重定向、1 MiB 响应和 HTML/纯文本内容类型。
-- Cloud schema 3 和 `/api/v1/v14/courses/{courseId}/knowledge` 提供所有者写入、发布可见读取与关键词降级搜索。
-- 服务端提供可选 Qdrant 适配边界；生产启用需要单独配置服务地址、集合、密钥、备份与告警，不把该基础设施暴露给桌面客户端。
+- Cloud schema 4 在知识事实、切片之外增加事务 Outbox 与嵌入画像；后台任务批量生成向量并幂等写入 Qdrant，失败按退避重试且不回滚事实数据。
+- 云端关键词与向量候选通过 RRF 融合；Qdrant 使用课程与可见性 Payload filter，返回后由 SQLite 对当前修订和授权再次复核。
+- 生产 FastEmbed `0.8.0` 使用 `BAAI/bge-small-zh-v1.5` 的 query/passage 接口，固定 512 维并离线加载；Qdrant 和嵌入端口均只监听 loopback。
+- `/health`、管理状态/重建接口和运维检查覆盖 Provider 就绪、索引积压、集合、快照与恢复。
 - `v185-rag-golden-set.jsonl` 固化首批 40 个 SQL 课程问题，评测器输出 Recall@K、MRR、拒答精度、引用覆盖率和 P95 延迟。
 
 ## 设计边界
@@ -21,13 +23,15 @@
 - 向量和搜索缓存都是派生状态，随时可重建；文章修订、所有者与发布状态由 SQLite 事实表决定。
 - Ollama、Brave 或 Qdrant 不可用时，界面必须显示降级状态，不伪装为完整语义检索。
 - Brave 结果只作为独立标注的联网来源展示，不自动发布、不自动参与掌握度判断。
-- Qdrant 生产激活属于运维步骤；本版本交付代码边界与 Cloud schema，不在没有基础设施授权时修改线上服务。
+- 生产已启用 FastEmbed、Qdrant 与 Cloud Outbox 闭环；服务不可用时 Cloud 搜索仍确定性降级到 SQLite 关键词路径。
 
 ## 发布门禁
 
-- `mvn -B -ntp test`：通过，319 项测试，0 失败、0 错误；2 项在线 AI smoke test 按设计跳过。
+- `mvn -q test`：通过，325 项测试，0 失败、0 错误；2 项在线 AI smoke test 按设计跳过。
 - 打包后类路径 smoke：Java 21、JavaFX、SQLite、MySQL 与 MariaDB 均通过；本机 Ollama 未运行，按设计报告 warning 并保持 FTS5 降级。
 - `https://api.sqlteacher.tech/health`：HTTP 200，JSON `status=ok`。
+- 生产隔离端到端：2 个向量点完成发布、Outbox、Embedding、Qdrant upsert 和语义查询；学生可见 PUBLISHED 且不可见 PRIVATE。
+- 运维恢复：512 维快照恢复到临时集合成功，Payload Index 完整，临时集合删除后返回 404；总运维检查 `Result=success`。
 - Windows 产物严格为两个：`SQLTeacher-1.8.5.exe` 与 `SQLTeacher-1.8.5-windows-x64.zip`；`SHA256SUMS.txt` 严格两行。
 - ZIP SHA-256：`d19b6f99d830311f9086f01c9acbcf53dc0e62d5d3fa4505c98b76c45638ae23`。
 - EXE SHA-256：`731ea94c2957ba46c576b5f8f44c07b7409ee3e5e38929a3da6c5e3b4c29dccf`。

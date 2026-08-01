@@ -118,7 +118,7 @@ class V14CloudApiClientIntegrationTest {
         try (var connection = DriverManager.getConnection("jdbc:sqlite:" + database);
              var statement = connection.createStatement();
              var row = statement.executeQuery("select max(version) from cloud_schema_version")) {
-            assertEquals(3, row.getInt(1));
+            assertEquals(4, row.getInt(1));
         }
 
         try (var connection = DriverManager.getConnection("jdbc:sqlite:" + database);

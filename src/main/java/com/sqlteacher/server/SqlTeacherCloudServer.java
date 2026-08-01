@@ -82,11 +82,13 @@ public final class SqlTeacherCloudServer {
 
     private final CloudStore store;
     private final V14CloudStore v14Store;
+    private final CloudKnowledgeIndexService knowledgeIndex;
     private final HttpServer server;
 
     SqlTeacherCloudServer(Path databasePath, int port) throws IOException, SQLException {
         this.store = new CloudStore(databasePath);
         this.v14Store = new V14CloudStore(databasePath);
+        this.knowledgeIndex = CloudKnowledgeIndexService.fromEnvironment(v14Store);
         String bootstrapEmail = System.getenv("SQLTEACHER_CLOUD_BOOTSTRAP_ADMIN_EMAIL");
         String bootstrapPassword = System.getenv("SQLTEACHER_CLOUD_BOOTSTRAP_ADMIN_PASSWORD");
         if (bootstrapEmail != null && !bootstrapEmail.isBlank()
@@ -111,17 +113,19 @@ public final class SqlTeacherCloudServer {
         Path database = Path.of(System.getenv().getOrDefault("SQLTEACHER_CLOUD_DB", "./data/cloud.db"))
             .toAbsolutePath().normalize();
         SqlTeacherCloudServer cloudServer = new SqlTeacherCloudServer(database, port);
-        cloudServer.server.start();
+        cloudServer.start();
         log.info("SQLTeacher cloud API started, port={}", port);
     }
 
-    void start() { server.start(); }
-    void stop() { server.stop(0); }
+    void start() { server.start(); knowledgeIndex.start(); }
+    void stop() { knowledgeIndex.close(); server.stop(0); }
     int port() { return server.getAddress().getPort(); }
 
     private void health(HttpExchange exchange) throws IOException {
         if (!"GET".equals(exchange.getRequestMethod())) { methodNotAllowed(exchange); return; }
-        respond(exchange, 200, Map.of("status", "ok", "time", Instant.now().toString()));
+        CloudKnowledgeIndexService.Health index = knowledgeIndex.health();
+        respond(exchange, 200, Map.of("status", "ok", "time", Instant.now().toString(),
+            "knowledgeIndex", index.status(), "knowledgeIndexBacklog", index.backlog()));
     }
 
     private void register(HttpExchange exchange) throws IOException {
@@ -338,15 +342,17 @@ public final class SqlTeacherCloudServer {
                         if (query == null || query.isBlank()) {
                             respond(exchange, 200, Map.of("articles", v14Store.listKnowledge(actor, courseId)));
                         } else {
-                            respond(exchange, 200, Map.of("results", v14Store.searchKnowledge(actor, courseId, query,
+                            respond(exchange, 200, Map.of("results", knowledgeIndex.search(actor, courseId, query,
                                 (int) queryLong(exchange.getRequestURI().getRawQuery(), "limit", 20))));
                         }
                         return;
                     }
                     if ("POST".equals(method)) {
                         Map<String, Object> body = objectRequest(exchange);
-                        respond(exchange, 201, v14Store.publishKnowledge(actor, courseId, string(body, "sectionId"),
-                            string(body, "title"), string(body, "content"), string(body, "visibility")));
+                        Object article = v14Store.publishKnowledge(actor, courseId, string(body, "sectionId"),
+                            string(body, "title"), string(body, "content"), string(body, "visibility"));
+                        knowledgeIndex.wake();
+                        respond(exchange, 201, article);
                         return;
                     }
                 }
@@ -502,6 +508,19 @@ public final class SqlTeacherCloudServer {
                 respond(exchange, 200, store.adminHealth(actor));
                 return;
             }
+            if (segments.length == 5 && "knowledge-index".equals(segments[4])
+                && "GET".equals(exchange.getRequestMethod())) {
+                requireAdmin(actor);
+                CloudKnowledgeIndexService.Health health = knowledgeIndex.health();
+                respond(exchange, 200, Map.of("status", health.status(), "backlog", health.backlog()));
+                return;
+            }
+            if (segments.length == 6 && "knowledge-index".equals(segments[4])
+                && "rebuild".equals(segments[5]) && "POST".equals(exchange.getRequestMethod())) {
+                requireAdmin(actor);
+                respond(exchange, 202, Map.of("queued", knowledgeIndex.rebuild()));
+                return;
+            }
             if (segments.length == 5 && "users".equals(segments[4])
                 && "GET".equals(exchange.getRequestMethod())) {
                 respond(exchange, 200, Map.of("users", store.adminUsers(actor)));
@@ -579,6 +598,10 @@ public final class SqlTeacherCloudServer {
     private static void logUnexpectedFailure(String operation, RuntimeException error) {
         log.error("Cloud API operation failed, operation={}, exceptionType={}",
             operation, error.getClass().getSimpleName());
+    }
+
+    private static void requireAdmin(AuthenticatedUser actor) {
+        if (!actor.hasRole(UserRole.ADMIN)) throw new SecurityException("administrator role required");
     }
 
     private static String queryValue(String query, String name) {

@@ -1,0 +1,44 @@
+[Unit]
+Description=SQLTeacher FastEmbed service
+Documentation=https://qdrant.github.io/fastembed/
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=fastembed
+Group=fastembed
+WorkingDirectory=/var/lib/fastembed
+ExecStart=/opt/fastembed/venv/bin/python /usr/local/libexec/sqlteacher/fastembed-server.py
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=90
+Environment=FASTEMBED_MODEL=BAAI/bge-small-zh-v1.5
+Environment=FASTEMBED_CACHE_PATH=/var/lib/fastembed/models
+Environment=FASTEMBED_DIMENSION=512
+Environment=FASTEMBED_PORT=11434
+Environment=HF_HUB_OFFLINE=1
+Environment=HF_HUB_DISABLE_TELEMETRY=1
+MemoryHigh=2G
+MemoryMax=3G
+TasksMax=512
+UMask=0027
+NoNewPrivileges=true
+PrivateDevices=true
+PrivateTmp=true
+ProtectClock=true
+ProtectControlGroups=true
+ProtectHome=true
+ProtectHostname=true
+ProtectKernelLogs=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/fastembed
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+
+[Install]
+WantedBy=multi-user.target

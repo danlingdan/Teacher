@@ -56,6 +56,12 @@ final class V14CloudStore {
     private static final int MAX_PAGE_SIZE = 100;
     private final Path database;
 
+    record PendingKnowledgeChunk(String outboxId, String chunkId, String articleId, String courseId,
+                                 String visibility, int revision, int chunkIndex, String content,
+                                 String contentHash, int attempts) {}
+
+    record VectorCandidate(String chunkId, double score) {}
+
     V14CloudStore(Path database) throws SQLException {
         this.database = Objects.requireNonNull(database, "database must not be null").toAbsolutePath().normalize();
         initialize();
@@ -976,6 +982,10 @@ final class V14CloudStore {
                  PreparedStatement chunk = connection.prepareStatement("""
                      insert into cloud_knowledge_chunks(id,article_id,revision_id,chunk_index,content,content_hash,index_status)
                      values(?,?,?,?,?,?,'PENDING')
+                     """);
+                 PreparedStatement outbox = connection.prepareStatement("""
+                     insert into cloud_knowledge_index_outbox(id,chunk_id,operation,status,attempts,next_attempt_at,created_at,updated_at)
+                     values(?,?,'UPSERT','PENDING',0,?,?,?)
                      """)) {
                 article.setString(1, id); article.setString(2, courseId); article.setString(3, blankToNull(sectionId));
                 article.setString(4, normalizedTitle); article.setString(5, normalizedVisibility); article.setString(6, hash);
@@ -986,10 +996,15 @@ final class V14CloudStore {
                 List<String> chunks = cloudChunks(normalizedContent);
                 for (int index = 0; index < chunks.size(); index++) {
                     String value = chunks.get(index);
-                    chunk.setString(1, UUID.randomUUID().toString()); chunk.setString(2, id); chunk.setString(3, revisionId);
+                    String chunkId = UUID.randomUUID().toString();
+                    chunk.setString(1, chunkId); chunk.setString(2, id); chunk.setString(3, revisionId);
                     chunk.setInt(4, index); chunk.setString(5, value); chunk.setString(6, sha256(value)); chunk.addBatch();
+                    outbox.setString(1, UUID.randomUUID().toString()); outbox.setString(2, chunkId);
+                    outbox.setString(3, now.toString()); outbox.setString(4, now.toString());
+                    outbox.setString(5, now.toString()); outbox.addBatch();
                 }
                 chunk.executeBatch();
+                outbox.executeBatch();
                 connection.commit();
                 return new CloudKnowledgeArticle(id, courseId, sectionId, normalizedTitle, hash,
                     normalizedVisibility, 1, actor.id(), now);
@@ -1032,6 +1047,160 @@ final class V14CloudStore {
             }
             return List.copyOf(result);
         } catch (SQLException error) { throw database(error); }
+    }
+
+    List<PendingKnowledgeChunk> pendingKnowledgeChunks(int limit) {
+        if (limit < 1 || limit > 64) throw new IllegalArgumentException("limit must be between 1 and 64");
+        String sql = """
+            select o.id,c.id,a.id,a.course_id,a.visibility,a.current_revision,c.chunk_index,c.content,c.content_hash,o.attempts
+            from cloud_knowledge_index_outbox o
+            join cloud_knowledge_chunks c on c.id=o.chunk_id
+            join cloud_knowledge_articles a on a.id=c.article_id
+            join cloud_knowledge_revisions r on r.id=c.revision_id and r.revision=a.current_revision
+            where o.operation='UPSERT' and o.status in ('PENDING','FAILED') and o.next_attempt_at<=?
+            order by o.created_at,o.id limit ?
+            """;
+        try (Connection connection = open(); PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, Instant.now().toString());
+            statement.setInt(2, limit);
+            List<PendingKnowledgeChunk> result = new ArrayList<>();
+            try (ResultSet rows = statement.executeQuery()) {
+                while (rows.next()) {
+                    result.add(new PendingKnowledgeChunk(rows.getString(1), rows.getString(2), rows.getString(3),
+                        rows.getString(4), rows.getString(5), rows.getInt(6), rows.getInt(7), rows.getString(8),
+                        rows.getString(9), rows.getInt(10)));
+                }
+            }
+            return List.copyOf(result);
+        } catch (SQLException error) { throw database(error); }
+    }
+
+    void markKnowledgeIndexed(List<PendingKnowledgeChunk> chunks, String provider, String model,
+                              int dimension, int indexVersion) {
+        if (chunks == null || chunks.isEmpty()) return;
+        Instant now = Instant.now();
+        try (Connection connection = open()) {
+            connection.setAutoCommit(false);
+            try (PreparedStatement chunk = connection.prepareStatement(
+                     "update cloud_knowledge_chunks set index_status='INDEXED' where id=?");
+                 PreparedStatement outbox = connection.prepareStatement(
+                     "update cloud_knowledge_index_outbox set status='COMPLETED',last_error=null,updated_at=? where id=?");
+                 PreparedStatement profile = connection.prepareStatement("""
+                     insert into cloud_knowledge_embedding_profile(id,provider,model,dimension,index_version,updated_at)
+                     values(1,?,?,?,?,?) on conflict(id) do update set provider=excluded.provider,model=excluded.model,
+                     dimension=excluded.dimension,index_version=excluded.index_version,updated_at=excluded.updated_at
+                     """)) {
+                for (PendingKnowledgeChunk item : chunks) {
+                    chunk.setString(1, item.chunkId()); chunk.addBatch();
+                    outbox.setString(1, now.toString()); outbox.setString(2, item.outboxId()); outbox.addBatch();
+                }
+                chunk.executeBatch(); outbox.executeBatch();
+                profile.setString(1, required(provider, "provider", 80));
+                profile.setString(2, required(model, "model", 160));
+                profile.setInt(3, dimension); profile.setInt(4, indexVersion); profile.setString(5, now.toString());
+                profile.executeUpdate();
+                connection.commit();
+            } catch (SQLException | RuntimeException error) { connection.rollback(); throw error; }
+        } catch (SQLException error) { throw database(error); }
+    }
+
+    void markKnowledgeIndexFailed(List<PendingKnowledgeChunk> chunks, String requestedError) {
+        if (chunks == null || chunks.isEmpty()) return;
+        String error = optional(requestedError, 500);
+        Instant now = Instant.now();
+        try (Connection connection = open()) {
+            connection.setAutoCommit(false);
+            try (PreparedStatement chunk = connection.prepareStatement(
+                     "update cloud_knowledge_chunks set index_status='FAILED' where id=?");
+                 PreparedStatement outbox = connection.prepareStatement("""
+                     update cloud_knowledge_index_outbox set status='FAILED',attempts=attempts+1,next_attempt_at=?,
+                     last_error=?,updated_at=? where id=?
+                     """)) {
+                for (PendingKnowledgeChunk item : chunks) {
+                    long delaySeconds = Math.min(3_600L, 5L << Math.min(9, item.attempts()));
+                    chunk.setString(1, item.chunkId()); chunk.addBatch();
+                    outbox.setString(1, now.plusSeconds(delaySeconds).toString());
+                    outbox.setString(2, error); outbox.setString(3, now.toString());
+                    outbox.setString(4, item.outboxId()); outbox.addBatch();
+                }
+                chunk.executeBatch(); outbox.executeBatch(); connection.commit();
+            } catch (SQLException | RuntimeException failure) { connection.rollback(); throw failure; }
+        } catch (SQLException failure) { throw database(failure); }
+    }
+
+    long pendingKnowledgeIndexCount() {
+        try (Connection connection = open(); Statement statement = connection.createStatement();
+             ResultSet row = statement.executeQuery(
+                 "select count(*) from cloud_knowledge_index_outbox where status<>'COMPLETED'")) {
+            return row.next() ? row.getLong(1) : 0;
+        } catch (SQLException error) { throw database(error); }
+    }
+
+    List<String> allowedKnowledgeVisibility(AuthenticatedUser actor, String courseId) {
+        requireKnowledgeCourseVisible(actor, courseId);
+        if (actor.hasRole(UserRole.ADMIN) || isCourseOwner(actor, courseId)) {
+            return List.of("PUBLISHED", "PRIVATE", "INACTIVE");
+        }
+        return List.of("PUBLISHED");
+    }
+
+    int requeueKnowledgeIndex() {
+        Instant now = Instant.now();
+        try (Connection connection = open()) {
+            connection.setAutoCommit(false);
+            try (Statement chunks = connection.createStatement();
+                 PreparedStatement outbox = connection.prepareStatement("""
+                     insert into cloud_knowledge_index_outbox(id,chunk_id,operation,status,attempts,next_attempt_at,last_error,created_at,updated_at)
+                     select lower(hex(randomblob(16))),c.id,'UPSERT','PENDING',0,?,null,?,?
+                     from cloud_knowledge_chunks c join cloud_knowledge_articles a on a.id=c.article_id
+                     join cloud_knowledge_revisions r on r.id=c.revision_id and r.revision=a.current_revision
+                     on conflict(chunk_id) do update set operation='UPSERT',status='PENDING',attempts=0,
+                     next_attempt_at=excluded.next_attempt_at,last_error=null,updated_at=excluded.updated_at
+                     """)) {
+                int count = chunks.executeUpdate("""
+                    update cloud_knowledge_chunks set index_status='PENDING' where id in (
+                    select c.id from cloud_knowledge_chunks c join cloud_knowledge_articles a on a.id=c.article_id
+                    join cloud_knowledge_revisions r on r.id=c.revision_id and r.revision=a.current_revision)
+                    """);
+                outbox.setString(1, now.toString()); outbox.setString(2, now.toString());
+                outbox.setString(3, now.toString()); outbox.executeUpdate();
+                connection.commit();
+                return count;
+            } catch (SQLException | RuntimeException error) { connection.rollback(); throw error; }
+        } catch (SQLException error) { throw database(error); }
+    }
+
+    List<CloudKnowledgeSearchHit> resolveAuthorizedVectorHits(AuthenticatedUser actor, String courseId,
+                                                               String query, List<VectorCandidate> candidates,
+                                                               int limit) {
+        requireKnowledgeCourseVisible(actor, courseId);
+        if (candidates == null || candidates.isEmpty()) return List.of();
+        boolean owner = actor.hasRole(UserRole.ADMIN) || isCourseOwner(actor, courseId);
+        Map<String, VectorCandidate> ordered = new LinkedHashMap<>();
+        candidates.forEach(item -> ordered.putIfAbsent(item.chunkId(), item));
+        String placeholders = String.join(",", java.util.Collections.nCopies(ordered.size(), "?"));
+        String sql = """
+            select c.id,a.id,a.title,a.current_revision,c.chunk_index,c.content,a.visibility
+            from cloud_knowledge_chunks c join cloud_knowledge_articles a on a.id=c.article_id
+            join cloud_knowledge_revisions r on r.id=c.revision_id and r.revision=a.current_revision
+            where a.course_id=? and c.id in (%s)
+            """.formatted(placeholders);
+        Map<String, CloudKnowledgeSearchHit> found = new LinkedHashMap<>();
+        try (Connection connection = open(); PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, courseId);
+            int parameter = 2;
+            for (String id : ordered.keySet()) statement.setString(parameter++, id);
+            try (ResultSet rows = statement.executeQuery()) {
+                while (rows.next()) {
+                    String chunkId = rows.getString(1);
+                    if (!owner && !"PUBLISHED".equals(rows.getString(7))) continue;
+                    VectorCandidate candidate = ordered.get(chunkId);
+                    found.put(chunkId, new CloudKnowledgeSearchHit(rows.getString(2), rows.getString(3),
+                        rows.getInt(4), rows.getInt(5), excerpt(rows.getString(6), query), candidate.score()));
+                }
+            }
+        } catch (SQLException error) { throw database(error); }
+        return ordered.keySet().stream().map(found::get).filter(Objects::nonNull).limit(limit).toList();
     }
 
     private void initialize() throws SQLException {
@@ -1088,6 +1257,18 @@ final class V14CloudStore {
                 + "cursor_version integer not null,updated_at text not null,primary key(user_id,course_id))");
             statement.executeUpdate("insert or ignore into cloud_schema_version(version,description,applied_at) values"
                 + "(3,'v1.8.5 shared knowledge and vector indexing metadata',current_timestamp)");
+            statement.executeUpdate("create table if not exists cloud_knowledge_index_outbox(id text primary key,"
+                + "chunk_id text not null unique references cloud_knowledge_chunks(id) on delete cascade,operation text not null check(operation in ('UPSERT','DELETE')),"
+                + "status text not null check(status in ('PENDING','FAILED','COMPLETED')),attempts integer not null default 0,next_attempt_at text not null,"
+                + "last_error text,created_at text not null,updated_at text not null)");
+            statement.executeUpdate("create table if not exists cloud_knowledge_embedding_profile(id integer primary key check(id=1),"
+                + "provider text not null,model text not null,dimension integer not null,index_version integer not null,updated_at text not null)");
+            statement.executeUpdate("insert or ignore into cloud_knowledge_index_outbox(id,chunk_id,operation,status,attempts,next_attempt_at,created_at,updated_at) "
+                + "select lower(hex(randomblob(16))),c.id,'UPSERT','PENDING',0,current_timestamp,current_timestamp,current_timestamp "
+                + "from cloud_knowledge_chunks c join cloud_knowledge_articles a on a.id=c.article_id "
+                + "join cloud_knowledge_revisions r on r.id=c.revision_id and r.revision=a.current_revision");
+            statement.executeUpdate("insert or ignore into cloud_schema_version(version,description,applied_at) values"
+                + "(4,'v1.8.5 qdrant embedding outbox and profile',current_timestamp)");
             statement.executeUpdate("create index if not exists idx_course_sections_order on course_sections(course_id,sort_order,id)");
             statement.executeUpdate("create index if not exists idx_knowledge_points_order on knowledge_points(course_id,sort_order,id)");
             statement.executeUpdate("create index if not exists idx_shared_exercise_course on shared_exercises(course_id,status,updated_at desc)");
@@ -1095,6 +1276,7 @@ final class V14CloudStore {
             statement.executeUpdate("create index if not exists idx_notification_recipient on cloud_notifications(recipient_user_id,created_at desc)");
             statement.executeUpdate("create index if not exists idx_cloud_knowledge_scope on cloud_knowledge_articles(course_id,visibility,updated_at desc)");
             statement.executeUpdate("create index if not exists idx_cloud_knowledge_chunks on cloud_knowledge_chunks(article_id,revision_id,chunk_index)");
+            statement.executeUpdate("create index if not exists idx_cloud_knowledge_outbox_pending on cloud_knowledge_index_outbox(status,next_attempt_at,created_at)");
         }
     }
 

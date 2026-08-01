@@ -1,7 +1,7 @@
 [Unit]
 Description=SQLTeacher Cloud API
-After=network-online.target
-Wants=network-online.target
+After=network-online.target sqlteacher-qdrant.service sqlteacher-embedding.service
+Wants=network-online.target sqlteacher-qdrant.service sqlteacher-embedding.service
 
 [Service]
 Type=simple
