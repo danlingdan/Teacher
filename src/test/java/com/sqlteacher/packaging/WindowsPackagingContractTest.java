@@ -23,7 +23,11 @@ class WindowsPackagingContractTest {
         assertTrue(content.contains("-Dsqlteacher.cloud.base-url="));
         assertTrue(content.contains("CloudBaseUrl must be an absolute HTTPS URL"));
         assertTrue(content.contains("sqlteacher-sbom.json"));
+        assertTrue(content.contains("LICENSE.txt"));
+        assertTrue(content.contains("THIRD-PARTY-LICENSES.txt"));
+        assertTrue(content.contains("PRIVACY.md"));
         assertTrue(content.contains("update-manifest.json"));
+        assertTrue(Files.exists(Path.of("LICENSE")));
         assertTrue(Files.size(Path.of("packaging", "sqlteacher.ico")) > 0);
         assertTrue(Files.size(Path.of("src", "main", "resources", "images", "sqlteacher-icon.png")) > 0);
     }

@@ -203,6 +203,7 @@ try {
     New-Item -ItemType Directory -Force -Path $legalDirectory | Out-Null
     Copy-Item -LiteralPath $generatedSbom -Destination (Join-Path $legalDirectory "sqlteacher-sbom.json") -Force
     Copy-Item -LiteralPath $generatedSbom -Destination $sbomPath -Force
+    Copy-Item -LiteralPath (Join-Path $projectRoot "LICENSE") -Destination (Join-Path $legalDirectory "LICENSE.txt") -Force
     Copy-Item -LiteralPath (Join-Path $projectRoot "src\main\resources\legal\THIRD-PARTY-LICENSES.txt") -Destination $legalDirectory -Force
     Copy-Item -LiteralPath (Join-Path $projectRoot "src\main\resources\legal\PRIVACY.md") -Destination $legalDirectory -Force
     $launcherConfig = Join-Path $appImageDir "app\$appName.cfg"
