@@ -7,10 +7,10 @@
          fx:controller="com.sqlteacher.desktop.controller.SettingsController"
          tabClosingPolicy="UNAVAILABLE">
     <tabs>
-        <Tab fx:id="appearanceTab" text="外观与易用性"/>
-        <Tab fx:id="sqlSafetyTab" text="SQL 安全"/>
-        <Tab fx:id="connectionsTab" text="数据库连接"/>
-        <Tab fx:id="dataTab" text="版本、备份与恢复"/>
-        <Tab fx:id="generalSoftwareTab" text="更新与支持"/>
+        <Tab fx:id="appearanceTab" text="%settings.1"/>
+        <Tab fx:id="sqlSafetyTab" text="%settings.2"/>
+        <Tab fx:id="connectionsTab" text="%settings.3"/>
+        <Tab fx:id="dataTab" text="%settings.4"/>
+        <Tab fx:id="generalSoftwareTab" text="%settings.5"/>
     </tabs>
 </TabPane>

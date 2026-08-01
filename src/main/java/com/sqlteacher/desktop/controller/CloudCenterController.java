@@ -1,4 +1,5 @@
 package com.sqlteacher.desktop.controller;
+import com.sqlteacher.desktop.AppI18n;
 
 import com.sqlteacher.application.collaboration.ClassAssignment;
 import com.sqlteacher.application.collaboration.AssignmentStatus;
@@ -128,11 +129,11 @@ public final class CloudCenterController {
         memberRoleCombo.setConverter(new StringConverter<>() {
             @Override public String toString(UserRole role) {
                 if (role == null) return "";
-                return role == UserRole.TEACHER ? "教师" : "学生";
+                return role == UserRole.TEACHER ? AppI18n.get("CloudCenterController.1") : AppI18n.get("CloudCenterController.2");
             }
 
             @Override public UserRole fromString(String value) {
-                return "教师".equals(value) ? UserRole.TEACHER : UserRole.STUDENT;
+                return AppI18n.get("CloudCenterController.3").equals(value) ? UserRole.TEACHER : UserRole.STUDENT;
             }
         });
         memberRoleCombo.setValue(UserRole.STUDENT);
@@ -140,8 +141,8 @@ public final class CloudCenterController {
         assignmentDueTimeCombo.setValue(DeadlineValueConverter.DEFAULT_TIME);
         retentionCategoryCombo.getItems().setAll(RetentionCategory.values());
         retentionCategoryCombo.setValue(RetentionCategory.SYNC_EVENTS);
-        classList.setPlaceholder(new Label("暂无班级，先创建一个教学班级"));
-        assignmentList.setPlaceholder(new Label("选择班级后查看已发布任务"));
+        classList.setPlaceholder(new Label(AppI18n.get("CloudCenterController.4")));
+        assignmentList.setPlaceholder(new Label(AppI18n.get("CloudCenterController.5")));
         classList.getSelectionModel().selectedIndexProperty().addListener((observable, oldValue, newValue) -> {
             updateSelectedClassLabel();
             if (!applyingClassSelection) refreshAssignments();
@@ -177,15 +178,15 @@ public final class CloudCenterController {
     @FXML
     private void onCreateClass() {
         requireClassManager();
-        String name = required(classNameField, "请输入班级名称");
+        String name = required(classNameField, AppI18n.get("CloudCenterController.6"));
         if (name == null) return;
-        run("正在创建班级…", () -> {
+        run(AppI18n.get("CloudCenterController.7"), () -> {
             var current = currentSession();
             var created = api.createClass(current.accessToken(), name);
             loadClasses(current.accessToken(), created.id());
             Platform.runLater(() -> {
                 classNameField.clear();
-                showStatus("班级“" + created.name() + "”已创建", Status.SUCCESS);
+                showStatus(AppI18n.get("CloudCenterController.8") + created.name() + AppI18n.get("CloudCenterController.9"), Status.SUCCESS);
             });
         });
     }
@@ -193,10 +194,10 @@ public final class CloudCenterController {
     @FXML
     private void onRefresh() {
         String selectedId = selectedClassId();
-        run("正在刷新班级与任务…", () -> {
+        run(AppI18n.get("CloudCenterController.10"), () -> {
             var current = currentSession();
             loadClasses(current.accessToken(), selectedId);
-            Platform.runLater(() -> showStatus("班级与任务已刷新", Status.SUCCESS));
+            Platform.runLater(() -> showStatus(AppI18n.get("CloudCenterController.11"), Status.SUCCESS));
         });
     }
 
@@ -207,13 +208,13 @@ public final class CloudCenterController {
 
     @FXML
     private void onSync() {
-        run("正在同步学习记录…", () -> {
+        run(AppI18n.get("CloudCenterController.12"), () -> {
             var result = sync.synchronize();
             var retry = assignmentDeliveryService.retryPending();
             Platform.runLater(() -> showStatus(
-                "同步完成：学习记录上传 " + result.uploaded() + " 条，下载 " + result.downloaded()
-                    + " 条；任务结果补交 " + retry.delivered() + " 条，剩余 " + retry.remaining() + " 条"
-                    + (retry.rejected() == 0 ? "" : "，被服务端拒绝 " + retry.rejected() + " 条"),
+                AppI18n.get("CloudCenterController.13") + result.uploaded() + AppI18n.get("CloudCenterController.14") + result.downloaded()
+                    + AppI18n.get("CloudCenterController.15") + retry.delivered() + AppI18n.get("CloudCenterController.16") + retry.remaining() + AppI18n.get("CloudCenterController.17")
+                    + (retry.rejected() == 0 ? "" : AppI18n.get("CloudCenterController.18") + retry.rejected() + AppI18n.get("CloudCenterController.19")),
                 Status.SUCCESS
             ));
         });
@@ -224,16 +225,16 @@ public final class CloudCenterController {
         var selectedClass = selectedClass();
         int index = assignmentList.getSelectionModel().getSelectedIndex();
         if (selectedClass == null || index < 0 || index >= assignments.size()) {
-            showStatus("请先选择一个班级任务", Status.ERROR);
+            showStatus(AppI18n.get("CloudCenterController.20"), Status.ERROR);
             return;
         }
         ClassAssignment assignment = assignments.get(index);
         if (assignment.status() != AssignmentStatus.PUBLISHED) {
-            showStatus("只有已发布任务可以开始练习", Status.ERROR);
+            showStatus(AppI18n.get("CloudCenterController.21"), Status.ERROR);
             return;
         }
         if (assignment.dueAt() != null && !Instant.now().isBefore(assignment.dueAt())) {
-            showStatus("任务已截止，只能查看历史提交", Status.ERROR);
+            showStatus(AppI18n.get("CloudCenterController.22"), Status.ERROR);
             return;
         }
         openAssignmentAction.accept(new AssignmentTaskContext(selectedClass.id(), assignment));
@@ -244,45 +245,45 @@ public final class CloudCenterController {
         requireClassManager();
         var selected = selectedClass();
         if (selected == null) {
-            showStatus("请先选择班级", Status.ERROR);
+            showStatus(AppI18n.get("CloudCenterController.23"), Status.ERROR);
             return;
         }
         FileChooser chooser = new FileChooser();
-        chooser.setTitle("导出班级教学记录");
-        chooser.setInitialFileName("SQLTeacher-" + selected.name().replaceAll("[\\/:*?\"<>|]", "_") + "-教学记录.csv");
-        chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("CSV 文件", "*.csv"));
+        chooser.setTitle(AppI18n.get("CloudCenterController.24"));
+        chooser.setInitialFileName("SQLTeacher-" + selected.name().replaceAll("[\\/:*?\"<>|]", "_") + AppI18n.get("CloudCenterController.25"));
+        chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter(AppI18n.get("CloudCenterController.26"), "*.csv"));
         var selectedFile = chooser.showSaveDialog(classAnalyticsLabel.getScene().getWindow());
         if (selectedFile == null) return;
         Path target = selectedFile.toPath();
-        run("正在导出班级教学记录…", () -> {
+        run(AppI18n.get("CloudCenterController.27"), () -> {
             String csv = api.exportClassLearningCsv(currentSession().accessToken(), selected.id());
             try {
                 Files.writeString(target, csv, StandardCharsets.UTF_8);
             } catch (java.io.IOException error) {
-                throw new IllegalStateException("无法写入教学记录 CSV", error);
+                throw new IllegalStateException(AppI18n.get("CloudCenterController.28"), error);
             }
-            Platform.runLater(() -> showStatus("教学记录已导出到 " + target, Status.SUCCESS));
+            Platform.runLater(() -> showStatus(AppI18n.get("CloudCenterController.29") + target, Status.SUCCESS));
         });
     }
 
     @FXML
     private void onRefreshAdminOperations() {
         requireAdministrator();
-        run("正在加载管理员运维摘要…", () -> {
+        run(AppI18n.get("CloudCenterController.30"), () -> {
             String token = currentSession().accessToken();
             var health = api.getAdminHealth(token);
             List<AdminUserSummary> users = api.listAdminUsers(token);
             var audit = api.getAdminAudit(token, null, null, null, 0, 50);
             Platform.runLater(() -> {
                 adminUsers = List.copyOf(users);
-                adminHealthLabel.setText("启用账号 " + health.activeUsers() + " · 禁用 " + health.disabledUsers()
-                    + " · 有效访问会话 " + health.activeAccessSessions() + " · 任务 " + health.assignments()
-                    + " · 提交 " + health.submissions());
+                adminHealthLabel.setText(AppI18n.get("CloudCenterController.31") + health.activeUsers() + AppI18n.get("CloudCenterController.32") + health.disabledUsers()
+                    + AppI18n.get("CloudCenterController.33") + health.activeAccessSessions() + AppI18n.get("CloudCenterController.34") + health.assignments()
+                    + AppI18n.get("CloudCenterController.35") + health.submissions());
                 adminUserList.getItems().setAll(users.stream().map(user -> user.displayName() + " · " + user.email()
-                    + " · " + (user.disabled() ? "已禁用" : "启用") + " · " + user.roles()).toList());
+                    + " · " + (user.disabled() ? AppI18n.get("CloudCenterController.36") : AppI18n.get("CloudCenterController.37")) + " · " + user.roles()).toList());
                 adminAuditList.getItems().setAll(audit.entries().stream().map(entry -> entry.createdAt() + " · "
                     + entry.action() + " · " + entry.result() + " · " + entry.reasonCode()).toList());
-                showStatus("管理员运维数据已刷新", Status.SUCCESS);
+                showStatus(AppI18n.get("CloudCenterController.38"), Status.SUCCESS);
             });
         });
     }
@@ -295,16 +296,16 @@ public final class CloudCenterController {
     private void onRevokeAdminUserSessions() {
         requireAdministrator();
         AdminUserSummary user = selectedAdminUser();
-        String reason = required(adminReasonField, "请输入受控原因码");
+        String reason = required(adminReasonField, AppI18n.get("CloudCenterController.39"));
         if (user == null || reason == null) {
-            if (user == null) showStatus("请先选择账号", Status.ERROR);
+            if (user == null) showStatus(AppI18n.get("CloudCenterController.40"), Status.ERROR);
             return;
         }
-        run("正在撤销账号会话…", () -> {
+        run(AppI18n.get("CloudCenterController.41"), () -> {
             api.revokeUserSessions(currentSession().accessToken(), user.id(), reason);
             Platform.runLater(() -> {
                 adminReasonField.clear();
-                showStatus("该账号的全部云端会话已撤销", Status.SUCCESS);
+                showStatus(AppI18n.get("CloudCenterController.42"), Status.SUCCESS);
             });
         });
     }
@@ -312,16 +313,16 @@ public final class CloudCenterController {
     private void changeAdminUser(boolean disabled) {
         requireAdministrator();
         AdminUserSummary user = selectedAdminUser();
-        String reason = required(adminReasonField, "请输入受控原因码");
+        String reason = required(adminReasonField, AppI18n.get("CloudCenterController.43"));
         if (user == null || reason == null) {
-            if (user == null) showStatus("请先选择账号", Status.ERROR);
+            if (user == null) showStatus(AppI18n.get("CloudCenterController.44"), Status.ERROR);
             return;
         }
-        run(disabled ? "正在禁用账号…" : "正在恢复账号…", () -> {
+        run(disabled ? AppI18n.get("CloudCenterController.45") : AppI18n.get("CloudCenterController.46"), () -> {
             api.setUserDisabled(currentSession().accessToken(), user.id(), disabled, reason);
             Platform.runLater(() -> {
                 adminReasonField.clear();
-                showStatus(disabled ? "账号已禁用且会话已撤销" : "账号已恢复，需重新登录", Status.SUCCESS);
+                showStatus(disabled ? AppI18n.get("CloudCenterController.47") : AppI18n.get("CloudCenterController.48"), Status.SUCCESS);
                 onRefreshAdminOperations();
             });
         });
@@ -333,18 +334,18 @@ public final class CloudCenterController {
         RetentionCategory category = retentionCategoryCombo.getValue();
         Instant cutoff;
         try {
-            cutoff = Instant.parse(required(retentionCutoffField, "请输入保留截止时间"));
+            cutoff = Instant.parse(required(retentionCutoffField, AppI18n.get("CloudCenterController.49")));
         } catch (RuntimeException error) {
-            showStatus("保留截止时间必须是 ISO-8601 格式", Status.ERROR);
+            showStatus(AppI18n.get("CloudCenterController.50"), Status.ERROR);
             return;
         }
-        run("正在预览清理影响…", () -> {
+        run(AppI18n.get("CloudCenterController.51"), () -> {
             RetentionPreview preview = api.previewRetention(currentSession().accessToken(), category, cutoff);
             Platform.runLater(() -> {
                 retentionPreview = preview;
-                retentionStatusLabel.setText("预览 " + preview.id() + " · 影响 " + preview.affectedRows()
-                    + " 行 · 确认有效至 " + preview.expiresAt());
-                showStatus("清理预览已生成，请核对影响范围", Status.SUCCESS);
+                retentionStatusLabel.setText(AppI18n.get("CloudCenterController.52") + preview.id() + AppI18n.get("CloudCenterController.53") + preview.affectedRows()
+                    + AppI18n.get("CloudCenterController.54") + preview.expiresAt());
+                showStatus(AppI18n.get("CloudCenterController.55"), Status.SUCCESS);
             });
         });
     }
@@ -353,20 +354,20 @@ public final class CloudCenterController {
     private void onExecuteRetention() {
         requireAdministrator();
         if (retentionPreview == null) {
-            showStatus("请先生成清理预览", Status.ERROR);
+            showStatus(AppI18n.get("CloudCenterController.56"), Status.ERROR);
             return;
         }
-        String backupReference = required(retentionBackupField, "请输入已验证的外部备份引用");
+        String backupReference = required(retentionBackupField, AppI18n.get("CloudCenterController.57"));
         if (backupReference == null) return;
-        run("正在创建安全快照并执行清理…", () -> {
+        run(AppI18n.get("CloudCenterController.58"), () -> {
             RetentionJob job = api.executeRetention(currentSession().accessToken(), retentionPreview.id(),
                 retentionPreview.confirmationToken(), backupReference);
             Platform.runLater(() -> {
                 retentionJob = job;
                 retentionPreview = null;
-                retentionStatusLabel.setText("作业 " + job.id() + " · " + job.status()
-                    + " · 已处理 " + job.affectedRows() + " 行");
-                showStatus("清理完成，归档仍可恢复", Status.SUCCESS);
+                retentionStatusLabel.setText(AppI18n.get("CloudCenterController.59") + job.id() + " · " + job.status()
+                    + AppI18n.get("CloudCenterController.60") + job.affectedRows() + AppI18n.get("CloudCenterController.61"));
+                showStatus(AppI18n.get("CloudCenterController.62"), Status.SUCCESS);
             });
         });
     }
@@ -375,15 +376,15 @@ public final class CloudCenterController {
     private void onRestoreRetention() {
         requireAdministrator();
         if (retentionJob == null || !"COMPLETED".equals(retentionJob.status())) {
-            showStatus("当前没有可恢复的已完成清理作业", Status.ERROR);
+            showStatus(AppI18n.get("CloudCenterController.63"), Status.ERROR);
             return;
         }
-        run("正在恢复归档数据…", () -> {
+        run(AppI18n.get("CloudCenterController.64"), () -> {
             RetentionJob restored = api.restoreRetention(currentSession().accessToken(), retentionJob.id());
             Platform.runLater(() -> {
                 retentionJob = restored;
-                retentionStatusLabel.setText("作业 " + restored.id() + " · 已恢复");
-                showStatus("归档数据已恢复", Status.SUCCESS);
+                retentionStatusLabel.setText(AppI18n.get("CloudCenterController.65") + restored.id() + AppI18n.get("CloudCenterController.66"));
+                showStatus(AppI18n.get("CloudCenterController.67"), Status.SUCCESS);
             });
         });
     }
@@ -393,19 +394,19 @@ public final class CloudCenterController {
         requireClassManager();
         var selected = selectedClass();
         if (selected == null) {
-            showStatus("请先选择班级", Status.ERROR);
+            showStatus(AppI18n.get("CloudCenterController.68"), Status.ERROR);
             return;
         }
-        String email = required(memberEmailField, "请输入成员邮箱");
+        String email = required(memberEmailField, AppI18n.get("CloudCenterController.69"));
         if (email == null) return;
         UserRole role = memberRoleCombo.getValue();
-        run("正在添加班级成员…", () -> {
+        run(AppI18n.get("CloudCenterController.70"), () -> {
             var current = currentSession();
             api.addClassMember(current.accessToken(), selected.id(), email, role);
             loadClasses(current.accessToken(), selected.id());
             Platform.runLater(() -> {
                 memberEmailField.clear();
-                showStatus("成员已加入“" + selected.name() + "”", Status.SUCCESS);
+                showStatus(AppI18n.get("CloudCenterController.71") + selected.name() + "”", Status.SUCCESS);
             });
         });
     }
@@ -426,16 +427,16 @@ public final class CloudCenterController {
         var selectedClass = selectedClass();
         ClassAssignment assignment = selectedAssignment();
         if (selectedClass == null || assignment == null) {
-            showStatus("请先选择要复制的任务", Status.ERROR);
+            showStatus(AppI18n.get("CloudCenterController.72"), Status.ERROR);
             return;
         }
-        run("正在复制任务…", () -> {
+        run(AppI18n.get("CloudCenterController.73"), () -> {
             var current = currentSession();
             api.copyAssignment(current.accessToken(), selectedClass.id(), assignment.id(), assignment.version());
             List<ClassAssignment> refreshed = api.listAssignments(current.accessToken(), selectedClass.id());
             Platform.runLater(() -> {
                 applyAssignments(selectedClass.id(), refreshed);
-                showStatus("任务已复制为草稿", Status.SUCCESS);
+                showStatus(AppI18n.get("CloudCenterController.74"), Status.SUCCESS);
             });
         });
     }
@@ -444,15 +445,15 @@ public final class CloudCenterController {
         requireClassManager();
         var selected = selectedClass();
         if (selected == null) {
-            showStatus("请先选择班级", Status.ERROR);
+            showStatus(AppI18n.get("CloudCenterController.75"), Status.ERROR);
             return;
         }
-        String exerciseId = required(assignmentExerciseField, "请输入本地题目 ID");
-        String title = required(assignmentTitleField, "请输入任务标题");
+        String exerciseId = required(assignmentExerciseField, AppI18n.get("CloudCenterController.76"));
+        String title = required(assignmentTitleField, AppI18n.get("CloudCenterController.77"));
         if (exerciseId == null || title == null) return;
         Instant dueAt = selectedAssignmentDeadline();
         String description = assignmentDescriptionField.getText() == null ? "" : assignmentDescriptionField.getText().trim();
-        run(draft ? "正在保存任务草稿…" : "正在发布班级任务…", () -> {
+        run(draft ? AppI18n.get("CloudCenterController.78") : AppI18n.get("CloudCenterController.79"), () -> {
             var current = currentSession();
             ClassAssignment created = api.createAssignmentDraft(current.accessToken(), selected.id(), exerciseId,
                 title, description, dueAt);
@@ -465,7 +466,7 @@ public final class CloudCenterController {
                 assignmentTitleField.clear();
                 assignmentDescriptionField.clear();
                 setAssignmentDeadline(null);
-                showStatus(draft ? "任务草稿已保存" : "任务已发布", Status.SUCCESS);
+                showStatus(draft ? AppI18n.get("CloudCenterController.80") : AppI18n.get("CloudCenterController.81"), Status.SUCCESS);
             });
         });
     }
@@ -476,19 +477,19 @@ public final class CloudCenterController {
         var selectedClass = selectedClass();
         var assignment = selectedAssignment();
         if (selectedClass == null || assignment == null) {
-            showStatus("请先选择一个班级任务", Status.ERROR);
+            showStatus(AppI18n.get("CloudCenterController.82"), Status.ERROR);
             return;
         }
-        run("正在加载任务学情…", () -> {
+        run(AppI18n.get("CloudCenterController.83"), () -> {
             AssignmentAnalyticsReport report = api.getAssignmentAnalytics(currentSession().accessToken(),
                 selectedClass.id(), assignment.id(), AssignmentAnalyticsFilter.firstPage());
             Platform.runLater(() -> {
-                assignmentAnalyticsLabel.setText("学生 " + report.totalStudents() + " 人 · 已提交 "
-                    + report.submittedStudents() + " 人 · 已通过 " + report.passedStudents()
-                    + " 人 · 尝试 " + report.totalAttempts() + " 次 · 完成率 "
+                assignmentAnalyticsLabel.setText(AppI18n.get("CloudCenterController.84") + report.totalStudents() + AppI18n.get("CloudCenterController.85")
+                    + report.submittedStudents() + AppI18n.get("CloudCenterController.86") + report.passedStudents()
+                    + AppI18n.get("CloudCenterController.87") + report.totalAttempts() + AppI18n.get("CloudCenterController.88")
                     + Math.round(report.completionRate() * 100) + "% · 通过率 "
                     + Math.round(report.passRate() * 100) + "%");
-                showStatus("任务学情已刷新", Status.SUCCESS);
+                showStatus(AppI18n.get("CloudCenterController.89"), Status.SUCCESS);
             });
         });
     }
@@ -499,40 +500,40 @@ public final class CloudCenterController {
         var selectedClass = selectedClass();
         var assignment = selectedAssignment();
         if (selectedClass == null || assignment == null) {
-            showStatus("请先选择一个班级任务", Status.ERROR);
+            showStatus(AppI18n.get("CloudCenterController.90"), Status.ERROR);
             return;
         }
         FileChooser chooser = new FileChooser();
-        chooser.setTitle("导出任务学情");
-        chooser.setInitialFileName("SQLTeacher-" + assignment.title().replaceAll("[\\/:*?\"<>|]", "_") + "-学情.csv");
-        chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("CSV 文件", "*.csv"));
+        chooser.setTitle(AppI18n.get("CloudCenterController.91"));
+        chooser.setInitialFileName("SQLTeacher-" + assignment.title().replaceAll("[\\/:*?\"<>|]", "_") + AppI18n.get("CloudCenterController.92"));
+        chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter(AppI18n.get("CloudCenterController.93"), "*.csv"));
         var selectedFile = chooser.showSaveDialog(assignmentAnalyticsLabel.getScene().getWindow());
         if (selectedFile == null) return;
-        run("正在导出任务学情…", () -> {
+        run(AppI18n.get("CloudCenterController.94"), () -> {
             String csv = api.exportAssignmentAnalyticsCsv(currentSession().accessToken(), selectedClass.id(),
                 assignment.id(), AssignmentAnalyticsFilter.firstPage());
             try {
                 Files.writeString(selectedFile.toPath(), csv, StandardCharsets.UTF_8);
             } catch (java.io.IOException error) {
-                throw new IllegalStateException("无法写入任务学情 CSV", error);
+                throw new IllegalStateException(AppI18n.get("CloudCenterController.95"), error);
             }
-            Platform.runLater(() -> showStatus("任务学情已导出", Status.SUCCESS));
+            Platform.runLater(() -> showStatus(AppI18n.get("CloudCenterController.96"), Status.SUCCESS));
         });
     }
 
     @FXML
     private void onCloseAssignment() {
-        changeSelectedAssignmentStatus(AssignmentStatus.CLOSED, "任务已截止，学生可查看但不能继续提交");
+        changeSelectedAssignmentStatus(AssignmentStatus.CLOSED, AppI18n.get("CloudCenterController.97"));
     }
 
     @FXML
     private void onWithdrawAssignment() {
-        changeSelectedAssignmentStatus(AssignmentStatus.WITHDRAWN, "任务已撤回，学生将不再看到该任务");
+        changeSelectedAssignmentStatus(AssignmentStatus.WITHDRAWN, AppI18n.get("CloudCenterController.98"));
     }
 
     @FXML
     private void onArchiveAssignment() {
-        changeSelectedAssignmentStatus(AssignmentStatus.ARCHIVED, "任务已归档");
+        changeSelectedAssignmentStatus(AssignmentStatus.ARCHIVED, AppI18n.get("CloudCenterController.99"));
     }
 
     @FXML
@@ -541,23 +542,23 @@ public final class CloudCenterController {
         var selectedClass = selectedClass();
         int index = assignmentList.getSelectionModel().getSelectedIndex();
         if (selectedClass == null || index < 0 || index >= assignments.size()) {
-            showStatus("请先选择一个班级任务", Status.ERROR);
+            showStatus(AppI18n.get("CloudCenterController.100"), Status.ERROR);
             return;
         }
-        String title = required(assignmentTitleField, "请输入更新后的任务标题");
+        String title = required(assignmentTitleField, AppI18n.get("CloudCenterController.101"));
         if (title == null) return;
         Instant dueAt = selectedAssignmentDeadline();
         ClassAssignment assignment = assignments.get(index);
         String description = assignmentDescriptionField.getText() == null
             ? "" : assignmentDescriptionField.getText().trim();
-        run("正在更新任务…", () -> {
+        run(AppI18n.get("CloudCenterController.102"), () -> {
             var current = currentSession();
             api.updateAssignment(current.accessToken(), selectedClass.id(), assignment.id(), title,
                 description, dueAt, assignment.version());
             List<ClassAssignment> refreshed = api.listAssignments(current.accessToken(), selectedClass.id());
             Platform.runLater(() -> {
                 applyAssignments(selectedClass.id(), refreshed);
-                showStatus("任务已更新", Status.SUCCESS);
+                showStatus(AppI18n.get("CloudCenterController.103"), Status.SUCCESS);
             });
         });
     }
@@ -579,11 +580,11 @@ public final class CloudCenterController {
         var selectedClass = selectedClass();
         int index = assignmentList.getSelectionModel().getSelectedIndex();
         if (selectedClass == null || index < 0 || index >= assignments.size()) {
-            showStatus("请先选择一个班级任务", Status.ERROR);
+            showStatus(AppI18n.get("CloudCenterController.104"), Status.ERROR);
             return;
         }
         ClassAssignment assignment = assignments.get(index);
-        run("正在更新任务状态…", () -> {
+        run(AppI18n.get("CloudCenterController.105"), () -> {
             var current = currentSession();
             api.changeAssignmentStatus(current.accessToken(), selectedClass.id(), assignment.id(), status,
                 assignment.version());
@@ -602,13 +603,13 @@ public final class CloudCenterController {
             assignmentList.getItems().clear();
             return;
         }
-        run("正在加载“" + selected.name() + "”的任务…", () -> {
+        run(AppI18n.get("CloudCenterController.106") + selected.name() + AppI18n.get("CloudCenterController.107"), () -> {
             List<ClassAssignment> assignments = api.listAssignments(current.orElseThrow().accessToken(), selected.id());
             var summary = canManageClass() ? api.getClassLearningSummary(current.orElseThrow().accessToken(), selected.id()) : null;
             Platform.runLater(() -> {
                 applyAssignments(selected.id(), assignments);
                 applyClassAnalytics(summary);
-                showStatus("已加载“" + selected.name() + "”", Status.INFO);
+                showStatus(AppI18n.get("CloudCenterController.108") + selected.name() + "”", Status.INFO);
             });
         });
     }
@@ -634,7 +635,7 @@ public final class CloudCenterController {
         applyingClassSelection = true;
         try {
             classList.getItems().setAll(loadedClasses.stream()
-                .map(item -> item.name() + "  ·  " + item.members().size() + " 名成员")
+                .map(item -> item.name() + "  ·  " + item.members().size() + AppI18n.get("CloudCenterController.109"))
                 .toList());
             if (selected == null) classList.getSelectionModel().clearSelection();
             else classList.getSelectionModel().select(loadedClasses.indexOf(selected));
@@ -642,8 +643,8 @@ public final class CloudCenterController {
             applyingClassSelection = false;
         }
         classSummaryLabel.setText(loadedClasses.isEmpty()
-            ? "还没有班级，可在下方立即创建"
-            : "共 " + loadedClasses.size() + " 个班级，选择后可管理成员和任务");
+            ? AppI18n.get("CloudCenterController.110")
+            : AppI18n.get("CloudCenterController.111") + loadedClasses.size() + AppI18n.get("CloudCenterController.112"));
         updateSelectedClassLabel();
         applyAssignments(selected == null ? null : selected.id(), assignments);
     }
@@ -652,45 +653,45 @@ public final class CloudCenterController {
         if (classroomId != null && !classroomId.equals(selectedClassId())) return;
         this.assignments = List.copyOf(assignments);
         assignmentList.getItems().setAll(assignments.stream()
-            .map(item -> item.title() + "\n题目 ID：" + item.exerciseId() + " · " + assignmentStatusLabel(item.status())
-                + (item.dueAt() == null ? "" : " · 截止：" + item.dueAt()))
+            .map(item -> item.title() + AppI18n.get("CloudCenterController.113") + item.exerciseId() + " · " + assignmentStatusLabel(item.status())
+                + (item.dueAt() == null ? "" : AppI18n.get("CloudCenterController.114") + item.dueAt()))
             .toList());
         assignmentList.setPlaceholder(new Label(classroomId == null
-            ? "选择班级后查看已发布任务"
-            : "这个班级还没有发布任务"));
+            ? AppI18n.get("CloudCenterController.115")
+            : AppI18n.get("CloudCenterController.116")));
         updateSubmissionQueueLabel();
     }
 
     private void updateSubmissionQueueLabel() {
         if (canManageClass()) {
-            submissionQueueLabel.setText("教师账号不产生本地任务提交队列");
+            submissionQueueLabel.setText(AppI18n.get("CloudCenterController.117"));
             return;
         }
         try {
             int pending = assignmentDeliveryService.pendingCount();
-            submissionQueueLabel.setText(pending == 0 ? "没有待同步的任务结果" : "待同步任务结果：" + pending + " 条");
+            submissionQueueLabel.setText(pending == 0 ? AppI18n.get("CloudCenterController.118") : AppI18n.get("CloudCenterController.119") + pending + AppI18n.get("CloudCenterController.120"));
         } catch (RuntimeException error) {
-            submissionQueueLabel.setText("待登录后读取任务提交队列");
+            submissionQueueLabel.setText(AppI18n.get("CloudCenterController.121"));
         }
     }
 
     private void applyClassAnalytics(com.sqlteacher.application.collaboration.ClassLearningSummary summary) {
         if (summary == null) {
-            classAnalyticsLabel.setText("仅教师和管理员可查看本班教学记录");
+            classAnalyticsLabel.setText(AppI18n.get("CloudCenterController.122"));
             return;
         }
-        classAnalyticsLabel.setText("学生 " + summary.studentCount() + " 人 · 已产生记录 "
-            + summary.activeStudentCount() + " 人 · 同步事件 " + summary.syncedEvents() + " 条 · 成功 "
-            + summary.successfulEvents() + " 条");
+        classAnalyticsLabel.setText(AppI18n.get("CloudCenterController.123") + summary.studentCount() + AppI18n.get("CloudCenterController.124")
+            + summary.activeStudentCount() + AppI18n.get("CloudCenterController.125") + summary.syncedEvents() + AppI18n.get("CloudCenterController.126")
+            + summary.successfulEvents() + AppI18n.get("CloudCenterController.127"));
     }
 
     private String assignmentStatusLabel(AssignmentStatus status) {
         return switch (status) {
-            case DRAFT -> "草稿";
-            case PUBLISHED -> "已发布";
-            case CLOSED -> "已截止";
-            case WITHDRAWN -> "已撤回";
-            case ARCHIVED -> "已归档";
+            case DRAFT -> AppI18n.get("CloudCenterController.128");
+            case PUBLISHED -> AppI18n.get("CloudCenterController.129");
+            case CLOSED -> AppI18n.get("CloudCenterController.130");
+            case WITHDRAWN -> AppI18n.get("CloudCenterController.131");
+            case ARCHIVED -> AppI18n.get("CloudCenterController.132");
         };
     }
 
@@ -717,16 +718,16 @@ public final class CloudCenterController {
     private void updateSelectedClassLabel() {
         var selected = selectedClass();
         selectedClassLabel.setText(selected == null
-            ? "尚未选择班级"
-            : selected.name() + " · " + selected.members().size() + " 名成员");
+            ? AppI18n.get("CloudCenterController.133")
+            : selected.name() + " · " + selected.members().size() + AppI18n.get("CloudCenterController.134"));
     }
 
     private void updateSessionState() {
         var current = session.current();
         boolean signedIn = current.isPresent();
         accountLabel.setText(current
-            .map(value -> value.user().displayName() + " · " + value.user().roles().stream().map(this::roleName).sorted().reduce((a, b) -> a + "/" + b).orElse("用户"))
-            .orElse("未登录"));
+            .map(value -> value.user().displayName() + " · " + value.user().roles().stream().map(this::roleName).sorted().reduce((a, b) -> a + "/" + b).orElse(AppI18n.get("CloudCenterController.135")))
+            .orElse(AppI18n.get("CloudCenterController.136")));
         signedOutPrompt.setVisible(!signedIn);
         signedOutPrompt.setManaged(!signedIn);
         authenticatedContent.setVisible(signedIn);
@@ -737,9 +738,9 @@ public final class CloudCenterController {
 
     private String roleName(UserRole role) {
         return switch (role) {
-            case ADMIN -> "管理员";
-            case TEACHER -> "教师";
-            case STUDENT -> "学生";
+            case ADMIN -> AppI18n.get("CloudCenterController.137");
+            case TEACHER -> AppI18n.get("CloudCenterController.138");
+            case STUDENT -> AppI18n.get("CloudCenterController.139");
         };
     }
 
@@ -749,17 +750,17 @@ public final class CloudCenterController {
     }
 
     private void requireClassManager() {
-        if (!canManageClass()) throw new SecurityException("当前身份不能管理班级或发布任务");
+        if (!canManageClass()) throw new SecurityException(AppI18n.get("CloudCenterController.140"));
     }
 
     private void requireAdministrator() {
         if (accessProfile.kind() != DesktopAccessProfile.Kind.ADMIN) {
-            throw new SecurityException("当前身份不是管理员");
+            throw new SecurityException(AppI18n.get("CloudCenterController.141"));
         }
     }
 
     private CloudAuthenticationService.Session currentSession() {
-        return session.current().orElseThrow(() -> new IllegalStateException("请先登录云端账号"));
+        return session.current().orElseThrow(() -> new IllegalStateException(AppI18n.get("CloudCenterController.142")));
     }
 
     private String required(TextField field, String message) {
@@ -795,14 +796,14 @@ public final class CloudCenterController {
     }
 
     private void showStatus(String message, Status status) {
-        statusLabel.setText(message == null || message.isBlank() ? "操作未完成，请稍后重试" : message);
+        statusLabel.setText(message == null || message.isBlank() ? AppI18n.get("CloudCenterController.143") : message);
         statusBanner.getStyleClass().removeAll(STATUS_STYLES);
         statusBanner.getStyleClass().add(status.styleClass);
     }
 
     private static String message(RuntimeException error) {
         return error.getMessage() == null || error.getMessage().isBlank()
-            ? "操作未完成，请检查网络后重试"
+            ? AppI18n.get("CloudCenterController.144")
             : error.getMessage();
     }
 

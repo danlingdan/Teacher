@@ -95,7 +95,7 @@ class DesktopVisualResourceTest {
     @Test
     void homeShouldUseAccessibleVectorIconPlaceholdersInsteadOfEmoji() throws IOException {
         String home = resource("/fxml/home.fxml");
-        assertTrue(home.contains("accessibleText=\"打开 SQL 练习\""));
+        assertTrue(home.contains("accessibleText=\"%home.7\""), "accessible labels should be localized keys");
         assertFalse(home.contains("🔧"));
         assertFalse(home.contains("✨"));
         assertFalse(home.contains("📊"));

@@ -21,7 +21,7 @@
         <Label styleClass="intro-tag" text="AI + Database Education"/>
         <Label styleClass="intro-title" text="SQLTeacher"/>
         <Label styleClass="intro-description"
-               text="面向数据库教学的本地实训平台。选择下方任务开始练习；AI 输出仅作草案，所有 SQL 执行均经过 Java 侧安全检查。"/>
+               text="%home.1"/>
         <Region styleClass="intro-divider"/>
     </VBox>
 
@@ -29,17 +29,17 @@
         <VBox.margin><Insets right="32" left="32"/></VBox.margin>
         <HBox alignment="CENTER_LEFT" spacing="10">
             <VBox spacing="3" HBox.hgrow="ALWAYS">
-                <Label styleClass="section-title" text="下一步学习"/>
-                <Label fx:id="diagnosisSummaryLabel" styleClass="model-status" text="正在读取本机练习记录…"/>
+                <Label styleClass="section-title" text="%home.2"/>
+                <Label fx:id="diagnosisSummaryLabel" styleClass="model-status" text="%home.3"/>
             </VBox>
-            <Button text="刷新诊断" onAction="#onRefreshDiagnosis" styleClass="secondary-button"/>
+            <Button text="%home.4" onAction="#onRefreshDiagnosis" styleClass="secondary-button"/>
         </HBox>
         <ListView fx:id="learningQueue" prefHeight="150" minHeight="120" styleClass="learning-queue-list"/>
         <HBox alignment="CENTER_LEFT" spacing="10">
             <Label fx:id="queueStatusLabel" wrapText="true" styleClass="model-status" HBox.hgrow="ALWAYS"/>
-            <Button fx:id="dismissActionButton" text="暂时忽略" onAction="#onDismissAction"
+            <Button fx:id="dismissActionButton" text="%home.5" onAction="#onDismissAction"
                     disable="true" styleClass="secondary-button"/>
-            <Button fx:id="continueLearningButton" text="继续学习" onAction="#onContinueLearning"
+            <Button fx:id="continueLearningButton" text="%home.6" onAction="#onContinueLearning"
                     disable="true" styleClass="primary-button"/>
         </HBox>
     </VBox>
@@ -50,45 +50,45 @@
 
         <Button onAction="#onSqlPracticeCardClick" contentDisplay="GRAPHIC_ONLY"
                 mnemonicParsing="false" maxWidth="Infinity"
-                accessibleText="打开 SQL 练习" styleClass="home-card">
+                accessibleText="%home.7" styleClass="home-card">
             <graphic>
                 <VBox alignment="TOP_LEFT" spacing="12" maxWidth="Infinity">
-                    <Label fx:id="sqlIcon" styleClass="card-icon" accessibleText="SQL 练习"/>
-                    <Label styleClass="card-title" text="SQL 练习"/>
+                    <Label fx:id="sqlIcon" styleClass="card-icon" accessibleText="%home.8"/>
+                    <Label styleClass="card-title" text="%home.9"/>
                     <Label styleClass="card-description" wrapText="true"
-                           text="编写并执行 SQL，查看查询结果和教学提示；高风险语句执行前需要明确确认。"/>
+                           text="%home.10"/>
                     <Region VBox.vgrow="ALWAYS"/>
-                    <Label styleClass="card-arrow" text="打开 →"/>
+                    <Label styleClass="card-arrow" text="%home.11"/>
                 </VBox>
             </graphic>
         </Button>
 
         <Button onAction="#onAiAssistantCardClick" contentDisplay="GRAPHIC_ONLY"
                 mnemonicParsing="false" maxWidth="Infinity"
-                accessibleText="打开 AI 助手" styleClass="home-card">
+                accessibleText="%home.12" styleClass="home-card">
             <graphic>
                 <VBox alignment="TOP_LEFT" spacing="12" maxWidth="Infinity">
-                    <Label fx:id="aiIcon" styleClass="card-icon" accessibleText="AI 助手"/>
-                    <Label styleClass="card-title" text="AI 助手"/>
+                    <Label fx:id="aiIcon" styleClass="card-icon" accessibleText="%home.13"/>
+                    <Label styleClass="card-title" text="%home.14"/>
                     <Label styleClass="card-description" wrapText="true"
-                           text="根据自然语言生成 SQL 草案和解释，经过安全检查后复制到 SQL 练习页。"/>
+                           text="%home.15"/>
                     <Region VBox.vgrow="ALWAYS"/>
-                    <Label styleClass="card-arrow" text="打开 →"/>
+                    <Label styleClass="card-arrow" text="%home.16"/>
                 </VBox>
             </graphic>
         </Button>
 
         <Button onAction="#onTableSchemaCardClick" contentDisplay="GRAPHIC_ONLY"
                 mnemonicParsing="false" maxWidth="Infinity"
-                accessibleText="打开表结构浏览" styleClass="home-card">
+                accessibleText="%home.17" styleClass="home-card">
             <graphic>
                 <VBox alignment="TOP_LEFT" spacing="12" maxWidth="Infinity">
-                    <Label fx:id="schemaIcon" styleClass="card-icon" accessibleText="表结构浏览"/>
-                    <Label styleClass="card-title" text="表结构浏览"/>
+                    <Label fx:id="schemaIcon" styleClass="card-icon" accessibleText="%home.18"/>
+                    <Label styleClass="card-title" text="%home.19"/>
                     <Label styleClass="card-description" wrapText="true"
-                           text="以树形结构查看数据库表、字段类型和主键信息，并快速带入 SQL 编辑器。"/>
+                           text="%home.20"/>
                     <Region VBox.vgrow="ALWAYS"/>
-                    <Label styleClass="card-arrow" text="打开 →"/>
+                    <Label styleClass="card-arrow" text="%home.21"/>
                 </VBox>
             </graphic>
         </Button>

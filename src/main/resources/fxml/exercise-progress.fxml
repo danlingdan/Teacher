@@ -12,89 +12,89 @@
             <padding><Insets top="18" right="24" bottom="12" left="24"/></padding>
             <HBox alignment="CENTER_LEFT">
                 <VBox spacing="5">
-                    <Label text="教师学情看板" styleClass="page-title"/>
-                    <Label text="统一统计口径，可按日期、题目、知识点和错误类型筛选并导出 CSV。" styleClass="page-subtitle"/>
+                    <Label text="%exercise-progress.1" styleClass="page-title"/>
+                    <Label text="%exercise-progress.2" styleClass="page-subtitle"/>
                 </VBox>
                 <Region HBox.hgrow="ALWAYS"/>
-                <Button text="清理学习数据" onAction="#onResetLearningData" styleClass="danger-outline-button"/>
-                <Button fx:id="exportButton" text="导出 CSV" onAction="#onExport" styleClass="secondary-button" disable="true"/>
-                <Button text="刷新" onAction="#onRefresh" styleClass="refresh-button"/>
+                <Button text="%exercise-progress.3" onAction="#onResetLearningData" styleClass="danger-outline-button"/>
+                <Button fx:id="exportButton" text="%exercise-progress.4" onAction="#onExport" styleClass="secondary-button" disable="true"/>
+                <Button text="%exercise-progress.5" onAction="#onRefresh" styleClass="refresh-button"/>
             </HBox>
             <HBox spacing="8" alignment="CENTER_LEFT" styleClass="analytics-filter-bar">
-                <Label text="开始"/><DatePicker fx:id="startDatePicker" prefWidth="130"/>
-                <Label text="结束"/><DatePicker fx:id="endDatePicker" prefWidth="130"/>
-                <ComboBox fx:id="exerciseFilter" promptText="全部题目" prefWidth="170"/>
-                <ComboBox fx:id="knowledgeFilter" promptText="全部知识点" prefWidth="135"/>
-                <ComboBox fx:id="errorFilter" promptText="全部错误" prefWidth="165"/>
-                <Button text="应用" onAction="#onRefresh" styleClass="secondary-button"/>
-                <Button text="清除" onAction="#onClearFilters" styleClass="secondary-button"/>
+                <Label text="%exercise-progress.6"/><DatePicker fx:id="startDatePicker" prefWidth="130"/>
+                <Label text="%exercise-progress.7"/><DatePicker fx:id="endDatePicker" prefWidth="130"/>
+                <ComboBox fx:id="exerciseFilter" promptText="%exercise-progress.8" prefWidth="170"/>
+                <ComboBox fx:id="knowledgeFilter" promptText="%exercise-progress.9" prefWidth="135"/>
+                <ComboBox fx:id="errorFilter" promptText="%exercise-progress.10" prefWidth="165"/>
+                <Button text="%exercise-progress.11" onAction="#onRefresh" styleClass="secondary-button"/>
+                <Button text="%exercise-progress.12" onAction="#onClearFilters" styleClass="secondary-button"/>
             </HBox>
         </VBox>
     </top>
     <center>
         <VBox spacing="10" styleClass="progress-content">
             <TilePane prefColumns="6" hgap="10" vgap="8">
-                <VBox styleClass="progress-card"><Label text="会话" styleClass="model-status"/><Label fx:id="sessionsLabel" text="0" styleClass="progress-value"/></VBox>
-                <VBox styleClass="progress-card"><Label text="尝试" styleClass="model-status"/><Label fx:id="attemptsLabel" text="0" styleClass="progress-value"/></VBox>
-                <VBox styleClass="progress-card"><Label text="提交通过率" styleClass="model-status"/><Label fx:id="passRateLabel" text="0%" styleClass="progress-value"/></VBox>
-                <VBox styleClass="progress-card"><Label text="题目完成率" styleClass="model-status"/><Label fx:id="completionRateLabel" text="0%" styleClass="progress-value"/></VBox>
-                <VBox styleClass="progress-card"><Label text="平均尝试/完成题" styleClass="model-status"/><Label fx:id="averageAttemptsLabel" text="0" styleClass="progress-value"/></VBox>
-                <VBox styleClass="progress-card"><Label text="平均提交耗时" styleClass="model-status"/><Label fx:id="durationLabel" text="0 ms" styleClass="progress-value"/></VBox>
+                <VBox styleClass="progress-card"><Label text="%exercise-progress.13" styleClass="model-status"/><Label fx:id="sessionsLabel" text="0" styleClass="progress-value"/></VBox>
+                <VBox styleClass="progress-card"><Label text="%exercise-progress.14" styleClass="model-status"/><Label fx:id="attemptsLabel" text="0" styleClass="progress-value"/></VBox>
+                <VBox styleClass="progress-card"><Label text="%exercise-progress.15" styleClass="model-status"/><Label fx:id="passRateLabel" text="0%" styleClass="progress-value"/></VBox>
+                <VBox styleClass="progress-card"><Label text="%exercise-progress.16" styleClass="model-status"/><Label fx:id="completionRateLabel" text="0%" styleClass="progress-value"/></VBox>
+                <VBox styleClass="progress-card"><Label text="%exercise-progress.17" styleClass="model-status"/><Label fx:id="averageAttemptsLabel" text="0" styleClass="progress-value"/></VBox>
+                <VBox styleClass="progress-card"><Label text="%exercise-progress.18" styleClass="model-status"/><Label fx:id="durationLabel" text="0 ms" styleClass="progress-value"/></VBox>
             </TilePane>
             <TabPane VBox.vgrow="ALWAYS" tabClosingPolicy="UNAVAILABLE">
                 <tabs>
-                    <Tab text="题目完成情况">
+                    <Tab text="%exercise-progress.19">
                         <TableView fx:id="exerciseTable" styleClass="result-table">
                             <columns>
-                                <TableColumn fx:id="titleColumn" text="题目" prefWidth="220"/>
-                                <TableColumn fx:id="knowledgeColumn" text="知识点" prefWidth="130"/>
-                                <TableColumn fx:id="attemptsColumn" text="尝试" prefWidth="70"/>
-                                <TableColumn fx:id="submissionsColumn" text="提交" prefWidth="70"/>
-                                <TableColumn fx:id="passColumn" text="通过率" prefWidth="90"/>
-                                <TableColumn fx:id="completedColumn" text="状态" prefWidth="90"/>
-                                <TableColumn fx:id="lastAttemptColumn" text="最后尝试" prefWidth="130"/>
+                                <TableColumn fx:id="titleColumn" text="%exercise-progress.20" prefWidth="220"/>
+                                <TableColumn fx:id="knowledgeColumn" text="%exercise-progress.21" prefWidth="130"/>
+                                <TableColumn fx:id="attemptsColumn" text="%exercise-progress.22" prefWidth="70"/>
+                                <TableColumn fx:id="submissionsColumn" text="%exercise-progress.23" prefWidth="70"/>
+                                <TableColumn fx:id="passColumn" text="%exercise-progress.24" prefWidth="90"/>
+                                <TableColumn fx:id="completedColumn" text="%exercise-progress.25" prefWidth="90"/>
+                                <TableColumn fx:id="lastAttemptColumn" text="%exercise-progress.26" prefWidth="130"/>
                             </columns>
                         </TableView>
                     </Tab>
-                    <Tab text="常见错误">
+                    <Tab text="%exercise-progress.27">
                         <TableView fx:id="errorTable" styleClass="result-table">
                             <columns>
-                                <TableColumn fx:id="errorCodeColumn" text="错误类型" prefWidth="320"/>
-                                <TableColumn fx:id="errorCountColumn" text="次数" prefWidth="120"/>
+                                <TableColumn fx:id="errorCodeColumn" text="%exercise-progress.28" prefWidth="320"/>
+                                <TableColumn fx:id="errorCountColumn" text="%exercise-progress.29" prefWidth="120"/>
                             </columns>
                         </TableView>
                     </Tab>
-                    <Tab text="知识点薄弱项">
+                    <Tab text="%exercise-progress.30">
                         <TableView fx:id="knowledgeTable" styleClass="result-table">
                             <columns>
-                                <TableColumn fx:id="pointColumn" text="知识点" prefWidth="180"/>
-                                <TableColumn fx:id="pointAttemptsColumn" text="尝试" prefWidth="90"/>
-                                <TableColumn fx:id="pointFailuresColumn" text="失败提交" prefWidth="110"/>
-                                <TableColumn fx:id="pointCompletionColumn" text="完成题目" prefWidth="110"/>
-                                <TableColumn fx:id="weaknessColumn" text="薄弱度" prefWidth="100"/>
+                                <TableColumn fx:id="pointColumn" text="%exercise-progress.31" prefWidth="180"/>
+                                <TableColumn fx:id="pointAttemptsColumn" text="%exercise-progress.32" prefWidth="90"/>
+                                <TableColumn fx:id="pointFailuresColumn" text="%exercise-progress.33" prefWidth="110"/>
+                                <TableColumn fx:id="pointCompletionColumn" text="%exercise-progress.34" prefWidth="110"/>
+                                <TableColumn fx:id="weaknessColumn" text="%exercise-progress.35" prefWidth="100"/>
                             </columns>
                         </TableView>
                     </Tab>
-                    <Tab text="教师干预队列">
+                    <Tab text="%exercise-progress.36">
                         <VBox spacing="8">
                             <HBox spacing="8" alignment="CENTER_LEFT">
-                                <Label text="仅显示当前账号有权访问的班级；处理状态保存在本机。" styleClass="model-status"/>
+                                <Label text="%exercise-progress.37" styleClass="model-status"/>
                                 <Region HBox.hgrow="ALWAYS"/>
-                                <Button text="刷新" onAction="#onRefreshInterventions" styleClass="secondary-button"/>
-                                <Button text="已查看" onAction="#onAcknowledgeIntervention" styleClass="secondary-button"/>
-                                <Button text="已解决" onAction="#onResolveIntervention" styleClass="primary-button"/>
-                                <Button text="忽略" onAction="#onDismissIntervention" styleClass="secondary-button"/>
-                                <Button text="进入反馈/任务" onAction="#onOpenTeachingWorkspace" styleClass="secondary-button"/>
-                                <Button text="导出" onAction="#onExportInterventions" styleClass="secondary-button"/>
+                                <Button text="%exercise-progress.38" onAction="#onRefreshInterventions" styleClass="secondary-button"/>
+                                <Button text="%exercise-progress.39" onAction="#onAcknowledgeIntervention" styleClass="secondary-button"/>
+                                <Button text="%exercise-progress.40" onAction="#onResolveIntervention" styleClass="primary-button"/>
+                                <Button text="%exercise-progress.41" onAction="#onDismissIntervention" styleClass="secondary-button"/>
+                                <Button text="%exercise-progress.42" onAction="#onOpenTeachingWorkspace" styleClass="secondary-button"/>
+                                <Button text="%exercise-progress.43" onAction="#onExportInterventions" styleClass="secondary-button"/>
                             </HBox>
                             <TableView fx:id="interventionTable" styleClass="result-table" VBox.vgrow="ALWAYS">
                                 <columns>
-                                    <TableColumn fx:id="interventionClassColumn" text="班级" prefWidth="120"/>
-                                    <TableColumn fx:id="interventionAssignmentColumn" text="任务" prefWidth="170"/>
-                                    <TableColumn fx:id="interventionStudentColumn" text="学生" prefWidth="140"/>
-                                    <TableColumn fx:id="interventionReasonColumn" text="原因" prefWidth="110"/>
-                                    <TableColumn fx:id="interventionEvidenceColumn" text="证据摘要" prefWidth="260"/>
-                                    <TableColumn fx:id="interventionStatusColumn" text="状态" prefWidth="100"/>
+                                    <TableColumn fx:id="interventionClassColumn" text="%exercise-progress.44" prefWidth="120"/>
+                                    <TableColumn fx:id="interventionAssignmentColumn" text="%exercise-progress.45" prefWidth="170"/>
+                                    <TableColumn fx:id="interventionStudentColumn" text="%exercise-progress.46" prefWidth="140"/>
+                                    <TableColumn fx:id="interventionReasonColumn" text="%exercise-progress.47" prefWidth="110"/>
+                                    <TableColumn fx:id="interventionEvidenceColumn" text="%exercise-progress.48" prefWidth="260"/>
+                                    <TableColumn fx:id="interventionStatusColumn" text="%exercise-progress.49" prefWidth="100"/>
                                 </columns>
                             </TableView>
                         </VBox>

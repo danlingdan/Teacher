@@ -10,9 +10,9 @@
     <top>
         <VBox spacing="8" styleClass="student-workflow-header">
             <padding><Insets top="20" right="24" bottom="14" left="24"/></padding>
-            <Label text="闯关练习" styleClass="page-title"/>
-            <Label text="在隔离数据集上运行并提交 SQL；评测无需 AI，也不会展示参考答案。" styleClass="page-subtitle"/>
-            <Label text="操作顺序：选择题目 → 开始练习 → 运行检查 → 提交评测。快捷键：Ctrl+Enter 运行，Ctrl+Shift+Enter 提交，F1 获取提示。"
+            <Label text="%student-exercise.1" styleClass="page-title"/>
+            <Label text="%student-exercise.2" styleClass="page-subtitle"/>
+            <Label text="%student-exercise.3"
                    wrapText="true" styleClass="workflow-hint"/>
         </VBox>
     </top>
@@ -20,35 +20,35 @@
         <SplitPane dividerPositions="0.27" styleClass="exercise-split">
             <VBox spacing="10" styleClass="panel-card">
                 <HBox alignment="CENTER_LEFT">
-                    <Label text="练习题" styleClass="card-title"/>
+                    <Label text="%student-exercise.4" styleClass="card-title"/>
                     <Region HBox.hgrow="ALWAYS"/>
-                    <Button text="刷新" onAction="#onRefresh" styleClass="refresh-button"/>
+                    <Button text="%student-exercise.5" onAction="#onRefresh" styleClass="refresh-button"/>
                 </HBox>
                 <ListView fx:id="exerciseList" VBox.vgrow="ALWAYS" styleClass="exercise-list"/>
-                <Button fx:id="startButton" text="开始选中题目" disable="true" onAction="#onStart"
+                <Button fx:id="startButton" text="%student-exercise.6" disable="true" onAction="#onStart"
                         maxWidth="Infinity" styleClass="sql-execute-button"/>
             </VBox>
             <VBox spacing="10" styleClass="exercise-workspace">
                 <VBox spacing="5" styleClass="panel-card">
-                    <Label fx:id="titleLabel" text="请选择一道题目" styleClass="card-title"/>
+                    <Label fx:id="titleLabel" text="%student-exercise.7" styleClass="card-title"/>
                     <Label fx:id="metaLabel" text="-" styleClass="model-status"/>
-                    <Label fx:id="descriptionLabel" text="选择题目并开始后，在下方编写 SQL。" wrapText="true" styleClass="card-description"/>
-                    <Label fx:id="schemaLabel" text="可用表与字段：选择题目后显示" wrapText="true" styleClass="exercise-schema-summary"/>
+                    <Label fx:id="descriptionLabel" text="%student-exercise.8" wrapText="true" styleClass="card-description"/>
+                    <Label fx:id="schemaLabel" text="%student-exercise.9" wrapText="true" styleClass="exercise-schema-summary"/>
                 </VBox>
                 <VBox spacing="8" styleClass="panel-card" VBox.vgrow="ALWAYS">
                     <HBox alignment="CENTER_LEFT">
-                        <Label text="SQL 编辑器" styleClass="card-title"/>
+                        <Label text="%student-exercise.10" styleClass="card-title"/>
                         <Region HBox.hgrow="ALWAYS"/>
-                        <Button fx:id="resetButton" text="重置数据" onAction="#onReset" styleClass="refresh-button"/>
-                        <Button fx:id="hintButton" text="提示" onAction="#onHint" styleClass="refresh-button"/>
-                        <Button fx:id="runButton" text="运行查询" onAction="#onRun" styleClass="secondary-button"/>
-                        <Button fx:id="submitButton" text="提交评测" onAction="#onSubmit" defaultButton="true" styleClass="sql-execute-button"/>
+                        <Button fx:id="resetButton" text="%student-exercise.11" onAction="#onReset" styleClass="refresh-button"/>
+                        <Button fx:id="hintButton" text="%student-exercise.12" onAction="#onHint" styleClass="refresh-button"/>
+                        <Button fx:id="runButton" text="%student-exercise.13" onAction="#onRun" styleClass="secondary-button"/>
+                        <Button fx:id="submitButton" text="%student-exercise.14" onAction="#onSubmit" defaultButton="true" styleClass="sql-execute-button"/>
                     </HBox>
                     <TextArea fx:id="sqlArea" prefRowCount="9" minHeight="180" prefHeight="220"
                               styleClass="sql-editor, exercise-sql-editor" VBox.vgrow="SOMETIMES"/>
                     <SplitPane orientation="VERTICAL" dividerPositions="0.62" VBox.vgrow="ALWAYS" styleClass="exercise-result-split">
                         <TableView fx:id="resultTable" styleClass="result-table"/>
-                        <TextArea fx:id="feedbackArea" editable="false" wrapText="true" promptText="运行结果和分项反馈会显示在这里。"/>
+                        <TextArea fx:id="feedbackArea" editable="false" wrapText="true" promptText="%student-exercise.15"/>
                     </SplitPane>
                     <Label fx:id="statusLabel" visible="false" managed="false" wrapText="true"/>
                 </VBox>

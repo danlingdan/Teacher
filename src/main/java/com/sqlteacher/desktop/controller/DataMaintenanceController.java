@@ -1,4 +1,5 @@
 package com.sqlteacher.desktop.controller;
+import com.sqlteacher.desktop.AppI18n;
 
 import com.sqlteacher.application.config.ApplicationVersion;
 import com.sqlteacher.application.config.SqlTeacherConfiguration;
@@ -57,16 +58,16 @@ public final class DataMaintenanceController {
                 if (empty || item == null) {
                     setText(null);
                 } else {
-                    String kind = item.automatic() ? "自动" : "手动";
+                    String kind = item.automatic() ? AppI18n.get("DataMaintenanceController.1") : AppI18n.get("DataMaintenanceController.2");
                     String time = DISPLAY_TIME.format(item.createdAt().atZone(ZoneId.systemDefault()));
-                    setText(kind + "备份 · " + time + " · " + formatBytes(item.sizeBytes()));
+                    setText(kind + AppI18n.get("DataMaintenanceController.3") + time + " · " + formatBytes(item.sizeBytes()));
                 }
             }
         });
         if (maintenanceAllowed) {
             refreshBackups();
         } else {
-            String reason = "仅管理员可以备份或恢复整台设备的数据。版本信息仍可查看。";
+            String reason = AppI18n.get("DataMaintenanceController.4");
             backupList.setDisable(true);
             backupList.setPlaceholder(new Label(reason));
             refreshBackupsButton.setDisable(true);
@@ -84,10 +85,10 @@ public final class DataMaintenanceController {
 
     @FXML
     private void onCreateBackup() {
-        runAsync("正在创建安全备份…", () -> {
+        runAsync(AppI18n.get("DataMaintenanceController.5"), () -> {
             BackupSnapshot snapshot = backupService.createBackup();
             Platform.runLater(() -> {
-                maintenanceStatusLabel.setText("备份已创建：" + snapshot.id());
+                maintenanceStatusLabel.setText(AppI18n.get("DataMaintenanceController.6") + snapshot.id());
                 refreshBackups();
             });
         });
@@ -97,24 +98,24 @@ public final class DataMaintenanceController {
     private void onRestoreBackup() {
         BackupSnapshot selected = backupList.getSelectionModel().getSelectedItem();
         if (selected == null) {
-            maintenanceStatusLabel.setText("请先选择一个备份。");
+            maintenanceStatusLabel.setText(AppI18n.get("DataMaintenanceController.7"));
             return;
         }
         Alert confirmation = new Alert(
             Alert.AlertType.CONFIRMATION,
-            "恢复会用所选备份替换当前应用数据。系统会先自动保存当前数据，完成后应用将退出，请重新打开。",
+            AppI18n.get("DataMaintenanceController.8"),
             ButtonType.CANCEL,
             ButtonType.OK
         );
-        confirmation.setTitle("确认恢复备份");
-        confirmation.setHeaderText("恢复 " + selected.id() + "？");
+        confirmation.setTitle(AppI18n.get("DataMaintenanceController.9"));
+        confirmation.setHeaderText(AppI18n.get("DataMaintenanceController.10") + selected.id() + AppI18n.get("DataMaintenanceController.11"));
         if (confirmation.showAndWait().orElse(ButtonType.CANCEL) != ButtonType.OK) {
             return;
         }
-        runAsync("正在校验并恢复备份…", () -> {
+        runAsync(AppI18n.get("DataMaintenanceController.12"), () -> {
             backupService.restoreBackup(selected.id());
             Platform.runLater(() -> {
-                new Alert(Alert.AlertType.INFORMATION, "恢复完成。SQLTeacher 现在将退出，请重新打开应用。")
+                new Alert(Alert.AlertType.INFORMATION, AppI18n.get("DataMaintenanceController.13"))
                     .showAndWait();
                 Platform.exit();
             });
@@ -125,22 +126,22 @@ public final class DataMaintenanceController {
     private void onRestoreDemo() {
         Alert confirmation = new Alert(
             Alert.AlertType.CONFIRMATION,
-            "演示数据库将恢复为内置学生示例数据，不影响题库、学习记录和连接设置。",
+            AppI18n.get("DataMaintenanceController.14"),
             ButtonType.CANCEL,
             ButtonType.OK
         );
-        confirmation.setTitle("恢复演示数据库");
-        confirmation.setHeaderText("确认恢复演示数据？");
+        confirmation.setTitle(AppI18n.get("DataMaintenanceController.15"));
+        confirmation.setHeaderText(AppI18n.get("DataMaintenanceController.16"));
         if (confirmation.showAndWait().orElse(ButtonType.CANCEL) != ButtonType.OK) {
             return;
         }
-        runAsync("正在恢复演示数据库…", () -> Platform.runLater(
-            () -> maintenanceStatusLabel.setText("演示数据库已恢复。")
+        runAsync(AppI18n.get("DataMaintenanceController.17"), () -> Platform.runLater(
+            () -> maintenanceStatusLabel.setText(AppI18n.get("DataMaintenanceController.18"))
         ), backupService::restoreDemoDatabase);
     }
 
     private void refreshBackups() {
-        runAsync("正在读取备份…", () -> {
+        runAsync(AppI18n.get("DataMaintenanceController.19"), () -> {
             var snapshots = backupService.listBackups();
             Platform.runLater(() -> backupList.setItems(FXCollections.observableArrayList(snapshots)));
         });
@@ -159,7 +160,7 @@ public final class DataMaintenanceController {
             } else {
                 Throwable cause = error instanceof CompletionException && error.getCause() != null
                     ? error.getCause() : error;
-                maintenanceStatusLabel.setText("操作失败：" + cause.getMessage());
+                maintenanceStatusLabel.setText(AppI18n.get("DataMaintenanceController.20") + cause.getMessage());
             }
         }));
     }

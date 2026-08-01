@@ -1,4 +1,5 @@
 package com.sqlteacher.desktop.controller;
+import com.sqlteacher.desktop.AppI18n;
 
 import com.sqlteacher.application.connection.ConnectionManagementService;
 import com.sqlteacher.application.execution.SqlExecutionRequest;
@@ -38,7 +39,7 @@ import java.util.function.Consumer;
  *
  * <p><b>依赖注入</b>：构造注入应用层 {@link DatabaseMetadataService}、{@link SqlExecutionService}
  * 与一个 {@link Consumer} 回调。回调由 {@code MainWindowController} 提供，用于在用户点击表名时
- * 把 {@code "SELECT * FROM 表名"} 同步填充到 SQL 练习页输入框（不跳转页面，不影响右侧即时预览）。
+ * 把 {@code AppI18n.get("TableSchemaController.1")} 同步填充到 SQL 练习页输入框（不跳转页面，不影响右侧即时预览）。
  *
  * <p><b>线程模型</b>：所有耗时操作（元数据加载、数据预览查询）均通过 {@link Task} 提交到共享守护线程池
  * {@code DesktopExecutors.background()}，绝不阻塞 JavaFX Application Thread。
@@ -61,25 +62,25 @@ import java.util.function.Consumer;
 public final class TableSchemaController {
 
     /** 树根标签：展示当前数据库的层级根节点。 */
-    private static final String ROOT_LABEL = "当前数据库";
+    private static final String ROOT_LABEL = AppI18n.get("TableSchemaController.2");
 
     /** 懒加载占位子节点文案。 */
-    private static final String LOADING_CHILD_LABEL = "加载中…";
+    private static final String LOADING_CHILD_LABEL = AppI18n.get("TableSchemaController.3");
 
     /** 表结构加载中占位文案。 */
-    private static final String SCHEMA_LOADING_MESSAGE = "正在加载表结构…";
+    private static final String SCHEMA_LOADING_MESSAGE = AppI18n.get("TableSchemaController.4");
 
     /** 数据预览加载中占位文案。 */
-    private static final String PREVIEW_LOADING_MESSAGE = "正在加载数据预览…";
+    private static final String PREVIEW_LOADING_MESSAGE = AppI18n.get("TableSchemaController.5");
 
     /** 预览空态占位文案。 */
-    private static final String PREVIEW_EMPTY_MESSAGE = "点击左侧数据表预览数据";
+    private static final String PREVIEW_EMPTY_MESSAGE = AppI18n.get("TableSchemaController.6");
 
     /** 表结构空态占位文案。 */
-    private static final String EMPTY_MESSAGE = "暂无表结构数据";
+    private static final String EMPTY_MESSAGE = AppI18n.get("TableSchemaController.7");
 
     /** 错误兜底文案。 */
-    private static final String FALLBACK_ERROR_MESSAGE = "加载失败";
+    private static final String FALLBACK_ERROR_MESSAGE = AppI18n.get("TableSchemaController.8");
 
     /** 预览查询默认返回行数上限。 */
     private static final int PREVIEW_MAX_ROWS = 100;
@@ -88,7 +89,7 @@ public final class TableSchemaController {
     private static final Duration PREVIEW_TIMEOUT = Duration.ofSeconds(5);
 
     /** 错误弹窗标题。 */
-    private static final String ERROR_ALERT_TITLE = "加载失败";
+    private static final String ERROR_ALERT_TITLE = AppI18n.get("TableSchemaController.9");
 
     /** 应用层表元数据服务接口。 */
     private final DatabaseMetadataService metadataService;
@@ -97,7 +98,7 @@ public final class TableSchemaController {
     private final SqlExecutionService sqlExecutionService;
     private final ConnectionManagementService connectionManagementService;
 
-    /** 表名选中回调：把 {@code "SELECT * FROM 表名"} 传回主窗口控制器联动 SQL 练习页。 */
+    /** 表名选中回调：把 {@code AppI18n.get("TableSchemaController.10")} 传回主窗口控制器联动 SQL 练习页。 */
     private final Consumer<String> onTableSelected;
 
     /** 树形控件，分层展示 库 → 表 → 字段。 */
@@ -481,7 +482,7 @@ public final class TableSchemaController {
             return;
         }
         if (viewModel.rowCount() == 0) {
-            previewPlaceholder.setText("该表暂无数据");
+            previewPlaceholder.setText(AppI18n.get("TableSchemaController.11"));
             clearPreviewTable();
             setNodeVisible(previewTable, false);
             setNodeVisible(previewPlaceholder, true);
@@ -497,8 +498,8 @@ public final class TableSchemaController {
         setNodeVisible(previewPlaceholder, false);
         setNodeVisible(previewErrorLabel, false);
         previewStatusLabel.setText(viewModel.truncated()
-            ? "已显示前 " + viewModel.rowCount() + " 行，结果已按上限截断"
-            : "共 " + viewModel.rowCount() + " 行 · " + viewModel.executionMillis() + " ms");
+            ? AppI18n.get("TableSchemaController.12") + viewModel.rowCount() + AppI18n.get("TableSchemaController.13")
+            : AppI18n.get("TableSchemaController.14") + viewModel.rowCount() + AppI18n.get("TableSchemaController.15") + viewModel.executionMillis() + " ms");
         setNodeVisible(previewStatusLabel, true);
     }
 

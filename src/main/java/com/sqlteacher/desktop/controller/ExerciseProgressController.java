@@ -1,4 +1,5 @@
 package com.sqlteacher.desktop.controller;
+import com.sqlteacher.desktop.AppI18n;
 
 import com.sqlteacher.application.analytics.AnalyticsCsvExport;
 import com.sqlteacher.application.analytics.AnalyticsFilter;
@@ -113,7 +114,7 @@ public final class ExerciseProgressController {
         attemptsColumn.setCellValueFactory(cell -> text(cell.getValue().attempts()));
         submissionsColumn.setCellValueFactory(cell -> text(cell.getValue().submissions()));
         passColumn.setCellValueFactory(cell -> text(percent(cell.getValue().passRate())));
-        completedColumn.setCellValueFactory(cell -> text(cell.getValue().completed() ? "已完成" : "未完成"));
+        completedColumn.setCellValueFactory(cell -> text(cell.getValue().completed() ? AppI18n.get("ExerciseProgressController.1") : AppI18n.get("ExerciseProgressController.2")));
         lastAttemptColumn.setCellValueFactory(cell -> text(cell.getValue().lastAttempt().map(TIME_FORMAT::format).orElse("-")));
         errorCodeColumn.setCellValueFactory(cell -> text(cell.getValue().errorCode()));
         errorCountColumn.setCellValueFactory(cell -> text(cell.getValue().count()));
@@ -157,7 +158,7 @@ public final class ExerciseProgressController {
             showStatus(exceptionMapper.map(error).userMessage(), true);
             return;
         }
-        GlobalLoading.show("正在生成学情 CSV…");
+        GlobalLoading.show(AppI18n.get("ExerciseProgressController.3"));
         DesktopExecutors.background().execute(() -> {
             try {
                 AnalyticsCsvExport export = analyticsService.exportCsv(filter);
@@ -172,17 +173,17 @@ public final class ExerciseProgressController {
     private void onResetLearningData() {
         Alert confirm = new Alert(
             Alert.AlertType.CONFIRMATION,
-            "将删除全部练习会话、尝试和学习事件，但保留题库、连接配置与知识文档。此操作不可撤销。",
+            AppI18n.get("ExerciseProgressController.4"),
             ButtonType.CANCEL,
             ButtonType.OK
         );
-        confirm.setTitle("清理学习数据");
-        confirm.setHeaderText("确认清理本机学习数据？");
+        confirm.setTitle(AppI18n.get("ExerciseProgressController.5"));
+        confirm.setHeaderText(AppI18n.get("ExerciseProgressController.6"));
         if (confirm.showAndWait().orElse(ButtonType.CANCEL) != ButtonType.OK) {
             return;
         }
         AnalyticsFilter filter = captureFilterSnapshot();
-        GlobalLoading.show("正在清理学习数据…");
+        GlobalLoading.show(AppI18n.get("ExerciseProgressController.7"));
         DesktopExecutors.background().execute(() -> {
             try {
                 LearningDataResetResult result = maintenanceService.resetLearningData();
@@ -190,8 +191,8 @@ public final class ExerciseProgressController {
                 Platform.runLater(() -> {
                     GlobalLoading.hide();
                     showReport(report);
-                    showStatus("已删除 " + result.sessionsDeleted() + " 个会话、"
-                        + result.attemptsDeleted() + " 次尝试和 " + result.eventsDeleted() + " 条事件。", false);
+                    showStatus(AppI18n.get("ExerciseProgressController.8") + result.sessionsDeleted() + AppI18n.get("ExerciseProgressController.9")
+                        + result.attemptsDeleted() + AppI18n.get("ExerciseProgressController.10") + result.eventsDeleted() + AppI18n.get("ExerciseProgressController.11"), false);
                 });
             } catch (Throwable error) {
                 Platform.runLater(() -> fail(error));
@@ -200,7 +201,7 @@ public final class ExerciseProgressController {
     }
 
     private void loadInitialData() {
-        GlobalLoading.show("正在加载教师学情看板…");
+        GlobalLoading.show(AppI18n.get("ExerciseProgressController.12"));
         DesktopExecutors.background().execute(() -> {
             try {
                 List<ExerciseSummary> catalog = catalogService.listAvailableExercises();
@@ -241,7 +242,7 @@ public final class ExerciseProgressController {
     @FXML
     private void onOpenTeachingWorkspace() {
         if (interventionTable.getSelectionModel().getSelectedItem() == null) {
-            showStatus("请先选择一条干预记录。", true);
+            showStatus(AppI18n.get("ExerciseProgressController.13"), true);
             return;
         }
         openTeachingWorkspace.run();
@@ -251,18 +252,18 @@ public final class ExerciseProgressController {
     private void onExportInterventions() {
         String csv = interventionService.exportCsv(List.copyOf(interventionTable.getItems()));
         FileChooser chooser = new FileChooser();
-        chooser.setTitle("导出教师干预队列");
+        chooser.setTitle(AppI18n.get("ExerciseProgressController.14"));
         chooser.setInitialFileName("sqlteacher-interventions.csv");
-        chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("CSV 文件", "*.csv"));
+        chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter(AppI18n.get("ExerciseProgressController.15"), "*.csv"));
         File target = chooser.showSaveDialog(interventionTable.getScene().getWindow());
         if (target == null) return;
-        GlobalLoading.show("正在写入干预队列 CSV…");
+        GlobalLoading.show(AppI18n.get("ExerciseProgressController.16"));
         DesktopExecutors.background().execute(() -> {
             try {
                 Files.writeString(target.toPath(), csv, StandardCharsets.UTF_8);
                 Platform.runLater(() -> {
                     GlobalLoading.hide();
-                    showStatus("干预队列已脱敏导出到 " + target.getAbsolutePath(), false);
+                    showStatus(AppI18n.get("ExerciseProgressController.17") + target.getAbsolutePath(), false);
                 });
             } catch (Throwable error) {
                 Platform.runLater(() -> fail(error));
@@ -276,7 +277,7 @@ public final class ExerciseProgressController {
                 List<InterventionCandidate> items = interventionService.refreshAuthorized();
                 Platform.runLater(() -> interventionTable.getItems().setAll(items));
             } catch (Throwable error) {
-                Platform.runLater(() -> showStatus("云端干预队列暂不可用："
+                Platform.runLater(() -> showStatus(AppI18n.get("ExerciseProgressController.18")
                     + exceptionMapper.map(error).userMessage(), true));
             }
         });
@@ -285,10 +286,10 @@ public final class ExerciseProgressController {
     private void updateSelectedIntervention(InterventionStatus status) {
         InterventionCandidate selected = interventionTable.getSelectionModel().getSelectedItem();
         if (selected == null) {
-            showStatus("请先选择一条干预记录。", true);
+            showStatus(AppI18n.get("ExerciseProgressController.19"), true);
             return;
         }
-        GlobalLoading.show("正在更新干预状态…");
+        GlobalLoading.show(AppI18n.get("ExerciseProgressController.20"));
         DesktopExecutors.background().execute(() -> {
             try {
                 interventionService.updateStatus(selected.id(), status);
@@ -304,15 +305,15 @@ public final class ExerciseProgressController {
 
     private static String reasonLabel(InterventionCandidate item) {
         return switch (item.reason()) {
-            case OVERDUE_TASK -> "任务逾期";
-            case REPEATED_FAILURE -> "连续失败";
-            case STALE_PROGRESS -> "提交待跟进";
+            case OVERDUE_TASK -> AppI18n.get("ExerciseProgressController.21");
+            case REPEATED_FAILURE -> AppI18n.get("ExerciseProgressController.22");
+            case STALE_PROGRESS -> AppI18n.get("ExerciseProgressController.23");
             default -> item.reason().name();
         };
     }
 
     private void refresh(AnalyticsFilter filter) {
-        GlobalLoading.show("正在计算学情统计…");
+        GlobalLoading.show(AppI18n.get("ExerciseProgressController.24"));
         DesktopExecutors.background().execute(() -> {
             try {
                 LearningAnalyticsReport report = analyticsService.analyze(filter);
@@ -330,7 +331,7 @@ public final class ExerciseProgressController {
         LocalDate start = startDatePicker.getValue();
         LocalDate end = endDatePicker.getValue();
         if (start != null && end != null && end.isBefore(start)) {
-            throw new IllegalArgumentException("结束日期不能早于开始日期");
+            throw new IllegalArgumentException(AppI18n.get("ExerciseProgressController.25"));
         }
         ZoneId zone = ZoneId.systemDefault();
         Instant startInstant = start == null ? null : start.atStartOfDay(zone).toInstant();
@@ -372,27 +373,27 @@ public final class ExerciseProgressController {
         }
         errorFilter.setValue(selectedError);
         exportButton.setDisable(false);
-        showStatus("统计已更新。通过率按通过提交/全部提交，日期按本机时区筛选。", false);
+        showStatus(AppI18n.get("ExerciseProgressController.26"), false);
     }
 
     private void chooseExportFile(AnalyticsCsvExport export) {
         GlobalLoading.hide();
         FileChooser chooser = new FileChooser();
-        chooser.setTitle("导出学情 CSV");
+        chooser.setTitle(AppI18n.get("ExerciseProgressController.27"));
         chooser.setInitialFileName(export.fileName());
-        chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("CSV 文件", "*.csv"));
+        chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter(AppI18n.get("ExerciseProgressController.28"), "*.csv"));
         File target = chooser.showSaveDialog(exportButton.getScene().getWindow());
         if (target == null) {
-            showStatus("已取消导出。", false);
+            showStatus(AppI18n.get("ExerciseProgressController.29"), false);
             return;
         }
-        GlobalLoading.show("正在写入 CSV…");
+        GlobalLoading.show(AppI18n.get("ExerciseProgressController.30"));
         DesktopExecutors.background().execute(() -> {
             try {
                 Files.writeString(target.toPath(), export.utf8Content(), StandardCharsets.UTF_8);
                 Platform.runLater(() -> {
                     GlobalLoading.hide();
-                    showStatus("CSV 已导出到 " + target.getAbsolutePath(), false);
+                    showStatus(AppI18n.get("ExerciseProgressController.31") + target.getAbsolutePath(), false);
                 });
             } catch (Throwable error) {
                 Platform.runLater(() -> fail(error));

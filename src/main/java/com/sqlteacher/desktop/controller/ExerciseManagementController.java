@@ -1,4 +1,5 @@
 package com.sqlteacher.desktop.controller;
+import com.sqlteacher.desktop.AppI18n;
 
 import com.sqlteacher.application.error.ApplicationExceptionMapper;
 import com.sqlteacher.application.exercise.ExerciseDraft;
@@ -74,7 +75,7 @@ public final class ExerciseManagementController {
             protected void updateItem(ExerciseSummary item, boolean empty) {
                 super.updateItem(item, empty);
                 setText(empty || item == null ? null
-                    : item.title() + "  ·  " + item.difficulty() + (item.enabled() ? "" : "  ·  已停用"));
+                    : item.title() + "  ·  " + item.difficulty() + (item.enabled() ? "" : AppI18n.get("ExerciseManagementController.1")));
             }
         });
         exerciseList.getSelectionModel().selectedItemProperty().addListener(
@@ -102,8 +103,8 @@ public final class ExerciseManagementController {
             showStatus(error.getMessage(), true);
             return;
         }
-        runAsync("正在保存题目…", () -> managementService.save(draft), saved -> {
-            showStatus("题目已保存，当前版本 " + saved.version() + "。", false);
+        runAsync(AppI18n.get("ExerciseManagementController.2"), () -> managementService.save(draft), saved -> {
+            showStatus(AppI18n.get("ExerciseManagementController.3") + saved.version() + AppI18n.get("ExerciseManagementController.4"), false);
             refresh(saved.id());
         });
     }
@@ -112,18 +113,18 @@ public final class ExerciseManagementController {
     private void onCopy() {
         ExerciseSummary selected = exerciseList.getSelectionModel().getSelectedItem();
         if (selected == null) {
-            showStatus("请先选择要复制的题目。", true);
+            showStatus(AppI18n.get("ExerciseManagementController.5"), true);
             return;
         }
-        TextInputDialog dialog = new TextInputDialog(selected.title() + "（副本）");
-        dialog.setTitle("复制题目");
-        dialog.setHeaderText("副本默认停用，请检查后再启用。");
-        dialog.setContentText("新标题：");
+        TextInputDialog dialog = new TextInputDialog(selected.title() + AppI18n.get("ExerciseManagementController.6"));
+        dialog.setTitle(AppI18n.get("ExerciseManagementController.7"));
+        dialog.setHeaderText(AppI18n.get("ExerciseManagementController.8"));
+        dialog.setContentText(AppI18n.get("ExerciseManagementController.9"));
         dialog.showAndWait().ifPresent(title -> runAsync(
-            "正在复制题目…",
+            AppI18n.get("ExerciseManagementController.10"),
             () -> managementService.copy(selected.id(), title),
             copied -> {
-                showStatus("题目副本已创建并保持停用。", false);
+                showStatus(AppI18n.get("ExerciseManagementController.11"), false);
                 refresh(copied.id());
             }
         ));
@@ -133,14 +134,14 @@ public final class ExerciseManagementController {
     private void onToggleEnabled() {
         ExerciseSummary selected = exerciseList.getSelectionModel().getSelectedItem();
         if (selected == null) {
-            showStatus("请先选择题目。", true);
+            showStatus(AppI18n.get("ExerciseManagementController.12"), true);
             return;
         }
         runAsync(
-            selected.enabled() ? "正在停用题目…" : "正在启用题目…",
+            selected.enabled() ? AppI18n.get("ExerciseManagementController.13") : AppI18n.get("ExerciseManagementController.14"),
             () -> managementService.setEnabled(selected.id(), !selected.enabled(), selected.version()),
             changed -> {
-                showStatus(changed.enabled() ? "题目已启用。" : "题目已停用。", false);
+                showStatus(changed.enabled() ? AppI18n.get("ExerciseManagementController.15") : AppI18n.get("ExerciseManagementController.16"), false);
                 refresh(changed.id());
             }
         );
@@ -148,19 +149,19 @@ public final class ExerciseManagementController {
 
     @FXML
     private void onImport() {
-        FileChooser chooser = jsonChooser("导入题包");
+        FileChooser chooser = jsonChooser(AppI18n.get("ExerciseManagementController.17"));
         File file = chooser.showOpenDialog(exerciseList.getScene().getWindow());
         if (file == null) {
             return;
         }
-        runAsync("正在导入题包…", () -> {
+        runAsync(AppI18n.get("ExerciseManagementController.18"), () -> {
             try {
                 return managementService.importPackage(Files.readString(file.toPath(), StandardCharsets.UTF_8));
             } catch (IOException error) {
-                throw new IllegalStateException("无法读取题包文件。", error);
+                throw new IllegalStateException(AppI18n.get("ExerciseManagementController.19"), error);
             }
         }, imported -> {
-            showStatus("导入完成：" + imported.exercisesImported() + " 道题。", false);
+            showStatus(AppI18n.get("ExerciseManagementController.20") + imported.exercisesImported() + AppI18n.get("ExerciseManagementController.21"), false);
             refresh(imported.importedExerciseIds().isEmpty() ? null : imported.importedExerciseIds().getFirst());
         });
     }
@@ -168,21 +169,21 @@ public final class ExerciseManagementController {
     @FXML
     private void onExport() {
         ExerciseSummary selected = exerciseList.getSelectionModel().getSelectedItem();
-        FileChooser chooser = jsonChooser("导出题包");
+        FileChooser chooser = jsonChooser(AppI18n.get("ExerciseManagementController.22"));
         chooser.setInitialFileName(selected == null ? "sqlteacher-exercises.json" : selected.id() + ".json");
         File file = chooser.showSaveDialog(exerciseList.getScene().getWindow());
         if (file == null) {
             return;
         }
         List<String> ids = selected == null ? List.of() : List.of(selected.id());
-        runAsync("正在导出题包…", () -> {
+        runAsync(AppI18n.get("ExerciseManagementController.23"), () -> {
             try {
                 Files.writeString(file.toPath(), managementService.exportPackage(ids), StandardCharsets.UTF_8);
                 return file;
             } catch (IOException error) {
-                throw new IllegalStateException("无法写入题包文件。", error);
+                throw new IllegalStateException(AppI18n.get("ExerciseManagementController.24"), error);
             }
-        }, exported -> showStatus("题包已导出到：" + exported.getName(), false));
+        }, exported -> showStatus(AppI18n.get("ExerciseManagementController.25") + exported.getName(), false));
     }
 
     @FXML
@@ -191,7 +192,7 @@ public final class ExerciseManagementController {
     }
 
     private void refresh(String selectedId) {
-        runAsync("正在加载题库…", () -> new CatalogSnapshot(
+        runAsync(AppI18n.get("ExerciseManagementController.26"), () -> new CatalogSnapshot(
             managementService.listExercises(true),
             managementService.listDatasets().stream().map(dataset -> dataset.id()).toList()
         ), snapshot -> {
@@ -212,7 +213,7 @@ public final class ExerciseManagementController {
             updateToggle(null);
             return;
         }
-        runAsync("正在读取题目…", () -> managementService.findDefinition(summary.id()).orElseThrow(), this::showDefinition);
+        runAsync(AppI18n.get("ExerciseManagementController.27"), () -> managementService.findDefinition(summary.id()).orElseThrow(), this::showDefinition);
     }
 
     private void showDefinition(ExerciseDefinition exercise) {
@@ -233,7 +234,7 @@ public final class ExerciseManagementController {
         keywordsField.setText(String.join(", ", exercise.evaluationRule().requiredSqlKeywords()));
         enabledCheck.setSelected(exercise.enabled());
         currentVersion = exercise.version();
-        versionLabel.setText("版本：" + exercise.version());
+        versionLabel.setText(AppI18n.get("ExerciseManagementController.28") + exercise.version());
         updateToggle(new ExerciseSummary(
             exercise.id(), exercise.title(), exercise.knowledgePoint(), exercise.difficulty(),
             exercise.version(), exercise.enabled()
@@ -276,13 +277,13 @@ public final class ExerciseManagementController {
         keywordsField.clear();
         enabledCheck.setSelected(false);
         currentVersion = null;
-        versionLabel.setText("新题目");
+        versionLabel.setText(AppI18n.get("ExerciseManagementController.29"));
         updateToggle(null);
     }
 
     private void updateToggle(ExerciseSummary summary) {
         toggleButton.setDisable(summary == null);
-        toggleButton.setText(summary != null && summary.enabled() ? "停用" : "启用");
+        toggleButton.setText(summary != null && summary.enabled() ? AppI18n.get("ExerciseManagementController.30") : AppI18n.get("ExerciseManagementController.31"));
     }
 
     private String selectedId() {
@@ -293,7 +294,7 @@ public final class ExerciseManagementController {
     private static FileChooser jsonChooser(String title) {
         FileChooser chooser = new FileChooser();
         chooser.setTitle(title);
-        chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("JSON 题包", "*.json"));
+        chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter(AppI18n.get("ExerciseManagementController.32"), "*.json"));
         return chooser;
     }
 
@@ -316,7 +317,7 @@ public final class ExerciseManagementController {
     }
 
     private void showStatus(String message, boolean error) {
-        statusLabel.setText(message == null || message.isBlank() ? "操作失败，请检查输入。" : message);
+        statusLabel.setText(message == null || message.isBlank() ? AppI18n.get("ExerciseManagementController.33") : message);
         statusLabel.getStyleClass().removeAll("sql-result-hint", "sql-error-hint");
         statusLabel.getStyleClass().add(error ? "sql-error-hint" : "sql-result-hint");
         statusLabel.setVisible(true);

@@ -1,4 +1,5 @@
 package com.sqlteacher.desktop.controller;
+import com.sqlteacher.desktop.AppI18n;
 
 import com.sqlteacher.desktop.appearance.UiDensity;
 import com.sqlteacher.desktop.appearance.UiFontChoice;
@@ -39,12 +40,12 @@ public final class AppearanceSettingsController {
         UiFontChoice font = fontCombo.getValue();
         UiDensity density = densityCombo.getValue();
         if (theme == null || font == null || density == null) {
-            statusLabel.setText("请选择完整的外观选项。");
+            statusLabel.setText(AppI18n.get("AppearanceSettingsController.1"));
             statusLabel.getStyleClass().setAll("status-error");
             return;
         }
         preferences.save(new UiPreferencesSnapshot(theme, font, density, reducedMotionCheck.isSelected()));
-        statusLabel.setText("外观已应用并保存在当前设备，无需重启。");
+        statusLabel.setText(AppI18n.get("AppearanceSettingsController.2"));
         statusLabel.getStyleClass().setAll("status-success");
     }
 
@@ -52,7 +53,7 @@ public final class AppearanceSettingsController {
     private void onReset() {
         preferences.reset();
         show(preferences.current());
-        statusLabel.setText("已恢复推荐外观设置。");
+        statusLabel.setText(AppI18n.get("AppearanceSettingsController.3"));
         statusLabel.getStyleClass().setAll("status-info");
     }
 

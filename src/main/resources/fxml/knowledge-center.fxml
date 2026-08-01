@@ -12,27 +12,27 @@
             <padding><Insets top="16" right="20" bottom="10" left="20"/></padding>
             <HBox alignment="CENTER_LEFT" spacing="8">
                 <VBox spacing="4">
-                    <Label text="课程知识中心" styleClass="page-title"/>
-                    <Label text="按课程、章节、知识点组织资料；保留版本，发布后可供学生检索与带引用解释。" styleClass="page-subtitle"/>
+                    <Label text="%knowledge-center.1" styleClass="page-title"/>
+                    <Label text="%knowledge-center.2" styleClass="page-subtitle"/>
                 </VBox>
                 <Region HBox.hgrow="ALWAYS"/>
-                <Label fx:id="indexStatusLabel" text="索引：读取中…" styleClass="page-subtitle"/>
-                <Button text="重建索引" onAction="#onRebuildIndex" styleClass="secondary-button"/>
-                <Button text="刷新" onAction="#onRefresh" styleClass="secondary-button"/>
-                <Button fx:id="importButton" text="批量导入" onAction="#onImport" styleClass="refresh-button"/>
+                <Label fx:id="indexStatusLabel" text="%knowledge-center.3" styleClass="page-subtitle"/>
+                <Button text="%knowledge-center.4" onAction="#onRebuildIndex" styleClass="secondary-button"/>
+                <Button text="%knowledge-center.5" onAction="#onRefresh" styleClass="secondary-button"/>
+                <Button fx:id="importButton" text="%knowledge-center.6" onAction="#onImport" styleClass="refresh-button"/>
             </HBox>
             <HBox spacing="8" alignment="CENTER_LEFT">
-                <TextField fx:id="courseField" promptText="课程（必填）" prefWidth="180"/>
-                <TextField fx:id="sectionField" promptText="章节（必填）" prefWidth="180"/>
-                <TextField fx:id="knowledgePointsField" promptText="知识点，逗号分隔" HBox.hgrow="ALWAYS"/>
-                <TextField fx:id="objectiveField" promptText="课程目标 ID/稳定标识" prefWidth="210"/>
-                <CheckBox fx:id="includePrivateCheck" text="含私有" selected="true"/>
+                <TextField fx:id="courseField" promptText="%knowledge-center.7" prefWidth="180"/>
+                <TextField fx:id="sectionField" promptText="%knowledge-center.8" prefWidth="180"/>
+                <TextField fx:id="knowledgePointsField" promptText="%knowledge-center.9" HBox.hgrow="ALWAYS"/>
+                <TextField fx:id="objectiveField" promptText="%knowledge-center.10" prefWidth="210"/>
+                <CheckBox fx:id="includePrivateCheck" text="%knowledge-center.11" selected="true"/>
             </HBox>
             <HBox spacing="8" alignment="CENTER_LEFT">
-                <TextField fx:id="queryField" promptText="输入课程问题或关键词" HBox.hgrow="ALWAYS"/>
-                <Button text="检索" onAction="#onSearch" styleClass="secondary-button"/>
-                <Button text="联网搜索" onAction="#onWebSearch" styleClass="secondary-button"/>
-                <Button text="AI 带引用解释" onAction="#onExplain" styleClass="primary-button"/>
+                <TextField fx:id="queryField" promptText="%knowledge-center.12" HBox.hgrow="ALWAYS"/>
+                <Button text="%knowledge-center.13" onAction="#onSearch" styleClass="secondary-button"/>
+                <Button text="%knowledge-center.14" onAction="#onWebSearch" styleClass="secondary-button"/>
+                <Button text="%knowledge-center.15" onAction="#onExplain" styleClass="primary-button"/>
             </HBox>
         </VBox>
     </top>
@@ -41,60 +41,60 @@
             <items>
                 <VBox spacing="8" styleClass="progress-content">
                     <HBox alignment="CENTER_LEFT" spacing="6">
-                        <Label text="知识条目" styleClass="section-title"/>
+                        <Label text="%knowledge-center.16" styleClass="section-title"/>
                         <Region HBox.hgrow="ALWAYS"/>
-                        <Button fx:id="reviseButton" text="新版本" onAction="#onRevise" styleClass="secondary-button"/>
-                        <Button fx:id="publishButton" text="发布" onAction="#onPublish" styleClass="primary-button"/>
-                        <Button fx:id="privateButton" text="私有" onAction="#onMakePrivate" styleClass="secondary-button"/>
-                        <Button fx:id="inactivateButton" text="停用" onAction="#onInactivate" styleClass="secondary-button"/>
-                        <Button fx:id="deleteButton" text="删除" onAction="#onDelete" styleClass="danger-outline-button"/>
+                        <Button fx:id="reviseButton" text="%knowledge-center.17" onAction="#onRevise" styleClass="secondary-button"/>
+                        <Button fx:id="publishButton" text="%knowledge-center.18" onAction="#onPublish" styleClass="primary-button"/>
+                        <Button fx:id="privateButton" text="%knowledge-center.19" onAction="#onMakePrivate" styleClass="secondary-button"/>
+                        <Button fx:id="inactivateButton" text="%knowledge-center.20" onAction="#onInactivate" styleClass="secondary-button"/>
+                        <Button fx:id="deleteButton" text="%knowledge-center.21" onAction="#onDelete" styleClass="danger-outline-button"/>
                     </HBox>
                     <TableView fx:id="articleTable" styleClass="result-table" VBox.vgrow="ALWAYS">
                         <columns>
-                            <TableColumn fx:id="articleTitleColumn" text="标题" prefWidth="170"/>
-                            <TableColumn fx:id="courseColumn" text="课程" prefWidth="100"/>
-                            <TableColumn fx:id="sectionColumn" text="章节" prefWidth="100"/>
-                            <TableColumn fx:id="visibilityColumn" text="状态" prefWidth="70"/>
-                            <TableColumn fx:id="revisionColumn" text="版本" prefWidth="55"/>
+                            <TableColumn fx:id="articleTitleColumn" text="%knowledge-center.22" prefWidth="170"/>
+                            <TableColumn fx:id="courseColumn" text="%knowledge-center.23" prefWidth="100"/>
+                            <TableColumn fx:id="sectionColumn" text="%knowledge-center.24" prefWidth="100"/>
+                            <TableColumn fx:id="visibilityColumn" text="%knowledge-center.25" prefWidth="70"/>
+                            <TableColumn fx:id="revisionColumn" text="%knowledge-center.26" prefWidth="55"/>
                         </columns>
                     </TableView>
                 </VBox>
                 <TabPane tabClosingPolicy="UNAVAILABLE" styleClass="progress-content">
                     <tabs>
-                        <Tab text="检索结果">
+                        <Tab text="%knowledge-center.27">
                             <TableView fx:id="resultTable" styleClass="result-table">
                                 <columns>
-                                    <TableColumn fx:id="resultTitleColumn" text="标题" prefWidth="150"/>
-                                    <TableColumn fx:id="resultSourceColumn" text="来源" prefWidth="105"/>
-                                    <TableColumn fx:id="resultSnippetColumn" text="命中片段" prefWidth="420"/>
+                                    <TableColumn fx:id="resultTitleColumn" text="%knowledge-center.28" prefWidth="150"/>
+                                    <TableColumn fx:id="resultSourceColumn" text="%knowledge-center.29" prefWidth="105"/>
+                                    <TableColumn fx:id="resultSnippetColumn" text="%knowledge-center.30" prefWidth="420"/>
                                 </columns>
                             </TableView>
                         </Tab>
-                        <Tab text="正文与版本">
+                        <Tab text="%knowledge-center.31">
                             <VBox spacing="8">
-                                <TextArea fx:id="contentArea" editable="false" wrapText="true" VBox.vgrow="ALWAYS" promptText="选择条目后查看当前正文与历史版本数量。"/>
-                                <Button text="标记当前版本已读" onAction="#onMarkRead" styleClass="secondary-button"/>
+                                <TextArea fx:id="contentArea" editable="false" wrapText="true" VBox.vgrow="ALWAYS" promptText="%knowledge-center.32"/>
+                                <Button text="%knowledge-center.33" onAction="#onMarkRead" styleClass="secondary-button"/>
                             </VBox>
                         </Tab>
-                        <Tab text="关联练习">
+                        <Tab text="%knowledge-center.34">
                             <VBox spacing="8">
                                 <TableView fx:id="exerciseTable" VBox.vgrow="ALWAYS">
                                     <columns>
-                                        <TableColumn fx:id="exerciseTitleColumn" text="练习" prefWidth="300"/>
-                                        <TableColumn fx:id="exercisePointColumn" text="知识点" prefWidth="220"/>
+                                        <TableColumn fx:id="exerciseTitleColumn" text="%knowledge-center.35" prefWidth="300"/>
+                                        <TableColumn fx:id="exercisePointColumn" text="%knowledge-center.36" prefWidth="220"/>
                                     </columns>
                                 </TableView>
-                                <Button text="打开选中练习" onAction="#onOpenExercise" styleClass="primary-button"/>
+                                <Button text="%knowledge-center.37" onAction="#onOpenExercise" styleClass="primary-button"/>
                             </VBox>
                         </Tab>
-                        <Tab text="AI 解释">
+                        <Tab text="%knowledge-center.38">
                             <VBox spacing="8">
-                                <TextArea fx:id="answerArea" editable="false" wrapText="true" VBox.vgrow="ALWAYS" promptText="确认发送上下文后，在这里显示答案和引用。"/>
+                                <TextArea fx:id="answerArea" editable="false" wrapText="true" VBox.vgrow="ALWAYS" promptText="%knowledge-center.39"/>
                                 <HBox spacing="8" alignment="CENTER_RIGHT">
-                                    <Label text="本次辅导反馈：" styleClass="page-subtitle"/>
-                                    <Button text="有帮助" onAction="#onTutorHelpful" styleClass="secondary-button"/>
-                                    <Button text="仍不理解" onAction="#onTutorStillConfused" styleClass="secondary-button"/>
-                                    <Button text="引用有误" onAction="#onTutorCitationError" styleClass="secondary-button"/>
+                                    <Label text="%knowledge-center.40" styleClass="page-subtitle"/>
+                                    <Button text="%knowledge-center.41" onAction="#onTutorHelpful" styleClass="secondary-button"/>
+                                    <Button text="%knowledge-center.42" onAction="#onTutorStillConfused" styleClass="secondary-button"/>
+                                    <Button text="%knowledge-center.43" onAction="#onTutorCitationError" styleClass="secondary-button"/>
                                 </HBox>
                             </VBox>
                         </Tab>

@@ -57,9 +57,9 @@
                     <VBox styleClass="title-area" alignment="CENTER" spacing="6.0">
                         <children>
                             <Region styleClass="title-badge"/>
-                            <Label styleClass="page-title" text="AI 助手"/>
+                            <Label styleClass="page-title" text="%ai-assistant.1"/>
                             <Label styleClass="page-subtitle"
-                                   text="统一使用本地或网络模型生成 SQL 草稿，并经过同一套本地安全检查"/>
+                                   text="%ai-assistant.2"/>
                         </children>
                     </VBox>
 
@@ -69,14 +69,14 @@
                             <HBox styleClass="card-title-row" alignment="CENTER_LEFT" spacing="10.0">
                                 <children>
                                     <Region styleClass="card-accent"/>
-                                    <Label styleClass="card-title" text="AI 模型来源"/>
+                                    <Label styleClass="card-title" text="%ai-assistant.3"/>
                                     <Region HBox.hgrow="ALWAYS"/>
-                                    <Label styleClass="model-status" text="网络 API Key 使用 Windows DPAPI 加密保存"/>
+                                    <Label styleClass="model-status" text="%ai-assistant.4"/>
                                 </children>
                             </HBox>
                             <HBox alignment="CENTER_LEFT" spacing="12.0">
                                 <children>
-                                    <Label styleClass="model-label" text="来源"/>
+                                    <Label styleClass="model-label" text="%ai-assistant.5"/>
                                     <ComboBox fx:id="providerSelector" prefWidth="190"
                                               onAction="#onProviderSelected"/>
                                 </children>
@@ -85,54 +85,54 @@
                                 <children>
                                     <HBox alignment="CENTER_LEFT" spacing="12.0">
                                         <children>
-                                            <Label styleClass="model-label" text="本地模型"/>
+                                            <Label styleClass="model-label" text="%ai-assistant.6"/>
                                             <ComboBox fx:id="modelSelector" styleClass="model-selector"
-                                                      promptText="正在检测已安装模型…" onAction="#onModelSelected"
+                                                      promptText="%ai-assistant.7" onAction="#onModelSelected"
                                                       maxWidth="Infinity" HBox.hgrow="ALWAYS"/>
                                             <Button fx:id="refreshModelsButton" styleClass="model-refresh-button"
-                                                    text="刷新" onAction="#onRefreshModels"/>
+                                                    text="%ai-assistant.8" onAction="#onRefreshModels"/>
                                         </children>
                                     </HBox>
                                     <Label fx:id="modelStatusLabel" styleClass="model-status"
-                                           text="正在检测本地 Ollama 模型…" wrapText="true"/>
+                                           text="%ai-assistant.9" wrapText="true"/>
                                 </children>
                             </VBox>
                             <VBox fx:id="networkProviderPane" spacing="8.0" visible="false" managed="false">
                                 <children>
                                     <HBox spacing="10.0" alignment="CENTER_LEFT">
                                         <children>
-                                            <ComboBox fx:id="networkProfileSelector" promptText="选择已保存 Profile"
+                                            <ComboBox fx:id="networkProfileSelector" promptText="%ai-assistant.10"
                                                       onAction="#onNetworkProfileSelected" maxWidth="Infinity" HBox.hgrow="ALWAYS"/>
-                                            <TextField fx:id="networkProfileNameField" promptText="Profile 名称"
+                                            <TextField fx:id="networkProfileNameField" promptText="%ai-assistant.11"
                                                        maxWidth="Infinity" HBox.hgrow="ALWAYS"/>
-                                            <Button text="删除" onAction="#onDeleteNetworkProfile" styleClass="danger-button"/>
+                                            <Button text="%ai-assistant.12" onAction="#onDeleteNetworkProfile" styleClass="danger-button"/>
                                         </children>
                                     </HBox>
                                     <TextField fx:id="networkEndpointField"
-                                               promptText="HTTPS Chat Completions 地址"/>
+                                               promptText="%ai-assistant.13"/>
                                     <HBox spacing="10.0">
                                         <children>
-                                            <ComboBox fx:id="networkModelSelector" promptText="模型名称" editable="true"
+                                            <ComboBox fx:id="networkModelSelector" promptText="%ai-assistant.14" editable="true"
                                                       maxWidth="Infinity" HBox.hgrow="ALWAYS"/>
                                             <PasswordField fx:id="networkApiKeyField"
-                                                           promptText="API Key（留空保留已保存凭据）"
+                                                           promptText="%ai-assistant.15"
                                                            HBox.hgrow="ALWAYS"/>
                                         </children>
                                     </HBox>
                                     <HBox spacing="10.0" alignment="CENTER_RIGHT">
                                         <children>
-                                            <Button text="切换回本地" onAction="#onUseLocalAi"
+                                            <Button text="%ai-assistant.16" onAction="#onUseLocalAi"
                                                     styleClass="secondary-button"/>
-                                            <Button text="测试并发现模型" onAction="#onTestNetworkAi"
+                                            <Button text="%ai-assistant.17" onAction="#onTestNetworkAi"
                                                     styleClass="secondary-button"/>
-                                            <Button text="启用网络 AI" onAction="#onConfigureNetworkAi"
+                                            <Button text="%ai-assistant.18" onAction="#onConfigureNetworkAi"
                                                     styleClass="sql-execute-button"/>
                                         </children>
                                     </HBox>
                                 </children>
                             </VBox>
                             <Label fx:id="providerStatusLabel" styleClass="model-status"
-                                   text="选择本地 Ollama 或网络 AI" wrapText="true"/>
+                                   text="%ai-assistant.19" wrapText="true"/>
                         </children>
                     </VBox>
 
@@ -142,13 +142,13 @@
                             <HBox alignment="CENTER_LEFT" spacing="10.0">
                                 <children>
                                     <Region styleClass="warning-icon"/>
-                                    <Label fx:id="offlineTitle" styleClass="offline-title" text="AI 请求未完成"/>
+                                    <Label fx:id="offlineTitle" styleClass="offline-title" text="%ai-assistant.20"/>
                                 </children>
                             </HBox>
                             <Label fx:id="offlineHint"
                                    styleClass="offline-message"
                                    wrapText="true"
-                                   text="当前选择的 AI 服务不可用，请检查本地 Ollama 或网络 AI 配置后重试。"/>
+                                   text="%ai-assistant.21"/>
                         </children>
                     </VBox>
 
@@ -158,23 +158,23 @@
                             <HBox styleClass="card-title-row" alignment="CENTER_LEFT" spacing="10.0">
                                 <children>
                                     <Region styleClass="card-accent"/>
-                                    <Label styleClass="card-title" text="自然语言提问"/>
+                                    <Label styleClass="card-title" text="%ai-assistant.22"/>
                                 </children>
                             </HBox>
                             <TextArea fx:id="questionInput"
                                       styleClass="sql-editor"
-                                      promptText="例如：查询成绩大于90分的学生姓名和分数"
+                                      promptText="%ai-assistant.23"
                                       wrapText="true"
                                       prefRowCount="4"/>
                             <Label fx:id="privacyPreviewLabel" styleClass="model-status" wrapText="true"
-                                   text="发送前会显示数据类别、来源、字符数和删减情况；网络调用需要人工确认。"/>
+                                   text="%ai-assistant.24"/>
                             <HBox styleClass="sql-action-row" alignment="CENTER_RIGHT" spacing="12.0">
                                 <children>
                                     <Button fx:id="cancelAiButton" styleClass="secondary-button" disable="true"
-                                            text="取消" onAction="#onCancelAiTask"/>
+                                            text="%ai-assistant.25" onAction="#onCancelAiTask"/>
                                     <Button fx:id="generateButton"
                                             styleClass="sql-execute-button"
-                                            text="生成 SQL"
+                                            text="%ai-assistant.26"
                                             onAction="#onGenerateSql"/>
                                 </children>
                             </HBox>
@@ -187,11 +187,11 @@
                             <HBox styleClass="card-title-row" alignment="CENTER_LEFT" spacing="10.0">
                                 <children>
                                     <Region styleClass="card-accent"/>
-                                    <Label styleClass="card-title" text="SQL 预览"/>
+                                    <Label styleClass="card-title" text="%ai-assistant.27"/>
                                     <Region HBox.hgrow="ALWAYS"/>
                                     <Button fx:id="copyToPracticeButton"
                                             styleClass="sql-execute-button"
-                                            text="复制至 SQL 练习页"
+                                            text="%ai-assistant.28"
                                             onAction="#onCopyToPractice"/>
                                 </children>
                             </HBox>
@@ -208,21 +208,21 @@
                                               editable="false"/>
                                     <Label fx:id="sqlPlaceholder"
                                            styleClass="table-empty-hint"
-                                           text="生成的 SQL 将在此显示"/>
+                                           text="%ai-assistant.29"/>
                                 </children>
                             </StackPane>
                             <HBox alignment="CENTER_LEFT" spacing="10.0">
                                 <children>
                                     <TextField fx:id="revisionInstructionField" HBox.hgrow="ALWAYS"
-                                               promptText="例如：增加班级条件，并按成绩降序（每轮都会重新安全检查）"/>
-                                    <Button fx:id="reviseButton" text="修订草稿" disable="true"
+                                               promptText="%ai-assistant.30"/>
+                                    <Button fx:id="reviseButton" text="%ai-assistant.31" disable="true"
                                             onAction="#onReviseSql" styleClass="secondary-button"/>
-                                    <Button fx:id="favoriteDraftButton" text="收藏草稿" disable="true"
+                                    <Button fx:id="favoriteDraftButton" text="%ai-assistant.32" disable="true"
                                             onAction="#onFavoriteDraft" styleClass="secondary-button"/>
                                 </children>
                             </HBox>
                             <Label fx:id="historyStatusLabel" styleClass="model-status" wrapText="true"
-                                   text="默认仅保存任务元数据；只有主动收藏时才保存草稿正文。"/>
+                                   text="%ai-assistant.33"/>
                         </children>
                     </VBox>
 
@@ -232,7 +232,7 @@
                             <HBox styleClass="card-title-row" alignment="CENTER_LEFT" spacing="10.0">
                                 <children>
                                     <Region styleClass="card-accent"/>
-                                    <Label styleClass="card-title" text="AI 解读"/>
+                                    <Label styleClass="card-title" text="%ai-assistant.34"/>
                                 </children>
                             </HBox>
                             <!-- 解读区：NORMAL 显示文本域；EMPTY/初始显示占位提示（居中，二者互斥）。 -->
@@ -248,7 +248,7 @@
                                               editable="false"/>
                                     <Label fx:id="explanationPlaceholder"
                                            styleClass="table-empty-hint"
-                                           text="AI 将在此解释生成的 SQL 逻辑"/>
+                                           text="%ai-assistant.35"/>
                                 </children>
                             </StackPane>
                         </children>

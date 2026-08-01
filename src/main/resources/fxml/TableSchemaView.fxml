@@ -60,9 +60,9 @@
                         <VBox styleClass="title-area" alignment="CENTER" spacing="6.0">
                             <children>
                                 <Region styleClass="title-badge"/>
-                                <Label styleClass="page-title" text="表结构"/>
+                                <Label styleClass="page-title" text="%TableSchemaView.1"/>
                                 <Label styleClass="page-subtitle"
-                                       text="浏览当前数据库的表与字段，点击数据表即可在右侧预览数据"/>
+                                       text="%TableSchemaView.2"/>
                             </children>
                         </VBox>
 
@@ -85,11 +85,11 @@
                                               HBox.hgrow="ALWAYS">
                                             <children>
                                                 <Region styleClass="card-accent"/>
-                                                <Label styleClass="card-title" text="数据库表结构"/>
+                                                <Label styleClass="card-title" text="%TableSchemaView.3"/>
                                                 <Region HBox.hgrow="ALWAYS"/>
                                                 <Button fx:id="refreshButton"
                                                         styleClass="refresh-button"
-                                                        text="刷新"
+                                                        text="%TableSchemaView.4"
                                                         onAction="#onRefreshSchema"/>
                                             </children>
                                         </HBox>
@@ -113,7 +113,7 @@
                                                 </AnchorPane>
                                                 <Label fx:id="emptyPlaceholder"
                                                        styleClass="table-empty-hint"
-                                                       text="正在加载表结构…"
+                                                       text="%TableSchemaView.5"
                                                        visible="true"
                                                        managed="true"/>
                                             </children>
@@ -143,7 +143,7 @@
                                               HBox.hgrow="ALWAYS">
                                             <children>
                                                 <Region styleClass="card-accent"/>
-                                                <Label styleClass="card-title" text="数据预览"/>
+                                                <Label styleClass="card-title" text="%TableSchemaView.6"/>
                                                 <Label fx:id="previewTitleLabel"
                                                        styleClass="card-title"
                                                        text=""/>
@@ -173,7 +173,7 @@
                                                 </AnchorPane>
                                                 <Label fx:id="previewPlaceholder"
                                                        styleClass="table-empty-hint"
-                                                       text="点击左侧数据表预览数据"
+                                                       text="%TableSchemaView.7"
                                                        visible="true"
                                                        managed="true"/>
                                             </children>

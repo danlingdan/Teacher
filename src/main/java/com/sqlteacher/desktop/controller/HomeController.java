@@ -1,4 +1,5 @@
 package com.sqlteacher.desktop.controller;
+import com.sqlteacher.desktop.AppI18n;
 
 import com.sqlteacher.application.error.ApplicationExceptionMapper;
 import com.sqlteacher.application.collaboration.AssignmentTaskContext;
@@ -121,7 +122,7 @@ public final class HomeController {
     private void onDismissAction() {
         StudentLearningQueueItem selected = learningQueue.getSelectionModel().getSelectedItem();
         if (selected == null) return;
-        GlobalLoading.show("正在更新学习队列…");
+        GlobalLoading.show(AppI18n.get("HomeController.1"));
         DesktopExecutors.background().execute(() -> {
             try {
                 queueService.dismiss(selected);
@@ -136,7 +137,7 @@ public final class HomeController {
     }
 
     private void refreshDiagnosis() {
-        GlobalLoading.show("正在生成确定性学习诊断…");
+        GlobalLoading.show(AppI18n.get("HomeController.2"));
         DesktopExecutors.background().execute(() -> {
             try {
                 var queue = queueService.refresh();
@@ -146,12 +147,12 @@ public final class HomeController {
                     learningQueue.getItems().setAll(queue.items());
                     long weak = dashboard.mastery().stream().filter(item ->
                         item.level() == com.sqlteacher.application.learning.MasteryLevel.NEEDS_PRACTICE).count();
-                    diagnosisSummaryLabel.setText("已分析 " + dashboard.mastery().size() + " 个知识点 · "
-                        + weak + " 个需要练习 · 规则 " + dashboard.policyVersion());
+                    diagnosisSummaryLabel.setText(AppI18n.get("HomeController.3") + dashboard.mastery().size() + AppI18n.get("HomeController.4")
+                        + weak + AppI18n.get("HomeController.5") + dashboard.policyVersion());
                     queueStatusLabel.setText(queue.items().isEmpty()
-                        ? "当前没有待办建议；继续练习后会自动刷新。"
-                        : queue.cloudAvailable() ? "已合并本机诊断、班级任务和未读反馈。"
-                        : "云端不可用，当前仅展示本机确定性诊断。");
+                        ? AppI18n.get("HomeController.6")
+                        : queue.cloudAvailable() ? AppI18n.get("HomeController.7")
+                        : AppI18n.get("HomeController.8"));
                     if (!queue.items().isEmpty()) learningQueue.getSelectionModel().selectFirst();
                 });
             } catch (Throwable error) {

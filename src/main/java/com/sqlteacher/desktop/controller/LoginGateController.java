@@ -1,4 +1,5 @@
 package com.sqlteacher.desktop.controller;
+import com.sqlteacher.desktop.AppI18n;
 
 import com.sqlteacher.application.collaboration.CloudApiClient;
 import com.sqlteacher.application.collaboration.CloudSessionService;
@@ -58,7 +59,7 @@ public final class LoginGateController {
     }
 
     private void restorePersistedSession() {
-        setBusy(true, "正在恢复安全登录状态…");
+        setBusy(true, AppI18n.get("LoginGateController.1"));
         DesktopExecutors.background().execute(() -> {
             var restored = sessions.refresh();
             Platform.runLater(() -> restored.ifPresentOrElse(
@@ -82,22 +83,22 @@ public final class LoginGateController {
         String displayName = text(displayNameField);
         String passwordText = passwordField.getText();
         if (email.isBlank()) {
-            showError("请输入邮箱地址");
+            showError(AppI18n.get("LoginGateController.2"));
             emailField.requestFocus();
             return;
         }
         if (register && displayName.isBlank()) {
-            showError("注册账号时请输入昵称");
+            showError(AppI18n.get("LoginGateController.3"));
             displayNameField.requestFocus();
             return;
         }
         if (passwordText == null || passwordText.isBlank()) {
-            showError("请输入密码");
+            showError(AppI18n.get("LoginGateController.4"));
             passwordField.requestFocus();
             return;
         }
 
-        setBusy(true, register ? "正在创建学生账号…" : "正在验证账号…");
+        setBusy(true, register ? AppI18n.get("LoginGateController.5") : AppI18n.get("LoginGateController.6"));
         char[] password = passwordText.toCharArray();
         DesktopExecutors.background().execute(() -> {
             try {
@@ -154,12 +155,12 @@ public final class LoginGateController {
 
     private static String userMessage(RuntimeException error, boolean register) {
         String message = error.getMessage();
-        if (message != null && message.contains("HTTP 401")) return "邮箱或密码不正确";
-        if (message != null && message.contains("HTTP 409")) return "该邮箱已经注册，请直接登录";
+        if (message != null && message.contains("HTTP 401")) return AppI18n.get("LoginGateController.7");
+        if (message != null && message.contains("HTTP 409")) return AppI18n.get("LoginGateController.8");
         if (message != null && message.contains("HTTP 400")) return register
-            ? "注册信息不符合要求，请检查邮箱和密码长度"
-            : "登录信息格式不正确";
-        return message == null || message.isBlank() ? "无法连接云服务，请稍后重试" : message;
+            ? AppI18n.get("LoginGateController.9")
+            : AppI18n.get("LoginGateController.10");
+        return message == null || message.isBlank() ? AppI18n.get("LoginGateController.11") : message;
     }
 
     private static String text(TextField field) {

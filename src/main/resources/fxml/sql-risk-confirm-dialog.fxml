@@ -50,13 +50,13 @@
             <children>
                 <Label fx:id="riskTitleLabel"
                        styleClass="risk-dialog-title"
-                       text="高危 SQL 操作确认"/>
+                       text="%sql-risk-confirm-dialog.1"/>
                 <Label fx:id="riskTypeLabel"
                        styleClass="risk-dialog-type"
-                       text="风险类型："/>
+                       text="%sql-risk-confirm-dialog.2"/>
                 <Label fx:id="affectedTablesLabel"
                        styleClass="risk-dialog-tables"
-                       text="涉及数据表："/>
+                       text="%sql-risk-confirm-dialog.3"/>
             </children>
         </VBox>
     </top>
@@ -71,7 +71,7 @@
                       spacing="8.0"
                       style="-fx-background-color: transparent;">
                     <children>
-                        <Label styleClass="card-title" text="待执行SQL："/>
+                        <Label styleClass="card-title" text="%sql-risk-confirm-dialog.4"/>
                         <TextArea fx:id="sqlPreviewArea"
                                   styleClass="risk-dialog-sql"
                                   editable="false"
@@ -92,11 +92,11 @@
             <children>
                 <Button fx:id="cancelButton"
                         styleClass="risk-dialog-cancel"
-                        text="取消"
+                        text="%sql-risk-confirm-dialog.5"
                         onAction="#onCancel"/>
                 <Button fx:id="confirmButton"
                         styleClass="risk-dialog-confirm"
-                        text="确认执行"
+                        text="%sql-risk-confirm-dialog.6"
                         onAction="#onConfirm"/>
             </children>
         </HBox>

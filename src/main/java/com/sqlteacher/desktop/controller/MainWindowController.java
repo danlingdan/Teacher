@@ -96,7 +96,7 @@ import java.util.function.Consumer;
  * 复用同一插槽。
  *
  * <p><b>双向联动</b>：表结构页点击表名时，通过 {@link #fillSqlCallback} 把
- * {@code "SELECT * FROM 表名"} 同步填充到 SQL 练习页输入框（不自动跳转页面，
+ * {@code AppI18n.get("MainWindowController.1")} 同步填充到 SQL 练习页输入框（不自动跳转页面，
  * 用户可手动点击顶部「SQL 练习」导航查看/编辑），实现页面间联动。
  */
 public final class MainWindowController {
@@ -181,7 +181,7 @@ public final class MainWindowController {
     private final Runnable switchIdentityAction;
 
     /**
-     * 表名选中回调：表结构页点击表名时触发，把 {@code "SELECT * FROM 表名"}
+     * 表名选中回调：表结构页点击表名时触发，把 {@code AppI18n.get("MainWindowController.2")}
      * 填充到 SQL 练习页输入框（不自动跳转页面，避免打断右侧即时预览）。在构造器中初始化。
      */
     private final Consumer<String> fillSqlCallback;
@@ -459,13 +459,13 @@ public final class MainWindowController {
     private void applyAccessPolicy() {
         identityLabel.setText(accessProfile.displayName() + " · " + accessProfile.roleLabel());
         if (accessProfile.kind() == DesktopAccessProfile.Kind.STUDENT) {
-            teachingNavGroupTitle.setText("课程与反馈");
-            teachingContentNavButton.setText("学习反馈");
-            cloudCenterNavButton.setText("我的班级");
-            UiIcons.decorate(teachingContentNavButton, UiIcon.BOOK, "学习反馈");
-            UiIcons.decorate(cloudCenterNavButton, UiIcon.CLOUD, "我的班级");
+            teachingNavGroupTitle.setText(AppI18n.get("MainWindowController.3"));
+            teachingContentNavButton.setText(AppI18n.get("MainWindowController.4"));
+            cloudCenterNavButton.setText(AppI18n.get("MainWindowController.5"));
+            UiIcons.decorate(teachingContentNavButton, UiIcon.BOOK, AppI18n.get("MainWindowController.6"));
+            UiIcons.decorate(cloudCenterNavButton, UiIcon.CLOUD, AppI18n.get("MainWindowController.7"));
         } else if (accessProfile.kind() == DesktopAccessProfile.Kind.GUEST) {
-            teachingNavGroupTitle.setText("课程");
+            teachingNavGroupTitle.setText(AppI18n.get("MainWindowController.8"));
         }
         applyCapability(homeNavButton, DesktopCapability.HOME);
         applyCapability(sqlPracticeNavButton, DesktopCapability.SQL_PRACTICE);
@@ -486,18 +486,18 @@ public final class MainWindowController {
     }
 
     private void decorateNavigation() {
-        UiIcons.decorate(homeNavButton, UiIcon.HOME, "首页");
-        UiIcons.decorate(studentExerciseNavButton, UiIcon.PRACTICE, "我的练习");
-        UiIcons.decorate(knowledgeCenterNavButton, UiIcon.BOOK, "课程知识");
-        UiIcons.decorate(teachingContentNavButton, UiIcon.LIBRARY, "教学工作台");
-        UiIcons.decorate(exerciseManagementNavButton, UiIcon.PRACTICE, "题库管理");
-        UiIcons.decorate(exerciseProgressNavButton, UiIcon.CHART, "学情看板");
-        UiIcons.decorate(cloudCenterNavButton, UiIcon.CLOUD, "云端班级");
-        UiIcons.decorate(sqlPracticeNavButton, UiIcon.CODE, "自由 SQL");
-        UiIcons.decorate(aiAssistantNavButton, UiIcon.SPARK, "AI 助手");
-        UiIcons.decorate(tableSchemaNavButton, UiIcon.TABLE, "表结构");
-        UiIcons.decorate(settingsNavButton, UiIcon.SETTINGS, "设置");
-        UiIcons.decorate(switchIdentityButton, UiIcon.USER, "切换身份");
+        UiIcons.decorate(homeNavButton, UiIcon.HOME, AppI18n.get("MainWindowController.9"));
+        UiIcons.decorate(studentExerciseNavButton, UiIcon.PRACTICE, AppI18n.get("MainWindowController.10"));
+        UiIcons.decorate(knowledgeCenterNavButton, UiIcon.BOOK, AppI18n.get("MainWindowController.11"));
+        UiIcons.decorate(teachingContentNavButton, UiIcon.LIBRARY, AppI18n.get("MainWindowController.12"));
+        UiIcons.decorate(exerciseManagementNavButton, UiIcon.PRACTICE, AppI18n.get("MainWindowController.13"));
+        UiIcons.decorate(exerciseProgressNavButton, UiIcon.CHART, AppI18n.get("MainWindowController.14"));
+        UiIcons.decorate(cloudCenterNavButton, UiIcon.CLOUD, AppI18n.get("MainWindowController.15"));
+        UiIcons.decorate(sqlPracticeNavButton, UiIcon.CODE, AppI18n.get("MainWindowController.16"));
+        UiIcons.decorate(aiAssistantNavButton, UiIcon.SPARK, AppI18n.get("MainWindowController.17"));
+        UiIcons.decorate(tableSchemaNavButton, UiIcon.TABLE, AppI18n.get("MainWindowController.18"));
+        UiIcons.decorate(settingsNavButton, UiIcon.SETTINGS, AppI18n.get("MainWindowController.19"));
+        UiIcons.decorate(switchIdentityButton, UiIcon.USER, AppI18n.get("MainWindowController.20"));
     }
 
     private static void updateGroupVisibility(VBox group, Button... buttons) {
@@ -526,7 +526,7 @@ public final class MainWindowController {
         try {
             showPage(homePage());
         } catch (RuntimeException error) {
-            throw new IllegalStateException("无法加载首页", error);
+            throw new IllegalStateException(AppI18n.get("MainWindowController.21"), error);
         }
     }
 
@@ -542,7 +542,7 @@ public final class MainWindowController {
             showPage(sqlPracticePage());
         } catch (RuntimeException error) {
             // 子页面加载失败时保持原页面，由调用方日志或后续错误区处理。
-            throw new IllegalStateException("无法加载 SQL 练习页", error);
+            throw new IllegalStateException(AppI18n.get("MainWindowController.22"), error);
         }
     }
 
@@ -557,7 +557,7 @@ public final class MainWindowController {
         try {
             showPage(tableSchemaPage());
         } catch (RuntimeException error) {
-            throw new IllegalStateException("无法加载表结构浏览页", error);
+            throw new IllegalStateException(AppI18n.get("MainWindowController.23"), error);
         }
     }
 
@@ -572,7 +572,7 @@ public final class MainWindowController {
         try {
             showPage(aiAssistantPage());
         } catch (RuntimeException error) {
-            throw new IllegalStateException("无法加载 AI 助手页", error);
+            throw new IllegalStateException(AppI18n.get("MainWindowController.24"), error);
         }
     }
 
@@ -602,19 +602,19 @@ public final class MainWindowController {
     /** Opens the command palette (Ctrl+K). Destructive actions are never executed here, only navigated to. */
     private void onCommandPalette() {
         CommandPaletteModel model = new CommandPaletteModel();
-        model.register("home", "首页", "home", false, "home");
-        model.register("practice", "SQL 练习", "sql practice editor", false, "practice");
-        model.register("student", "学生练习", "student practice", false, "student");
-        model.register("teaching", "题库管理", "exercise management", false, "teaching");
-        model.register("progress", "学情看板", "learning analytics dashboard", false, "progress");
-        model.register("knowledge", "课程知识", "course knowledge", false, "knowledge");
-        model.register("ai", "AI 助手", "ai assistant", false, "ai");
-        model.register("schema", "表结构", "table schema", false, "schema");
-        model.register("settings", "设置", "settings", false, "settings");
+        model.register("home", AppI18n.get("MainWindowController.25"), "home", false, "home");
+        model.register("practice", AppI18n.get("MainWindowController.26"), "sql practice editor", false, "practice");
+        model.register("student", AppI18n.get("MainWindowController.27"), "student practice", false, "student");
+        model.register("teaching", AppI18n.get("MainWindowController.28"), "exercise management", false, "teaching");
+        model.register("progress", AppI18n.get("MainWindowController.29"), "learning analytics dashboard", false, "progress");
+        model.register("knowledge", AppI18n.get("MainWindowController.30"), "course knowledge", false, "knowledge");
+        model.register("ai", AppI18n.get("MainWindowController.31"), "ai assistant", false, "ai");
+        model.register("schema", AppI18n.get("MainWindowController.32"), "table schema", false, "schema");
+        model.register("settings", AppI18n.get("MainWindowController.33"), "settings", false, "settings");
         TextInputDialog dialog = new TextInputDialog();
         dialog.setTitle(AppI18n.get("app.name"));
-        dialog.setHeaderText("命令面板 · Command Palette");
-        dialog.setContentText("输入页面或命令（输入命令 / Command）：");
+        dialog.setHeaderText(AppI18n.get("MainWindowController.34"));
+        dialog.setContentText(AppI18n.get("MainWindowController.35"));
         dialog.showAndWait().ifPresent(query -> {
             var matches = model.search(query, 5);
             if (matches.isEmpty()) return;
@@ -642,7 +642,7 @@ public final class MainWindowController {
         try {
             showPage(settingsPage());
         } catch (RuntimeException error) {
-            throw new IllegalStateException("无法加载数据库连接设置页", error);
+            throw new IllegalStateException(AppI18n.get("MainWindowController.36"), error);
         }
     }
 
@@ -864,7 +864,7 @@ public final class MainWindowController {
 
     private void requireCapability(DesktopCapability capability) {
         if (!accessProfile.can(capability)) {
-            throw new SecurityException("当前“" + accessProfile.roleLabel() + "”身份无权使用此功能");
+            throw new SecurityException(AppI18n.get("MainWindowController.37") + accessProfile.roleLabel() + AppI18n.get("MainWindowController.38"));
         }
     }
 

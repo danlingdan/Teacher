@@ -1,4 +1,5 @@
 package com.sqlteacher.desktop.controller;
+import com.sqlteacher.desktop.AppI18n;
 
 import com.sqlteacher.application.connection.ConnectionManagementService;
 import com.sqlteacher.application.execution.SqlExecutionRequest;
@@ -72,16 +73,16 @@ public final class SqlPracticeController {
     private static final Duration DEFAULT_TIMEOUT = Duration.ofSeconds(5);
 
     /** 空白 / null SQL 的固定错误文案（分支①）。 */
-    private static final String BLANK_SQL_MESSAGE = "SQL 语句不能为空";
+    private static final String BLANK_SQL_MESSAGE = AppI18n.get("SqlPracticeController.1");
 
     /** 错误文案兜底：异常 message 为空时的默认展示文案。 */
-    private static final String FALLBACK_ERROR_MESSAGE = "SQL 执行失败";
+    private static final String FALLBACK_ERROR_MESSAGE = AppI18n.get("SqlPracticeController.2");
 
     /** 空态占位文案（与 SqlPractice.fxml 中 emptyPlaceholder 初始文本保持一致）。 */
-    private static final String EMPTY_PLACEHOLDER_MESSAGE = "暂无查询结果";
+    private static final String EMPTY_PLACEHOLDER_MESSAGE = AppI18n.get("SqlPracticeController.3");
 
     /** 执行中占位文案（后台执行期间展示 loading）。 */
-    private static final String LOADING_MESSAGE = "正在执行SQL，请稍候…";
+    private static final String LOADING_MESSAGE = AppI18n.get("SqlPracticeController.4");
 
     /** SQL 执行服务（应用层接口）；运行期实现由 Spring Context 提供。 */
     private final SqlExecutionService sqlExecutionService;
@@ -296,7 +297,7 @@ public final class SqlPracticeController {
      * 把指定 SQL 填充到输入框并定位光标到末尾。
      *
      * <p>供 {@link MainWindowController} 在表结构页点击表名时联动调用：把
-     * {@code "SELECT * FROM 表名"} 填入输入框，实现表结构页 → SQL 练习页的双向联动。
+     * {@code AppI18n.get("SqlPracticeController.5")} 填入输入框，实现表结构页 → SQL 练习页的双向联动。
      * 仅做输入填充与光标定位，不触发执行。
      *
      * @param sql 要填充的 SQL 语句，不可为 {@code null}
@@ -334,8 +335,8 @@ public final class SqlPracticeController {
         setNodeVisible(emptyPlaceholder, false);
         setNodeVisible(errorLabel, false);
         resultStatusLabel.setText(viewModel.truncated()
-            ? "已显示前 " + viewModel.rowCount() + " 行，结果已按上限截断"
-            : "共 " + viewModel.rowCount() + " 行 · " + viewModel.executionMillis() + " ms");
+            ? AppI18n.get("SqlPracticeController.6") + viewModel.rowCount() + AppI18n.get("SqlPracticeController.7")
+            : AppI18n.get("SqlPracticeController.8") + viewModel.rowCount() + AppI18n.get("SqlPracticeController.9") + viewModel.executionMillis() + " ms");
         setNodeVisible(resultStatusLabel, true);
     }
 

@@ -1,4 +1,5 @@
 package com.sqlteacher.desktop.controller;
+import com.sqlteacher.desktop.AppI18n;
 
 import com.sqlteacher.application.ai.AiContextPreview;
 import com.sqlteacher.application.error.ApplicationExceptionMapper;
@@ -136,7 +137,7 @@ public final class KnowledgeCenterController {
         includePrivateCheck.setSelected(authoringAllowed);
         includePrivateCheck.setDisable(!authoringAllowed);
         refreshIndexStatus();
-        refreshArticles("正在加载课程知识库…");
+        refreshArticles(AppI18n.get("KnowledgeCenterController.1"));
     }
 
     @FXML
@@ -144,16 +145,16 @@ public final class KnowledgeCenterController {
         String course = field(courseField);
         String section = field(sectionField);
         if (course.isBlank() || section.isBlank()) {
-            showStatus("请先填写课程与章节，再导入资料。", true);
+            showStatus(AppI18n.get("KnowledgeCenterController.2"), true);
             return;
         }
-        FileChooser chooser = knowledgeFileChooser("批量导入课程知识文档");
+        FileChooser chooser = knowledgeFileChooser(AppI18n.get("KnowledgeCenterController.3"));
         List<File> files = chooser.showOpenMultipleDialog(importButton.getScene().getWindow());
         if (files == null || files.isEmpty()) {
             return;
         }
         List<String> points = knowledgePoints();
-        GlobalLoading.show("正在建立课程知识版本与本地索引…");
+        GlobalLoading.show(AppI18n.get("KnowledgeCenterController.4"));
         DesktopExecutors.background().execute(() -> {
             try {
                 List<String> imported = new ArrayList<>();
@@ -166,7 +167,7 @@ public final class KnowledgeCenterController {
                     GlobalLoading.hide();
                     articleTable.getItems().setAll(articles);
                     refreshIndexStatus();
-                    showStatus("已导入 " + imported.size() + " 份资料，默认保持私有草稿。" + indexReport.message(), false);
+                    showStatus(AppI18n.get("KnowledgeCenterController.5") + imported.size() + AppI18n.get("KnowledgeCenterController.6") + indexReport.message(), false);
                 });
             } catch (Throwable error) {
                 Platform.runLater(() -> fail(error));
@@ -176,14 +177,14 @@ public final class KnowledgeCenterController {
 
     @FXML
     private void onRevise() {
-        CourseKnowledgeArticle selected = selectedArticle("请先选择要更新版本的知识条目。");
+        CourseKnowledgeArticle selected = selectedArticle(AppI18n.get("KnowledgeCenterController.7"));
         if (selected == null) return;
-        FileChooser chooser = knowledgeFileChooser("选择新版本文档");
+        FileChooser chooser = knowledgeFileChooser(AppI18n.get("KnowledgeCenterController.8"));
         File file = chooser.showOpenDialog(importButton.getScene().getWindow());
         if (file == null) return;
-        runArticleChange("正在建立新版本…",
+        runArticleChange(AppI18n.get("KnowledgeCenterController.9"),
             () -> knowledgeService.reviseArticle(selected.id(), file.toPath(), knowledgePoints()),
-            "已生成新版本；旧版本仍保留在历史记录中。");
+            AppI18n.get("KnowledgeCenterController.10"));
     }
 
     @FXML private void onPublish() { changeVisibility(KnowledgeVisibility.PUBLISHED); }
@@ -192,14 +193,14 @@ public final class KnowledgeCenterController {
 
     @FXML
     private void onDelete() {
-        CourseKnowledgeArticle selected = selectedArticle("请先选择要删除的知识条目。");
+        CourseKnowledgeArticle selected = selectedArticle(AppI18n.get("KnowledgeCenterController.11"));
         if (selected == null) return;
         Alert confirm = new Alert(Alert.AlertType.CONFIRMATION,
-            "条目、全部历史版本与检索片段都将从本机删除。", ButtonType.CANCEL, ButtonType.OK);
-        confirm.setTitle("删除课程知识");
-        confirm.setHeaderText("确认删除《" + selected.title() + "》？");
+            AppI18n.get("KnowledgeCenterController.12"), ButtonType.CANCEL, ButtonType.OK);
+        confirm.setTitle(AppI18n.get("KnowledgeCenterController.13"));
+        confirm.setHeaderText(AppI18n.get("KnowledgeCenterController.14") + selected.title() + AppI18n.get("KnowledgeCenterController.15"));
         if (confirm.showAndWait().orElse(ButtonType.CANCEL) != ButtonType.OK) return;
-        GlobalLoading.show("正在删除知识条目…");
+        GlobalLoading.show(AppI18n.get("KnowledgeCenterController.16"));
         DesktopExecutors.background().execute(() -> {
             try {
                 documentService.deleteDocument(selected.documentId());
@@ -208,7 +209,7 @@ public final class KnowledgeCenterController {
                     GlobalLoading.hide();
                     articleTable.getItems().setAll(articles);
                     clearDetail();
-                    showStatus("知识条目与全部本地索引已删除。", false);
+                    showStatus(AppI18n.get("KnowledgeCenterController.17"), false);
                 });
             } catch (Throwable error) {
                 Platform.runLater(() -> fail(error));
@@ -220,10 +221,10 @@ public final class KnowledgeCenterController {
     private void onSearch() {
         String query = field(queryField);
         if (query.isBlank()) {
-            showStatus("请输入课程知识问题或关键词。", true);
+            showStatus(AppI18n.get("KnowledgeCenterController.18"), true);
             return;
         }
-        GlobalLoading.show("正在按课程、章节与知识点检索…");
+        GlobalLoading.show(AppI18n.get("KnowledgeCenterController.19"));
         DesktopExecutors.background().execute(() -> {
             try {
                 HybridKnowledgeRetrievalService.RetrievalResponse response = retrievalService.retrieve(query, currentFilter(), 20);
@@ -231,8 +232,8 @@ public final class KnowledgeCenterController {
                 Platform.runLater(() -> {
                     GlobalLoading.hide();
                     resultTable.getItems().setAll(results);
-                    showStatus(results.isEmpty() ? "未找到符合筛选条件的资料。" : "找到 " + results.size()
-                        + " 个可追溯片段（" + response.mode() + "）。" + (response.degraded() ? response.message() : ""), false);
+                    showStatus(results.isEmpty() ? AppI18n.get("KnowledgeCenterController.20") : AppI18n.get("KnowledgeCenterController.21") + results.size()
+                        + AppI18n.get("KnowledgeCenterController.22") + response.mode() + AppI18n.get("KnowledgeCenterController.23") + (response.degraded() ? response.message() : ""), false);
                 });
             } catch (Throwable error) {
                 Platform.runLater(() -> fail(error));
@@ -243,16 +244,16 @@ public final class KnowledgeCenterController {
     @FXML
     private void onWebSearch() {
         String query = field(queryField);
-        if (query.isBlank()) { showStatus("请输入需要联网查找的问题。", true); return; }
+        if (query.isBlank()) { showStatus(AppI18n.get("KnowledgeCenterController.24"), true); return; }
         if (!webSearchProvider.enabled()) {
-            showStatus("联网知识搜索默认关闭；请通过 SQLTEACHER_BRAVE_API_KEY 配置 Brave Search 后重启。", true);
+            showStatus(AppI18n.get("KnowledgeCenterController.25"), true);
             return;
         }
         Alert confirm = new Alert(Alert.AlertType.CONFIRMATION,
-            "将把以下查询发送给 Brave Search：\n\n" + query, ButtonType.CANCEL, ButtonType.OK);
-        confirm.setTitle("确认联网知识搜索"); confirm.setHeaderText("联网结果不是课程知识库内容，请独立核验来源");
+            AppI18n.get("KnowledgeCenterController.26") + query, ButtonType.CANCEL, ButtonType.OK);
+        confirm.setTitle(AppI18n.get("KnowledgeCenterController.27")); confirm.setHeaderText(AppI18n.get("KnowledgeCenterController.28"));
         if (confirm.showAndWait().orElse(ButtonType.CANCEL) != ButtonType.OK) return;
-        GlobalLoading.show("正在安全获取联网知识来源…");
+        GlobalLoading.show(AppI18n.get("KnowledgeCenterController.29"));
         DesktopExecutors.background().execute(() -> {
             try {
                 List<WebSearchProvider.WebSearchResult> searchResults = webSearchProvider.search(query, 5);
@@ -264,13 +265,13 @@ public final class KnowledgeCenterController {
                         try { snippet = summarize(webContentFetcher.fetch(item.uri()).text()); }
                         catch (RuntimeException ignored) { /* Search snippet remains visible and attributed. */ }
                     }
-                    if (snippet.isBlank()) snippet = "仅提供来源链接，请打开后核验。";
+                    if (snippet.isBlank()) snippet = AppI18n.get("KnowledgeCenterController.30");
                     results.add(new KnowledgeSearchResult("web:" + Integer.toUnsignedString(item.uri().hashCode()), item.title(),
                         item.uri().toString(), index, snippet, Math.max(0, searchResults.size() - index)));
                 }
                 Platform.runLater(() -> {
                     GlobalLoading.hide(); resultTable.getItems().setAll(results);
-                    showStatus(results.isEmpty() ? "联网搜索未返回结果。" : "已获取 " + results.size() + " 个联网来源；未写入课程知识库。", false);
+                    showStatus(results.isEmpty() ? AppI18n.get("KnowledgeCenterController.31") : AppI18n.get("KnowledgeCenterController.32") + results.size() + AppI18n.get("KnowledgeCenterController.33"), false);
                 });
             } catch (Throwable error) { Platform.runLater(() -> fail(error)); }
         });
@@ -278,7 +279,7 @@ public final class KnowledgeCenterController {
 
     @FXML
     private void onRebuildIndex() {
-        GlobalLoading.show("正在重建本地向量索引…");
+        GlobalLoading.show(AppI18n.get("KnowledgeCenterController.34"));
         DesktopExecutors.background().execute(() -> {
             try {
                 KnowledgeIndexService.IndexReport report = indexService.rebuildAll();
@@ -289,37 +290,37 @@ public final class KnowledgeCenterController {
 
     @FXML
     private void onMarkRead() {
-        CourseKnowledgeArticle selected = selectedArticle("请先选择要标记已读的知识条目。");
+        CourseKnowledgeArticle selected = selectedArticle(AppI18n.get("KnowledgeCenterController.35"));
         if (selected == null) return;
         readStateService.save(selected.id(), selected.currentRevision(), 100);
-        showStatus("已记录当前版本的阅读进度。", false);
+        showStatus(AppI18n.get("KnowledgeCenterController.36"), false);
     }
 
     @FXML
     private void onExplain() {
         String question = field(queryField);
         if (question.isBlank()) {
-            showStatus("请先输入要解释的问题。", true);
+            showStatus(AppI18n.get("KnowledgeCenterController.37"), true);
             return;
         }
         try {
             String objective = field(objectiveField);
             if (objective.isBlank()) {
-                showStatus("请先填写当前课程目标 ID 或稳定标识。", true);
+                showStatus(AppI18n.get("KnowledgeCenterController.38"), true);
                 return;
             }
             AiContextPreview preview = tutorService.preview(question, currentFilter());
             Alert confirm = new Alert(Alert.AlertType.CONFIRMATION,
-                "将发送 " + preview.characterCount() + " 个字符；来源：\n" + String.join("\n", preview.sources()),
+                AppI18n.get("KnowledgeCenterController.39") + preview.characterCount() + AppI18n.get("KnowledgeCenterController.40") + String.join("\n", preview.sources()),
                 ButtonType.CANCEL, ButtonType.OK);
-            confirm.setTitle("确认 AI 上下文");
-            confirm.setHeaderText("仅发送学生问题与本次检索到的课程知识片段");
+            confirm.setTitle(AppI18n.get("KnowledgeCenterController.41"));
+            confirm.setHeaderText(AppI18n.get("KnowledgeCenterController.42"));
             if (confirm.showAndWait().orElse(ButtonType.CANCEL) != ButtonType.OK) return;
         } catch (Throwable error) {
             fail(error);
             return;
         }
-        GlobalLoading.show("正在生成带引用的课程解释…");
+        GlobalLoading.show(AppI18n.get("KnowledgeCenterController.43"));
         DesktopExecutors.background().execute(() -> {
             try {
                 var result = tutorService.ask(field(courseField), field(objectiveField), question, currentFilter());
@@ -342,12 +343,12 @@ public final class KnowledgeCenterController {
 
     private void saveTutorFeedback(TutorFeedbackType type) {
         if (lastTutorSessionId.isBlank()) {
-            showStatus("请先完成一次带引用辅导。", true);
+            showStatus(AppI18n.get("KnowledgeCenterController.44"), true);
             return;
         }
         try {
             tutorService.feedback(lastTutorSessionId, type, "");
-            showStatus("已记录枚举反馈，不保存完整问答正文。", false);
+            showStatus(AppI18n.get("KnowledgeCenterController.45"), false);
         } catch (Throwable error) {
             fail(error);
         }
@@ -357,13 +358,13 @@ public final class KnowledgeCenterController {
     private void onOpenExercise() {
         ExerciseSummary selected = exerciseTable.getSelectionModel().getSelectedItem();
         if (selected == null) {
-            showStatus("请先选择关联练习。", true);
+            showStatus(AppI18n.get("KnowledgeCenterController.46"), true);
             return;
         }
         openExercise.accept(selected.id());
     }
 
-    @FXML private void onRefresh() { refreshArticles("正在刷新课程知识…"); }
+    @FXML private void onRefresh() { refreshArticles(AppI18n.get("KnowledgeCenterController.47")); }
 
     public void focusKnowledgePoint(String knowledgePoint) {
         if (knowledgePoint == null || knowledgePoint.isBlank()) return;
@@ -377,7 +378,7 @@ public final class KnowledgeCenterController {
             clearDetail();
             return;
         }
-        GlobalLoading.show("正在读取知识详情…");
+        GlobalLoading.show(AppI18n.get("KnowledgeCenterController.48"));
         DesktopExecutors.background().execute(() -> {
             try {
                 CourseKnowledgeDetail detail = knowledgeService.getArticle(selected.id());
@@ -390,7 +391,7 @@ public final class KnowledgeCenterController {
                     courseField.setText(selected.courseTitle());
                     sectionField.setText(selected.sectionTitle());
                     knowledgePointsField.setText(String.join(", ", selected.knowledgePoints()));
-                    contentArea.setText("当前版本 v" + selected.currentRevision() + "｜历史版本 " + detail.history().size()
+                    contentArea.setText(AppI18n.get("KnowledgeCenterController.49") + selected.currentRevision() + AppI18n.get("KnowledgeCenterController.50") + detail.history().size()
                         + "\n\n" + detail.revision().content());
                     exerciseTable.getItems().setAll(exercises);
                 });
@@ -401,10 +402,10 @@ public final class KnowledgeCenterController {
     }
 
     private void changeVisibility(KnowledgeVisibility visibility) {
-        CourseKnowledgeArticle selected = selectedArticle("请先选择知识条目。");
+        CourseKnowledgeArticle selected = selectedArticle(AppI18n.get("KnowledgeCenterController.51"));
         if (selected == null) return;
-        runArticleChange("正在更新发布状态…", () -> knowledgeService.changeVisibility(selected.id(), visibility),
-            "发布状态已更新为：" + visibilityLabel(visibility) + "。");
+        runArticleChange(AppI18n.get("KnowledgeCenterController.52"), () -> knowledgeService.changeVisibility(selected.id(), visibility),
+            AppI18n.get("KnowledgeCenterController.53") + visibilityLabel(visibility) + AppI18n.get("KnowledgeCenterController.54"));
     }
 
     private void runArticleChange(String loading, ArticleChange change, String successMessage) {
@@ -435,8 +436,8 @@ public final class KnowledgeCenterController {
                 Platform.runLater(() -> {
                     GlobalLoading.hide();
                     articleTable.getItems().setAll(articles);
-                    showStatus(articles.isEmpty() ? "暂无课程知识，可批量导入 UTF-8 文本或 Markdown。"
-                        : "已加载 " + articles.size() + " 个课程知识条目。", false);
+                    showStatus(articles.isEmpty() ? AppI18n.get("KnowledgeCenterController.55")
+                        : AppI18n.get("KnowledgeCenterController.56") + articles.size() + AppI18n.get("KnowledgeCenterController.57"), false);
                 });
             } catch (Throwable error) {
                 Platform.runLater(() -> fail(error));
@@ -456,7 +457,7 @@ public final class KnowledgeCenterController {
     }
 
     private List<String> knowledgePoints() {
-        return List.of(field(knowledgePointsField).split("[,，;；\\n]")).stream()
+        return List.of(field(knowledgePointsField).split(AppI18n.get("KnowledgeCenterController.58"))).stream()
             .map(String::trim).filter(value -> !value.isBlank()).distinct().toList();
     }
 
@@ -474,16 +475,16 @@ public final class KnowledgeCenterController {
     private static FileChooser knowledgeFileChooser(String title) {
         FileChooser chooser = new FileChooser();
         chooser.setTitle(title);
-        chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("课程资料", "*.txt", "*.md", "*.markdown", "*.pdf", "*.docx"));
+        chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter(AppI18n.get("KnowledgeCenterController.59"), "*.txt", "*.md", "*.markdown", "*.pdf", "*.docx"));
         return chooser;
     }
 
     private static String formatAnswer(GroundedKnowledgeAnswer answer) {
         StringBuilder text = new StringBuilder(answer.answer());
-        if (!answer.citations().isEmpty()) text.append("\n\n引用：");
+        if (!answer.citations().isEmpty()) text.append(AppI18n.get("KnowledgeCenterController.60"));
         for (GroundedKnowledgeAnswer.Citation citation : answer.citations()) {
             text.append("\n[").append(citation.number()).append("] ").append(citation.articleTitle())
-                .append(" v").append(citation.revision()).append("，片段 ").append(citation.chunkIndex() + 1);
+                .append(" v").append(citation.revision()).append(AppI18n.get("KnowledgeCenterController.61")).append(citation.chunkIndex() + 1);
         }
         return text.toString();
     }
@@ -510,8 +511,8 @@ public final class KnowledgeCenterController {
 
     private void refreshIndexStatus() {
         KnowledgeIndexService.IndexStatus status = indexService.status();
-        indexStatusLabel.setText("索引：" + status.mode() + "｜待处理 " + status.pendingJobs()
-            + "｜已索引 " + status.indexedChunks() + "｜失败 " + status.failedChunks());
+        indexStatusLabel.setText(AppI18n.get("KnowledgeCenterController.62") + status.mode() + AppI18n.get("KnowledgeCenterController.63") + status.pendingJobs()
+            + AppI18n.get("KnowledgeCenterController.64") + status.indexedChunks() + AppI18n.get("KnowledgeCenterController.65") + status.failedChunks());
     }
 
     private static String summarize(String value) {
@@ -522,7 +523,7 @@ public final class KnowledgeCenterController {
     private static String field(TextField field) { return field.getText() == null ? "" : field.getText().trim(); }
     private static SimpleStringProperty text(Object value) { return new SimpleStringProperty(String.valueOf(value)); }
     private static String visibilityLabel(KnowledgeVisibility value) {
-        return switch (value) { case PRIVATE -> "私有"; case PUBLISHED -> "已发布"; case INACTIVE -> "已停用"; };
+        return switch (value) { case PRIVATE -> AppI18n.get("KnowledgeCenterController.66"); case PUBLISHED -> AppI18n.get("KnowledgeCenterController.67"); case INACTIVE -> AppI18n.get("KnowledgeCenterController.68"); };
     }
 
     @FunctionalInterface

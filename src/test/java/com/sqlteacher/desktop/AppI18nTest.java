@@ -25,7 +25,7 @@ import static org.junit.jupiter.api.Assertions.*;
  * and switching locales must actually change resolved text.
  */
 class AppI18nTest {
-    private static final Pattern FXML_KEY = Pattern.compile("%([a-zA-Z][a-zA-Z0-9_.]*)");
+    private static final Pattern FXML_KEY = Pattern.compile("%([a-zA-Z][a-zA-Z0-9_.-]*)");
 
     @Test void chineseAndEnglishBundlesHaveIdenticalKeySets() throws Exception {
         Properties zh = load("messages_zh_CN.properties");

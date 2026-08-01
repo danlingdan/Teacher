@@ -25,16 +25,16 @@
         <VBox styleClass="sql-practice-header" spacing="14">
             <VBox styleClass="title-area" alignment="CENTER" spacing="5">
                 <Label styleClass="intro-tag" text="SAFE SQL WORKBENCH"/>
-                <Label styleClass="page-title" text="SQL 练习"/>
+                <Label styleClass="page-title" text="%SqlPractice.1"/>
                 <Label styleClass="page-subtitle"
-                       text="编写、检查并执行 SQL；结果与风险反馈始终保留在当前工作区。"/>
+                       text="%SqlPractice.2"/>
             </VBox>
             <VBox styleClass="panel-card examples-card" spacing="10">
                 <HBox styleClass="card-title-row" alignment="CENTER_LEFT" spacing="10">
                     <Region styleClass="card-accent"/>
-                    <Label styleClass="card-title" text="快速示例"/>
+                    <Label styleClass="card-title" text="%SqlPractice.3"/>
                     <Region HBox.hgrow="ALWAYS"/>
-                    <Label styleClass="card-subtitle" text="点击只会填入编辑器，不会自动执行"/>
+                    <Label styleClass="card-subtitle" text="%SqlPractice.4"/>
                 </HBox>
                 <FlowPane styleClass="example-flow" hgap="10" vgap="10">
                     <Button styleClass="example-chip" onAction="#onFillExampleSql"
@@ -57,24 +57,24 @@
                     <VBox styleClass="panel-card editor-card" spacing="12">
                         <HBox styleClass="card-title-row" alignment="CENTER_LEFT" spacing="10">
                             <Region styleClass="card-accent"/>
-                            <Label styleClass="card-title" text="SQL 编辑器"/>
+                            <Label styleClass="card-title" text="%SqlPractice.5"/>
                             <Region HBox.hgrow="ALWAYS"/>
-                            <Label styleClass="card-subtitle" text="Ctrl + Enter 执行"/>
+                            <Label styleClass="card-subtitle" text="%SqlPractice.6"/>
                         </HBox>
                         <TextArea fx:id="sqlInputArea" styleClass="sql-editor"
-                                  promptText="例如：SELECT id, name, score FROM student ORDER BY score DESC;"
+                                  promptText="%SqlPractice.7"
                                   wrapText="true" prefRowCount="7" VBox.vgrow="ALWAYS"/>
                         <HBox styleClass="sql-action-row" alignment="CENTER_RIGHT" spacing="10">
                             <Button fx:id="clearSqlBtn" styleClass="sql-secondary-button"
-                                    text="清空" onAction="#onClearSql"/>
+                                    text="%SqlPractice.8" onAction="#onClearSql"/>
                             <Button fx:id="executeSqlButton" styleClass="sql-execute-button"
-                                    text="执行 SQL" onAction="#onExecuteSql"/>
+                                    text="%SqlPractice.9" onAction="#onExecuteSql"/>
                         </HBox>
                     </VBox>
                     <VBox styleClass="panel-card result-card" spacing="12">
                         <HBox styleClass="card-title-row" alignment="CENTER_LEFT" spacing="10">
                             <Region styleClass="card-accent"/>
-                            <Label styleClass="card-title" text="执行结果"/>
+                            <Label styleClass="card-title" text="%SqlPractice.10"/>
                             <Region HBox.hgrow="ALWAYS"/>
                             <Label fx:id="resultStatusLabel" styleClass="sql-result-hint"
                                    visible="false" managed="false"/>
@@ -83,7 +83,7 @@
                                    minHeight="120" VBox.vgrow="ALWAYS">
                             <TableView fx:id="resultTable" styleClass="result-table"/>
                             <Label fx:id="emptyPlaceholder" styleClass="table-empty-hint"
-                                   text="执行 SQL 后，结果会显示在这里"/>
+                                   text="%SqlPractice.11"/>
                         </StackPane>
                         <Label fx:id="errorLabel" styleClass="sql-error-hint" wrapText="true"
                                maxWidth="Infinity" visible="false" managed="false"/>

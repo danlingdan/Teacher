@@ -19,41 +19,41 @@
                 <padding><Insets top="18" right="14" bottom="16" left="14"/></padding>
                 <VBox spacing="2" styleClass="sidebar-brand">
                     <Label fx:id="brandTitle" text="SQLTeacher" styleClass="brand-title"/>
-                    <Label fx:id="sidebarCaption" text="数据库教学工作台" styleClass="sidebar-caption"/>
+                    <Label fx:id="sidebarCaption" text="%MainWindow.1" styleClass="sidebar-caption"/>
                 </VBox>
                 <ScrollPane fitToWidth="true" hbarPolicy="NEVER" vbarPolicy="AS_NEEDED"
                             styleClass="sidebar-scroll" VBox.vgrow="ALWAYS">
                     <content>
                         <VBox spacing="14">
                             <VBox fx:id="learningNavGroup" spacing="4" styleClass="nav-group">
-                                <Label fx:id="learningNavGroupTitle" text="学习" styleClass="nav-group-title"/>
-                                <Button fx:id="homeNavButton" text="首页" onAction="#onNavigateHome" maxWidth="Infinity" styleClass="nav-button"/>
-                                <Button fx:id="studentExerciseNavButton" text="我的练习" onAction="#onNavigateStudentExercise" maxWidth="Infinity" styleClass="nav-button"/>
-                                <Button fx:id="knowledgeCenterNavButton" text="课程知识" onAction="#onNavigateKnowledgeCenter" maxWidth="Infinity" styleClass="nav-button"/>
+                                <Label fx:id="learningNavGroupTitle" text="%MainWindow.2" styleClass="nav-group-title"/>
+                                <Button fx:id="homeNavButton" text="%MainWindow.3" onAction="#onNavigateHome" maxWidth="Infinity" styleClass="nav-button"/>
+                                <Button fx:id="studentExerciseNavButton" text="%MainWindow.4" onAction="#onNavigateStudentExercise" maxWidth="Infinity" styleClass="nav-button"/>
+                                <Button fx:id="knowledgeCenterNavButton" text="%MainWindow.5" onAction="#onNavigateKnowledgeCenter" maxWidth="Infinity" styleClass="nav-button"/>
                             </VBox>
                             <VBox fx:id="teachingNavGroup" spacing="4" styleClass="nav-group">
-                                <Label fx:id="teachingNavGroupTitle" text="教学" styleClass="nav-group-title"/>
-                                <Button fx:id="teachingContentNavButton" text="教学工作台" onAction="#onNavigateTeachingContent" maxWidth="Infinity" styleClass="nav-button"/>
-                                <Button fx:id="exerciseManagementNavButton" text="题库管理" onAction="#onNavigateExerciseManagement" maxWidth="Infinity" styleClass="nav-button"/>
-                                <Button fx:id="exerciseProgressNavButton" text="学情看板" onAction="#onNavigateExerciseProgress" maxWidth="Infinity" styleClass="nav-button"/>
-                                <Button fx:id="cloudCenterNavButton" text="云端班级" onAction="#onNavigateCloudCenter" maxWidth="Infinity" styleClass="nav-button"/>
+                                <Label fx:id="teachingNavGroupTitle" text="%MainWindow.6" styleClass="nav-group-title"/>
+                                <Button fx:id="teachingContentNavButton" text="%MainWindow.7" onAction="#onNavigateTeachingContent" maxWidth="Infinity" styleClass="nav-button"/>
+                                <Button fx:id="exerciseManagementNavButton" text="%MainWindow.8" onAction="#onNavigateExerciseManagement" maxWidth="Infinity" styleClass="nav-button"/>
+                                <Button fx:id="exerciseProgressNavButton" text="%MainWindow.9" onAction="#onNavigateExerciseProgress" maxWidth="Infinity" styleClass="nav-button"/>
+                                <Button fx:id="cloudCenterNavButton" text="%MainWindow.10" onAction="#onNavigateCloudCenter" maxWidth="Infinity" styleClass="nav-button"/>
                             </VBox>
                             <VBox fx:id="toolsNavGroup" spacing="4" styleClass="nav-group">
-                                <Label fx:id="toolsNavGroupTitle" text="SQL 工具" styleClass="nav-group-title"/>
-                                <Button fx:id="sqlPracticeNavButton" text="自由 SQL" onAction="#onNavigateSqlPractice" maxWidth="Infinity" styleClass="nav-button"/>
-                                <Button fx:id="aiAssistantNavButton" text="AI 助手" onAction="#onNavigateAiAssistant" maxWidth="Infinity" styleClass="nav-button"/>
-                                <Button fx:id="tableSchemaNavButton" text="表结构" onAction="#onNavigateTableSchema" maxWidth="Infinity" styleClass="nav-button"/>
+                                <Label fx:id="toolsNavGroupTitle" text="%MainWindow.11" styleClass="nav-group-title"/>
+                                <Button fx:id="sqlPracticeNavButton" text="%MainWindow.12" onAction="#onNavigateSqlPractice" maxWidth="Infinity" styleClass="nav-button"/>
+                                <Button fx:id="aiAssistantNavButton" text="%MainWindow.13" onAction="#onNavigateAiAssistant" maxWidth="Infinity" styleClass="nav-button"/>
+                                <Button fx:id="tableSchemaNavButton" text="%MainWindow.14" onAction="#onNavigateTableSchema" maxWidth="Infinity" styleClass="nav-button"/>
                             </VBox>
                             <VBox fx:id="systemNavGroup" spacing="4" styleClass="nav-group">
-                                <Label fx:id="systemNavGroupTitle" text="系统" styleClass="nav-group-title"/>
-                                <Button fx:id="settingsNavButton" text="设置" onAction="#onNavigateSettings" maxWidth="Infinity" styleClass="nav-button"/>
+                                <Label fx:id="systemNavGroupTitle" text="%MainWindow.15" styleClass="nav-group-title"/>
+                                <Button fx:id="settingsNavButton" text="%MainWindow.16" onAction="#onNavigateSettings" maxWidth="Infinity" styleClass="nav-button"/>
                             </VBox>
                         </VBox>
                     </content>
                 </ScrollPane>
                 <VBox fx:id="identityCard" spacing="8" styleClass="identity-card">
-                    <Label fx:id="identityLabel" text="访客" styleClass="identity-pill" wrapText="true"/>
-                    <Button fx:id="switchIdentityButton" text="切换身份" onAction="#onSwitchIdentity"
+                    <Label fx:id="identityLabel" text="%MainWindow.17" styleClass="identity-pill" wrapText="true"/>
+                    <Button fx:id="switchIdentityButton" text="%MainWindow.18" onAction="#onSwitchIdentity"
                             maxWidth="Infinity" styleClass="identity-switch-button"/>
                 </VBox>
             </VBox>
@@ -66,7 +66,7 @@
     <StackPane fx:id="loadingOverlay" styleClass="loading-overlay" visible="false" managed="false">
         <VBox alignment="CENTER" spacing="14">
             <ProgressIndicator styleClass="loading-spinner"/>
-            <Label fx:id="loadingText" styleClass="loading-text" text="加载中…"/>
+            <Label fx:id="loadingText" styleClass="loading-text" text="%MainWindow.19"/>
         </VBox>
     </StackPane>
 </StackPane>

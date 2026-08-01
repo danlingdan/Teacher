@@ -1,4 +1,5 @@
 package com.sqlteacher.desktop.controller;
+import com.sqlteacher.desktop.AppI18n;
 
 import com.sqlteacher.application.connection.ConnectionManagementService;
 import com.sqlteacher.application.connection.DatabaseConnectionProfile;
@@ -80,7 +81,7 @@ public final class ConnectionSettingsController {
             protected void updateItem(DatabaseConnectionProfile item, boolean empty) {
                 super.updateItem(item, empty);
                 setText(empty || item == null ? null
-                    : item.displayName() + "  ·  " + item.dialect() + (item.enabled() ? "" : "  ·  已禁用"));
+                    : item.displayName() + "  ·  " + item.dialect() + (item.enabled() ? "" : AppI18n.get("ConnectionSettingsController.1")));
             }
         });
         profileList.getSelectionModel().selectedItemProperty().addListener(
@@ -109,8 +110,8 @@ public final class ConnectionSettingsController {
             return;
         }
         credentialSession.forget(profile.id());
-        runAsync("正在保存连接…", () -> managementService.saveProfile(profile), saved -> {
-            showStatus("连接配置已保存。", false);
+        runAsync(AppI18n.get("ConnectionSettingsController.2"), () -> managementService.saveProfile(profile), saved -> {
+            showStatus(AppI18n.get("ConnectionSettingsController.3"), false);
             refreshProfiles(saved.id());
         });
     }
@@ -126,7 +127,7 @@ public final class ConnectionSettingsController {
         }
         char[] password = passwordField.getText().toCharArray();
         passwordField.clear();
-        runAsync("正在测试数据库连接…", () -> {
+        runAsync(AppI18n.get("ConnectionSettingsController.4"), () -> {
             try {
                 DatabaseConnectionTestResult result = testService.testConnection(profile, password);
                 boolean savedServerProfile = result.successful()
@@ -148,11 +149,11 @@ public final class ConnectionSettingsController {
     private void onSelect() {
         DatabaseConnectionProfile selected = profileList.getSelectionModel().getSelectedItem();
         if (selected == null) {
-            showStatus("请先选择一个已保存的连接。", true);
+            showStatus(AppI18n.get("ConnectionSettingsController.5"), true);
             return;
         }
-        runAsync("正在切换当前连接…", () -> managementService.selectProfile(selected.id()), profile -> {
-            showStatus("当前连接已切换为：" + profile.displayName(), false);
+        runAsync(AppI18n.get("ConnectionSettingsController.6"), () -> managementService.selectProfile(selected.id()), profile -> {
+            showStatus(AppI18n.get("ConnectionSettingsController.7") + profile.displayName(), false);
             refreshProfiles(profile.id());
         });
     }
@@ -161,36 +162,36 @@ public final class ConnectionSettingsController {
     private void onDelete() {
         DatabaseConnectionProfile selected = profileList.getSelectionModel().getSelectedItem();
         if (selected == null || selected.builtIn()) {
-            showStatus("内置连接不能删除。", true);
+            showStatus(AppI18n.get("ConnectionSettingsController.8"), true);
             return;
         }
         Alert confirmation = new Alert(
             Alert.AlertType.CONFIRMATION,
-            "确定删除连接“" + selected.displayName() + "”吗？",
+            AppI18n.get("ConnectionSettingsController.9") + selected.displayName() + AppI18n.get("ConnectionSettingsController.10"),
             ButtonType.CANCEL,
             ButtonType.OK
         );
-        confirmation.setHeaderText("删除连接配置");
+        confirmation.setHeaderText(AppI18n.get("ConnectionSettingsController.11"));
         if (confirmation.showAndWait().orElse(ButtonType.CANCEL) != ButtonType.OK) {
             return;
         }
-        runAsync("正在删除连接…", () -> {
+        runAsync(AppI18n.get("ConnectionSettingsController.12"), () -> {
             credentialSession.forget(selected.id());
             managementService.removeProfile(selected.id());
             return null;
         }, ignored -> {
-            showStatus("连接配置已删除。", false);
+            showStatus(AppI18n.get("ConnectionSettingsController.13"), false);
             refreshProfiles("demo");
         });
     }
 
     private void refreshProfiles(String selectedId) {
-        runAsync("正在加载连接配置…", () -> new ProfilesSnapshot(
+        runAsync(AppI18n.get("ConnectionSettingsController.14"), () -> new ProfilesSnapshot(
             managementService.listProfiles(),
             managementService.currentProfile()
         ), snapshot -> {
             profileList.getItems().setAll(snapshot.profiles());
-            currentLabel.setText("当前连接：" + snapshot.current()
+            currentLabel.setText(AppI18n.get("ConnectionSettingsController.15") + snapshot.current()
                 .map(DatabaseConnectionProfile::displayName).orElse("-") );
             String targetId = selectedId != null ? selectedId
                 : snapshot.current().map(DatabaseConnectionProfile::id).orElse(null);
@@ -239,7 +240,7 @@ public final class ConnectionSettingsController {
         idField.clear(); nameField.clear(); pathField.clear(); clearServerFields(); passwordField.clear();
         dialectBox.setValue(DatabaseDialect.SQLITE);
         readOnlyCheck.setSelected(true); enabledCheck.setSelected(true);
-        updateActions(null); updateTargetFields(); showStatus("请输入新的连接配置。", false);
+        updateActions(null); updateTargetFields(); showStatus(AppI18n.get("ConnectionSettingsController.16"), false);
     }
 
     private void clearServerFields() {
@@ -265,15 +266,15 @@ public final class ConnectionSettingsController {
         String id, String name, DatabaseDialect dialect, String path, String host, String port,
         String database, String username, boolean readOnly, boolean enabled
     ) {
-        Objects.requireNonNull(dialect, "请选择数据库类型。");
+        Objects.requireNonNull(dialect, AppI18n.get("ConnectionSettingsController.17"));
         DatabaseConnectionTarget target;
         if (dialect == DatabaseDialect.SQLITE) {
-            if (path == null || path.isBlank()) throw new IllegalArgumentException("请输入 SQLite 文件路径。");
+            if (path == null || path.isBlank()) throw new IllegalArgumentException(AppI18n.get("ConnectionSettingsController.18"));
             target = new SqliteConnectionTarget(Path.of(path.trim()));
         } else {
             int parsedPort;
             try { parsedPort = Integer.parseInt(port == null ? "" : port.trim()); }
-            catch (NumberFormatException error) { throw new IllegalArgumentException("端口必须是 1-65535 的整数。"); }
+            catch (NumberFormatException error) { throw new IllegalArgumentException(AppI18n.get("ConnectionSettingsController.19")); }
             target = new ServerConnectionTarget(dialect, host, parsedPort, database, username);
         }
         return new DatabaseConnectionProfile(id, name, target, readOnly, enabled, false);
@@ -295,7 +296,7 @@ public final class ConnectionSettingsController {
     }
 
     private void showStatus(String message, boolean error) {
-        statusLabel.setText(message == null || message.isBlank() ? "输入内容无效，请检查后重试。" : message);
+        statusLabel.setText(message == null || message.isBlank() ? AppI18n.get("ConnectionSettingsController.20") : message);
         statusLabel.getStyleClass().removeAll("sql-result-hint", "sql-error-hint");
         statusLabel.getStyleClass().add(error ? "sql-error-hint" : "sql-result-hint");
         statusLabel.setVisible(true); statusLabel.setManaged(true);
@@ -308,7 +309,7 @@ public final class ConnectionSettingsController {
 
     private static String formatTestResult(DatabaseConnectionTestResult result) {
         if (!result.successful()) return result.message();
-        String product = result.databaseProduct().isBlank() ? "数据库" : result.databaseProduct();
+        String product = result.databaseProduct().isBlank() ? AppI18n.get("ConnectionSettingsController.21") : result.databaseProduct();
         String version = result.databaseVersion().isBlank() ? "" : " " + result.databaseVersion();
         return result.message() + " " + product + version;
     }

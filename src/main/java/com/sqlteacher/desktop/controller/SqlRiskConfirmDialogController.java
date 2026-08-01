@@ -1,4 +1,5 @@
 package com.sqlteacher.desktop.controller;
+import com.sqlteacher.desktop.AppI18n;
 
 import com.sqlteacher.desktop.appearance.UiIcon;
 import com.sqlteacher.desktop.appearance.UiIcons;
@@ -38,7 +39,7 @@ public final class SqlRiskConfirmDialogController {
     @FXML
     private void initialize() {
         riskTitleLabel.setGraphic(UiIcons.create(UiIcon.WARNING, 24));
-        riskTitleLabel.setAccessibleText("高危 SQL 操作确认");
+        riskTitleLabel.setAccessibleText(AppI18n.get("SqlRiskConfirmDialogController.1"));
     }
 
     /**
@@ -51,8 +52,8 @@ public final class SqlRiskConfirmDialogController {
      */
     public void setContent(String sql, String riskType, String affectedTables, Runnable onConfirm) {
         this.onConfirm = onConfirm;
-        riskTypeLabel.setText("风险类型：" + riskType);
-        affectedTablesLabel.setText("涉及数据表：" + affectedTables);
+        riskTypeLabel.setText(AppI18n.get("SqlRiskConfirmDialogController.2") + riskType);
+        affectedTablesLabel.setText(AppI18n.get("SqlRiskConfirmDialogController.3") + affectedTables);
         sqlPreviewArea.setText(sql);
     }
 

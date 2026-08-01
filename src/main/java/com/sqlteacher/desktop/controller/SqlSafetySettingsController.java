@@ -1,4 +1,5 @@
 package com.sqlteacher.desktop.controller;
+import com.sqlteacher.desktop.AppI18n;
 
 import com.sqlteacher.application.risk.SqlSafetyModeService;
 import javafx.fxml.FXML;
@@ -39,32 +40,32 @@ public final class SqlSafetySettingsController {
             renderStatus();
         } catch (RuntimeException error) {
             unrestrictedModeCheck.setSelected(safetyModeService.isUnrestrictedModeEnabled());
-            statusLabel.setText(error.getMessage() == null ? "SQL 安全设置保存失败。" : error.getMessage());
+            statusLabel.setText(error.getMessage() == null ? AppI18n.get("SqlSafetySettingsController.1") : error.getMessage());
             setStatusStyle("status-error");
         }
     }
 
     private boolean confirmEnable() {
-        ButtonType enable = new ButtonType("确认启用无限模式", ButtonBar.ButtonData.OK_DONE);
+        ButtonType enable = new ButtonType(AppI18n.get("SqlSafetySettingsController.2"), ButtonBar.ButtonData.OK_DONE);
         Alert alert = new Alert(
             Alert.AlertType.WARNING,
-            "启用后，SQLTeacher 将不再拦截 DROP、TRUNCATE、UPDATE、DELETE、多语句等操作，"
-                + "也不会要求二次确认。SQL 可能永久删除或修改数据。\n\n"
-                + "该设置仅影响当前设备；数据库权限、驱动限制仍然有效。AI 只会生成草稿，不会自动执行。",
+            AppI18n.get("SqlSafetySettingsController.3")
+                + AppI18n.get("SqlSafetySettingsController.4")
+                + AppI18n.get("SqlSafetySettingsController.5"),
             enable,
             ButtonType.CANCEL
         );
-        alert.setTitle("启用无限模式");
-        alert.setHeaderText("关闭应用层 SQL 安全限制？");
+        alert.setTitle(AppI18n.get("SqlSafetySettingsController.6"));
+        alert.setHeaderText(AppI18n.get("SqlSafetySettingsController.7"));
         return alert.showAndWait().filter(enable::equals).isPresent();
     }
 
     private void renderStatus() {
         if (safetyModeService.isUnrestrictedModeEnabled()) {
-            statusLabel.setText("无限模式已启用：危险 SQL 将直接交给数据库执行。建议只用于可恢复的练习数据。");
+            statusLabel.setText(AppI18n.get("SqlSafetySettingsController.8"));
             setStatusStyle("status-error");
         } else {
-            statusLabel.setText("标准安全模式已启用：危险、多语句及需确认的 SQL 会被拦截或提示。");
+            statusLabel.setText(AppI18n.get("SqlSafetySettingsController.9"));
             setStatusStyle("status-success");
         }
     }

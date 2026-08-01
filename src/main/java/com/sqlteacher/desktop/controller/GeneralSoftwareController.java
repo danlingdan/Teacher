@@ -84,7 +84,7 @@ public final class GeneralSoftwareController {
     @FXML private void initialize() {
         buildInfoLabel.setText(ApplicationBuildInfo.current().supportSummary());
         proxyModeCombo.setItems(FXCollections.observableArrayList(GeneralSoftwareSettings.ProxyMode.values()));
-        languageCombo.setItems(FXCollections.observableArrayList("简体中文", "English"));
+        languageCombo.setItems(FXCollections.observableArrayList(AppI18n.get("GeneralSoftwareController.1"), "English"));
         proxyPortSpinner.setValueFactory(new SpinnerValueFactory.IntegerSpinnerValueFactory(0, 65535, 0));
         reportTypeCombo.setItems(FXCollections.observableArrayList(ProblemReportDraft.Type.values()));
         reportSeverityCombo.setItems(FXCollections.observableArrayList(ProblemReportDraft.Severity.values()));
@@ -95,18 +95,18 @@ public final class GeneralSoftwareController {
         if (!helpTopicCombo.getItems().isEmpty()) helpTopicCombo.setValue(helpTopicCombo.getItems().getFirst());
         loadSettings(); refreshSystemViews(); previewDiagnostics();
         downloadButton.setDisable(true); installButton.setDisable(true); updateProgress.setVisible(false);
-        if (diagnostics.previousRunCrashed()) reportStatusLabel.setText("检测到上次异常退出。你可以预览并提交最小诊断信息。");
+        if (diagnostics.previousRunCrashed()) reportStatusLabel.setText(AppI18n.get("GeneralSoftwareController.2"));
     }
 
     @FXML private void onCheckUpdates() {
-        updateStatusLabel.setText("正在检查稳定版更新…");
+        updateStatusLabel.setText(AppI18n.get("GeneralSoftwareController.3"));
         run(() -> updates.check(true), result -> {
             updateStatusLabel.setText(result.message()); available = result.available();
             downloadButton.setDisable(result.status() != UpdateCheckResult.Status.AVAILABLE && result.status() != UpdateCheckResult.Status.UNSUPPORTED);
-            updateDetailsLabel.setText(available == null ? "" : "发布时间：" + available.publishedAt() + "\n发布说明：" + available.releaseNotesUrl()
-                + "\n安装包：" + formatBytes(available.installerSize()));
+            updateDetailsLabel.setText(available == null ? "" : AppI18n.get("GeneralSoftwareController.4") + available.publishedAt() + AppI18n.get("GeneralSoftwareController.5") + available.releaseNotesUrl()
+                + AppI18n.get("GeneralSoftwareController.6") + formatBytes(available.installerSize()));
             refreshSystemViews();
-        }, error -> updateStatusLabel.setText("检查失败：" + safe(error)));
+        }, error -> updateStatusLabel.setText(AppI18n.get("GeneralSoftwareController.7") + safe(error)));
     }
 
     @FXML private void onDownloadUpdate() {
@@ -114,20 +114,20 @@ public final class GeneralSoftwareController {
         updateProgress.setProgress(0); updateProgress.setVisible(true); downloadButton.setDisable(true);
         run(() -> updates.download(available, value -> Platform.runLater(() -> updateProgress.setProgress(value))), result -> {
             installer = result; installButton.setDisable(!updates.ready(available, installer));
-            updateStatusLabel.setText(installButton.isDisable() ? "下载文件未通过验证。" : "下载和完整性验证完成，可以安装。");
+            updateStatusLabel.setText(installButton.isDisable() ? AppI18n.get("GeneralSoftwareController.8") : AppI18n.get("GeneralSoftwareController.9"));
             refreshSystemViews();
-        }, error -> { updateStatusLabel.setText("下载失败：" + safe(error)); downloadButton.setDisable(false); });
+        }, error -> { updateStatusLabel.setText(AppI18n.get("GeneralSoftwareController.10") + safe(error)); downloadButton.setDisable(false); });
     }
 
     @FXML private void onInstallUpdate() {
         if (available == null || installer == null || !updates.ready(available, installer)) return;
-        Alert alert = new Alert(Alert.AlertType.CONFIRMATION, "SQLTeacher 将启动已验证的安装器并退出。请先保存正在编辑的内容。", ButtonType.CANCEL, ButtonType.OK);
-        alert.setTitle("安装 SQLTeacher " + available.version()); alert.setHeaderText("确认退出并启动安装器？");
+        Alert alert = new Alert(Alert.AlertType.CONFIRMATION, AppI18n.get("GeneralSoftwareController.11"), ButtonType.CANCEL, ButtonType.OK);
+        alert.setTitle(AppI18n.get("GeneralSoftwareController.12") + available.version()); alert.setHeaderText(AppI18n.get("GeneralSoftwareController.13"));
         if (alert.showAndWait().orElse(ButtonType.CANCEL) != ButtonType.OK) return;
         updates.launchInstaller(available, installer); Platform.exit();
     }
 
-    @FXML private void onSkipUpdate() { if (available != null) { updates.skip(available.version()); updateStatusLabel.setText("已跳过 " + available.version() + " 的自动提醒；手动检查仍可查看。"); } }
+    @FXML private void onSkipUpdate() { if (available != null) { updates.skip(available.version()); updateStatusLabel.setText(AppI18n.get("GeneralSoftwareController.14") + available.version() + AppI18n.get("GeneralSoftwareController.15")); } }
 
     @FXML private void onSaveGeneralSettings() {
         GeneralSoftwareSettings old = system.settings();
@@ -139,83 +139,83 @@ public final class GeneralSoftwareController {
                 supportLoggingCheck.isSelected(), supportExpiry, old.updateMirrorsEnabled(), language));
             AppI18n.applyLanguage(language);
             applyAccessibility();
-            connectivityLabel.setText("通用设置已原子保存。界面语言已切换，请重启应用后完整生效；代理将在下次启动时应用；代理密码不会写入此设置文件。");
-        } catch (RuntimeException error) { connectivityLabel.setText("设置未保存：" + safe(error)); }
+            connectivityLabel.setText(AppI18n.get("GeneralSoftwareController.16"));
+        } catch (RuntimeException error) { connectivityLabel.setText(AppI18n.get("GeneralSoftwareController.17") + safe(error)); }
     }
 
     @FXML private void onExportSettings() {
-        FileChooser chooser = new FileChooser(); chooser.setTitle("导出非敏感设置"); chooser.setInitialFileName("SQLTeacher-settings-1.10.json");
+        FileChooser chooser = new FileChooser(); chooser.setTitle(AppI18n.get("GeneralSoftwareController.18")); chooser.setInitialFileName("SQLTeacher-settings-1.10.json");
         File selected = chooser.showSaveDialog(root.getScene().getWindow());
-        if (selected != null) connectivityLabel.setText("设置已导出：" + system.exportSettings(selected.toPath()).getFileName());
+        if (selected != null) connectivityLabel.setText(AppI18n.get("GeneralSoftwareController.19") + system.exportSettings(selected.toPath()).getFileName());
     }
     @FXML private void onImportSettings() {
-        FileChooser chooser = new FileChooser(); chooser.setTitle("导入非敏感设置"); chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("JSON", "*.json"));
+        FileChooser chooser = new FileChooser(); chooser.setTitle(AppI18n.get("GeneralSoftwareController.20")); chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("JSON", "*.json"));
         File selected = chooser.showOpenDialog(root.getScene().getWindow());
         if (selected == null) return;
-        try { system.importSettings(selected.toPath()); loadSettings(); connectivityLabel.setText("设置导入完成。凭据和会话不会从文件导入。"); }
-        catch (RuntimeException error) { connectivityLabel.setText("设置导入失败：" + safe(error)); }
+        try { system.importSettings(selected.toPath()); loadSettings(); connectivityLabel.setText(AppI18n.get("GeneralSoftwareController.21")); }
+        catch (RuntimeException error) { connectivityLabel.setText(AppI18n.get("GeneralSoftwareController.22") + safe(error)); }
     }
-    @FXML private void onResetSettings() { system.saveSettings(GeneralSoftwareSettings.defaults()); loadSettings(); connectivityLabel.setText("通用设置已恢复默认；账号、数据库和用户数据未删除。"); }
-    @FXML private void onConnectivityCheck() { connectivityLabel.setText("正在检查…"); run(system::connectivitySummary, value -> connectivityLabel.setText(value), error -> connectivityLabel.setText("检查失败：" + safe(error))); }
+    @FXML private void onResetSettings() { system.saveSettings(GeneralSoftwareSettings.defaults()); loadSettings(); connectivityLabel.setText(AppI18n.get("GeneralSoftwareController.23")); }
+    @FXML private void onConnectivityCheck() { connectivityLabel.setText(AppI18n.get("GeneralSoftwareController.24")); run(system::connectivitySummary, value -> connectivityLabel.setText(value), error -> connectivityLabel.setText(AppI18n.get("GeneralSoftwareController.25") + safe(error))); }
     @FXML private void onRefreshStorage() { refreshSystemViews(); }
     @FXML private void onClearRebuildable() {
-        Alert alert = new Alert(Alert.AlertType.CONFIRMATION, "只会清理可重建缓存、过期诊断和未校验更新，不删除数据库、知识原文或备份。", ButtonType.CANCEL, ButtonType.OK);
-        if (alert.showAndWait().orElse(ButtonType.CANCEL) == ButtonType.OK) run(system::clearRebuildableFiles, ignored -> refreshSystemViews(), error -> storageLabel.setText("清理失败：" + safe(error)));
+        Alert alert = new Alert(Alert.AlertType.CONFIRMATION, AppI18n.get("GeneralSoftwareController.26"), ButtonType.CANCEL, ButtonType.OK);
+        if (alert.showAndWait().orElse(ButtonType.CANCEL) == ButtonType.OK) run(system::clearRebuildableFiles, ignored -> refreshSystemViews(), error -> storageLabel.setText(AppI18n.get("GeneralSoftwareController.27") + safe(error)));
     }
 
     @FXML private void onPreviewDiagnostics() { previewDiagnostics(); }
     @FXML private void onExportDiagnostics() {
-        DirectoryChooser chooser = new DirectoryChooser(); chooser.setTitle("选择诊断包保存目录"); File selected = chooser.showDialog(root.getScene().getWindow());
+        DirectoryChooser chooser = new DirectoryChooser(); chooser.setTitle(AppI18n.get("GeneralSoftwareController.28")); File selected = chooser.showDialog(root.getScene().getWindow());
         if (selected == null) return;
-        run(() -> diagnostics.export(selection(), selected.toPath()), path -> reportStatusLabel.setText("诊断包已导出：" + path.getFileName()), error -> reportStatusLabel.setText("导出失败：" + safe(error)));
+        run(() -> diagnostics.export(selection(), selected.toPath()), path -> reportStatusLabel.setText(AppI18n.get("GeneralSoftwareController.29") + path.getFileName()), error -> reportStatusLabel.setText(AppI18n.get("GeneralSoftwareController.30") + safe(error)));
     }
     @FXML private void onSubmitReport() {
         try {
             ProblemReportDraft draft = new ProblemReportDraft(reportDraftId, reportTypeCombo.getValue(), reportSeverityCombo.getValue(),
                 reportSummaryField.getText(), reportDescriptionArea.getText(), reportStepsArea.getText(), "", "", reportContactField.getText(), selection(), null);
             Map<String, Object> preview = diagnostics.preview(selection()); diagnosticPreviewArea.setText(pretty(preview));
-            Alert confirmation = new Alert(Alert.AlertType.CONFIRMATION, "将发送表单内容和右侧预览的诊断字段。不会发送数据库、SQL、Prompt、密码、Token 或 AI Key。", ButtonType.CANCEL, ButtonType.OK);
-            confirmation.setHeaderText("确认提交问题反馈？");
+            Alert confirmation = new Alert(Alert.AlertType.CONFIRMATION, AppI18n.get("GeneralSoftwareController.31"), ButtonType.CANCEL, ButtonType.OK);
+            confirmation.setHeaderText(AppI18n.get("GeneralSoftwareController.32"));
             if (confirmation.showAndWait().orElse(ButtonType.CANCEL) != ButtonType.OK) return;
             String token = sessions.refresh().map(value -> value.accessToken()).orElse(null);
-            reportStatusLabel.setText("正在提交…");
+            reportStatusLabel.setText(AppI18n.get("GeneralSoftwareController.33"));
             run(() -> reports.submit(draft, preview, token), receipt -> {
-                reportStatusLabel.setText("提交成功，反馈编号：" + receipt.reportId());
+                reportStatusLabel.setText(AppI18n.get("GeneralSoftwareController.34") + receipt.reportId());
                 reportDraftId = UUID.randomUUID().toString();
-                system.notify(AppNotification.Category.SUPPORT, "问题反馈已提交", "反馈编号：" + receipt.reportId(), "support"); refreshSystemViews();
-            }, error -> reportStatusLabel.setText("提交失败，草稿仍保留在页面：" + safe(error)));
-        } catch (RuntimeException error) { reportStatusLabel.setText("请检查反馈内容：" + safe(error)); }
+                system.notify(AppNotification.Category.SUPPORT, AppI18n.get("GeneralSoftwareController.35"), AppI18n.get("GeneralSoftwareController.36") + receipt.reportId(), "support"); refreshSystemViews();
+            }, error -> reportStatusLabel.setText(AppI18n.get("GeneralSoftwareController.37") + safe(error)));
+        } catch (RuntimeException error) { reportStatusLabel.setText(AppI18n.get("GeneralSoftwareController.38") + safe(error)); }
     }
 
     @FXML private void onChangePassword() {
-        if (sessions.current().isEmpty()) { accountStatusLabel.setText("访客没有云端密码，请先登录。"); return; }
-        if (!newPasswordField.getText().equals(confirmPasswordField.getText())) { accountStatusLabel.setText("两次输入的新密码不一致。"); return; }
+        if (sessions.current().isEmpty()) { accountStatusLabel.setText(AppI18n.get("GeneralSoftwareController.39")); return; }
+        if (!newPasswordField.getText().equals(confirmPasswordField.getText())) { accountStatusLabel.setText(AppI18n.get("GeneralSoftwareController.40")); return; }
         char[] current = currentPasswordField.getText().toCharArray(); char[] replacement = newPasswordField.getText().toCharArray();
-        String token = sessions.current().orElseThrow().accessToken(); accountStatusLabel.setText("正在修改密码…");
+        String token = sessions.current().orElseThrow().accessToken(); accountStatusLabel.setText(AppI18n.get("GeneralSoftwareController.41"));
         run(() -> { cloudApi.changePassword(token, current, replacement); return true; }, ignored -> {
-            sessions.signOut(); clearPasswords(); accountStatusLabel.setText("密码已修改，所有会话已撤销，请重新登录。"); switchIdentity.run();
-        }, error -> { java.util.Arrays.fill(current, '\0'); java.util.Arrays.fill(replacement, '\0'); accountStatusLabel.setText("修改失败：" + safe(error)); });
+            sessions.signOut(); clearPasswords(); accountStatusLabel.setText(AppI18n.get("GeneralSoftwareController.42")); switchIdentity.run();
+        }, error -> { java.util.Arrays.fill(current, '\0'); java.util.Arrays.fill(replacement, '\0'); accountStatusLabel.setText(AppI18n.get("GeneralSoftwareController.43") + safe(error)); });
     }
 
     private void loadSettings() {
         GeneralSoftwareSettings value = system.settings(); automaticUpdatesCheck.setSelected(value.automaticUpdateChecks());
         proxyModeCombo.setValue(value.proxyMode()); proxyHostField.setText(value.proxyHost()); proxyPortSpinner.getValueFactory().setValue(value.proxyPort());
         reducedMotionCheck.setSelected(value.reducedMotion()); highContrastCheck.setSelected(value.highContrast()); supportLoggingCheck.setSelected(value.supportLogging());
-        languageCombo.setValue("en".equalsIgnoreCase(value.language()) ? "English" : "简体中文");
+        languageCombo.setValue("en".equalsIgnoreCase(value.language()) ? "English" : AppI18n.get("GeneralSoftwareController.44"));
         applyAccessibility();
     }
     private void refreshSystemViews() {
         StorageOverview storage = system.storage(); storageLabel.setText(storage.categoryBytes().entrySet().stream().map(item -> item.getKey() + " " + formatBytes(item.getValue())).collect(java.util.stream.Collectors.joining(" · "))
-            + (storage.usableBytes() >= 0 ? "\n可用空间 " + formatBytes(storage.usableBytes()) : ""));
+            + (storage.usableBytes() >= 0 ? AppI18n.get("GeneralSoftwareController.45") + formatBytes(storage.usableBytes()) : ""));
         taskList.setItems(FXCollections.observableArrayList(system.tasks().stream().map(item -> item.title() + " · " + item.status() + (item.errorCode().isBlank() ? "" : " · " + item.errorCode())).toList()));
         notificationList.setItems(FXCollections.observableArrayList(system.notifications().stream().map(item -> (item.read() ? "" : "● ") + item.title() + " · " + item.message()).toList()));
     }
     private DiagnosticSelection selection() { return new DiagnosticSelection(environmentCheck.isSelected(), errorsCheck.isSelected(), networkCheck.isSelected(), updateStateCheck.isSelected()); }
     private void previewDiagnostics() { diagnosticPreviewArea.setText(pretty(diagnostics.preview(selection()))); }
-    private static String pretty(Object value) { try { return new com.fasterxml.jackson.databind.ObjectMapper().findAndRegisterModules().writerWithDefaultPrettyPrinter().writeValueAsString(value); } catch (Exception error) { return "无法生成预览"; } }
+    private static String pretty(Object value) { try { return new com.fasterxml.jackson.databind.ObjectMapper().findAndRegisterModules().writerWithDefaultPrettyPrinter().writeValueAsString(value); } catch (Exception error) { return AppI18n.get("GeneralSoftwareController.46"); } }
     private static String safe(Throwable error) {
         String value = error.getMessage();
-        if (value == null || value.isBlank()) return "操作未完成，请稍后重试";
+        if (value == null || value.isBlank()) return AppI18n.get("GeneralSoftwareController.47");
         value = value.replaceAll("(?i)(bearer|token|password|authorization|api.?key)\\s*[:=]?\\s*\\S+", "$1=[REDACTED]")
             .replaceAll("(?i)([A-Z]:\\\\|/home/|/Users/)[^\\s]+", "[LOCAL_PATH]");
         return value.substring(0, Math.min(value.length(), 240));

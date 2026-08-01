@@ -1,4 +1,5 @@
 package com.sqlteacher.desktop.controller;
+import com.sqlteacher.desktop.AppI18n;
 
 import com.sqlteacher.application.collaboration.CloudApiClient;
 import com.sqlteacher.application.collaboration.CloudNotification;
@@ -135,23 +136,23 @@ public final class TeachingContentController {
         feedbackDraftStyleCombo.setValue(FeedbackDraftStyle.CONCISE);
         assignmentDueTimeCombo.getItems().setAll(DeadlineValueConverter.timeOptions());
         assignmentDueTimeCombo.setValue(DeadlineValueConverter.DEFAULT_TIME);
-        assignmentClassroomCombo.setPromptText("选择发布班级");
-        learningClassroomCombo.setPromptText("选择班级");
-        learningAssignmentCombo.setPromptText("选择任务");
-        learningStudentCombo.setPromptText("全部学生");
+        assignmentClassroomCombo.setPromptText(AppI18n.get("TeachingContentController.1"));
+        learningClassroomCombo.setPromptText(AppI18n.get("TeachingContentController.2"));
+        learningAssignmentCombo.setPromptText(AppI18n.get("TeachingContentController.3"));
+        learningStudentCombo.setPromptText(AppI18n.get("TeachingContentController.4"));
         learningStudentCombo.setVisible(teacher);
         learningStudentCombo.setManaged(teacher);
-        courseList.setPlaceholder(new Label("暂无云端课程"));
-        sectionList.setPlaceholder(new Label("暂无章节"));
-        knowledgePointList.setPlaceholder(new Label("暂无知识点"));
-        exerciseList.setPlaceholder(new Label("暂无已发布题目版本"));
-        objectiveList.setPlaceholder(new Label("暂无课程目标"));
+        courseList.setPlaceholder(new Label(AppI18n.get("TeachingContentController.5")));
+        sectionList.setPlaceholder(new Label(AppI18n.get("TeachingContentController.6")));
+        knowledgePointList.setPlaceholder(new Label(AppI18n.get("TeachingContentController.7")));
+        exerciseList.setPlaceholder(new Label(AppI18n.get("TeachingContentController.8")));
+        objectiveList.setPlaceholder(new Label(AppI18n.get("TeachingContentController.9")));
         objectiveResourceTypeCombo.getItems().setAll(ObjectiveResourceType.values());
         objectiveResourceTypeCombo.setValue(ObjectiveResourceType.KNOWLEDGE_POINT);
-        feedbackList.setPlaceholder(new Label("输入班级和任务后刷新反馈"));
-        masteryList.setPlaceholder(new Label("输入班级后查看薄弱点建议"));
-        notificationList.setPlaceholder(new Label("暂无站内通知"));
-        objectiveSummaryList.setPlaceholder(new Label("选择课程和班级后刷新目标分布"));
+        feedbackList.setPlaceholder(new Label(AppI18n.get("TeachingContentController.10")));
+        masteryList.setPlaceholder(new Label(AppI18n.get("TeachingContentController.11")));
+        notificationList.setPlaceholder(new Label(AppI18n.get("TeachingContentController.12")));
+        objectiveSummaryList.setPlaceholder(new Label(AppI18n.get("TeachingContentController.13")));
         confirmInterventionButton.setDisable(true);
         courseList.getSelectionModel().selectedIndexProperty().addListener((ignored, oldValue, newValue) -> {
             int index = newValue.intValue();
@@ -214,7 +215,7 @@ public final class TeachingContentController {
 
     @FXML
     private void onRefresh() {
-        run("正在刷新课程协作数据…", () -> {
+        run(AppI18n.get("TeachingContentController.14"), () -> {
             String token = token();
             String account = accountId();
             List<CourseCatalog> loadedCourses;
@@ -248,7 +249,7 @@ public final class TeachingContentController {
                 notifications = uiNotifications;
                 renderNotifications();
                 applyLearningFilters(uiClassrooms, uiAssignments);
-                showStatus(cached ? "云端不可用，已加载当前账号的本地缓存" : "课程与通知已刷新", false);
+                showStatus(cached ? AppI18n.get("TeachingContentController.15") : AppI18n.get("TeachingContentController.16"), false);
             });
         });
     }
@@ -256,9 +257,9 @@ public final class TeachingContentController {
     @FXML
     private void onCreateCourse() {
         requireTeacher();
-        String name = required(courseNameField.getText(), "请输入课程名称");
+        String name = required(courseNameField.getText(), AppI18n.get("TeachingContentController.17"));
         if (name == null) return;
-        run("正在创建课程…", () -> {
+        run(AppI18n.get("TeachingContentController.18"), () -> {
             CourseCatalog created = api.createCourse(token(), name, courseDescriptionField.getText());
             List<CourseCatalog> loaded = api.listCourses(token());
             cache.saveCourses(accountId(), loaded);
@@ -268,7 +269,7 @@ public final class TeachingContentController {
                 selectCourse(created.id());
                 courseNameField.clear();
                 courseDescriptionField.clear();
-                showStatus("课程已创建", false);
+                showStatus(AppI18n.get("TeachingContentController.19"), false);
             });
         });
     }
@@ -277,11 +278,11 @@ public final class TeachingContentController {
     private void onCreateSection() {
         requireTeacher();
         CourseCatalog course = selectedCourse();
-        String name = required(sectionNameField.getText(), "请先输入章节名称");
+        String name = required(sectionNameField.getText(), AppI18n.get("TeachingContentController.20"));
         if (course == null || name == null) return;
-        run("正在创建章节…", () -> {
+        run(AppI18n.get("TeachingContentController.21"), () -> {
             api.createCourseSection(token(), course.id(), name, nonNegativeOrder(sectionOrderField.getText(), sections.size()));
-            loadCourseDetails(course.id(), "章节已创建");
+            loadCourseDetails(course.id(), AppI18n.get("TeachingContentController.22"));
             Platform.runLater(sectionNameField::clear);
         });
     }
@@ -290,9 +291,9 @@ public final class TeachingContentController {
     private void onSaveCourse() {
         requireTeacher();
         CourseCatalog course = selectedCourse();
-        String name = required(courseNameField.getText(), "请输入课程名称");
+        String name = required(courseNameField.getText(), AppI18n.get("TeachingContentController.23"));
         if (course == null || name == null) return;
-        run("正在更新课程…", () -> {
+        run(AppI18n.get("TeachingContentController.24"), () -> {
             CourseCatalog updated = api.updateCourse(token(), course.id(), name, courseDescriptionField.getText(),
                 course.status(), course.version());
             List<CourseCatalog> loaded = api.listCourses(token());
@@ -301,7 +302,7 @@ public final class TeachingContentController {
                 courses = loaded;
                 courseList.getItems().setAll(loaded.stream().map(this::courseLabel).toList());
                 selectCourse(updated.id());
-                showStatus("课程已更新", false);
+                showStatus(AppI18n.get("TeachingContentController.25"), false);
             });
         });
     }
@@ -312,7 +313,7 @@ public final class TeachingContentController {
         CourseCatalog course = selectedCourse();
         if (course == null) return;
         ContentStatus next = course.status() == ContentStatus.ACTIVE ? ContentStatus.INACTIVE : ContentStatus.ACTIVE;
-        run("正在更新课程状态…", () -> {
+        run(AppI18n.get("TeachingContentController.26"), () -> {
             api.updateCourse(token(), course.id(), course.name(), course.description(), next, course.version());
             List<CourseCatalog> loaded = api.listCourses(token());
             cache.saveCourses(accountId(), loaded);
@@ -320,7 +321,7 @@ public final class TeachingContentController {
                 courses = loaded;
                 courseList.getItems().setAll(loaded.stream().map(this::courseLabel).toList());
                 selectCourse(course.id());
-                showStatus(next == ContentStatus.ACTIVE ? "课程已恢复" : "课程已停用，历史任务仍保留", false);
+                showStatus(next == ContentStatus.ACTIVE ? AppI18n.get("TeachingContentController.27") : AppI18n.get("TeachingContentController.28"), false);
             });
         });
     }
@@ -330,12 +331,12 @@ public final class TeachingContentController {
         requireTeacher();
         CourseCatalog course = selectedCourse();
         CourseSection section = selectedSection();
-        String name = required(sectionNameField.getText(), "请输入章节名称");
+        String name = required(sectionNameField.getText(), AppI18n.get("TeachingContentController.29"));
         if (course == null || section == null || name == null) return;
-        run("正在更新章节…", () -> {
+        run(AppI18n.get("TeachingContentController.30"), () -> {
             api.updateCourseSection(token(), course.id(), section.id(), name,
                 nonNegativeOrder(sectionOrderField.getText(), section.sortOrder()), section.status(), section.version());
-            loadCourseDetails(course.id(), "章节已更新");
+            loadCourseDetails(course.id(), AppI18n.get("TeachingContentController.31"));
         });
     }
 
@@ -346,10 +347,10 @@ public final class TeachingContentController {
         CourseSection section = selectedSection();
         if (course == null || section == null) return;
         ContentStatus next = section.status() == ContentStatus.ACTIVE ? ContentStatus.INACTIVE : ContentStatus.ACTIVE;
-        run("正在更新章节状态…", () -> {
+        run(AppI18n.get("TeachingContentController.32"), () -> {
             api.updateCourseSection(token(), course.id(), section.id(), section.name(), section.sortOrder(), next,
                 section.version());
-            loadCourseDetails(course.id(), next == ContentStatus.ACTIVE ? "章节已恢复" : "章节已停用");
+            loadCourseDetails(course.id(), next == ContentStatus.ACTIVE ? AppI18n.get("TeachingContentController.33") : AppI18n.get("TeachingContentController.34"));
         });
     }
 
@@ -357,14 +358,14 @@ public final class TeachingContentController {
     private void onCreateKnowledgePoint() {
         requireTeacher();
         CourseCatalog course = selectedCourse();
-        String name = required(knowledgePointNameField.getText(), "请先输入知识点名称");
+        String name = required(knowledgePointNameField.getText(), AppI18n.get("TeachingContentController.35"));
         if (course == null || name == null) return;
         CourseSection section = selectedSection();
-        run("正在创建知识点…", () -> {
+        run(AppI18n.get("TeachingContentController.36"), () -> {
             api.createKnowledgePoint(token(), course.id(), section == null ? null : section.id(), name,
                 knowledgePointDescriptionField.getText(),
                 nonNegativeOrder(knowledgePointOrderField.getText(), knowledgePoints.size()));
-            loadCourseDetails(course.id(), "知识点已创建");
+            loadCourseDetails(course.id(), AppI18n.get("TeachingContentController.37"));
             Platform.runLater(() -> {
                 knowledgePointNameField.clear();
                 knowledgePointDescriptionField.clear();
@@ -378,13 +379,13 @@ public final class TeachingContentController {
         CourseCatalog course = selectedCourse();
         KnowledgePoint point = selectedKnowledgePoint();
         CourseSection section = selectedSection();
-        String name = required(knowledgePointNameField.getText(), "请输入知识点名称");
+        String name = required(knowledgePointNameField.getText(), AppI18n.get("TeachingContentController.38"));
         if (course == null || point == null || name == null) return;
-        run("正在更新知识点…", () -> {
+        run(AppI18n.get("TeachingContentController.39"), () -> {
             api.updateKnowledgePoint(token(), course.id(), point.id(), section == null ? point.sectionId() : section.id(),
                 name, knowledgePointDescriptionField.getText(),
                 nonNegativeOrder(knowledgePointOrderField.getText(), point.sortOrder()), point.status(), point.version());
-            loadCourseDetails(course.id(), "知识点已更新");
+            loadCourseDetails(course.id(), AppI18n.get("TeachingContentController.40"));
         });
     }
 
@@ -395,10 +396,10 @@ public final class TeachingContentController {
         KnowledgePoint point = selectedKnowledgePoint();
         if (course == null || point == null) return;
         ContentStatus next = point.status() == ContentStatus.ACTIVE ? ContentStatus.INACTIVE : ContentStatus.ACTIVE;
-        run("正在更新知识点状态…", () -> {
+        run(AppI18n.get("TeachingContentController.41"), () -> {
             api.updateKnowledgePoint(token(), course.id(), point.id(), point.sectionId(), point.name(),
                 point.description(), point.sortOrder(), next, point.version());
-            loadCourseDetails(course.id(), next == ContentStatus.ACTIVE ? "知识点已恢复" : "知识点已停用");
+            loadCourseDetails(course.id(), next == ContentStatus.ACTIVE ? AppI18n.get("TeachingContentController.42") : AppI18n.get("TeachingContentController.43"));
         });
     }
 
@@ -406,17 +407,17 @@ public final class TeachingContentController {
     private void onPublishExercise() {
         requireTeacher();
         CourseCatalog course = selectedCourse();
-        String title = required(exerciseTitleField.getText(), "请输入题目标题");
-        String prompt = required(exercisePromptField.getText(), "请输入题目说明");
-        String dataset = required(datasetVersionField.getText(), "请输入数据集版本");
-        String rule = required(evaluationRuleField.getText(), "请输入确定性评测规则");
+        String title = required(exerciseTitleField.getText(), AppI18n.get("TeachingContentController.44"));
+        String prompt = required(exercisePromptField.getText(), AppI18n.get("TeachingContentController.45"));
+        String dataset = required(datasetVersionField.getText(), AppI18n.get("TeachingContentController.46"));
+        String rule = required(evaluationRuleField.getText(), AppI18n.get("TeachingContentController.47"));
         if (course == null || title == null || prompt == null || dataset == null || rule == null) return;
         KnowledgePoint point = selectedKnowledgePoint();
         List<String> pointIds = point == null ? List.of() : List.of(point.id());
-        run("正在发布不可变题目版本…", () -> {
+        run(AppI18n.get("TeachingContentController.48"), () -> {
             api.publishSharedExercise(token(), course.id(), blankToNull(localExerciseIdField.getText()), title,
                 prompt, dataset, rule, pointIds, UUID.randomUUID().toString());
-            loadCourseDetails(course.id(), "题目版本已发布");
+            loadCourseDetails(course.id(), AppI18n.get("TeachingContentController.49"));
         });
     }
 
@@ -424,21 +425,21 @@ public final class TeachingContentController {
     private void onCreateAssignmentSnapshot() {
         requireTeacher();
         SharedExerciseVersion exercise = selectedExercise();
-        String classroomId = selectedId(assignmentClassroomCombo, "请选择发布班级");
+        String classroomId = selectedId(assignmentClassroomCombo, AppI18n.get("TeachingContentController.50"));
         if (exercise == null || classroomId == null) return;
         Instant dueAt = DeadlineValueConverter.toInstant(
             assignmentDueDatePicker.getValue(), assignmentDueTimeCombo.getValue(), ZoneId.systemDefault()
         );
-        run("正在创建带快照的任务…", () -> {
+        run(AppI18n.get("TeachingContentController.51"), () -> {
             var assignment = api.createAssignmentFromVersion(token(), classroomId, exercise.id(),
-                assignmentTitleField.getText(), "来自云端共享题库 v" + exercise.version(), dueAt,
+                assignmentTitleField.getText(), AppI18n.get("TeachingContentController.52") + exercise.version(), dueAt,
                 UUID.randomUUID().toString());
             List<ClassAssignment> loaded = api.listAssignments(token(), classroomId);
             Platform.runLater(() -> {
                 selectOption(learningClassroomCombo, classroomId);
                 applyLearningAssignments(loaded);
                 selectOption(learningAssignmentCombo, assignment.id());
-                showStatus("任务已发布，内容快照已冻结", false);
+                showStatus(AppI18n.get("TeachingContentController.53"), false);
             });
         });
     }
@@ -450,19 +451,19 @@ public final class TeachingContentController {
         SharedExerciseVersion exercise = selectedExercise();
         if (course == null || exercise == null) return;
         ContentStatus next = exercise.status() == ContentStatus.ACTIVE ? ContentStatus.INACTIVE : ContentStatus.ACTIVE;
-        run("正在更新题目状态…", () -> {
+        run(AppI18n.get("TeachingContentController.54"), () -> {
             api.setSharedExerciseStatus(token(), course.id(), exercise.exerciseId(), next);
-            loadCourseDetails(course.id(), next == ContentStatus.ACTIVE ? "题目已恢复" : "题目已停用，历史快照不受影响");
+            loadCourseDetails(course.id(), next == ContentStatus.ACTIVE ? AppI18n.get("TeachingContentController.55") : AppI18n.get("TeachingContentController.56"));
         });
     }
 
     @FXML
     private void onRefreshLearning() {
-        String classroomId = selectedId(learningClassroomCombo, "请选择班级");
+        String classroomId = selectedId(learningClassroomCombo, AppI18n.get("TeachingContentController.57"));
         if (classroomId == null) return;
-        String assignmentId = selectedId(learningAssignmentCombo, "请选择任务");
+        String assignmentId = selectedId(learningAssignmentCombo, AppI18n.get("TeachingContentController.58"));
         if (assignmentId == null) return;
-        run("正在刷新反馈与薄弱点…", () -> {
+        run(AppI18n.get("TeachingContentController.59"), () -> {
             String requestedStudent = isTeacher() ? optionalSelectedId(learningStudentCombo) : null;
             String account = accountId();
             List<SubmissionFeedback> loadedFeedback;
@@ -490,7 +491,7 @@ public final class TeachingContentController {
                 feedback = uiFeedback;
                 feedbackList.getItems().setAll(uiFeedback.stream().map(this::feedbackLabel).toList());
                 masteryList.getItems().setAll(uiMastery.stream().map(this::masteryLabel).toList());
-                showStatus(cached ? "云端不可用，已加载本地反馈与建议缓存" : "反馈与薄弱点已刷新", false);
+                showStatus(cached ? AppI18n.get("TeachingContentController.60") : AppI18n.get("TeachingContentController.61"), false);
             });
         });
     }
@@ -498,28 +499,28 @@ public final class TeachingContentController {
     @FXML
     private void onDraftFeedback() {
         requireTeacher();
-        String classroomId = selectedId(learningClassroomCombo, "请选择班级");
-        String assignmentId = selectedId(learningAssignmentCombo, "请选择任务");
-        String submissionId = required(submissionIdField.getText(), "请输入提交 ID");
+        String classroomId = selectedId(learningClassroomCombo, AppI18n.get("TeachingContentController.62"));
+        String assignmentId = selectedId(learningAssignmentCombo, AppI18n.get("TeachingContentController.63"));
+        String submissionId = required(submissionIdField.getText(), AppI18n.get("TeachingContentController.64"));
         if (classroomId == null || assignmentId == null || submissionId == null) return;
-        run("正在准备最小必要反馈上下文…", () -> {
+        run(AppI18n.get("TeachingContentController.65"), () -> {
             var deterministic = api.draftSubmissionFeedback(token(), classroomId, assignmentId, submissionId);
             var preview = feedbackDraftEnhancer.preview(deterministic);
             Platform.runLater(() -> {
                 javafx.scene.control.Alert alert = new javafx.scene.control.Alert(javafx.scene.control.Alert.AlertType.CONFIRMATION);
-                alert.setTitle("确认生成 AI 反馈草稿");
-                alert.setHeaderText("将发送 " + preview.characterCount() + " 个脱敏后的确定性证据字符");
-                alert.setContentText("来源：" + String.join("、", preview.sources()) + "\nAI 不得改变评测结论，草稿发布前仍需人工确认。");
+                alert.setTitle(AppI18n.get("TeachingContentController.66"));
+                alert.setHeaderText(AppI18n.get("TeachingContentController.67") + preview.characterCount() + AppI18n.get("TeachingContentController.68"));
+                alert.setContentText(AppI18n.get("TeachingContentController.69") + String.join(AppI18n.get("TeachingContentController.70"), preview.sources()) + AppI18n.get("TeachingContentController.71"));
                 if (alert.showAndWait().filter(javafx.scene.control.ButtonType.OK::equals).isEmpty()) {
                     feedbackCommentField.setText(deterministic.text());
-                    showStatus("已取消网络增强，保留确定性模板草稿", false);
+                    showStatus(AppI18n.get("TeachingContentController.72"), false);
                     return;
                 }
-                run("正在生成安全反馈草稿…", () -> {
+                run(AppI18n.get("TeachingContentController.73"), () -> {
                     var draft = feedbackDraftEnhancer.enhance(deterministic, feedbackDraftStyleCombo.getValue());
                     Platform.runLater(() -> {
                         feedbackCommentField.setText(draft.text());
-                        showStatus(draft.aiGenerated() ? "已生成 AI 反馈草稿，请人工确认" : "已生成确定性模板草稿", false);
+                        showStatus(draft.aiGenerated() ? AppI18n.get("TeachingContentController.74") : AppI18n.get("TeachingContentController.75"), false);
                     });
                 });
             });
@@ -530,15 +531,15 @@ public final class TeachingContentController {
     private void onRefreshObjectiveSummary() {
         requireTeacher();
         CourseCatalog course = selectedCourse();
-        String classroomId = selectedId(learningClassroomCombo, "请选择班级");
+        String classroomId = selectedId(learningClassroomCombo, AppI18n.get("TeachingContentController.76"));
         if (course == null || classroomId == null) return;
-        run("正在按课程目标汇总班级事实…", () -> {
+        run(AppI18n.get("TeachingContentController.77"), () -> {
             List<ObjectiveClassSummary> loaded = api.getObjectiveClassSummary(token(), course.id(), classroomId);
             Platform.runLater(() -> {
                 objectiveSummaryList.getItems().setAll(loaded.stream().map(item -> item.objectiveTitle()
-                    + " · 未知 " + item.unknown() + " · 需支持 " + item.needsSupport() + " · 发展中 "
-                    + item.developing() + " · 已掌握 " + item.mastered()).toList());
-                showStatus("目标分布只描述现有证据，不生成教师评分", false);
+                    + AppI18n.get("TeachingContentController.78") + item.unknown() + AppI18n.get("TeachingContentController.79") + item.needsSupport() + AppI18n.get("TeachingContentController.80")
+                    + item.developing() + AppI18n.get("TeachingContentController.81") + item.mastered()).toList());
+                showStatus(AppI18n.get("TeachingContentController.82"), false);
             });
         });
     }
@@ -548,16 +549,16 @@ public final class TeachingContentController {
         requireTeacher();
         CourseCatalog course = selectedCourse();
         CourseObjective objective = selectedObjective();
-        String classroomId = selectedId(learningClassroomCombo, "请选择班级");
-        String action = required(interventionActionField.getText(), "请输入复习或反馈动作草稿");
+        String classroomId = selectedId(learningClassroomCombo, AppI18n.get("TeachingContentController.83"));
+        String action = required(interventionActionField.getText(), AppI18n.get("TeachingContentController.84"));
         if (course == null || objective == null || classroomId == null || action == null) return;
-        run("正在生成干预影响预览…", () -> {
+        run(AppI18n.get("TeachingContentController.85"), () -> {
             ObjectiveInterventionDraft draft = api.createObjectiveInterventionDraft(token(), course.id(), classroomId,
                 objective.id(), "OBJECTIVE_EVIDENCE_GAP", action);
             Platform.runLater(() -> {
                 pendingIntervention = draft;
                 confirmInterventionButton.setDisable(false);
-                showStatus("草稿已生成，影响 " + draft.impactCount() + " 名学生；请核对后明确确认", false);
+                showStatus(AppI18n.get("TeachingContentController.86") + draft.impactCount() + AppI18n.get("TeachingContentController.87"), false);
             });
         });
     }
@@ -568,14 +569,14 @@ public final class TeachingContentController {
         CourseCatalog course = selectedCourse();
         ObjectiveInterventionDraft draft = pendingIntervention;
         if (course == null || draft == null) {
-            showStatus("请先生成干预影响预览", true); return;
+            showStatus(AppI18n.get("TeachingContentController.88"), true); return;
         }
-        run("正在复核目标版本并确认干预…", () -> {
+        run(AppI18n.get("TeachingContentController.89"), () -> {
             api.confirmObjectiveInterventionDraft(token(), course.id(), draft.id(), draft.confirmationToken());
             Platform.runLater(() -> {
                 pendingIntervention = null;
                 confirmInterventionButton.setDisable(true);
-                showStatus("干预已人工确认并写入审计；后续仅展示事实变化", false);
+                showStatus(AppI18n.get("TeachingContentController.90"), false);
             });
         });
     }
@@ -584,13 +585,13 @@ public final class TeachingContentController {
     private void onCreateObjective() {
         requireTeacher();
         CourseCatalog course = selectedCourse();
-        String title = required(objectiveTitleField.getText(), "请输入课程目标标题");
-        String criteria = required(objectiveCriteriaField.getText(), "请输入可验证完成条件");
+        String title = required(objectiveTitleField.getText(), AppI18n.get("TeachingContentController.91"));
+        String criteria = required(objectiveCriteriaField.getText(), AppI18n.get("TeachingContentController.92"));
         if (course == null || title == null || criteria == null) return;
-        run("正在创建课程目标…", () -> {
+        run(AppI18n.get("TeachingContentController.93"), () -> {
             api.createCourseObjective(token(), course.id(), title, objectiveDescriptionField.getText(), criteria,
                 nonNegativeOrder(objectiveOrderField.getText(), objectives.size()));
-            loadCourseDetails(course.id(), "课程目标已创建");
+            loadCourseDetails(course.id(), AppI18n.get("TeachingContentController.94"));
         });
     }
 
@@ -599,14 +600,14 @@ public final class TeachingContentController {
         requireTeacher();
         CourseCatalog course = selectedCourse();
         CourseObjective objective = selectedObjective();
-        String title = required(objectiveTitleField.getText(), "请输入课程目标标题");
-        String criteria = required(objectiveCriteriaField.getText(), "请输入可验证完成条件");
+        String title = required(objectiveTitleField.getText(), AppI18n.get("TeachingContentController.95"));
+        String criteria = required(objectiveCriteriaField.getText(), AppI18n.get("TeachingContentController.96"));
         if (course == null || objective == null || title == null || criteria == null) return;
-        run("正在保存课程目标…", () -> {
+        run(AppI18n.get("TeachingContentController.97"), () -> {
             api.updateCourseObjective(token(), course.id(), objective.id(), title, objectiveDescriptionField.getText(),
                 criteria, nonNegativeOrder(objectiveOrderField.getText(), objective.sortOrder()), objective.status(),
                 objective.version());
-            loadCourseDetails(course.id(), "课程目标已保存");
+            loadCourseDetails(course.id(), AppI18n.get("TeachingContentController.98"));
         });
     }
 
@@ -617,10 +618,10 @@ public final class TeachingContentController {
         CourseObjective objective = selectedObjective();
         if (course == null || objective == null) return;
         ContentStatus next = objective.status() == ContentStatus.ACTIVE ? ContentStatus.INACTIVE : ContentStatus.ACTIVE;
-        run("正在更新课程目标状态…", () -> {
+        run(AppI18n.get("TeachingContentController.99"), () -> {
             api.updateCourseObjective(token(), course.id(), objective.id(), objective.title(), objective.description(),
                 objective.completionCriteria(), objective.sortOrder(), next, objective.version());
-            loadCourseDetails(course.id(), next == ContentStatus.ACTIVE ? "课程目标已恢复" : "课程目标已停用");
+            loadCourseDetails(course.id(), next == ContentStatus.ACTIVE ? AppI18n.get("TeachingContentController.100") : AppI18n.get("TeachingContentController.101"));
         });
     }
 
@@ -631,11 +632,11 @@ public final class TeachingContentController {
         CourseObjective objective = selectedObjective();
         SelectionOption prerequisite = prerequisiteObjectiveCombo.getValue();
         if (course == null || objective == null || prerequisite == null) {
-            showStatus("请选择当前目标和先修目标", true); return;
+            showStatus(AppI18n.get("TeachingContentController.102"), true); return;
         }
-        run("正在校验先修关系…", () -> {
+        run(AppI18n.get("TeachingContentController.103"), () -> {
             api.addObjectivePrerequisite(token(), course.id(), objective.id(), prerequisite.id());
-            Platform.runLater(() -> showStatus("先修关系已添加；环路与跨课程关系会由服务端拒绝", false));
+            Platform.runLater(() -> showStatus(AppI18n.get("TeachingContentController.104"), false));
         });
     }
 
@@ -653,27 +654,27 @@ public final class TeachingContentController {
             resourceId = selectedExercise().id();
         }
         if (course == null || objective == null || type == null || resourceId == null) {
-            showStatus("请选择目标并提供同课程资源 ID", true); return;
+            showStatus(AppI18n.get("TeachingContentController.105"), true); return;
         }
         String selectedResourceId = resourceId;
-        run("正在关联课程资源…", () -> {
+        run(AppI18n.get("TeachingContentController.106"), () -> {
             api.addObjectiveResource(token(), course.id(), objective.id(), type, selectedResourceId);
-            Platform.runLater(() -> showStatus("资源已关联到课程目标", false));
+            Platform.runLater(() -> showStatus(AppI18n.get("TeachingContentController.107"), false));
         });
     }
 
     @FXML
     private void onSaveFeedback() {
         requireTeacher();
-        String classroomId = selectedId(learningClassroomCombo, "请选择班级");
-        String assignmentId = selectedId(learningAssignmentCombo, "请选择任务");
-        String submissionId = required(submissionIdField.getText(), "请输入提交 ID");
+        String classroomId = selectedId(learningClassroomCombo, AppI18n.get("TeachingContentController.108"));
+        String assignmentId = selectedId(learningAssignmentCombo, AppI18n.get("TeachingContentController.109"));
+        String submissionId = required(submissionIdField.getText(), AppI18n.get("TeachingContentController.110"));
         if (classroomId == null || assignmentId == null || submissionId == null) return;
         long expectedVersion = feedback.stream().filter(item -> item.submissionId().equals(submissionId))
             .mapToLong(SubmissionFeedback::version).findFirst().orElse(0);
         KnowledgePoint point = selectedKnowledgePoint();
         List<String> pointIds = point == null ? List.of() : List.of(point.id());
-        run("正在保存教师反馈…", () -> {
+        run(AppI18n.get("TeachingContentController.111"), () -> {
             api.saveSubmissionFeedback(token(), classroomId, assignmentId, submissionId,
                 feedbackStatusCombo.getValue(), feedbackCommentField.getText(), pointIds, expectedVersion,
                 UUID.randomUUID().toString());
@@ -682,14 +683,14 @@ public final class TeachingContentController {
             Platform.runLater(() -> {
                 feedback = loaded;
                 feedbackList.getItems().setAll(loaded.stream().map(this::feedbackLabel).toList());
-                showStatus("教师反馈已保存并通知学生", false);
+                showStatus(AppI18n.get("TeachingContentController.112"), false);
             });
         });
     }
 
     @FXML
     private void onRefreshNotifications() {
-        run("正在刷新通知…", () -> {
+        run(AppI18n.get("TeachingContentController.113"), () -> {
             List<CloudNotification> loaded;
             boolean offline = false;
             try {
@@ -704,7 +705,7 @@ public final class TeachingContentController {
             Platform.runLater(() -> {
                 notifications = uiNotifications;
                 renderNotifications();
-                showStatus(cached ? "云端不可用，已加载本地通知缓存" : "通知已刷新", false);
+                showStatus(cached ? AppI18n.get("TeachingContentController.114") : AppI18n.get("TeachingContentController.115"), false);
             });
         });
     }
@@ -714,14 +715,14 @@ public final class TeachingContentController {
         int index = notificationList.getSelectionModel().getSelectedIndex();
         if (index < 0 || index >= notifications.size()) return;
         String id = notifications.get(index).id();
-        run("正在更新通知…", () -> {
+        run(AppI18n.get("TeachingContentController.116"), () -> {
             api.markNotificationRead(token(), id);
             List<CloudNotification> loaded = api.listNotifications(token(), 0, 50);
             cache.saveNotifications(accountId(), loaded);
             Platform.runLater(() -> {
                 notifications = loaded;
                 renderNotifications();
-                showStatus("通知已标记为已读", false);
+                showStatus(AppI18n.get("TeachingContentController.117"), false);
             });
         });
     }
@@ -732,14 +733,14 @@ public final class TeachingContentController {
         CourseCatalog course = selectedCourse();
         if (course == null) return;
         FileChooser chooser = new FileChooser();
-        chooser.setTitle("导出课程题库包");
+        chooser.setTitle(AppI18n.get("TeachingContentController.118"));
         chooser.setInitialFileName("sqlteacher-course-" + course.id() + ".json");
         chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("JSON", "*.json"));
         var file = chooser.showSaveDialog(courseList.getScene().getWindow());
         if (file == null) return;
-        run("正在导出课程题库包…", () -> {
+        run(AppI18n.get("TeachingContentController.119"), () -> {
             Files.writeString(file.toPath(), api.exportCourseBundle(token(), course.id()), StandardCharsets.UTF_8);
-            Platform.runLater(() -> showStatus("课程题库包已导出", false));
+            Platform.runLater(() -> showStatus(AppI18n.get("TeachingContentController.120"), false));
         });
     }
 
@@ -747,11 +748,11 @@ public final class TeachingContentController {
     private void onImportCourse() {
         requireTeacher();
         FileChooser chooser = new FileChooser();
-        chooser.setTitle("导入课程题库包");
+        chooser.setTitle(AppI18n.get("TeachingContentController.121"));
         chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("JSON", "*.json"));
         var file = chooser.showOpenDialog(courseList.getScene().getWindow());
         if (file == null) return;
-        run("正在预检并导入课程题库包…", () -> {
+        run(AppI18n.get("TeachingContentController.122"), () -> {
             String bundle = Files.readString(file.toPath(), StandardCharsets.UTF_8);
             var result = api.importCourseBundle(token(), bundle, UUID.randomUUID().toString());
             List<CourseCatalog> loaded = api.listCourses(token());
@@ -760,7 +761,7 @@ public final class TeachingContentController {
                 courses = loaded;
                 courseList.getItems().setAll(loaded.stream().map(this::courseLabel).toList());
                 selectCourse(result.courseId());
-                showStatus("导入完成：" + result.exercises() + " 个题目", false);
+                showStatus(AppI18n.get("TeachingContentController.123") + result.exercises() + AppI18n.get("TeachingContentController.124"), false);
             });
         });
     }
@@ -768,7 +769,7 @@ public final class TeachingContentController {
     private void refreshSelectedCourse() {
         CourseCatalog selected = selectedCourse();
         if (selected == null || running.get()) return;
-        run("正在加载课程内容…", () -> loadCourseDetails(selected.id(), "课程内容已加载"));
+        run(AppI18n.get("TeachingContentController.125"), () -> loadCourseDetails(selected.id(), AppI18n.get("TeachingContentController.126")));
     }
 
     private void loadCourseDetails(String courseId, String message) {
@@ -810,7 +811,7 @@ public final class TeachingContentController {
                 + item.title() + " · " + item.status() + " · v" + item.version()).toList());
             prerequisiteObjectiveCombo.getItems().setAll(uiObjectives.stream()
                 .map(item -> new SelectionOption(item.id(), item.title())).toList());
-            showStatus(cached ? "云端不可用，已加载该课程的本地缓存" : message, false);
+            showStatus(cached ? AppI18n.get("TeachingContentController.127") : message, false);
         });
     }
 
@@ -837,11 +838,11 @@ public final class TeachingContentController {
     }
 
     private void loadLearningAssignments(String classroomId) {
-        run("正在加载班级任务…", () -> {
+        run(AppI18n.get("TeachingContentController.128"), () -> {
             List<ClassAssignment> loaded = api.listAssignments(token(), classroomId);
             Platform.runLater(() -> {
                 applyLearningAssignments(loaded);
-                showStatus("班级任务已加载", false);
+                showStatus(AppI18n.get("TeachingContentController.129"), false);
             });
         });
     }
@@ -866,7 +867,7 @@ public final class TeachingContentController {
         }
         learningStudentCombo.getItems().setAll(classroom.members().stream()
             .filter(member -> member.role() == com.sqlteacher.application.collaboration.UserRole.STUDENT)
-            .map(member -> new SelectionOption(member.userId(), "学生 · " + shortId(member.userId())))
+            .map(member -> new SelectionOption(member.userId(), AppI18n.get("TeachingContentController.130") + shortId(member.userId())))
             .toList());
         learningStudentCombo.getSelectionModel().clearSelection();
     }
@@ -897,7 +898,7 @@ public final class TeachingContentController {
     private CourseCatalog selectedCourse() {
         int index = courseList.getSelectionModel().getSelectedIndex();
         if (index < 0 || index >= courses.size()) {
-            showStatus("请先选择课程", true);
+            showStatus(AppI18n.get("TeachingContentController.131"), true);
             return null;
         }
         return courses.get(index);
@@ -916,7 +917,7 @@ public final class TeachingContentController {
     private SharedExerciseVersion selectedExercise() {
         int index = exerciseList.getSelectionModel().getSelectedIndex();
         if (index < 0 || index >= exercises.size()) {
-            showStatus("请先选择题目版本", true);
+            showStatus(AppI18n.get("TeachingContentController.132"), true);
             return null;
         }
         return exercises.get(index);
@@ -936,20 +937,20 @@ public final class TeachingContentController {
     }
 
     private String feedbackLabel(SubmissionFeedback item) {
-        return item.status() + " · 提交 " + item.submissionId() + " · v" + item.version();
+        return item.status() + AppI18n.get("TeachingContentController.133") + item.submissionId() + " · v" + item.version();
     }
 
     private String masteryLabel(KnowledgeMastery item) {
-        return item.knowledgePointName() + " · " + item.masteryPercent() + "% · 建议 "
-            + item.recommendations().size() + " 题";
+        return item.knowledgePointName() + " · " + item.masteryPercent() + AppI18n.get("TeachingContentController.masterySuggestion")
+            + item.recommendations().size() + AppI18n.get("TeachingContentController.134");
     }
 
     private String token() {
-        return sessions.current().orElseThrow(() -> new IllegalStateException("请先登录云端账号")).accessToken();
+        return sessions.current().orElseThrow(() -> new IllegalStateException(AppI18n.get("TeachingContentController.135"))).accessToken();
     }
 
     private String accountId() {
-        return sessions.current().orElseThrow(() -> new IllegalStateException("请先登录云端账号")).user().id();
+        return sessions.current().orElseThrow(() -> new IllegalStateException(AppI18n.get("TeachingContentController.136"))).user().id();
     }
 
     private boolean isTeacher() {
@@ -958,7 +959,7 @@ public final class TeachingContentController {
     }
 
     private void requireTeacher() {
-        if (!isTeacher()) throw new SecurityException("当前身份不能管理课程内容");
+        if (!isTeacher()) throw new SecurityException(AppI18n.get("TeachingContentController.137"));
     }
 
     private String required(String value, String message) {
@@ -980,7 +981,7 @@ public final class TeachingContentController {
             if (parsed < 0) throw new NumberFormatException();
             return parsed;
         } catch (NumberFormatException error) {
-            throw new IllegalArgumentException("排序必须是非负整数");
+            throw new IllegalArgumentException(AppI18n.get("TeachingContentController.138"));
         }
     }
 
@@ -1006,7 +1007,7 @@ public final class TeachingContentController {
 
     private static String safeMessage(Throwable error) {
         String message = error.getMessage();
-        return message == null || message.isBlank() ? "操作失败，请稍后重试" : message;
+        return message == null || message.isBlank() ? AppI18n.get("TeachingContentController.139") : message;
     }
 
     @FunctionalInterface
@@ -1017,7 +1018,7 @@ public final class TeachingContentController {
     private CourseObjective selectedObjective() {
         int index = objectiveList.getSelectionModel().getSelectedIndex();
         if (index < 0 || index >= objectives.size()) {
-            showStatus("请先选择课程目标", true);
+            showStatus(AppI18n.get("TeachingContentController.140"), true);
             return null;
         }
         return objectives.get(index);

@@ -1,4 +1,5 @@
 package com.sqlteacher.desktop.controller;
+import com.sqlteacher.desktop.AppI18n;
 
 import com.sqlteacher.application.error.ApplicationExceptionMapper;
 import com.sqlteacher.application.execution.SqlExecutionResult;
@@ -110,11 +111,11 @@ public final class StudentExerciseController {
     private void onStart() {
         ExerciseSummary selected = exerciseList.getSelectionModel().getSelectedItem();
         if (selected == null) {
-            showStatus("请先选择一道题目。", true);
+            showStatus(AppI18n.get("StudentExerciseController.1"), true);
             return;
         }
         ExerciseSession previous = session;
-        runAsync("正在创建隔离练习数据…", () -> {
+        runAsync(AppI18n.get("StudentExerciseController.2"), () -> {
             if (previous != null && !previous.completed()) {
                 practiceService.close(previous.id());
             }
@@ -124,13 +125,13 @@ public final class StudentExerciseController {
             titleLabel.setText(started.exercise().title());
             metaLabel.setText(started.exercise().knowledgePoint() + " · " + started.exercise().difficulty());
             descriptionLabel.setText(started.exercise().description());
-            schemaLabel.setText("可用表与字段：" + started.exercise().schemaSummary());
+            schemaLabel.setText(AppI18n.get("StudentExerciseController.3") + started.exercise().schemaSummary());
             sqlArea.clear();
             feedbackArea.clear();
             resultTable.getColumns().clear();
             resultTable.getItems().clear();
             setSessionActions(true);
-            showStatus("练习已开始，数据集与其他会话完全隔离。", false);
+            showStatus(AppI18n.get("StudentExerciseController.4"), false);
         });
     }
 
@@ -147,18 +148,18 @@ public final class StudentExerciseController {
     @FXML
     private void onHint() {
         if (!requireSession()) return;
-        runAsync("正在获取提示…", () -> practiceService.requestHint(session.id()), this::showHint);
+        runAsync(AppI18n.get("StudentExerciseController.5"), () -> practiceService.requestHint(session.id()), this::showHint);
     }
 
     @FXML
     private void onReset() {
         if (!requireSession()) return;
-        runAsync("正在重置练习数据…", () -> practiceService.reset(session.id()), reset -> {
+        runAsync(AppI18n.get("StudentExerciseController.6"), () -> practiceService.reset(session.id()), reset -> {
             session = reset;
             resultTable.getColumns().clear();
             resultTable.getItems().clear();
             feedbackArea.clear();
-            showStatus("练习数据已恢复到初始状态。", false);
+            showStatus(AppI18n.get("StudentExerciseController.7"), false);
         });
     }
 
@@ -166,7 +167,7 @@ public final class StudentExerciseController {
         if (!requireSession()) return;
         String sql = sqlArea.getText();
         runAsync(
-            submit ? "正在提交并评测…" : "正在运行查询…",
+            submit ? AppI18n.get("StudentExerciseController.8") : AppI18n.get("StudentExerciseController.9"),
             () -> submit ? practiceService.submit(session.id(), sql) : practiceService.run(session.id(), sql),
             result -> showAttempt(result, submit)
         );
@@ -190,14 +191,14 @@ public final class StudentExerciseController {
             setSessionActions(false);
         }
         showStatus(
-            passed ? "恭喜，提交通过。" : attempt.execution().success()
-                ? (submitted ? "评测完成，请查看反馈。" : "查询运行完成。")
+            passed ? AppI18n.get("StudentExerciseController.10") : attempt.execution().success()
+                ? (submitted ? AppI18n.get("StudentExerciseController.11") : AppI18n.get("StudentExerciseController.12"))
                 : attempt.execution().message(),
             !attempt.execution().success() || (submitted && !passed)
         );
         if (submitted && assignmentTask != null && attempt.evaluation() != null) {
             String errorCode = attempt.evaluation().errorCode();
-            runAsync("正在提交班级任务结果…", () -> assignmentDeliveryService.deliver(
+            runAsync(AppI18n.get("StudentExerciseController.13"), () -> assignmentDeliveryService.deliver(
                 assignmentTask.classroomId(), assignmentTask.assignment().id(), passed,
                 errorCode == null || errorCode.isBlank() ? null : errorCode, attempt.occurredAt()),
                 this::showDeliveryResult);
@@ -218,8 +219,8 @@ public final class StudentExerciseController {
 
     private void showHint(ExerciseHint hint) {
         feedbackArea.appendText((feedbackArea.getText().isBlank() ? "" : "\n")
-            + "提示 " + hint.level() + "：" + hint.text());
-        showStatus(hint.exhausted() ? "已显示最后一级提示。" : "已显示一级提示。", false);
+            + AppI18n.get("StudentExerciseController.14") + hint.level() + AppI18n.get("StudentExerciseController.15") + hint.text());
+        showStatus(hint.exhausted() ? AppI18n.get("StudentExerciseController.16") : AppI18n.get("StudentExerciseController.17"), false);
     }
 
     private void showSelection(ExerciseSummary selected) {
@@ -227,16 +228,16 @@ public final class StudentExerciseController {
         if (selected == null || session != null && !session.completed()) {
             return;
         }
-        runAsync("正在读取题目…", () -> catalogService.findAvailableExercise(selected.id()).orElseThrow(), view -> {
+        runAsync(AppI18n.get("StudentExerciseController.18"), () -> catalogService.findAvailableExercise(selected.id()).orElseThrow(), view -> {
             titleLabel.setText(view.title());
             metaLabel.setText(view.knowledgePoint() + " · " + view.difficulty());
             descriptionLabel.setText(view.description());
-            schemaLabel.setText("可用表与字段：" + view.schemaSummary());
+            schemaLabel.setText(AppI18n.get("StudentExerciseController.19") + view.schemaSummary());
         });
     }
 
     private void refreshCatalog() {
-        runAsync("正在加载练习题…", catalogService::listAvailableExercises, exercises -> {
+        runAsync(AppI18n.get("StudentExerciseController.20"), catalogService::listAvailableExercises, exercises -> {
             exerciseList.getItems().setAll(exercises);
             if (assignmentTask != null) {
                 activateAssignment();
@@ -253,13 +254,13 @@ public final class StudentExerciseController {
         ExerciseSummary target = exerciseList.getItems().stream()
             .filter(item -> item.id().equals(requestedExerciseId)).findFirst().orElse(null);
         if (target == null) {
-            showStatus("建议关联的题目已停用或不存在：" + requestedExerciseId, true);
+            showStatus(AppI18n.get("StudentExerciseController.21") + requestedExerciseId, true);
             requestedExerciseId = null;
             return;
         }
         exerciseList.getSelectionModel().select(target);
         requestedExerciseId = null;
-        showStatus("已从学习队列打开“" + target.title() + "”，点击开始练习即可继续。", false);
+        showStatus(AppI18n.get("StudentExerciseController.22") + target.title() + AppI18n.get("StudentExerciseController.23"), false);
     }
 
     private void activateAssignment() {
@@ -268,26 +269,26 @@ public final class StudentExerciseController {
             .findFirst()
             .orElse(null);
         if (exercise == null) {
-            showStatus("任务关联的本地题目不存在或未启用：" + assignmentTask.assignment().exerciseId(), true);
+            showStatus(AppI18n.get("StudentExerciseController.24") + assignmentTask.assignment().exerciseId(), true);
             return;
         }
         exerciseList.getSelectionModel().select(exercise);
-        showStatus("已打开班级任务“" + assignmentTask.assignment().title() + "”，开始后将使用隔离数据集。", false);
+        showStatus(AppI18n.get("StudentExerciseController.25") + assignmentTask.assignment().title() + AppI18n.get("StudentExerciseController.26"), false);
         onStart();
     }
 
     private void showDeliveryResult(AssignmentDeliveryResult result) {
         switch (result.status()) {
-            case PASSED -> showStatus("任务结果已提交并通过，尝试次数：" + result.attemptNumber(), false);
-            case SUBMITTED -> showStatus("任务结果已提交，请查看评测反馈。", false);
-            case QUEUED -> showStatus("当前无法连接云端，结果已安全保存为待同步任务。", false);
-            case REJECTED -> showStatus("云端拒绝了本次任务提交，请刷新任务状态并检查截止时间。", true);
+            case PASSED -> showStatus(AppI18n.get("StudentExerciseController.27") + result.attemptNumber(), false);
+            case SUBMITTED -> showStatus(AppI18n.get("StudentExerciseController.28"), false);
+            case QUEUED -> showStatus(AppI18n.get("StudentExerciseController.29"), false);
+            case REJECTED -> showStatus(AppI18n.get("StudentExerciseController.30"), true);
         }
     }
 
     private boolean requireSession() {
         if (session == null || session.completed()) {
-            showStatus("请先开始一道练习。", true);
+            showStatus(AppI18n.get("StudentExerciseController.31"), true);
             return false;
         }
         return true;
@@ -303,7 +304,7 @@ public final class StudentExerciseController {
 
     private <T> void runAsync(String message, Supplier<T> task, Consumer<T> success) {
         if (!running.compareAndSet(false, true)) {
-            showStatus("当前操作仍在进行，请稍候。", false);
+            showStatus(AppI18n.get("StudentExerciseController.32"), false);
             return;
         }
         GlobalLoading.show(message);
@@ -337,7 +338,7 @@ public final class StudentExerciseController {
     }
 
     private void showStatus(String message, boolean error) {
-        statusLabel.setText(message == null || message.isBlank() ? "操作失败，请稍后重试。" : message);
+        statusLabel.setText(message == null || message.isBlank() ? AppI18n.get("StudentExerciseController.33") : message);
         statusLabel.getStyleClass().removeAll("sql-result-hint", "sql-error-hint");
         statusLabel.getStyleClass().add(error ? "sql-error-hint" : "sql-result-hint");
         statusLabel.setVisible(true);
