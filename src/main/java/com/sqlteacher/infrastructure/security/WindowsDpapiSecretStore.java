@@ -15,7 +15,7 @@ import java.util.concurrent.TimeUnit;
 
 /** Windows DPAPI encrypted binary storage scoped to the current operating-system user. */
 public final class WindowsDpapiSecretStore {
-    private static final Duration COMMAND_TIMEOUT = Duration.ofSeconds(5);
+    private static final Duration COMMAND_TIMEOUT = Duration.ofSeconds(15);
     private static final String PROTECT = """
         Add-Type -AssemblyName System.Security
         $data = [Convert]::FromBase64String([Console]::In.ReadToEnd())

@@ -26,7 +26,7 @@
 - `mvn test`：通过，313 项测试、0 失败、0 错误；2 项真实 AI 环境测试按设计跳过。
 - `GET https://api.sqlteacher.tech/health`：HTTP 200，`status=ok`。
 - `powershell -ExecutionPolicy Bypass -File packaging/package-stage1.ps1`：通过。
-- `SQLTeacher-1.8.0-windows-x64.zip`：SHA-256 `bb7196b0383f69c070c99645617d52b8931cde64fc1a49630aaee17b3f48e31c`。
-- `SQLTeacher-1.8.0.exe`：SHA-256 `9feda8af9df2cfeea02a4eb1b8ec1fc45a9a074981b497e096a70641562f852b`。
+- `SQLTeacher-1.8.0-windows-x64.zip`：SHA-256 `7f757db071eaf03854d0d9f271eb03dc38136a845deb326ed741e63f8b8168d6`。
+- `SQLTeacher-1.8.0.exe`：SHA-256 `9faf548bb376177ab15e39f86419d0aa316eb8eded35b5033ca2d78c99daf263`。
 - `SHA256SUMS.txt` 两项均与本地文件复算一致；`target/installer` 仅有两个版本化发布附件。
 - ZIP 共 323 个条目；ZIP 与应用 JAR 的运行数据扫描均为 0，未包含 `app-data`、数据库、日志、`.env`、Git 元数据或构建目录。
