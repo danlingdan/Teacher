@@ -4,7 +4,7 @@
 > 本地数据库：app schema 10
 > 云端数据库：Cloud schema 5
 > 计划策略：`v1.9.0-r1`
-> 范围：功能代码、自动化测试与文档；不包含正式版本发布和生产部署
+> 范围：功能代码、自动化测试、正式版本发布与生产部署
 
 ## 完成范围
 
@@ -58,9 +58,10 @@
 - 数据测试覆盖计划差异、状态保留、Outbox、幂等同步数据、账号隔离、辅导元数据最小化、反馈所有权、清理和未来 schema 拒绝。
 - FXML/XML 资源测试覆盖新增学生辅导与教师编排控件的格式完整性。
 
-## 明确保留的发布边界
+## 正式发布收敛
 
-- 本轮没有修改 `pom.xml` 的 `1.8.6` 版本号，没有创建 `v1.9.0` 标签、Windows 正式发布物或 GitHub Release。
-- 本轮没有部署 Cloud schema 5 或 `/api/v1/v19` 到生产；生产仍保持当前已发布服务状态。
-- 正式发布前仍需执行真实 JavaFX 键盘/缩放/1366×768 走查、Windows EXE/ZIP/校验和、生产备份恢复、HTTPS/Qdrant/Embedding 探针和公开 Release 验证。
+- `pom.xml` 已升级为 `1.9.0`，完整 Maven 回归、Windows EXE/ZIP、校验和及 app-image 启动门禁通过。
+- 生产服务已原子切换到 `/opt/sqlteacher/releases/1.9.0`，Cloud schema 4→5、SQLite 完整性、迁移前后备份和 loopback 监听边界通过。
+- 公网 HTTPS、管理员 v1.9 健康接口、Qdrant 快照、Embedding、Nginx 和运维探针通过；旧版本目录与迁移前备份保留用于回滚。
+- 正式标签、GitHub Actions 和三项公开 Release 资产由 `v1.9.0` 标签工作流生成并在发布后独立核验。
 - P1 项目中的学习日历、个人目标、课程包 v4、AI 备课/出题草稿和独立容量页面按计划裁剪，不影响本轮 P0 教学编排核心；不得把它们描述为已交付。
