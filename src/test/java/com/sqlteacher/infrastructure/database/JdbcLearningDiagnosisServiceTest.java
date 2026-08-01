@@ -98,6 +98,8 @@ class JdbcLearningDiagnosisServiceTest {
         }
         var service = service(connections, "owner-a");
 
+        // Measure steady-state diagnosis rather than one-time JVM/SQLite initialization on shared runners.
+        service.refresh();
         long started = System.nanoTime();
         var dashboard = service.refresh();
         long millis = Duration.ofNanos(System.nanoTime() - started).toMillis();
