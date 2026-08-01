@@ -200,3 +200,29 @@ P1 处置：V111-16 帮助文档英文化（可 P1，界面文案必须完整）
 - OSV 依赖漏洞扫描与 Windows 打包（EXE/ZIP/SBOM/签名清单/升级演练）归阶段 7 发布门禁。
 
 阶段 6 完成。下一阶段：阶段 7 生产部署与正式发布。
+
+## 阶段 7：生产部署与正式发布（2026-08-02）
+
+### 7.1 GitHub 正式发布
+
+- `pom.xml` 升至 `1.11.0`；提交 `571cbd8` 推送 `main`，创建 `v1.11.0` 标签触发 Actions 工作流，全部步骤通过。
+- Release `SQLTeacher v1.11.0` 已公开，资产齐全：EXE、Windows ZIP、`SHA256SUMS.txt`、CycloneDX SBOM、签名 `update-manifest.json`。
+- 本机验证签名清单链路：客户端 `SecureUpdateService.verifyAndParse` 校验 Ed25519 签名 + 1.11.0 + SHA-256 + `rollout{percentage=100,paused=false}` 均通过。
+
+### 7.2 生产 Cloud 部署（1.10.1 → 1.11.0）
+
+- 新增部署脚本 `packaging/cloud/deploy-v111.py`（paramiko，probe/backup/upload/swap/verify 分阶段）。
+- 上线前在线备份 `cloud-20260801T202737Z.db`，integrity_check ok。
+- 首次切换失败（缺 `bin/run-cloud.sh` → 203/EXEC 循环重启），立即回滚 1.10.1 恢复，补 `bin/` 脚本后重新切换成功；回滚点保留。
+- 上线后验证：`/health` apiVersion=1.11；capabilities 返回全部 12 个新能力位；`email_verifications`/`reset_tokens`/`account_tasks` 表创建；公网 HTTPS 可达；管理员登录/登出探针通过。
+- 完整记录见 `docs/operations/2026-08-02-v111-cloud-deployment.md`。
+
+### 7.3 已知限制
+
+- SMTP 真实投递未配置（FileMailSender outbox 已生效）；受控镜像站 DNS/同步未部署（客户端镜像开关默认关闭）。两者均不影响客户端主流程与已发布能力。
+
+### 7.4 完成定义复核
+
+- 13 项 P0 全部以正式入口交付并通过测试；Cloud 1.11 部署生效；v1.10 能力无回归（417 项测试）；`main`、`v1.11.0` 标签、Maven 版本、更新清单、Release 指向同一提交 `571cbd8` 与产物。
+
+v1.11 通用能力收尾交付完成。
