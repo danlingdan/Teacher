@@ -45,6 +45,18 @@ class SqlTeacherCloudServerTest {
     }
 
     @Test
+    void shouldKeepStrongPasswordCreationPolicyWhileAcceptingProvisionedPasswordAtLogin() throws Exception {
+        start();
+
+        assertEquals(400, postStatus("auth/register", null, """
+            {"email":"short-password@example.edu","displayName":"Short Password","password":"123456"}
+            """));
+        assertEquals(401, postStatus("auth/login", null, """
+            {"email":"short-password@example.edu","password":"123456"}
+            """));
+    }
+
+    @Test
     void shouldEnforceAssignmentLifecycleAndExportClassScopedCsv() throws Exception {
         Path database = start();
         JsonNode teacher = register("teacher@example.edu", "Teacher");

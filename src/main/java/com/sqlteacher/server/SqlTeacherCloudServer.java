@@ -984,7 +984,7 @@ public final class SqlTeacherCloudServer {
 
         void changePassword(String accessToken, char[] currentPassword, char[] newPassword) {
             AuthenticatedUser actor = authenticateData(accessToken);
-            validatePassword(currentPassword); validatePassword(newPassword);
+            validateLoginPassword(currentPassword); validatePassword(newPassword);
             try (Connection connection = open(); PreparedStatement read = connection.prepareStatement(
                 "select password_hash,password_salt from users where id=?")) {
                 read.setString(1, actor.id());
@@ -1052,7 +1052,7 @@ public final class SqlTeacherCloudServer {
         }
 
         SessionData loginData(String email, char[] password) {
-            String normalizedEmail = validateEmail(email); validatePassword(password);
+            String normalizedEmail = validateEmail(email); validateLoginPassword(password);
             String userId;
             try (Connection connection = open(); PreparedStatement statement = connection.prepareStatement(
                  "select id,password_hash,password_salt,disabled from users where email=?")) {
@@ -2301,7 +2301,7 @@ public final class SqlTeacherCloudServer {
             }
         }
         private void addColumnIfMissing(Statement statement,String table,String definition)throws SQLException{try{statement.executeUpdate("alter table "+table+" add column "+definition);}catch(SQLException error){if(!error.getMessage().toLowerCase(Locale.ROOT).contains("duplicate column"))throw error;}}
-        private byte[] bytes(int count){byte[] value=new byte[count];random.nextBytes(value);return value;} private byte[] hash(char[] password,byte[] salt){try{KeySpec spec=new PBEKeySpec(password,salt,PBKDF2_ITERATIONS,HASH_BITS);return SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256").generateSecret(spec).getEncoded();}catch(GeneralSecurityException e){throw new IllegalStateException("Password hashing unavailable",e);}} private byte[] tokenHash(String token){try{return java.security.MessageDigest.getInstance("SHA-256").digest(token.getBytes(StandardCharsets.UTF_8));}catch(GeneralSecurityException e){throw new IllegalStateException(e);}} private static boolean constantTimeEquals(byte[] a,byte[] b){return java.security.MessageDigest.isEqual(a,b);} private static String validateEmail(String e){if(e==null||!e.matches("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$")||e.length()>254)throw new IllegalArgumentException("email must be valid");return e.trim().toLowerCase(Locale.ROOT);} private static void validatePassword(char[] p){if(p==null||p.length<12||p.length>128)throw new IllegalArgumentException("password must contain 12 to 128 characters");} private static IllegalStateException database(SQLException e){return new IllegalStateException("Cloud database operation failed",e);} private static CloudAuthenticationService.Session toSession(SessionData s){return new CloudAuthenticationService.Session(s.token(),s.expiresAt(),s.user(),s.refreshToken());}
+        private byte[] bytes(int count){byte[] value=new byte[count];random.nextBytes(value);return value;} private byte[] hash(char[] password,byte[] salt){try{KeySpec spec=new PBEKeySpec(password,salt,PBKDF2_ITERATIONS,HASH_BITS);return SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256").generateSecret(spec).getEncoded();}catch(GeneralSecurityException e){throw new IllegalStateException("Password hashing unavailable",e);}} private byte[] tokenHash(String token){try{return java.security.MessageDigest.getInstance("SHA-256").digest(token.getBytes(StandardCharsets.UTF_8));}catch(GeneralSecurityException e){throw new IllegalStateException(e);}} private static boolean constantTimeEquals(byte[] a,byte[] b){return java.security.MessageDigest.isEqual(a,b);} private static String validateEmail(String e){if(e==null||!e.matches("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$")||e.length()>254)throw new IllegalArgumentException("email must be valid");return e.trim().toLowerCase(Locale.ROOT);} private static void validateLoginPassword(char[] p){if(p==null||p.length==0||p.length>128)throw new IllegalArgumentException("password must contain 1 to 128 characters");} private static void validatePassword(char[] p){if(p==null||p.length<12||p.length>128)throw new IllegalArgumentException("password must contain 12 to 128 characters");} private static IllegalStateException database(SQLException e){return new IllegalStateException("Cloud database operation failed",e);} private static CloudAuthenticationService.Session toSession(SessionData s){return new CloudAuthenticationService.Session(s.token(),s.expiresAt(),s.user(),s.refreshToken());}
         private record RetentionSpec(RetentionCategory category, String table, String keyColumn,
                                      String timeColumn, List<String> columns) { }
         private record RetentionJobState(RetentionCategory category, Instant cutoff, int previewRows,
