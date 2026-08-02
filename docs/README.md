@@ -6,7 +6,7 @@
 
 - 当前代码版本：`1.11.5`
 - 最新发布说明：[v1.11.5](releases/v1.11.5.md)
-- 最近一轮功能计划：[v1.11 通用能力收尾计划](plans/2026-08-02-v1.11-general-capabilities-closeout-plan.md)
+- 最近一轮功能计划：[v2.0 计算机专业学习平台总计划](plans/2026-08-02-v2.0-computer-science-learning-platform-plan.md)
 - 对应实施记录：[v1.11 通用能力收尾实施记录](history/stages/stage8/2026-08-02-v111-closeout-implementation.md)
 - 当前生产部署记录：[v1.11 生产云服务部署记录](operations/2026-08-02-v111-cloud-deployment.md)
 
