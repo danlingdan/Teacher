@@ -1,0 +1,4 @@
+interface:
+  display_name: "SQLTeacher Windows Release"
+  short_description: "Prepare and verify a complete Windows release"
+  default_prompt: "Use $sqlteacher-windows-release to prepare and verify this SQLTeacher release."

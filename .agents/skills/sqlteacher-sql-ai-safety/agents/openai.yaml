@@ -1,0 +1,4 @@
+interface:
+  display_name: "SQLTeacher SQL and AI Safety"
+  short_description: "Review and modify SQL or AI paths without bypassing safety"
+  default_prompt: "Use $sqlteacher-sql-ai-safety to review this SQL or AI change safely."

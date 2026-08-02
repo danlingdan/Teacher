@@ -1,0 +1,4 @@
+interface:
+  display_name: "SQLTeacher Change Delivery"
+  short_description: "Implement scoped SQLTeacher changes with proportional tests"
+  default_prompt: "Use $sqlteacher-deliver-change to implement and verify this SQLTeacher change."

@@ -1,0 +1,4 @@
+interface:
+  display_name: "SQLTeacher Cloud Operations"
+  short_description: "Operate SQLTeacher production with backups and rollback gates"
+  default_prompt: "Use $sqlteacher-cloud-operations to perform this production operation safely."

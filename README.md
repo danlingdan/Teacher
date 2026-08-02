@@ -13,7 +13,7 @@
   [![Platform](https://img.shields.io/badge/Windows-10%20%7C%2011-0078D4?logo=windows11&logoColor=white)](https://github.com/danlingdan/Teacher/releases/latest)
   [![License](https://img.shields.io/badge/License-Apache%202.0-4D7A97.svg)](LICENSE)
 
-  [下载最新版](https://github.com/danlingdan/Teacher/releases/latest) · [使用指南](docs/guide/) · [更新日志](docs/releases/v1.10.1.md) · [问题反馈](https://github.com/danlingdan/Teacher/issues)
+  [下载最新版](https://github.com/danlingdan/Teacher/releases/latest) · [文档中心](docs/README.md) · [使用指南](docs/guide/README.md) · [更新日志](docs/releases/v1.11.5.md) · [问题反馈](https://github.com/danlingdan/Teacher/issues)
 </div>
 
 ---
@@ -40,7 +40,7 @@ SQLTeacher 面向数据库课程教学与自主练习。它把 SQL 执行、确�
 - **更好的桌面体验**：`Ctrl+K` 命令面板、完整英文界面（键完整性测试门禁）、可选的 Windows 原生通知（白名单正文）、按流量计费/低电量任务暂停、安装文件完整性检测与修复引导。
 - **Cloud API 1.11**：新能力位与端点（反馈撤回/导出、截图附件、会话、账号导出/注销、密码重置、分阶段发布），最低兼容客户端保持 1.9.0。
 
-完整变更见 [v1.10.1 发布说明](docs/releases/v1.10.1.md)和 [v1.11 实施计划](docs/plans/2026-08-02-v1.11-general-capabilities-closeout-plan.md)。
+完整变更见 [v1.11.5 发布说明](docs/releases/v1.11.5.md)、[v1.11 实施记录](docs/history/stages/stage8/2026-08-02-v111-closeout-implementation.md)和 [v1.11 实施计划](docs/plans/2026-08-02-v1.11-general-capabilities-closeout-plan.md)。
 
 ## 安全设计
 
@@ -66,8 +66,8 @@ flowchart LR
 
 前往 [GitHub Releases](https://github.com/danlingdan/Teacher/releases/latest) 下载：
 
-- `SQLTeacher-1.10.1.exe`：推荐，标准 Windows 安装器；
-- `SQLTeacher-1.10.1-windows-x64.zip`：免安装便携版；
+- `SQLTeacher-1.11.5.exe`：推荐，标准 Windows 安装器；
+- `SQLTeacher-1.11.5-windows-x64.zip`：免安装便携版；
 - `SHA256SUMS.txt`：发布文件完整性校验值。
 
 正式包自带 Java 运行时，无需另装 JDK。用户数据默认保存在 `%LOCALAPPDATA%\SQLTeacher`，升级应用不会覆盖该目录。

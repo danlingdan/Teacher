@@ -396,26 +396,26 @@ mvn javafx:run
 | 日期 | 里程碑/功能 | 状态 | 验证与记录 | 提交 |
 |---|---|---|---|---|
 | 2026-07-21 | Demo 基线冻结与最终验收 | 已完成 | 160 项测试通过；CLI 验证通过；app-image 生成和短时启动通过；详见 `docs/acceptance/2026-07-21-demo-baseline-acceptance.md` | `151e022` |
-| 2026-07-21 | `app.db` schema 版本与迁移机制 | 已完成 | 覆盖空库、`v0.1.0` 旧库、重复启动、失败回滚和未来版本拒绝；详见 `docs/stage2/2026-07-21-sqlite-schema-migrations.md` | `df1ecef` |
-| 2026-07-21 | 连接管理领域模型与 application 契约 | 已完成 | 冻结连接类型、非敏感 Profile、临时密码连接测试和当前连接选择边界；详见 `docs/stage2/2026-07-21-connection-management-contracts.md` | `3df5673` |
-| 2026-07-21 | SQLite 连接 Profile 持久化 | 已完成 | schema 版本 2；覆盖内置连接、保存、列表、选择、禁用和删除回退；详见 `docs/stage2/2026-07-21-connection-profile-persistence.md` | `35fe4fa` |
-| 2026-07-21 | Profile 感知的 JDBC 连接与连接测试 | 已完成 | 相关增量测试通过；累计功能全量回归 180 项通过；详见 `docs/stage2/2026-07-21-profile-jdbc-connection-test.md` | `5225287` |
-| 2026-07-21 | 设置与连接管理 JavaFX 页面 | 已完成 | 增量测试和真实 JavaFX 导航走查通过；后台加载/测试、表单校验、选择、禁用与删除确认已接入；详见 `docs/stage2/2026-07-21-connection-settings-page.md` | `0a63f6c` |
-| 2026-07-21 | 当前 Profile 接入 SQL、元数据与 NL2SQL 链路 | 已完成 | 增量测试通过；MySQL 9.7.1 真实连接、当前 catalog 元数据和只读查询通过；会话凭据不持久化；详见 `docs/stage2/2026-07-21-current-profile-database-flow.md` | `0c434cd` |
-| 2026-07-21 | MySQL 失败场景与方言安全回归 | 已完成 | JDBC 身份验证、权限、超时、连接和 SQL 错误统一脱敏分类；MySQL/MariaDB 特有文件、锁和延迟查询在连接前拦截；197 项全量测试通过；详见 `docs/stage2/2026-07-21-mysql-failure-and-dialect-safety.md` | `4e43523` |
-| 2026-07-21 | MariaDB 独立驱动与安全连接路由 | 已完成 | 引入 MariaDB Connector/J 3.5.9；MySQL/MariaDB 按方言使用独立驱动；固定连接超时并关闭多语句、本地文件导入；增量测试、CLI 和 app-image 验证通过；详见 `docs/stage2/2026-07-21-mariadb-driver-routing.md` | `66ea903` |
-| 2026-07-21 | 专用只读账号真实权限验证 | 已完成 | MySQL 9.7.1 隔离测试库和服务器生成的临时账号完成查询、元数据、写入拒绝和系统表拒绝验证；账号与数据库已清理；累计 203 项全量测试通过；详见 `docs/stage2/2026-07-21-mysql-readonly-account-verification.md` | `2824004` |
+| 2026-07-21 | `app.db` schema 版本与迁移机制 | 已完成 | 覆盖空库、`v0.1.0` 旧库、重复启动、失败回滚和未来版本拒绝；详见 `docs/history/stages/stage2/2026-07-21-sqlite-schema-migrations.md` | `df1ecef` |
+| 2026-07-21 | 连接管理领域模型与 application 契约 | 已完成 | 冻结连接类型、非敏感 Profile、临时密码连接测试和当前连接选择边界；详见 `docs/history/stages/stage2/2026-07-21-connection-management-contracts.md` | `3df5673` |
+| 2026-07-21 | SQLite 连接 Profile 持久化 | 已完成 | schema 版本 2；覆盖内置连接、保存、列表、选择、禁用和删除回退；详见 `docs/history/stages/stage2/2026-07-21-connection-profile-persistence.md` | `35fe4fa` |
+| 2026-07-21 | Profile 感知的 JDBC 连接与连接测试 | 已完成 | 相关增量测试通过；累计功能全量回归 180 项通过；详见 `docs/history/stages/stage2/2026-07-21-profile-jdbc-connection-test.md` | `5225287` |
+| 2026-07-21 | 设置与连接管理 JavaFX 页面 | 已完成 | 增量测试和真实 JavaFX 导航走查通过；后台加载/测试、表单校验、选择、禁用与删除确认已接入；详见 `docs/history/stages/stage2/2026-07-21-connection-settings-page.md` | `0a63f6c` |
+| 2026-07-21 | 当前 Profile 接入 SQL、元数据与 NL2SQL 链路 | 已完成 | 增量测试通过；MySQL 9.7.1 真实连接、当前 catalog 元数据和只读查询通过；会话凭据不持久化；详见 `docs/history/stages/stage2/2026-07-21-current-profile-database-flow.md` | `0c434cd` |
+| 2026-07-21 | MySQL 失败场景与方言安全回归 | 已完成 | JDBC 身份验证、权限、超时、连接和 SQL 错误统一脱敏分类；MySQL/MariaDB 特有文件、锁和延迟查询在连接前拦截；197 项全量测试通过；详见 `docs/history/stages/stage2/2026-07-21-mysql-failure-and-dialect-safety.md` | `4e43523` |
+| 2026-07-21 | MariaDB 独立驱动与安全连接路由 | 已完成 | 引入 MariaDB Connector/J 3.5.9；MySQL/MariaDB 按方言使用独立驱动；固定连接超时并关闭多语句、本地文件导入；增量测试、CLI 和 app-image 验证通过；详见 `docs/history/stages/stage2/2026-07-21-mariadb-driver-routing.md` | `66ea903` |
+| 2026-07-21 | 专用只读账号真实权限验证 | 已完成 | MySQL 9.7.1 隔离测试库和服务器生成的临时账号完成查询、元数据、写入拒绝和系统表拒绝验证；账号与数据库已清理；累计 203 项全量测试通过；详见 `docs/history/stages/stage2/2026-07-21-mysql-readonly-account-verification.md` | `2824004` |
 | 2026-07-21 | `v0.2.0` 阶段门禁验收 | 条件通过 | 203 项测试、CLI、MySQL 9.7.1 只读权限、凭据扫描及 app-image 通过；因未实测计划指定的 MySQL 8.x 或 MariaDB 实例，暂不宣布正式发布；详见 `docs/acceptance/2026-07-21-v0.2-stage-gate.md` | `6eb4850` |
 | 2026-07-21 | MySQL 8.x / MariaDB 发布兼容环境验证 | 发布前待办 | 在独立 MySQL 8.x 或 MariaDB 环境复用只读验证矩阵，确认元数据与查询差异后解除 `v0.2.0` 发布条件 | - |
-| 2026-07-21 | `v0.3.0` 题库与练习领域契约及 schema | 已完成 | 冻结题目、数据集、评测规则、会话、尝试、提示和管理/练习服务契约；`app.db` schema 升至版本 3；按阶段约定仅编译，测试待全部功能完成后集中执行；详见 `docs/stage3/2026-07-21-exercise-contracts-and-schema.md` | `2025a55` |
-| 2026-07-21 | `v0.3.0` 题库管理、导入导出与 20 道示例题 | 已完成 | JDBC 题库管理、乐观版本、复制默认停用、版本 1 JSON 题包、事务导入和五类各 4 道幂等内置题已实现；测试待阶段末集中运行；详见 `docs/stage3/2026-07-21-exercise-catalog-persistence.md` | `b61e57e` |
-| 2026-07-21 | `v0.3.0` 学生练习会话、隔离数据集与尝试记录 | 已完成 | 会话独立临时 SQLite、数据集事务初始化/重置、单条只读查询、500 行上限、生命周期清理和完整尝试记录已实现；详见 `docs/stage3/2026-07-21-exercise-practice-sessions.md` | `245b8fb` |
-| 2026-07-21 | `v0.3.0` 确定性评测与分级反馈 | 已完成 | 参考/学生查询隔离执行；按列、行、值、顺序、行数和结构分项判断；支持数值与 NULL 规范化；反馈不含答案；详见 `docs/stage3/2026-07-21-deterministic-exercise-evaluation.md` | `d82b616` |
-| 2026-07-21 | `v0.3.0` 教师题库与学生练习 JavaFX 页面 | 已完成 | 教师 CRUD/复制/启停/题包导入导出与学生选题/运行/提交/提示/重置均接入真实服务和后台执行器；详见 `docs/stage3/2026-07-21-exercise-desktop-pages.md` | `efc12c0` |
-| 2026-07-21 | `v0.3.0` 基础练习进度 | 已完成 | 固定会话、尝试、提交通过率、平均耗时、提示、完成题目和逐题进度口径，并提供真实 JDBC 桌面摘要；详见 `docs/stage3/2026-07-21-exercise-progress.md` | `beef17a` |
+| 2026-07-21 | `v0.3.0` 题库与练习领域契约及 schema | 已完成 | 冻结题目、数据集、评测规则、会话、尝试、提示和管理/练习服务契约；`app.db` schema 升至版本 3；按阶段约定仅编译，测试待全部功能完成后集中执行；详见 `docs/history/stages/stage3/2026-07-21-exercise-contracts-and-schema.md` | `2025a55` |
+| 2026-07-21 | `v0.3.0` 题库管理、导入导出与 20 道示例题 | 已完成 | JDBC 题库管理、乐观版本、复制默认停用、版本 1 JSON 题包、事务导入和五类各 4 道幂等内置题已实现；测试待阶段末集中运行；详见 `docs/history/stages/stage3/2026-07-21-exercise-catalog-persistence.md` | `b61e57e` |
+| 2026-07-21 | `v0.3.0` 学生练习会话、隔离数据集与尝试记录 | 已完成 | 会话独立临时 SQLite、数据集事务初始化/重置、单条只读查询、500 行上限、生命周期清理和完整尝试记录已实现；详见 `docs/history/stages/stage3/2026-07-21-exercise-practice-sessions.md` | `245b8fb` |
+| 2026-07-21 | `v0.3.0` 确定性评测与分级反馈 | 已完成 | 参考/学生查询隔离执行；按列、行、值、顺序、行数和结构分项判断；支持数值与 NULL 规范化；反馈不含答案；详见 `docs/history/stages/stage3/2026-07-21-deterministic-exercise-evaluation.md` | `d82b616` |
+| 2026-07-21 | `v0.3.0` 教师题库与学生练习 JavaFX 页面 | 已完成 | 教师 CRUD/复制/启停/题包导入导出与学生选题/运行/提交/提示/重置均接入真实服务和后台执行器；详见 `docs/history/stages/stage3/2026-07-21-exercise-desktop-pages.md` | `efc12c0` |
+| 2026-07-21 | `v0.3.0` 基础练习进度 | 已完成 | 固定会话、尝试、提交通过率、平均耗时、提示、完成题目和逐题进度口径，并提供真实 JDBC 桌面摘要；详见 `docs/history/stages/stage3/2026-07-21-exercise-progress.md` | `beef17a` |
 | 2026-07-21 | `v0.3.0` 集中测试与阶段验收 | 已完成 | 218 项全量测试、CLI、JAR 打包和真实 JavaFX 三页走查通过；走查发现的表单主题与中断会话清理问题已修复；详见 `docs/acceptance/2026-07-21-v0.3-stage-gate.md` | `e60b51e` |
-| 2026-07-21 | `v0.4.0` 学情与知识检索核心服务 | 已完成 | schema 4、统一统计与 CSV、本地 FTS5 文档导入/检索/删除、学习事件扩展和数据清理服务完成；详见 `docs/stage4/2026-07-21-analytics-and-knowledge-core.md` | `f61a8e0` |
-| 2026-07-21 | `v0.4.0` 教师看板与课程知识桌面页 | 已完成 | 组合筛选、三类统计表、CSV 导出、学习数据清理和课程资料管理/检索均接入真实后台服务；详见 `docs/stage4/2026-07-21-analytics-and-knowledge-desktop.md` | `d1f77c0` |
+| 2026-07-21 | `v0.4.0` 学情与知识检索核心服务 | 已完成 | schema 4、统一统计与 CSV、本地 FTS5 文档导入/检索/删除、学习事件扩展和数据清理服务完成；详见 `docs/history/stages/stage4/2026-07-21-analytics-and-knowledge-core.md` | `f61a8e0` |
+| 2026-07-21 | `v0.4.0` 教师看板与课程知识桌面页 | 已完成 | 组合筛选、三类统计表、CSV 导出、学习数据清理和课程资料管理/检索均接入真实后台服务；详见 `docs/history/stages/stage4/2026-07-21-analytics-and-knowledge-desktop.md` | `d1f77c0` |
 | 2026-07-21 | `v0.4.0` 自动化测试 | 已完成 | 新增 schema、固定统计、CSV、FTS5、失败回滚、清理、事件隐私与 FXML 测试；223 项全量测试通过 | `20a4747` |
 | 2026-07-21 | `v0.4.0` 集中验收与打包 | 已完成 | 223 项全量测试、CLI、打包应用教师看板/课程知识走查和 Windows ZIP 校验通过；详见 `docs/acceptance/2026-07-21-v0.4-stage-gate.md` | 本次提交 |
 | 2026-07-22 | `v1.0.0` 数据迁移与恢复 | 已完成 | 用户目录迁移、升级前自动备份、完整性校验恢复、恢复失败回滚和演示库复原 | `2f3d2fc` |

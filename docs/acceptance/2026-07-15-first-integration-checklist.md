@@ -46,4 +46,4 @@
 - 2026-07-13 提前执行第一次联调，结果通过。
 - `mvn test`：70 项测试通过，0 失败、0 错误、0 跳过。
 - app-image 已生成并实际启动，真实查询和危险 SQL 拦截均通过 UI 验证。
-- 详细记录见 `docs/stage1/2026-07-13-first-integration-report.md`。
+- 详细记录见 `docs/history/stages/stage1/2026-07-13-first-integration-report.md`。

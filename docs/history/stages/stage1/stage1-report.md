@@ -1,7 +1,7 @@
 # 阶段 1 验证报告
 
 > 本文保留 2026-07-03 阶段 1 基线记录。2026-07-13 第一轮独立实现后的最新测试、
-> 打包和限制说明见 `docs/stage1/2026-07-13-e-first-round-test-report.md` 与
+> 打包和限制说明见 `docs/history/stages/stage1/2026-07-13-e-first-round-test-report.md` 与
 > `docs/acceptance/first-round-known-limitations.md`。下文历史数据不代表当前 `develop` 状态。
 
 ## 1. 阶段目标

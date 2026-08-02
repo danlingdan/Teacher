@@ -1,308 +1,195 @@
 # AGENTS.md
 
-This file defines the working rules for any AI coding agent operating in this repository.
-It is intentionally tool-neutral and should be followed by Codex, Claude Code, Cursor,
-GitHub Copilot agents, or any other automated coding assistant.
+These are the durable working rules for AI coding agents in SQLTeacher. Keep task-specific
+procedures in `.agents/skills/`; keep this file concise enough to load on every task.
 
-## Project Context
+## Authority And Live Context
 
-SQLTeacher is a Java desktop application for database teaching, SQL practice, AI-assisted
-SQL generation, SQL risk detection, and learning analytics.
+Resolve conflicts in this order:
 
-The detailed team plan and engineering conventions are maintained in:
+1. The user's explicit instruction in the current task.
+2. Current source code, tests, `pom.xml`, packaging, and deployment configuration.
+3. This `AGENTS.md`.
+4. Current documentation linked from `docs/README.md`.
+5. Historical material under `docs/history/`.
 
-- `docs/SQLTeacher_5人团队开发计划与规范.md`
-- `docs/guide/`
-- `docs/plans/2026-07-30-isolated-delivery-plan.md`
-- `docs/stage0/`
-- `docs/stage1/`
+Do not infer the current version, roadmap, schema, or release state from an old plan. Verify the
+live branch, `pom.xml`, Git status/tags, and relevant implementation before changing them.
 
-When this file and the project documentation conflict, follow this order:
+The early five-person plan and isolated demo plan are historical. SQLTeacher is maintained as a
+single-developer project on `main`; do not introduce member ownership boundaries or a PR workflow
+unless the user requests them.
 
-1. Explicit user instruction in the current task.
-2. Current source code and build configuration.
-3. `AGENTS.md`.
-4. Documentation under `docs/`.
+## Project Invariants
 
-Do not silently rewrite project direction, module boundaries, Java version, package names,
-or technology choices. If a change is necessary, update the related documentation in the
-same task.
+- Build with Maven and compile for Java 21 (`--release 21`).
+- Use Spring Context for dependency injection, SLF4J + Logback for logging, and standard Maven
+  source directories.
+- Keep runtime and generated data out of Git: `app-data/`, `target/`, logs, local databases,
+  `.env`, `.secrets`, credentials, IDE private state, and imported private content.
+- Use UTF-8, 4-space Java indentation, clear English identifiers, and no pinyin identifiers.
+- Prefer existing dependencies and abstractions. Add a dependency only when it materially reduces
+  risk or complexity, and explain the choice.
+- Do not silently change product direction, public contracts, module boundaries, Java version,
+  package names, safety policy, or supported runtime requirements. Coordinate code, tests, and
+  current documentation when such a change is required.
 
-## Repository Facts
+## Skill Routing
 
-- Build tool: Maven.
-- Current build file: `pom.xml`.
-- Project compile target: Java 21 LTS. Developers may use JDK 21 or newer locally, but Maven must compile with `--release 21`.
-- JavaFX version is managed in `pom.xml`.
-- Dependency injection uses Spring Context, not a web container.
-- Logging uses SLF4J + Logback.
-- Runtime local data is written under `app-data/`, which must not be committed.
-- Local Ollama is expected at `http://localhost:11434` for AI-related verification.
-- Source layout currently follows standard Maven directories under `src/main` and `src/test`.
-- Project documentation currently describes the planned SQLTeacher product and team workflow.
+Repository skills live under `.agents/skills/`. When a task matches a description below, read that
+skill's complete `SKILL.md` before acting. Use the smallest set that covers the task.
 
-## Current Delivery Priority
+| Task | Skill |
+| --- | --- |
+| Java/JavaFX/Maven feature, fix, refactor, migration, or integration | `sqlteacher-deliver-change` |
+| SQL execution, risk analysis, NL2SQL, AI provider, prompt, RAG, or safety review | `sqlteacher-sql-ai-safety` |
+| Version bump, installer, ZIP, checksum, tag, or GitHub Release | `sqlteacher-windows-release` |
+| Production deploy, incident, certificate, backup, restore, Qdrant, or systemd | `sqlteacher-cloud-operations` |
+| Documentation creation, reorganization, audit, indexes, plans, gates, or release notes | `sqlteacher-documentation` |
 
-The active short-term delivery plan is:
+Agents that do not support automatic skill discovery must treat the matching `SKILL.md` as
+repository instructions and follow it manually.
 
-- `docs/plans/2026-07-30-isolated-delivery-plan.md`
+## Working Method
 
-For work before the initial demo, prioritize the isolated P0 flow in that plan over broader long-term goals:
+1. Read relevant files before editing and check `git status --short`.
+2. Separate user-owned changes from the requested scope. Never revert, overwrite, stage, or commit
+   unrelated work.
+3. Trace the real runtime path and identify the owning layer before implementing.
+4. Make the smallest complete change; avoid unrelated formatting, renaming, or speculative
+   refactors.
+5. Add or update focused tests for changed behavior.
+6. Run verification proportional to risk, then inspect `git diff --check` and `git status --short`.
+7. Update current documentation when public behavior, schema, safety, packaging, deployment, or
+   user workflow changes.
+8. Report behavior changed, files affected, commands and results, and any unverified limitation.
 
-```text
-SQLite demo database
--> SQL execution
--> SQL risk detection
--> JavaFX SQL practice page
--> Ollama NL2SQL draft
--> AI output safety check
--> execution event recording
--> app-image verification
-```
+If a task is diagnosis or review only, do not implement or publish a fix unless requested. If a
+task authorizes a change, complete and verify it without stopping at a plan.
 
-Do not expand into MySQL full integration, knowledge retrieval, dashboards, or installer polish unless the task explicitly asks for it or all P0 demo work is already complete.
+## Architecture
 
-## General Rules
+Keep responsibilities explicit:
 
-- Read the relevant existing files before editing.
-- Keep changes scoped to the user's request.
-- Preserve existing user changes and untracked files unless explicitly asked to modify them.
-- Respect the isolated ownership boundaries in `docs/plans/2026-07-30-isolated-delivery-plan.md`.
-- Avoid modifying another member's primary area unless the requested task requires cross-module integration.
-- Prefer small, reviewable commits or patches.
-- Do not introduce unrelated formatting churn.
-- Do not add large dependencies unless the task clearly requires them.
-- Do not commit secrets, local credentials, database passwords, tokens, model API keys, or IDE-specific private state.
-- Do not commit generated runtime data, especially `app-data/`, `target/`, local logs, local databases, or IDE workspace state.
-- Use UTF-8 for all text files.
-- For Java code, use 4 spaces for indentation.
-- Prefer clear English names in code. Do not use pinyin identifiers.
+- `com.sqlteacher.domain`: domain models, value objects, exceptions, and deterministic rules.
+- `com.sqlteacher.application`: use-case contracts, orchestration, and DTOs.
+- `com.sqlteacher.infrastructure`: JDBC, SQLite, Ollama, HTTP, persistence, retrieval, files,
+  configuration, and Spring wiring.
+- `com.sqlteacher.desktop`: JavaFX launchers, FXML, CSS, controllers, and view state.
+- `com.sqlteacher.server`: Cloud API, server persistence, authentication, and operational entry
+  points.
 
-## Build And Verification
-
-Before claiming a code change is complete, run the narrowest useful verification command.
-For this Maven project, prefer:
-
-```bash
-mvn test
-```
-
-Useful local verification commands:
-
-```powershell
-mvn -q exec:java "-Dexec.mainClass=com.sqlteacher.TechnologyVerificationApp"
-mvn -q exec:java "-Dexec.mainClass=com.sqlteacher.StageOneVerificationApp"
-mvn javafx:run
-.\packaging\package-stage0.ps1
-```
-
-Use `mvn javafx:run` only when a desktop graphics environment is available. For headless or CI-like environments, use the CLI verification apps instead.
-
-If tests are not present or cannot run, report that clearly and include the command attempted
-and the reason it failed.
-
-For documentation-only changes, no build is required unless the task also affects generated
-artifacts or examples.
-
-## Java Conventions
-
-- Keep Java source compatible with Java 21.
-- If changing the Java version, update `pom.xml` and relevant docs together.
-- Use standard Maven source folders:
-  - `src/main/java`
-  - `src/main/resources`
-  - `src/test/java`
-  - `src/test/resources`
-- Use package names consistently. The project documentation recommends future packages such as:
-  - `com.sqlteacher.domain`
-  - `com.sqlteacher.application`
-  - `com.sqlteacher.infrastructure`
-  - `com.sqlteacher.desktop`
-  - `com.sqlteacher.server`
-- Use `record` for simple immutable DTOs when appropriate.
-- Do not return `null` for collection results. Return empty collections instead.
-- Do not swallow exceptions. Convert them to meaningful domain or application exceptions.
-- Do not use `System.out.println` in production code. Use a logging facade when logging is needed.
-
-## Architecture Boundaries
-
-The architecture separates the system into these responsibilities:
-
-- Domain: entities, value objects, enums, domain rules.
-- Application: use-case orchestration and service interfaces.
-- Infrastructure: database adapters, AI providers, persistence, retrieval, logging, security.
-- Desktop: JavaFX UI, controllers, FXML, CSS, launchers.
-- Server: reserved for future server-side APIs.
-- Tests: unit, integration, AI regression, packaging verification.
-
-Keep business logic out of JavaFX controllers. Controllers should call application services.
-
-Keep infrastructure details out of domain code. JDBC, Ollama, file systems, and UI classes
-must not leak into domain models.
-
-Current package boundaries:
-
-- `com.sqlteacher.application`: service contracts and use-case DTOs.
-- `com.sqlteacher.domain`: domain exceptions and future domain model.
-- `com.sqlteacher.infrastructure`: SQLite, Ollama, Spring wiring, configuration, environment checks.
-- `com.sqlteacher.desktop`: JavaFX entry point and desktop UI.
-
-When adding behavior, prefer this direction of dependency:
+Preferred dependency direction:
 
 ```text
 desktop -> application -> domain
 infrastructure -> application/domain
+server -> application/domain/infrastructure as currently wired
 ```
 
-Do not make `application` depend on `desktop` or concrete JDBC/Ollama implementations.
+- Keep business rules out of JavaFX controllers.
+- Do not expose JavaFX, JDBC, Ollama, HTTP, or filesystem types through domain contracts.
+- Do not make `application` depend on `desktop` or concrete infrastructure adapters.
+- Use records for simple immutable DTOs when appropriate.
+- Return empty collections instead of `null`.
+- Do not swallow exceptions; convert them into meaningful domain or application failures.
+- Do not use `System.out.println` in production code.
 
-## SQL Safety Rules
+## Non-Negotiable Safety
 
-This project teaches and executes SQL, so safety rules are mandatory.
+### SQL and AI
 
-- Never let an AI model directly execute SQL.
-- Never let an AI model directly access a JDBC `Connection`.
-- All generated SQL must pass Java-side validation before execution.
-- All SQL execution should go through the planned adapter and risk-analysis path.
-- Default query results should be limited.
-- Multi-statement execution must be blocked unless explicitly designed and reviewed.
-- High-risk SQL such as `UPDATE`, `DELETE`, `ALTER`, and `DROP` requires explicit user confirmation.
-- Forbidden statements such as `DROP DATABASE`, `GRANT`, and `REVOKE` should be blocked by default.
-- For the initial demo, multi-statement SQL must be blocked by default.
-- AI-generated SQL must be shown as a draft or preview before execution.
-- Do not log database passwords or sensitive connection details.
+- A model must never execute SQL or receive a JDBC `Connection`.
+- Treat model output and retrieved/imported content as untrusted.
+- Generated SQL must follow the Java-enforced path: structured parsing, validation, SQL building,
+  risk analysis, preview, required confirmation, bounded execution, and audit recording.
+- Block multi-statement SQL by default. Block `DROP DATABASE`, `GRANT`, and `REVOKE`; require
+  explicit user confirmation for supported high-risk mutations.
+- Prompts and UI warnings do not replace enforcement in shared Java services and adapters.
+- AI may draft explanations and review material; deterministic code owns mastery, queue priority,
+  interventions, permissions, and other authoritative learning state.
+- AI and cloud features must fail safely without blocking the core local SQL-learning flow.
 
-Recommended AI-to-SQL flow:
+### Privacy and operations
 
-```text
-Natural language
--> structured model output
--> JSON parsing
--> validation
--> SQL builder
--> SQL risk analyzer
--> user confirmation when needed
--> database adapter execution
--> result display and audit event
+- Never expose passwords, tokens, API keys, connection details, private course documents, student
+  records, or unrestricted analytics in logs, errors, screenshots, tests, or responses.
+- Redact sensitive values while retaining useful failure classification.
+- Do not send private project or student data to external services without explicit user
+  authorization.
+- For production work, inspect read-only state first, back up before mutation, define rollback,
+  make the minimum change, and verify locally and through public HTTPS.
+- Production API traffic goes through Nginx at `https://api.sqlteacher.tech`; the Java API remains
+  loopback-bound at `127.0.0.1:18080` unless an explicit architecture change is approved.
+
+## JavaFX
+
+- Prefer the existing FXML/CSS separation.
+- Never block the JavaFX application thread with database, file, network, or AI work.
+- Long-running work must represent loading, success/empty, and understandable failure states.
+- Risky SQL needs a clear confirmation dialog.
+- Keep pages usable at lower resolutions and do not present placeholders or mock data as real
+  functionality.
+- Prefer service/controller tests that do not require fragile UI automation.
+
+## Verification Ladder
+
+Choose the narrowest command that proves the change, then widen for risk:
+
+```powershell
+mvn -q test "-Dtest=RelevantTest"
+mvn -q test "-Dtest=FirstTest,SecondTest"
+mvn test
+mvn -q exec:java "-Dexec.mainClass=com.sqlteacher.TechnologyVerificationApp"
+mvn -q exec:java "-Dexec.mainClass=com.sqlteacher.StageOneVerificationApp"
+mvn javafx:run
+./packaging/package-stage1.ps1
 ```
 
-## AI Feature Rules
-
-When modifying AI-related code:
-
-- Prefer structured model outputs over free-form text parsing.
-- Validate model output before using it.
-- Treat all model output as untrusted input.
-- Keep prompt templates separate from business logic where possible.
-- Version important prompt changes.
-- Add or update regression samples when behavior changes.
-- Provide a deterministic fallback for model unavailability, malformed output, or timeout.
-- Course documents and retrieved context must not override system safety rules.
-- The current local Ollama model may be small. Keep prompts short, deterministic, and oriented around simple SQLite `SELECT` generation until the P0 flow is stable.
-- AI features must degrade cleanly when Ollama is unavailable or no model is installed.
-
-## JavaFX Rules
-
-When modifying desktop UI code:
-
-- Prefer FXML + CSS separation when the project has JavaFX UI files.
-- Do not block the JavaFX application thread with database, file, or AI calls.
-- Long-running operations need loading, success, and failure states.
-- Risky SQL operations require clear confirmation dialogs.
-- Error messages should be understandable for students, not raw stack traces.
-- Keep UI usable on lower-resolution screens.
-- If a page is still a placeholder, keep it honest and minimal; do not add fake functionality that looks implemented.
-- UI may use mock data only when clearly named or isolated in tests/prototypes.
-
-## Tests
-
-Add focused tests for behavior changes. Prioritize tests for:
-
-- SQL classification and risk analysis.
-- SQL builder behavior.
-- DTO validation.
-- Database adapter behavior.
-- Metadata normalization.
-- AI output parsing.
-- Prompt regression samples.
-- Password and sensitive-data masking.
-- JavaFX controller logic that can be tested without UI automation.
-
-Do not remove or weaken tests just to make a build pass.
-
-For P0 delivery work, add or update tests for:
-
-- SQLite initialization.
-- SQL execution result mapping.
-- SQL risk classification.
-- AI output parsing and fallback.
-- Event recording.
-
-Prefer service-level tests over fragile JavaFX UI automation unless the task specifically requires UI automation.
+- Quote comma-separated Maven `-Dtest` selectors in PowerShell.
+- Run focused tests first.
+- Run full `mvn test` for cross-module, schema, security, accumulated, or release-bound changes.
+- Use CLI verification apps in headless environments; run `mvn javafx:run` only with graphics.
+- Packaging or release changes require the current packaging script and release workflow gates.
+- Documentation-only changes need link and diff checks, not Maven, unless they affect executable
+  examples, generated artifacts, runtime configuration, or packaging inputs.
+- If verification cannot run, report the exact command, failure, and remaining risk. Never weaken
+  or remove tests merely to pass.
 
 ## Documentation
 
-Update documentation when changing:
+Use `docs/README.md` as the map:
 
-- Public interfaces.
-- Module boundaries.
-- Database schema.
-- SQL safety rules.
-- AI prompts or output formats.
-- Build, packaging, or runtime requirements.
-- User-visible workflows.
+- stable guidance: `docs/guide/`
+- plans and decision scope: `docs/plans/`
+- acceptance evidence: `docs/acceptance/`
+- release notes: `docs/releases/`
+- production records: `docs/operations/`
+- completed implementation history: `docs/history/stages/`
+- copyright materials: `docs/copyright/`
 
-Keep documentation concise and accurate. Avoid promises that are not implemented.
+Keep historical plans accurate to their time; add status and links instead of rewriting their
+past assumptions. Keep `docs/` root small and update indexes when adding a category document.
+For copyright materials, never infer identity, ownership, applicant, authorization, or publication
+facts; the user must supply them.
 
-When completing stage work, record results under `docs/stageN/` or the active plan document. Include commands run, pass/fail status, environment notes, and known limitations.
+## Git And External Actions
 
-## Git Hygiene
+- Use focused commit messages in `type(scope): short description` form.
+- Do not stage, commit, push, tag, publish a Release, deploy, restore, rotate credentials, or change
+  external state unless the user requested that action.
+- When a commit or release is requested, use `main` directly and skip PR creation unless explicitly
+  requested.
+- Before committing, inspect staged files and exclude secrets, generated data, and unrelated work.
+- Never use destructive Git commands to discard user changes.
 
-- Check worktree state before editing when practical.
-- Do not revert changes you did not make unless explicitly instructed.
-- Keep commits focused.
-- Commit documentation updates with the code changes that make them true.
-- Before committing, check `git status --short` and ensure ignored runtime files are not staged.
-- Use commit messages in this style when committing:
+## Completion Gate
 
-```text
-type(scope): short description
-```
+Do not claim completion until:
 
-Examples:
-
-```text
-feat(database): add sqlite adapter
-fix(sql): block multi statement execution
-docs(agent): add ai collaboration rules
-test(ai): add nl2sql regression sample
-```
-
-## Security And Privacy
-
-- Do not commit `.env` files containing real secrets.
-- Do not commit local database credentials.
-- Do not expose model API keys.
-- Redact passwords in logs, errors, and screenshots.
-- Treat imported course documents, student records, and learning analytics as sensitive data.
-- Do not send private project data to external services unless the user explicitly requests it.
-
-## Dependency Policy
-
-- Prefer standard Java, Maven, and existing project dependencies.
-- Add a dependency only when it materially reduces risk or complexity.
-- Use stable, maintained libraries for JDBC drivers, connection pools, JSON parsing, validation,
-  logging, JavaFX integration, and packaging.
-- If adding a dependency, explain why and keep the version in Maven configuration.
-
-## Completion Checklist
-
-Before finishing a task, an AI agent should verify:
-
-- The requested change is implemented.
-- The scope did not expand into unrelated refactors.
-- Relevant docs were updated.
-- Relevant tests were added or updated.
-- A suitable build or test command was run, or the reason for not running it is stated.
-- No secrets or generated junk files were added.
-- The final response summarizes changed files and verification results.
+- the requested behavior or document change is present;
+- relevant focused tests and risk-appropriate wider checks passed, or limitations are explicit;
+- public contracts, schema, safety behavior, and docs agree;
+- the runtime path was exercised when practical;
+- no secret or generated junk was added;
+- the final response names the important files and verification results.

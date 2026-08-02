@@ -6,19 +6,19 @@
 
 建议新成员按以下顺序阅读：
 
-1. [项目范围与里程碑](guide/01-project-scope-and-roadmap.md)
-2. [团队分工与协作机制](guide/02-team-collaboration.md)
-3. [架构与模块设计](guide/03-architecture-and-modules.md)
-4. [开发规范](guide/04-development-standards.md)
-5. [SQL 与 AI 安全规范](guide/05-sql-and-ai-safety.md)
-6. [测试、打包与验收](guide/06-testing-packaging-acceptance.md)
-7. [交付物与风险管理](guide/07-delivery-and-risk-management.md)
-8. [2026-07-10 至 2026-07-30 隔离式初步版交付计划](plans/2026-07-30-isolated-delivery-plan.md)
+1. [项目范围与里程碑](../guide/01-project-scope-and-roadmap.md)
+2. [团队分工与协作机制](../guide/02-team-collaboration.md)
+3. [架构与模块设计](../guide/03-architecture-and-modules.md)
+4. [开发规范](../guide/04-development-standards.md)
+5. [SQL 与 AI 安全规范](../guide/05-sql-and-ai-safety.md)
+6. [测试、打包与验收](../guide/06-testing-packaging-acceptance.md)
+7. [交付物与风险管理](../guide/07-delivery-and-risk-management.md)
+8. [2026-07-10 至 2026-07-30 隔离式初步版交付计划](../plans/2026-07-30-isolated-delivery-plan.md)
 
 ## 阶段记录
 
-- [阶段 0 技术验证报告](stage0/stage0-report.md)
-- [阶段 1 验证报告](stage1/stage1-report.md)
+- [阶段 0 技术验证报告](stages/stage0/stage0-report.md)
+- [阶段 1 验证报告](stages/stage1/stage1-report.md)
 
 ## 项目目标
 

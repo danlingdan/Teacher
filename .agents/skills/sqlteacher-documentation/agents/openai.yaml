@@ -1,0 +1,4 @@
+interface:
+  display_name: "SQLTeacher Documentation"
+  short_description: "Maintain navigable current and historical project documentation"
+  default_prompt: "Use $sqlteacher-documentation to organize and validate SQLTeacher documentation."
