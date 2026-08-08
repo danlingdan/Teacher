@@ -14,6 +14,11 @@ class WindowsPackagingContractTest {
         String content = Files.readString(script);
 
         assertTrue(content.contains("--type exe"));
+        assertTrue(content.contains("ConvertTo-WindowsPackageVersion"));
+        assertTrue(content.contains("$packageVersion"));
+        assertTrue(content.contains("'alpha' { 1000 }"));
+        assertTrue(content.contains("'beta' { 2000 }"));
+        assertTrue(content.contains("'rc' { 3000 }"));
         assertTrue(content.contains("--win-upgrade-uuid"));
         assertTrue(content.contains("--win-per-user-install"));
         assertTrue(content.contains("--install-dir \"SQLTeacher-App\""));
@@ -44,6 +49,9 @@ class WindowsPackagingContractTest {
         assertTrue(workflow.contains("gh release upload"));
         assertTrue(workflow.contains("SQLTEACHER_UPDATE_SIGNING_KEY"));
         assertTrue(workflow.contains("UpdateManifestTool.java sign"));
+        assertTrue(workflow.contains("RELEASE_PRERELEASE=true"));
+        assertTrue(workflow.contains("--prerelease"));
+        assertTrue(workflow.contains("--latest=false"));
         assertTrue(workflow.contains("sqlteacher-sbom.json"));
         assertTrue(workflow.contains("update-manifest.json"));
         assertTrue(workflow.contains("--draft=false"));

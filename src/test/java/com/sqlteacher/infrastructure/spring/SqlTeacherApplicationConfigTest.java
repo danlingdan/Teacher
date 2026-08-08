@@ -1,5 +1,7 @@
 package com.sqlteacher.infrastructure.spring;
 
+import com.sqlteacher.application.activity.ActivityEvaluationDispatcher;
+import com.sqlteacher.application.activity.ActivityEvaluator;
 import com.sqlteacher.application.ai.AiStatusService;
 import com.sqlteacher.application.ai.NetworkAiSettingsService;
 import com.sqlteacher.application.collaboration.CloudApiClient;
@@ -50,6 +52,8 @@ class SqlTeacherApplicationConfigTest {
             assertNotNull(context.getBean(ExerciseManagementService.class));
             assertNotNull(context.getBean(ExerciseCatalogService.class));
             assertNotNull(context.getBean(SqlExerciseEvaluationService.class));
+            assertNotNull(context.getBean(ActivityEvaluationDispatcher.class));
+            assertEquals(1, context.getBeansOfType(ActivityEvaluator.class).size());
             assertNotNull(context.getBean(ExercisePracticeService.class));
             assertNotNull(context.getBean(ExerciseProgressService.class));
             assertNotNull(context.getBean(DatabaseMetadataService.class));

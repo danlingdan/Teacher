@@ -81,6 +81,10 @@ class DefaultLearningEventServiceTest {
 
         assertEquals(LearningEventType.EXERCISE_PASSED, recorded.get(0).type());
         assertEquals("query-01", recorded.get(0).attributes().get("exerciseId"));
+        assertEquals("query-01", recorded.get(0).attributes().get("activityId"));
+        assertEquals("SQL", recorded.get(0).attributes().get("activityType"));
+        assertEquals("sql-deterministic-v1", recorded.get(0).attributes().get("evaluatorVersion"));
+        assertEquals("activity-evidence-v1", recorded.get(0).attributes().get("evidenceVersion"));
         assertFalse(recorded.get(0).attributes().containsKey("sql"));
         assertEquals(LearningEventType.EXERCISE_HINT_USED, recorded.get(1).type());
         assertEquals("2", recorded.get(1).attributes().get("hintLevel"));

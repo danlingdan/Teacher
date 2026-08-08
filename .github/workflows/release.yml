@@ -38,6 +38,13 @@ jobs:
               throw "Release tag '$env:GITHUB_REF_NAME' does not match pom.xml version '$version'."
           }
           "PROJECT_VERSION=$version" >> $env:GITHUB_ENV
+          if ($version -match '-(?<channel>alpha|beta|rc)\.[0-9]+$') {
+              "RELEASE_CHANNEL=$($Matches.channel)" >> $env:GITHUB_ENV
+              "RELEASE_PRERELEASE=true" >> $env:GITHUB_ENV
+          } else {
+              "RELEASE_CHANNEL=stable" >> $env:GITHUB_ENV
+              "RELEASE_PRERELEASE=false" >> $env:GITHUB_ENV
+          }
 
       - name: Run full test suite
         run: mvn -B test
@@ -70,7 +77,7 @@ jobs:
           $installer = Get-Item -LiteralPath "target/installer/SQLTeacher-$env:PROJECT_VERSION.exe"
           $archive = Get-Item -LiteralPath "target/installer/SQLTeacher-$env:PROJECT_VERSION-windows-x64.zip"
           $payload = [ordered]@{
-              schemaVersion = 1; product = 'SQLTeacher'; channel = 'stable'; version = $env:PROJECT_VERSION
+              schemaVersion = 1; product = 'SQLTeacher'; channel = $env:RELEASE_CHANNEL; version = $env:PROJECT_VERSION
               platform = 'windows'; architecture = 'x64'; publishedAt = [DateTimeOffset]::UtcNow.ToString('o')
               releaseNotesUrl = "https://github.com/${{ github.repository }}/releases/tag/$env:GITHUB_REF_NAME"
               installerUrl = "https://github.com/${{ github.repository }}/releases/download/$env:GITHUB_REF_NAME/$($installer.Name)"
@@ -104,8 +111,13 @@ jobs:
         run: |
           gh release view $env:GITHUB_REF_NAME *> $null
           if ($LASTEXITCODE -ne 0) {
-              gh release create $env:GITHUB_REF_NAME --verify-tag --draft `
-                  --title "SQLTeacher $env:GITHUB_REF_NAME" --generate-notes
+              if ($env:RELEASE_PRERELEASE -eq 'true') {
+                  gh release create $env:GITHUB_REF_NAME --verify-tag --draft --prerelease `
+                      --title "SQLTeacher $env:GITHUB_REF_NAME" --generate-notes
+              } else {
+                  gh release create $env:GITHUB_REF_NAME --verify-tag --draft `
+                      --title "SQLTeacher $env:GITHUB_REF_NAME" --generate-notes
+              }
               if ($LASTEXITCODE -ne 0) { throw 'Unable to create the GitHub Release draft.' }
           }
 
@@ -127,5 +139,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release edit $env:GITHUB_REF_NAME --draft=false --latest
+          if ($env:RELEASE_PRERELEASE -eq 'true') {
+              gh release edit $env:GITHUB_REF_NAME --draft=false --prerelease --latest=false
+          } else {
+              gh release edit $env:GITHUB_REF_NAME --draft=false --latest
+          }
           if ($LASTEXITCODE -ne 0) { throw 'Unable to publish the GitHub Release.' }

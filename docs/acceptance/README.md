@@ -4,6 +4,8 @@
 
 ## 正式版本门禁
 
+- [v2.0.0-alpha.1](2026-08-09-v2-alpha1-stage-gate.md)（预发布）
+
 - [v1.9.0](2026-08-01-v1.9-stage-gate.md)
 - [v1.7.0](2026-07-30-v1.7.0-stage-gate.md)
 - [v1.6.0](2026-07-30-v1.6.0-stage-gate.md)

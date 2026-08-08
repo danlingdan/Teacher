@@ -1,6 +1,8 @@
 package com.sqlteacher.application.event;
 
 import com.sqlteacher.application.risk.SqlRiskLevel;
+import com.sqlteacher.application.activity.SqlActivityEvaluator;
+import com.sqlteacher.domain.activity.ActivityType;
 
 import java.time.Clock;
 import java.time.Duration;
@@ -120,23 +122,51 @@ public final class DefaultLearningEventService implements LearningEventService {
         Duration duration,
         String errorCode
     ) {
-        validateText(exerciseId, "exerciseId");
+        recordActivityEvaluation(
+            exerciseId, ActivityType.SQL, status, successful, duration,
+            SqlActivityEvaluator.VERSION, SqlActivityEvaluator.EVIDENCE_VERSION, errorCode
+        );
+    }
+
+    @Override
+    public void recordActivityEvaluation(
+        String activityId,
+        ActivityType activityType,
+        String status,
+        boolean successful,
+        Duration duration,
+        String evaluatorVersion,
+        String evidenceVersion,
+        String reasonCode
+    ) {
+        validateText(activityId, "activityId");
+        Objects.requireNonNull(activityType, "activityType must not be null");
         validateText(status, "status");
         Objects.requireNonNull(duration, "duration must not be null");
-        if (duration.isNegative()) {
-            throw new IllegalArgumentException("duration must not be negative");
-        }
+        validateText(evaluatorVersion, "evaluatorVersion");
+        validateText(evidenceVersion, "evidenceVersion");
+        if (duration.isNegative()) throw new IllegalArgumentException("duration must not be negative");
         Map<String, String> attributes = new LinkedHashMap<>();
-        attributes.put("exerciseId", exerciseId);
+        attributes.put("activityId", activityId);
+        attributes.put("activityType", activityType.name());
         attributes.put("status", status);
         attributes.put("durationMs", Long.toString(duration.toMillis()));
-        putIfPresent(attributes, "errorCode", errorCode);
+        attributes.put("evaluatorVersion", evaluatorVersion);
+        attributes.put("evidenceVersion", evidenceVersion);
+        putIfPresent(attributes, "reasonCode", reasonCode);
+        if (activityType == ActivityType.SQL) {
+            attributes.put("exerciseId", activityId);
+            putIfPresent(attributes, "errorCode", reasonCode);
+        }
         LearningEventType type = switch (status) {
-            case "PASSED" -> LearningEventType.EXERCISE_PASSED;
-            case "FAILED" -> LearningEventType.EXERCISE_FAILED;
-            default -> LearningEventType.EXERCISE_ATTEMPT;
+            case "PASSED" -> activityType == ActivityType.SQL
+                ? LearningEventType.EXERCISE_PASSED : LearningEventType.ACTIVITY_PASSED;
+            case "FAILED" -> activityType == ActivityType.SQL
+                ? LearningEventType.EXERCISE_FAILED : LearningEventType.ACTIVITY_FAILED;
+            default -> activityType == ActivityType.SQL
+                ? LearningEventType.EXERCISE_ATTEMPT : LearningEventType.ACTIVITY_ATTEMPT;
         };
-        record(type, "exercise", successful, attributes);
+        record(type, activityType == ActivityType.SQL ? "exercise" : "activity", successful, attributes);
     }
 
     @Override

@@ -18,7 +18,37 @@ $outputPath = if ([System.IO.Path]::IsPathRooted($OutputDir)) {
 }
 $pomPath = Join-Path $projectRoot "pom.xml"
 [xml]$pom = Get-Content -LiteralPath $pomPath -Raw
-$projectVersion = $pom.project.version
+$projectVersion = [string]$pom.project.version
+
+function ConvertTo-WindowsPackageVersion {
+    param([string]$SemanticVersion)
+
+    if ($SemanticVersion -notmatch '^(?<major>0|[1-9][0-9]*)\.(?<minor>0|[1-9][0-9]*)\.(?<patch>0|[1-9][0-9]*)(?:-(?<stage>alpha|beta|rc)\.(?<sequence>[1-9][0-9]*))?$') {
+        throw "Unsupported SQLTeacher release version for Windows packaging: $SemanticVersion"
+    }
+    $major = [int]$Matches.major
+    $minor = [int]$Matches.minor
+    $patch = [int]$Matches.patch
+    if ($major -lt 2 -and [string]::IsNullOrWhiteSpace($Matches.stage)) {
+        return "$major.$minor.$patch"
+    }
+    $build = if ([string]::IsNullOrWhiteSpace($Matches.stage)) {
+        4000 + $patch
+    } else {
+        $offset = switch ($Matches.stage) {
+            'alpha' { 1000 }
+            'beta' { 2000 }
+            'rc' { 3000 }
+        }
+        $offset + [int]$Matches.sequence
+    }
+    if ($major -gt 255 -or $minor -gt 255 -or $build -gt 65535) {
+        throw "Windows package version is outside MSI limits: $major.$minor.$build"
+    }
+    return "$major.$minor.$build"
+}
+
+$packageVersion = ConvertTo-WindowsPackageVersion -SemanticVersion $projectVersion
 $cloudUri = $null
 if (-not [System.Uri]::TryCreate($CloudBaseUrl, [System.UriKind]::Absolute, [ref]$cloudUri) -or
     $cloudUri.Scheme -ne [System.Uri]::UriSchemeHttps -or
@@ -32,6 +62,7 @@ $appName = "SQLTeacher"
 $appImageDir = Join-Path $outputPath $appName
 $archivePath = Join-Path $outputPath "$appName-$projectVersion-windows-x64.zip"
 $installerPath = Join-Path $outputPath "$appName-$projectVersion.exe"
+$generatedInstallerPath = Join-Path $outputPath "$appName-$packageVersion.exe"
 $checksumPath = Join-Path $outputPath "SHA256SUMS.txt"
 $sbomPath = Join-Path $outputPath "sqlteacher-sbom.json"
 $updatePayloadPath = Join-Path $outputPath "update-payload.json"
@@ -65,6 +96,7 @@ Assert-ChildPath -Candidate $inputDir -Parent $targetRoot
 Assert-ChildPath -Candidate $appImageDir -Parent $outputPath
 Assert-ChildPath -Candidate $archivePath -Parent $outputPath
 Assert-ChildPath -Candidate $installerPath -Parent $outputPath
+Assert-ChildPath -Candidate $generatedInstallerPath -Parent $outputPath
 Assert-ChildPath -Candidate $checksumPath -Parent $outputPath
 Assert-ChildPath -Candidate $sbomPath -Parent $outputPath
 Assert-ChildPath -Candidate $updatePayloadPath -Parent $outputPath
@@ -148,7 +180,7 @@ try {
 
     New-Item -ItemType Directory -Force -Path $outputPath | Out-Null
     Get-ChildItem -LiteralPath $outputPath -File | Where-Object {
-        $_.Name -match '^SQLTeacher-[0-9]+\.[0-9]+\.[0-9]+(?:-windows-x64\.zip|\.exe)$'
+        $_.Name -match '^SQLTeacher-[0-9]+\.[0-9]+\.[0-9]+(?:-(?:alpha|beta|rc)\.[0-9]+)?(?:-windows-x64\.zip|\.exe)$'
     } | ForEach-Object {
         Assert-ChildPath -Candidate $_.FullName -Parent $outputPath
         Remove-Item -LiteralPath $_.FullName -Force
@@ -175,7 +207,7 @@ try {
     jpackage `
         --type app-image `
         --name $appName `
-        --app-version $projectVersion `
+        --app-version $packageVersion `
         --vendor "SQLTeacher Project" `
         --description "Local-first SQL teaching and practice desktop application" `
         --copyright "Copyright 2026 SQLTeacher Project" `
@@ -220,7 +252,7 @@ try {
         jpackage `
             --type exe `
             --name $appName `
-            --app-version $projectVersion `
+            --app-version $packageVersion `
             --vendor "SQLTeacher Project" `
             --description "Local-first SQL teaching and practice desktop application" `
             --copyright "Copyright 2026 SQLTeacher Project" `
@@ -236,6 +268,9 @@ try {
             --win-upgrade-uuid "569f427c-d027-4420-8477-7222c9ba6c55"
         if ($LASTEXITCODE -ne 0) {
             throw "jpackage installer failed with exit code $LASTEXITCODE."
+        }
+        if ($generatedInstallerPath -ne $installerPath -and (Test-Path -LiteralPath $generatedInstallerPath)) {
+            Move-Item -LiteralPath $generatedInstallerPath -Destination $installerPath -Force
         }
         if (-not (Test-Path -LiteralPath $installerPath)) {
             throw "Windows installer was not created: $installerPath"

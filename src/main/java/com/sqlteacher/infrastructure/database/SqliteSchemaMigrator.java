@@ -556,6 +556,256 @@ final class SqliteSchemaMigrator {
                     )
                     """
             )
+        ),
+        new Migration(
+            11,
+            "Create v2 alpha.1 course graph, activity, evaluation, and evidence skeleton",
+            List.of(
+                """
+                    create table course_definition (
+                        id text primary key,
+                        version text not null,
+                        title text not null,
+                        language text not null,
+                        license text not null,
+                        maintainer text not null,
+                        visibility text not null check (visibility in ('PRIVATE','PUBLISHED','INACTIVE')),
+                        created_at text not null,
+                        updated_at text not null
+                    )
+                    """,
+                """
+                    create table course_section (
+                        id text primary key,
+                        course_id text not null references course_definition(id) on delete cascade,
+                        title text not null,
+                        sort_order integer not null check (sort_order >= 0),
+                        unlock_policy text not null default 'OPEN',
+                        unique(course_id, sort_order)
+                    )
+                    """,
+                """
+                    create table learning_outcome (
+                        id text primary key,
+                        course_id text not null references course_definition(id) on delete cascade,
+                        description text not null,
+                        expected_level text not null,
+                        sort_order integer not null check (sort_order >= 0),
+                        unique(course_id, sort_order)
+                    )
+                    """,
+                """
+                    create table knowledge_point_definition (
+                        id text primary key,
+                        course_id text not null references course_definition(id) on delete cascade,
+                        name text not null,
+                        aliases_json text not null default '[]',
+                        cs2023_mappings_json text not null default '[]',
+                        unique(course_id, name)
+                    )
+                    """,
+                """
+                    create table knowledge_point_relation (
+                        course_id text not null references course_definition(id) on delete cascade,
+                        source_id text not null references knowledge_point_definition(id) on delete cascade,
+                        target_id text not null references knowledge_point_definition(id) on delete cascade,
+                        relation_type text not null check (relation_type in ('PREREQUISITE','RELATED','TRANSFER')),
+                        primary key(source_id, target_id, relation_type),
+                        check (source_id <> target_id)
+                    )
+                    """,
+                """
+                    create table learning_activity_definition (
+                        id text primary key,
+                        course_id text not null references course_definition(id),
+                        section_id text not null references course_section(id),
+                        activity_type text not null check (activity_type in (
+                            'SQL','QUIZ','TRACE','SIMULATION','CODE','LAB','PROJECT','READING'
+                        )),
+                        title text not null,
+                        description text not null,
+                        difficulty text not null check (difficulty in ('BEGINNER','INTERMEDIATE','ADVANCED')),
+                        estimated_minutes integer not null check (estimated_minutes > 0),
+                        definition_version integer not null check (definition_version > 0),
+                        specification_format_version integer not null check (specification_format_version > 0),
+                        specification_json text not null,
+                        source_kind text not null,
+                        source_id text not null,
+                        enabled integer not null check (enabled in (0, 1)),
+                        created_at text not null,
+                        updated_at text not null,
+                        unique(source_kind, source_id)
+                    )
+                    """,
+                "create index learning_activity_course_section on learning_activity_definition(course_id, section_id, enabled, activity_type)",
+                """
+                    create table activity_session (
+                        id text primary key,
+                        owner_id text not null,
+                        activity_id text not null references learning_activity_definition(id),
+                        activity_version integer not null check (activity_version > 0),
+                        status text not null check (status in ('STARTED','PAUSED','COMPLETED','CLOSED')),
+                        source_kind text not null,
+                        source_id text not null,
+                        started_at text not null,
+                        updated_at text not null,
+                        unique(source_kind, source_id)
+                    )
+                    """,
+                "create index activity_session_owner_status on activity_session(owner_id, status, updated_at desc)",
+                """
+                    create table activity_knowledge_point (
+                        activity_id text not null references learning_activity_definition(id) on delete cascade,
+                        knowledge_point_id text not null references knowledge_point_definition(id) on delete cascade,
+                        primary key(activity_id, knowledge_point_id)
+                    )
+                    """,
+                """
+                    create table activity_evaluation_result (
+                        id text primary key,
+                        owner_id text not null,
+                        activity_id text not null references learning_activity_definition(id),
+                        activity_version integer not null check (activity_version > 0),
+                        activity_type text not null,
+                        status text not null check (status in ('PASSED','FAILED','REJECTED','ERROR')),
+                        reason_code text not null default '',
+                        criteria_json text not null,
+                        evidence_summary_json text not null,
+                        evaluator_version text not null,
+                        evidence_version text not null,
+                        duration_ms integer not null check (duration_ms >= 0),
+                        artifact_hash text not null,
+                        occurred_at text not null
+                    )
+                    """,
+                "create index activity_evaluation_owner_activity on activity_evaluation_result(owner_id, activity_id, occurred_at desc)",
+                "alter table learning_events add column activity_id text",
+                "alter table learning_events add column activity_type text",
+                "alter table learning_events add column evaluator_version text",
+                "alter table learning_events add column evidence_version text",
+                "alter table learning_events add column reason_code text",
+                """
+                    insert into course_definition(
+                        id, version, title, language, license, maintainer, visibility, created_at, updated_at
+                    ) values (
+                        'builtin-data-management', '1', '数据管理', 'zh-CN',
+                        'SQLTeacher built-in content', 'SQLTeacher', 'PUBLISHED', current_timestamp, current_timestamp
+                    )
+                    """,
+                """
+                    insert into course_section(id, course_id, title, sort_order)
+                    values ('sql-practice', 'builtin-data-management', 'SQL 练习', 0)
+                    """,
+                """
+                    insert into knowledge_point_definition(id, course_id, name)
+                    select 'legacy-sql:' || lower(hex(cast(knowledge_point as blob))),
+                        'builtin-data-management', knowledge_point
+                    from exercises
+                    group by knowledge_point
+                    """,
+                """
+                    insert into learning_activity_definition(
+                        id, course_id, section_id, activity_type, title, description, difficulty,
+                        estimated_minutes, definition_version, specification_format_version,
+                        specification_json, source_kind, source_id, enabled, created_at, updated_at
+                    )
+                    select id, 'builtin-data-management', 'sql-practice', 'SQL', title, description, difficulty,
+                        15, version, 1, '{}', 'SQL_EXERCISE', id, enabled, created_at, updated_at
+                    from exercises
+                    """,
+                """
+                    insert into activity_knowledge_point(activity_id, knowledge_point_id)
+                    select id, 'legacy-sql:' || lower(hex(cast(knowledge_point as blob)))
+                    from exercises
+                    """,
+                """
+                    insert into activity_session(
+                        id, owner_id, activity_id, activity_version, status,
+                        source_kind, source_id, started_at, updated_at
+                    )
+                    select id, owner_id, exercise_id, exercise_version,
+                        case when completed_at is null then 'STARTED' else 'COMPLETED' end,
+                        'SQL_EXERCISE_SESSION', id, started_at, coalesce(completed_at, started_at)
+                    from exercise_sessions
+                    """,
+                """
+                    create trigger exercises_activity_insert after insert on exercises begin
+                        insert or ignore into knowledge_point_definition(id, course_id, name)
+                        values (
+                            'legacy-sql:' || lower(hex(cast(new.knowledge_point as blob))),
+                            'builtin-data-management', new.knowledge_point
+                        );
+                        insert into learning_activity_definition(
+                            id, course_id, section_id, activity_type, title, description, difficulty,
+                            estimated_minutes, definition_version, specification_format_version,
+                            specification_json, source_kind, source_id, enabled, created_at, updated_at
+                        ) values (
+                            new.id, 'builtin-data-management', 'sql-practice', 'SQL', new.title,
+                            new.description, new.difficulty, 15, new.version, 1, '{}',
+                            'SQL_EXERCISE', new.id, new.enabled, new.created_at, new.updated_at
+                        );
+                        insert into activity_knowledge_point(activity_id, knowledge_point_id)
+                        values (
+                            new.id, 'legacy-sql:' || lower(hex(cast(new.knowledge_point as blob)))
+                        );
+                    end
+                    """,
+                """
+                    create trigger exercises_activity_update after update on exercises begin
+                        insert or ignore into knowledge_point_definition(id, course_id, name)
+                        values (
+                            'legacy-sql:' || lower(hex(cast(new.knowledge_point as blob))),
+                            'builtin-data-management', new.knowledge_point
+                        );
+                        update learning_activity_definition set
+                            title = new.title,
+                            description = new.description,
+                            difficulty = new.difficulty,
+                            definition_version = new.version,
+                            enabled = new.enabled,
+                            updated_at = new.updated_at
+                        where source_kind = 'SQL_EXERCISE' and source_id = new.id;
+                        delete from activity_knowledge_point where activity_id = new.id;
+                        insert into activity_knowledge_point(activity_id, knowledge_point_id)
+                        values (
+                            new.id, 'legacy-sql:' || lower(hex(cast(new.knowledge_point as blob)))
+                        );
+                    end
+                    """,
+                """
+                    create trigger exercises_activity_delete after delete on exercises begin
+                        delete from learning_activity_definition
+                        where source_kind = 'SQL_EXERCISE' and source_id = old.id;
+                    end
+                    """,
+                """
+                    create trigger exercise_sessions_activity_insert after insert on exercise_sessions begin
+                        insert into activity_session(
+                            id, owner_id, activity_id, activity_version, status,
+                            source_kind, source_id, started_at, updated_at
+                        ) values (
+                            new.id, new.owner_id, new.exercise_id, new.exercise_version,
+                            case when new.completed_at is null then 'STARTED' else 'COMPLETED' end,
+                            'SQL_EXERCISE_SESSION', new.id, new.started_at, coalesce(new.completed_at, new.started_at)
+                        );
+                    end
+                    """,
+                """
+                    create trigger exercise_sessions_activity_update after update on exercise_sessions begin
+                        update activity_session set
+                            owner_id = new.owner_id,
+                            status = case when new.completed_at is null then 'STARTED' else 'COMPLETED' end,
+                            updated_at = coalesce(new.completed_at, new.started_at)
+                        where source_kind = 'SQL_EXERCISE_SESSION' and source_id = new.id;
+                    end
+                    """,
+                """
+                    create trigger exercise_sessions_activity_delete after delete on exercise_sessions begin
+                        delete from activity_session
+                        where source_kind = 'SQL_EXERCISE_SESSION' and source_id = old.id;
+                    end
+                    """
+            )
         )
     );
 

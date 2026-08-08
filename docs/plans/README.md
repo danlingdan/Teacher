@@ -6,7 +6,7 @@
 
 | 版本/主题 | 计划 | 对应实施记录 |
 | --- | --- | --- |
-| v2.0 | [计算机专业学习平台总计划](2026-08-02-v2.0-computer-science-learning-platform-plan.md) | 待实施 |
+| v2.0 | [计算机专业学习平台总计划](2026-08-02-v2.0-computer-science-learning-platform-plan.md) · [alpha.1 活动内核 RFC](2026-08-09-v2-alpha1-activity-kernel-rfc.md) | [Stage 9](../history/stages/stage9/2026-08-09-v2-alpha1-implementation.md) |
 | v1.11 | [通用能力收尾](2026-08-02-v1.11-general-capabilities-closeout-plan.md) | [Stage 8](../history/stages/stage8/2026-08-02-v111-closeout-implementation.md) |
 | v1.10 | [通用软件能力与用户支持](2026-08-02-v1.10-general-software-capabilities-plan.md) | [Stage 7](../history/stages/stage7/2026-08-02-v110-general-software-implementation.md) |
 | v1.9 | [可验证教学编排](2026-08-01-v1.9-verifiable-teaching-orchestration-plan.md) | [Stage 6](../history/stages/stage6/2026-08-01-v19-teaching-orchestration-implementation.md) |

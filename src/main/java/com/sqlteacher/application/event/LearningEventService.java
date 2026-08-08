@@ -1,6 +1,7 @@
 package com.sqlteacher.application.event;
 
 import com.sqlteacher.application.risk.SqlRiskLevel;
+import com.sqlteacher.domain.activity.ActivityType;
 
 import java.time.Duration;
 
@@ -38,6 +39,18 @@ public interface LearningEventService {
         boolean successful,
         Duration duration,
         String errorCode
+    ) {
+    }
+
+    default void recordActivityEvaluation(
+        String activityId,
+        ActivityType activityType,
+        String status,
+        boolean successful,
+        Duration duration,
+        String evaluatorVersion,
+        String evidenceVersion,
+        String reasonCode
     ) {
     }
 

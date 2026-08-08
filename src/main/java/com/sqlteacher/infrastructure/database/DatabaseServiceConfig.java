@@ -1,5 +1,10 @@
 package com.sqlteacher.infrastructure.database;
 
+import com.sqlteacher.application.activity.ActivityBackedSqlExerciseEvaluationService;
+import com.sqlteacher.application.activity.ActivityEvaluationDispatcher;
+import com.sqlteacher.application.activity.ActivityEvaluator;
+import com.sqlteacher.application.activity.DefaultActivityEvaluationDispatcher;
+import com.sqlteacher.application.activity.SqlActivityEvaluator;
 import com.sqlteacher.application.connection.ConnectionManagementService;
 import com.sqlteacher.application.connection.DatabaseConnectionTestService;
 import com.sqlteacher.application.connection.DatabaseCredentialSession;
@@ -51,9 +56,11 @@ import com.sqlteacher.infrastructure.knowledge.SqliteKnowledgeIndexService;
 import com.sqlteacher.infrastructure.knowledge.SqliteKnowledgeReadStateService;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Primary;
 import org.springframework.beans.factory.ObjectProvider;
 
 import java.time.Duration;
+import java.util.List;
 
 @Configuration
 public class DatabaseServiceConfig {
@@ -158,10 +165,29 @@ public class DatabaseServiceConfig {
     }
 
     @Bean
-    public SqlExerciseEvaluationService sqlExerciseEvaluationService(
+    public DeterministicSqlExerciseEvaluationService deterministicSqlExerciseEvaluationService(
             SqlRiskAnalysisService riskAnalysisService,
             SqlTeacherConfiguration configuration) {
         return new DeterministicSqlExerciseEvaluationService(riskAnalysisService, configuration);
+    }
+
+    @Bean
+    public ActivityEvaluator<?, ?> sqlActivityEvaluator(
+            DeterministicSqlExerciseEvaluationService deterministicEvaluator) {
+        return new SqlActivityEvaluator(deterministicEvaluator);
+    }
+
+    @Bean
+    public ActivityEvaluationDispatcher activityEvaluationDispatcher(
+            List<ActivityEvaluator<?, ?>> evaluators) {
+        return new DefaultActivityEvaluationDispatcher(evaluators);
+    }
+
+    @Bean
+    @Primary
+    public SqlExerciseEvaluationService sqlExerciseEvaluationService(
+            ActivityEvaluationDispatcher dispatcher) {
+        return new ActivityBackedSqlExerciseEvaluationService(dispatcher);
     }
 
     @Bean(destroyMethod = "shutdown")

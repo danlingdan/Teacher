@@ -26,7 +26,7 @@ class SqliteSchemaMigratorTest {
 
         int version = new SqliteSchemaMigrator().migrate(database);
 
-        assertEquals(10, version);
+        assertEquals(11, version);
         assertTrue(tableExists(database, "schema_version"));
         assertTrue(tableExists(database, "app_event"));
         assertTrue(tableExists(database, "learning_events"));
@@ -55,7 +55,15 @@ class SqliteSchemaMigratorTest {
         assertTrue(tableExists(database, "study_plan_action"));
         assertTrue(tableExists(database, "study_plan_outbox"));
         assertTrue(tableExists(database, "grounded_tutor_session"));
-        assertEquals(List.of(1, 2, 3, 4, 5, 6, 7, 8, 9, 10), appliedVersions(database));
+        assertTrue(tableExists(database, "course_definition"));
+        assertTrue(tableExists(database, "course_section"));
+        assertTrue(tableExists(database, "knowledge_point_definition"));
+        assertTrue(tableExists(database, "knowledge_point_relation"));
+        assertTrue(tableExists(database, "learning_activity_definition"));
+        assertTrue(tableExists(database, "activity_session"));
+        assertTrue(tableExists(database, "activity_knowledge_point"));
+        assertTrue(tableExists(database, "activity_evaluation_result"));
+        assertEquals(List.of(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11), appliedVersions(database));
     }
 
     @Test
@@ -73,7 +81,7 @@ class SqliteSchemaMigratorTest {
 
         new SqliteSchemaMigrator().migrate(database);
 
-        assertEquals(List.of(1, 2, 3, 4, 5, 6, 7, 8, 9, 10), appliedVersions(database));
+        assertEquals(List.of(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11), appliedVersions(database));
         assertEquals(1, countRows(database, "app_event"));
         assertTrue(tableExists(database, "learning_events"));
     }
@@ -87,8 +95,8 @@ class SqliteSchemaMigratorTest {
         execute(database, "insert into app_event(event_type, message) values ('FIRST_RUN', 'keep me')");
         int version = migrator.migrate(database);
 
-        assertEquals(10, version);
-        assertEquals(List.of(1, 2, 3, 4, 5, 6, 7, 8, 9, 10), appliedVersions(database));
+        assertEquals(11, version);
+        assertEquals(List.of(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11), appliedVersions(database));
         assertEquals(1, countRows(database, "app_event"));
     }
 
@@ -130,7 +138,8 @@ class SqliteSchemaMigratorTest {
         execute(database, "insert into schema_version(version, description) values (8, 'course knowledge')");
         execute(database, "insert into schema_version(version, description) values (9, 'hybrid knowledge')");
         execute(database, "insert into schema_version(version, description) values (10, 'study planning')");
-        execute(database, "insert into schema_version(version, description) values (11, 'future version')");
+        execute(database, "insert into schema_version(version, description) values (11, 'activities')");
+        execute(database, "insert into schema_version(version, description) values (12, 'future version')");
 
         SQLException error = assertThrows(
             SQLException.class,
@@ -138,7 +147,43 @@ class SqliteSchemaMigratorTest {
         );
 
         assertTrue(error.getMessage().contains("newer"));
-        assertEquals(List.of(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11), appliedVersions(database));
+        assertEquals(List.of(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12), appliedVersions(database));
+    }
+
+    @Test
+    void shouldBackfillSqlExercisesAsActivitiesAndRejectUnknownTypes() throws Exception {
+        Path database = tempDir.resolve("activities.db");
+        new SqliteSchemaMigrator().migrate(database);
+        execute(database, """
+            insert into exercise_datasets(id, name, setup_sql, version)
+            values ('dataset', 'Dataset', 'create table sample(id integer);', 1)
+            """);
+        execute(database, """
+            insert into exercises(
+                id, title, description, knowledge_point, difficulty, dataset_id, reference_sql,
+                evaluation_rule_json, hints_json, version, enabled
+            ) values (
+                'sql-1', 'SQL activity', 'SQL activity', 'Filtering', 'BEGINNER', 'dataset',
+                'select id from sample',
+                '{"compareColumns":true,"compareRows":true,"rowOrderMatters":false,"expectedRowCount":null,"requiredSqlKeywords":[]}',
+                '[]', 1, 1
+            )
+            """);
+
+        assertEquals(1, countRows(database, "exercises"));
+        assertEquals(1, countRows(database, "learning_activity_definition"));
+        assertEquals(1, countRows(database, "activity_knowledge_point"));
+        assertEquals(1, countRows(database, "course_definition"));
+        assertThrows(SQLException.class, () -> execute(database, """
+            insert into learning_activity_definition(
+                id, course_id, section_id, activity_type, title, description, difficulty,
+                estimated_minutes, definition_version, specification_format_version,
+                specification_json, source_kind, source_id, enabled, created_at, updated_at
+            ) values (
+                'unknown', 'builtin-data-management', 'sql-practice', 'UNKNOWN', 'Unknown', 'Unknown',
+                'BEGINNER', 1, 1, 1, '{}', 'TEST', 'unknown', 1, current_timestamp, current_timestamp
+            )
+            """));
     }
 
     private static void execute(Path database, String sql) throws Exception {
@@ -176,7 +221,10 @@ class SqliteSchemaMigratorTest {
     }
 
     private static int countRows(Path database, String tableName) throws Exception {
-        if (!List.of("app_event").contains(tableName)) {
+        if (!List.of(
+                "app_event", "exercises", "learning_activity_definition",
+                "activity_knowledge_point", "course_definition"
+            ).contains(tableName)) {
             throw new IllegalArgumentException("Unexpected test table: " + tableName);
         }
         try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + database);

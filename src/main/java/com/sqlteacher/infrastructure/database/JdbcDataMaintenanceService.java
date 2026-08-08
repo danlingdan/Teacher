@@ -5,6 +5,7 @@ import com.sqlteacher.application.maintenance.LearningDataResetResult;
 import com.sqlteacher.domain.SqlTeacherException;
 
 import java.sql.Connection;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 
@@ -20,9 +21,12 @@ public final class JdbcDataMaintenanceService implements DataMaintenanceService 
         try (Connection connection = connectionFactory.open("app")) {
             connection.setAutoCommit(false);
             try (Statement statement = connection.createStatement()) {
-                int attempts = statement.executeUpdate("delete from exercise_attempts");
-                int sessions = statement.executeUpdate("delete from exercise_sessions");
-                int events = statement.executeUpdate("delete from learning_events");
+                int attempts = count(statement, "exercise_attempts");
+                int sessions = count(statement, "exercise_sessions");
+                int events = count(statement, "learning_events");
+                statement.executeUpdate("delete from exercise_attempts");
+                statement.executeUpdate("delete from exercise_sessions");
+                statement.executeUpdate("delete from learning_events");
                 statement.executeUpdate("delete from mastery_snapshot");
                 statement.executeUpdate("delete from learning_action_state");
                 statement.executeUpdate("delete from study_plan_evidence");
@@ -39,6 +43,16 @@ public final class JdbcDataMaintenanceService implements DataMaintenanceService 
             }
         } catch (SQLException error) {
             throw new SqlTeacherException("LEARNING_DATA_RESET_FAILED", "Failed to reset learning data", error);
+        }
+    }
+
+    private static int count(Statement statement, String table) throws SQLException {
+        if (!java.util.Set.of("exercise_attempts", "exercise_sessions", "learning_events").contains(table)) {
+            throw new IllegalArgumentException("Unexpected learning data table");
+        }
+        try (ResultSet result = statement.executeQuery("select count(*) from " + table)) {
+            result.next();
+            return result.getInt(1);
         }
     }
 }
