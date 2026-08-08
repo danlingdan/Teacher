@@ -10,6 +10,7 @@ import org.junit.jupiter.api.condition.EnabledOnOs;
 import org.junit.jupiter.api.condition.OS;
 
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -30,11 +31,14 @@ class WslSandboxCodeRunnerTest {
     }
 
     @Test
-    void shouldRunPythonCAndCppInIsolatedWorkspace() {
+    void shouldRunJavaPythonCAndCppInIsolatedWorkspace() {
+        var java = run(CodeLanguage.JAVA, "public class Main { public static void main(String[] args) { System.out.println(\"java-ok\"); } }", "", limits());
         var python = run(CodeLanguage.PYTHON, "print(input())", "hello\n", limits());
         var c = run(CodeLanguage.C, "#include <stdio.h>\nint main(void){puts(\"c-ok\");return 0;}", "", limits());
         var cpp = run(CodeLanguage.CPP, "#include <iostream>\nint main(){std::cout << \"cpp-ok\\n\";}", "", limits());
 
+        assertEquals(RunnerFailureReason.NONE, java.failureReason(), java.standardError());
+        assertEquals("java-ok\n", java.standardOutput());
         assertEquals(RunnerFailureReason.NONE, python.failureReason(), python.standardError());
         assertEquals("hello\n", python.standardOutput());
         assertEquals(RunnerFailureReason.NONE, c.failureReason(), c.standardError());
@@ -117,12 +121,43 @@ class WslSandboxCodeRunnerTest {
                 children.append(subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(5)']))
             """, "", constrained);
 
-        assertFalse(memory.succeeded());
-        assertFalse(processes.succeeded());
+        assertEquals(RunnerFailureReason.MEMORY_LIMIT, memory.failureReason(), memory.standardError());
+        assertEquals(RunnerFailureReason.PROCESS_LIMIT, processes.failureReason(), processes.standardError());
         assertTrue(memory.resourceUsage().wallTime().compareTo(Duration.ofSeconds(8)) < 0);
         assertTrue(processes.resourceUsage().wallTime().compareTo(Duration.ofSeconds(8)) < 0);
         var recovered = run(CodeLanguage.PYTHON, "print('bounded')", "", limits());
         assertEquals(RunnerFailureReason.NONE, recovered.failureReason(), recovered.standardError());
+    }
+
+    @Test
+    void shouldClassifyCompileAndWorkspaceLimits() {
+        var constrained = new CodeExecutionLimits(Duration.ofSeconds(4), Duration.ofSeconds(3),
+            256 * CodeExecutionLimits.MEBIBYTE, 16 * 1024, CodeExecutionLimits.MEBIBYTE, 8, 4);
+        var compile = run(CodeLanguage.JAVA, "public class Main { this is not Java; }", "", limits());
+        var workspace = run(CodeLanguage.PYTHON, """
+            for index in range(1000):
+                open(f'/work/generated-{index}', 'w').write('x')
+            """, "", constrained);
+
+        assertEquals(RunnerFailureReason.COMPILE_ERROR, compile.failureReason(), compile.standardError());
+        assertEquals(RunnerFailureReason.WORKSPACE_LIMIT, workspace.failureReason(), workspace.standardError());
+    }
+
+    @Test
+    void shouldRunConcurrentRequestsAndRecover() throws Exception {
+        var executor = Executors.newVirtualThreadPerTaskExecutor();
+        try (executor) {
+            var tasks = new ArrayList<java.util.concurrent.Callable<com.sqlteacher.application.runner.CodeRunResult>>();
+            for (int index = 0; index < 4; index++) {
+                int value = index;
+                tasks.add(() -> run(CodeLanguage.PYTHON, "print('parallel-" + value + "')", "", limits()));
+            }
+            for (var future : executor.invokeAll(tasks)) {
+                assertEquals(RunnerFailureReason.NONE, future.get().failureReason());
+            }
+        }
+        assertEquals(RunnerFailureReason.NONE,
+            run(CodeLanguage.PYTHON, "print('after-parallel')", "", limits()).failureReason());
     }
 
     private static com.sqlteacher.application.runner.CodeRunResult run(CodeLanguage language, String source,

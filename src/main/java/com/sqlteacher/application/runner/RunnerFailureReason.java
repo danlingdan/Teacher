@@ -8,6 +8,8 @@ public enum RunnerFailureReason {
     RUNTIME_ERROR,
     TIME_LIMIT,
     MEMORY_LIMIT,
+    WORKSPACE_LIMIT,
+    PROCESS_LIMIT,
     OUTPUT_LIMIT,
     CANCELLED,
     INTERNAL_ERROR

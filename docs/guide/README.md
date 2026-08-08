@@ -21,5 +21,6 @@
 12. [云端服务部署](12-cloud-service-deployment.md)
 13. [课程协作、反馈与通知](13-v1.4-course-collaboration.md)
 14. [UI、主题与设置权限](14-v1.5-ui-themes-and-settings.md)
+15. [本地学习 IDE 与代码 Runner 配置](15-local-ide-and-runner-setup.md)
 
 返回 [文档中心](../README.md)。

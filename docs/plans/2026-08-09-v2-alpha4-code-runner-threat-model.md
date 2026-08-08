@@ -1,8 +1,8 @@
 # v2.0 alpha.4 代码 Runner 威胁模型与实施 RFC
 
 > 日期：2026-08-09
-> 状态：实施中，尚未通过 alpha.4 完整退出门禁
-> 当前代码版本：`2.0.0-alpha.3`；完成全部门禁后才切换 alpha.4 版本和发布材料
+> 状态：已完成；验证见 [alpha.4 阶段门禁](../acceptance/2026-08-09-v2-alpha4-stage-gate.md)
+> 当前代码版本：`2.0.0-alpha.4`
 
 ## 1. 目标与非目标
 
@@ -39,8 +39,8 @@ SQLTeacher 负责让权限状态持续可见、提供取消和有界控制台，
 | 错误泄露绝对路径 | 输出限长并替换宿主临时路径和用户名 | 编译/运行结果不返回 Windows 临时目录 |
 
 安全评价在 WSL2、systemd 用户 cgroup、user/PID/mount/network namespace 或指定工具链缺失时
-**默认拒绝**，不会退回宿主直跑。当前机器已验证 Python 3.14、GCC/G++ 15.2；WSL 尚无 Linux
-JDK，因此 Java 安全评价显示稳定的工具链不可用原因码。
+**默认拒绝**，不会退回宿主直跑。当前机器已验证 OpenJDK 21.0.11、Python 3.14、GCC/G++ 15.2；
+Java、Python、C、C++ 安全评价均通过真实工具链夹具。
 
 ## 3. 本地 IDE 模式
 
@@ -65,14 +65,8 @@ JDK，因此 Java 安全评价显示稳定的工具链不可用原因码。
 - schema 13 增加 Java/Python/C/C++ 四个“两数求和”内置活动；
 - 本地 JDK 21、WSL Python 和 MSVC C/C++ 的真实编译运行已接线；另可打开对应本地终端。
 
-## 5. 未完成门禁
+## 5. 完成门禁
 
-在以下事项完成前，本 RFC 保持“实施中”，不建立 alpha.4 发布说明或完成记录：
+Alpha4 收口时根据“本地优先 IDE、隔离评价可选”的明确产品决策，Linux 工具链不再捆绑进 Windows 包，改为发行版签名、版本可审计、能力可探测的 WSL 环境依赖。缺失依赖时安全评价稳定拒绝，并链接[安装指南](../guide/15-local-ide-and-runner-setup.md)。
 
-- 为安全 Runner 提供可审计、可校验、许可完整的 Linux JDK 21 工具链，而不是依赖当前 WSL 手工安装；
-- 冻结 WSL 发行版/版本探测与 Windows 10/11 无 WSL 时的安装引导；
-- 增加编译错误、内存限制原因分类、文件/inode 耗尽和并发 Runner 固定夹具；
-- 对取消、快速切活动、本地运行/终端、低分辨率和中英文 UI 做实际 JavaFX 走查；
-- 完整 `mvn test`、相邻 schema 升级、打包、app-image 启动和敏感文件扫描通过。
-
-完成证据将单独写入 acceptance 和 Stage 12；本文件只冻结设计与当前验证边界。
+其余门禁均已完成：Ubuntu/WSL2/systemd 探测、Java 21 安全工具链、编译与资源原因分类、文件/inode 与并发夹具、JavaFX 取消/快速切页/低分辨率/中英文走查、相邻 schema 升级、451 项测试、EXE/ZIP/app-image/SBOM/校验和、启动烟测和敏感文件扫描。证据见 [acceptance](../acceptance/2026-08-09-v2-alpha4-stage-gate.md) 与 [Stage 12](../history/stages/stage12/2026-08-09-v2-alpha4-local-ide-runner-implementation.md)。

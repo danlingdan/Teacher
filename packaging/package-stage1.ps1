@@ -209,7 +209,7 @@ try {
         --name $appName `
         --app-version $packageVersion `
         --vendor "SQLTeacher Project" `
-        --description "Local-first SQL teaching and practice desktop application" `
+        --description "Local-first computer science learning IDE" `
         --copyright "Copyright 2026 SQLTeacher Project" `
         --icon $iconPath `
         --input $inputDir `
@@ -254,7 +254,7 @@ try {
             --name $appName `
             --app-version $packageVersion `
             --vendor "SQLTeacher Project" `
-            --description "Local-first SQL teaching and practice desktop application" `
+            --description "Local-first computer science learning IDE" `
             --copyright "Copyright 2026 SQLTeacher Project" `
             --app-image $appImageDir `
             --icon $iconPath `

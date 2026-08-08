@@ -4,11 +4,11 @@
 
 ## 当前基线
 
-- 当前代码版本：`2.0.0-alpha.3`
-- 最新预发布说明：[v2.0.0-alpha.3](releases/v2.0.0-alpha.3.md)
+- 当前代码版本：`2.0.0-alpha.4`
+- 最新预发布说明：[v2.0.0-alpha.4](releases/v2.0.0-alpha.4.md)
 - 最新稳定版说明：[v1.11.5](releases/v1.11.5.md)
 - 最近一轮功能计划：[v2.0 计算机专业学习平台总计划](plans/2026-08-02-v2.0-computer-science-learning-platform-plan.md)
-- 对应实施记录：[v2.0 alpha.3 二叉树学习闭环实施记录](history/stages/stage11/2026-08-09-v2-alpha3-binary-tree-learning-loop-implementation.md)
+- 对应实施记录：[v2.0 alpha.4 本地学习 IDE 与代码 Runner 实施记录](history/stages/stage12/2026-08-09-v2-alpha4-local-ide-runner-implementation.md)
 - 当前生产部署记录：[v1.11 生产云服务部署记录](operations/2026-08-02-v111-cloud-deployment.md)
 
 > “当前”以 `pom.xml`、Git 标签和实际代码为准。计划文档记录制定时的基线，不应被当作实时状态页。

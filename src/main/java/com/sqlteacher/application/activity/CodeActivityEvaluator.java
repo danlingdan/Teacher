@@ -90,6 +90,8 @@ public final class CodeActivityEvaluator implements CancellableActivityEvaluator
             case RUNTIME_ERROR -> "程序运行失败。";
             case TIME_LIMIT -> "程序超过时间限制。";
             case MEMORY_LIMIT -> "程序超过内存限制。";
+            case WORKSPACE_LIMIT -> "程序超过工作区文件或空间限制。";
+            case PROCESS_LIMIT -> "程序超过进程数量限制。";
             case OUTPUT_LIMIT -> "程序超过输出限制。";
             case CANCELLED -> "运行已取消。";
             case INTERNAL_ERROR -> "Runner 内部失败。";

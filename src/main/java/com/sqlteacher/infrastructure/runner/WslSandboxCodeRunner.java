@@ -42,7 +42,7 @@ public final class WslSandboxCodeRunner implements CodeRunner {
     private volatile List<RunnerCapability> cachedCapabilities;
 
     public WslSandboxCodeRunner() {
-        this(defaultWslExecutable(), "Ubuntu");
+        this(defaultWslExecutable(), System.getProperty("sqlteacher.runner.wsl.distribution", "Ubuntu"));
     }
 
     public WslSandboxCodeRunner(Path wslExecutable, String distribution) {
@@ -145,7 +145,27 @@ public final class WslSandboxCodeRunner implements CodeRunner {
         if (!Files.isRegularFile(wslExecutable)) {
             return unavailableAll("WSL_NOT_INSTALLED");
         }
+        CommandOutput distributionProbe = control(List.of("-d", distribution, "--", "/bin/bash", "-lc",
+            "set -eu; grep -E '^(ID|VERSION_ID)=' /etc/os-release; printf 'KERNEL='; uname -r"));
+        if (distributionProbe.exitCode() != 0) {
+            return unavailableAll("WSL_DISTRIBUTION_UNAVAILABLE");
+        }
+        String platform = distributionProbe.stdout();
+        if (!platform.matches("(?s).*\\n?ID=ubuntu(?:\\R|$).*")
+                && !platform.startsWith("ID=ubuntu")) {
+            return unavailableAll("WSL_UBUNTU_REQUIRED");
+        }
+        var version = java.util.regex.Pattern.compile("(?m)^VERSION_ID=\\\"?(\\d+)\\.(\\d+)\\\"?$")
+            .matcher(platform);
+        if (!version.find() || Integer.parseInt(version.group(1)) < 24) {
+            return unavailableAll("WSL_UBUNTU_VERSION_UNSUPPORTED");
+        }
+        if (!platform.toLowerCase(java.util.Locale.ROOT).contains("microsoft-standard-wsl2")) {
+            return unavailableAll("WSL2_REQUIRED");
+        }
         String probe = "set -eu; command -v unshare >/dev/null; command -v systemd-run >/dev/null; "
+            + "command -v setpriv >/dev/null; command -v prlimit >/dev/null; "
+            + "test \"$(ps -p 1 -o comm= | tr -d ' ')\" = systemd; "
             + "unshare --user --map-root-user --mount --pid --net --fork /bin/true; "
             + "systemd-run --user --quiet --wait --collect -p TasksMax=2 -p MemoryMax=32M /bin/true";
         CommandOutput output = control(List.of("-d", distribution, "--", "/bin/bash", "-lc", probe));
@@ -183,10 +203,13 @@ public final class WslSandboxCodeRunner implements CodeRunner {
         long memory = request.limits().memoryBytes();
         long wall = Math.max(1, request.limits().wallTime().toSeconds());
         long cpu = Math.max(1, request.limits().cpuTime().toSeconds());
+        int toolchainTasks = request.language() == CodeLanguage.JAVA ? 96 : 16;
         List<String> command = new ArrayList<>(List.of(wslExecutable.toString(), "-d", distribution, "--",
             "systemd-run", "--user", "--quiet", "--pipe", "--wait", "--collect", "--unit", unit,
-            "-p", "KillMode=control-group", "-p", "MemoryMax=" + memory, "-p", "MemorySwapMax=0",
-            "-p", "TasksMax=" + (request.limits().processes() + 16), "-p", "RuntimeMaxSec=" + (wall + 3),
+            "-p", "KillMode=control-group", "-p", "OOMPolicy=continue",
+            "-p", "MemoryMax=" + memory, "-p", "MemorySwapMax=0",
+            "-p", "TasksMax=" + (request.limits().processes() + toolchainTasks),
+            "-p", "RuntimeMaxSec=" + (wall + 3),
             "/bin/bash", script, request.language().name(), source, input,
             Long.toString(wall), Long.toString(cpu), Long.toString(memory),
             Long.toString(request.limits().workspaceBytes()), Integer.toString(request.limits().files()),
@@ -282,6 +305,9 @@ public final class WslSandboxCodeRunner implements CodeRunner {
             case 10 -> RunnerFailureReason.COMPILE_ERROR;
             case 11 -> RunnerFailureReason.RUNTIME_ERROR;
             case 12 -> RunnerFailureReason.TIME_LIMIT;
+            case 13 -> RunnerFailureReason.MEMORY_LIMIT;
+            case 14 -> RunnerFailureReason.WORKSPACE_LIMIT;
+            case 15 -> RunnerFailureReason.PROCESS_LIMIT;
             case 20 -> RunnerFailureReason.TOOLCHAIN_UNAVAILABLE;
             default -> RunnerFailureReason.SANDBOX_UNAVAILABLE;
         };

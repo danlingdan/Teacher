@@ -29,7 +29,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
-/** Generic four-region activity workspace. Alpha.2 mounts the deterministic SQL runner in its center. */
+/** Generic four-region activity workspace for deterministic learning and IDE runners. */
 public final class ActivityWorkspaceController {
     private final CourseMapService courseMapService;
     private final ActivityLearningService activityLearningService;

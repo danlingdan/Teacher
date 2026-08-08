@@ -3,9 +3,9 @@
 
   # SQLTeacher
 
-  **安全、可验证、本地优先的 SQL 教学桌面应用**
+  **本地优先、可验证的计算机专业学习 IDE**
 
-  从 SQL 练习、AI 草稿与风险检测，到课程知识、学习诊断和云端教学协作。
+  从 Java、Python、C/C++ 与 SQL 实践，到课程知识、确定性评价、学习诊断和云端教学协作。
 
   [![Release](https://img.shields.io/github/v/release/danlingdan/Teacher?display_name=tag&sort=semver)](https://github.com/danlingdan/Teacher/releases/latest)
   [![Build](https://github.com/danlingdan/Teacher/actions/workflows/release.yml/badge.svg)](https://github.com/danlingdan/Teacher/actions/workflows/release.yml)
@@ -20,10 +20,11 @@
 
 ## 为什么选择 SQLTeacher
 
-SQLTeacher 面向数据库课程教学与自主练习。它把 SQL 执行、确定性判题、风险拦截、AI 辅助、课程知识和学习反馈放在同一个桌面工作区中；网络或 AI 服务不可用时，核心本地练习能力仍可继续使用。
+SQLTeacher 面向计算机专业课程教学与自主实践。它把本地代码编辑与工具链运行、SQL 实验、确定性评价、AI 辅助、课程知识和学习反馈放在同一个桌面工作区中；网络或 AI 服务不可用时，核心本地学习能力仍可继续使用。
 
 | 能力 | 说明 |
 | --- | --- |
+| 💻 本地学习 IDE | Java、Python、C/C++ 编辑、标准输入、控制台、本机联网运行、终端与可选安全评价 |
 | 🧪 安全 SQL 实验 | SQLite 演示库、结构浏览、结果限制、多语句拦截和高风险操作确认 |
 | 🤖 受控 AI 助手 | 支持本地 Ollama 和用户配置的网络 AI；模型只生成草稿，不能直接执行 SQL |
 | 🎯 可验证学习闭环 | 练习、任务、反馈、知识点诊断和学习计划均保留可解释的确定性依据 |
