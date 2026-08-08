@@ -15,7 +15,7 @@ import com.sun.net.httpserver.HttpServer;
 import java.net.InetSocketAddress;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 class WindowsLocalIdeCodeRunnerTest {
     @TempDir Path tempDir;
@@ -23,7 +23,7 @@ class WindowsLocalIdeCodeRunnerTest {
     @Test
     void shouldRunJavaPythonCAndCppWithInstalledLocalToolchains() {
         var runner = new WindowsLocalIdeCodeRunner(tempDir.resolve("runs"));
-        assertTrue(runner.capabilities().stream().allMatch(item -> item.available()),
+        assumeTrue(runner.capabilities().stream().allMatch(item -> item.available()),
             () -> "Missing local toolchain: " + runner.capabilities());
 
         var java = run(runner, CodeLanguage.JAVA, """

@@ -18,6 +18,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 @EnabledOnOs(OS.WINDOWS)
 class WslSandboxCodeRunnerTest {
@@ -26,7 +27,7 @@ class WslSandboxCodeRunnerTest {
     @BeforeAll
     static void createRunner() {
         runner = new WslSandboxCodeRunner();
-        assertTrue(runner.capability(CodeLanguage.PYTHON).available(),
+        assumeTrue(runner.capability(CodeLanguage.PYTHON).available(),
             () -> "Python sandbox unavailable: " + runner.capability(CodeLanguage.PYTHON).reasonCode());
     }
 

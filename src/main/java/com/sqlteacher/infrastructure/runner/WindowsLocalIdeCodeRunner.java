@@ -237,8 +237,31 @@ public final class WindowsLocalIdeCodeRunner implements LocalCodeRunner {
             Path javaHome = Path.of(System.getProperty("java.home"));
             Path java = executable(javaHome.resolve("bin/java.exe"));
             Path javac = executable(javaHome.resolve("bin/javac.exe"));
-            Path wsl = executable(systemExecutable("wsl.exe"));
+            Path wslCandidate = executable(systemExecutable("wsl.exe"));
+            Path wsl = usableUbuntuPython(wslCandidate) ? wslCandidate : null;
             return new Toolchains(java, javac, wsl, WindowsLocalCodeWorkspaceLauncher.visualStudioDeveloperShell());
+        }
+
+        private static boolean usableUbuntuPython(Path wsl) {
+            if (wsl == null) return false;
+            Process process = null;
+            try {
+                process = new ProcessBuilder(wsl.toString(), "-d", "Ubuntu", "--", "python3", "--version")
+                    .redirectOutput(ProcessBuilder.Redirect.DISCARD)
+                    .redirectError(ProcessBuilder.Redirect.DISCARD)
+                    .start();
+                if (!process.waitFor(10, TimeUnit.SECONDS)) {
+                    terminateTree(process);
+                    return false;
+                }
+                return process.exitValue() == 0;
+            } catch (IOException error) {
+                return false;
+            } catch (InterruptedException error) {
+                Thread.currentThread().interrupt();
+                if (process != null) terminateTree(process);
+                return false;
+            }
         }
 
         private static Path executable(Path path) {
