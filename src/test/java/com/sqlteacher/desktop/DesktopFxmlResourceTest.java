@@ -28,6 +28,8 @@ class DesktopFxmlResourceTest {
         assertWellFormed("/fxml/cloud-center.fxml");
         assertWellFormed("/fxml/teaching-content.fxml");
         assertWellFormed("/fxml/login-gate.fxml");
+        assertWellFormed("/fxml/course-map.fxml");
+        assertWellFormed("/fxml/activity-workspace.fxml");
     }
 
     private static void assertWellFormed(String resourcePath) throws Exception {

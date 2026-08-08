@@ -32,7 +32,7 @@ import java.util.Objects;
 
 /** Deterministic, owner-isolated learning diagnosis. Derived snapshots are safe to rebuild. */
 public final class JdbcLearningDiagnosisService implements LearningDiagnosisService {
-    public static final String POLICY_VERSION = "v1.7.0-r1";
+    public static final String POLICY_VERSION = "v2.0.0-alpha3-r1";
     static final int MIN_EVIDENCE = 3;
     static final int MAX_ATTEMPTS_PER_POINT = 20;
     static final int MAX_ACTIONS = 7;
@@ -63,9 +63,14 @@ public final class JdbcLearningDiagnosisService implements LearningDiagnosisServ
         try (Connection connection = connectionFactory.open("app")) {
             Map<String, ExerciseInfo> exercises = loadExercises(connection);
             List<EventRecord> events = loadOwnedEvents(connection, ownerId, now.minus(WINDOW));
-            List<MasterySnapshot> snapshots = calculate(ownerId, exercises, events, now);
+            List<ActivityEvidenceRecord> activityEvidence = loadActivityEvidence(
+                connection, ownerId, now.minus(WINDOW)
+            );
+            List<MasterySnapshot> snapshots = calculate(ownerId, exercises, events, activityEvidence, now);
             persistSnapshots(connection, ownerId, snapshots);
-            List<LearningAction> actions = buildActions(connection, ownerId, exercises, events, snapshots, now);
+            List<LearningAction> actions = buildActions(
+                connection, ownerId, exercises, events, snapshots, activityEvidence, now
+            );
             return new LearningDashboard(ownerId, snapshots, actions, now,
                 Duration.ofNanos(System.nanoTime() - started), POLICY_VERSION);
         } catch (SQLException error) {
@@ -106,8 +111,10 @@ public final class JdbcLearningDiagnosisService implements LearningDiagnosisServ
     }
 
     private List<MasterySnapshot> calculate(String ownerId, Map<String, ExerciseInfo> exercises,
-                                            List<EventRecord> events, Instant now) {
-        Map<String, List<EventRecord>> attemptsByPoint = new LinkedHashMap<>();
+                                            List<EventRecord> events,
+                                            List<ActivityEvidenceRecord> activityEvidence,
+                                            Instant now) {
+        Map<String, List<EvidenceRecord>> attemptsByPoint = new LinkedHashMap<>();
         Map<String, Integer> hintsByPoint = new HashMap<>();
         for (EventRecord event : events) {
             ExerciseInfo exercise = exercises.get(event.exerciseId());
@@ -116,16 +123,28 @@ public final class JdbcLearningDiagnosisService implements LearningDiagnosisServ
                 hintsByPoint.merge(exercise.knowledgePoint(), 1, Integer::sum);
             } else if (event.type() == LearningEventType.EXERCISE_PASSED
                 || event.type() == LearningEventType.EXERCISE_FAILED) {
-                attemptsByPoint.computeIfAbsent(exercise.knowledgePoint(), ignored -> new ArrayList<>()).add(event);
+                attemptsByPoint.computeIfAbsent(exercise.knowledgePoint(), ignored -> new ArrayList<>()).add(
+                    new EvidenceRecord(event.sourceId(), event.exerciseId(), event.type().name(),
+                        event.successful(), event.errorCode(), event.occurredAt())
+                );
             }
+        }
+        for (ActivityEvidenceRecord evidence : activityEvidence) {
+            attemptsByPoint.computeIfAbsent(evidence.knowledgePoint(), ignored -> new ArrayList<>()).add(
+                new EvidenceRecord(evidence.sourceId(), evidence.activityId(), evidence.activityType(),
+                    evidence.successful(), evidence.reasonCode(), evidence.occurredAt())
+            );
         }
 
         List<MasterySnapshot> result = new ArrayList<>();
-        exercises.values().stream().map(ExerciseInfo::knowledgePoint).distinct().sorted().forEach(point -> {
-            List<EventRecord> attempts = attemptsByPoint.getOrDefault(point, List.of()).stream()
-                .sorted(Comparator.comparing(EventRecord::occurredAt).reversed().thenComparing(EventRecord::sourceId))
+        java.util.Set<String> knowledgePoints = new java.util.TreeSet<>();
+        exercises.values().stream().map(ExerciseInfo::knowledgePoint).forEach(knowledgePoints::add);
+        activityEvidence.stream().map(ActivityEvidenceRecord::knowledgePoint).forEach(knowledgePoints::add);
+        knowledgePoints.forEach(point -> {
+            List<EvidenceRecord> attempts = attemptsByPoint.getOrDefault(point, List.of()).stream()
+                .sorted(Comparator.comparing(EvidenceRecord::occurredAt).reversed().thenComparing(EvidenceRecord::sourceId))
                 .limit(MAX_ATTEMPTS_PER_POINT).toList();
-            int passes = (int) attempts.stream().filter(EventRecord::successful).count();
+            int passes = (int) attempts.stream().filter(EvidenceRecord::successful).count();
             int failures = attempts.size() - passes;
             int hints = hintsByPoint.getOrDefault(point, 0);
             int percent = attempts.isEmpty() ? 0
@@ -147,7 +166,7 @@ public final class JdbcLearningDiagnosisService implements LearningDiagnosisServ
             }
             if (hints >= 2) reasons.add(DiagnosisReasonCode.HINT_DEPENDENCY);
             List<MasteryEvidence> evidence = attempts.stream().limit(5).map(event -> new MasteryEvidence(
-                event.sourceId(), event.exerciseId(), event.type().name(), event.successful(), event.errorCode(),
+                event.sourceId(), event.targetId(), event.kind(), event.successful(), event.reasonCode(),
                 event.occurredAt())).toList();
             result.add(new MasterySnapshot(ownerId, point, level, attempts.size(), passes, failures, hints,
                 percent, reasons, evidence, POLICY_VERSION, now));
@@ -159,6 +178,7 @@ public final class JdbcLearningDiagnosisService implements LearningDiagnosisServ
                                                Map<String, ExerciseInfo> exercises,
                                                List<EventRecord> events,
                                                List<MasterySnapshot> snapshots,
+                                               List<ActivityEvidenceRecord> activityEvidence,
                                                Instant now) throws SQLException {
         List<LearningAction> result = new ArrayList<>();
         for (ActiveSession session : loadActiveSessions(connection, ownerId)) {
@@ -174,17 +194,26 @@ public final class JdbcLearningDiagnosisService implements LearningDiagnosisServ
             if (snapshot.level() != MasteryLevel.NEEDS_PRACTICE
                 && snapshot.level() != MasteryLevel.DEVELOPING) continue;
             ExerciseInfo target = preferredExercise(exercises, events, snapshot.knowledgePoint());
-            if (target == null) continue;
             DiagnosisReasonCode reason = snapshot.reasons().contains(DiagnosisReasonCode.REPEATED_FAILURE)
                 ? DiagnosisReasonCode.REPEATED_FAILURE : DiagnosisReasonCode.DEVELOPING_PROGRESS;
             String cycle = evidenceHash(snapshot.evidence());
-            String id = actionId(ownerId, LearningActionType.RETRY_EXERCISE, target.id(), cycle);
-            result.add(action(connection, id, LearningActionType.RETRY_EXERCISE,
-                "巩固：" + snapshot.knowledgePoint(), reason == DiagnosisReasonCode.REPEATED_FAILURE
-                    ? "最近提交出现连续失败，建议重练“" + target.title() + "”。"
-                    : "当前知识点正在形成掌握，建议再完成一道相关题目。",
-                target.id(), snapshot.knowledgePoint(), reason,
-                reason == DiagnosisReasonCode.REPEATED_FAILURE ? 75 : 55, now));
+            if (target != null) {
+                String id = actionId(ownerId, LearningActionType.RETRY_EXERCISE, target.id(), cycle);
+                result.add(action(connection, id, LearningActionType.RETRY_EXERCISE,
+                    "巩固：" + snapshot.knowledgePoint(), reason == DiagnosisReasonCode.REPEATED_FAILURE
+                        ? "最近提交出现连续失败，建议重练“" + target.title() + "”。"
+                        : "当前知识点正在形成掌握，建议再完成一道相关题目。",
+                    target.id(), snapshot.knowledgePoint(), reason,
+                    reason == DiagnosisReasonCode.REPEATED_FAILURE ? 75 : 55, now));
+                continue;
+            }
+            ActivityTarget activityTarget = preferredActivity(connection, activityEvidence, snapshot.knowledgePoint());
+            if (activityTarget == null) continue;
+            String id = actionId(ownerId, LearningActionType.RETRY_ACTIVITY, activityTarget.id(), cycle);
+            result.add(action(connection, id, LearningActionType.RETRY_ACTIVITY,
+                "巩固：" + snapshot.knowledgePoint(), "跨活动证据尚未稳定，建议重做“" + activityTarget.title() + "”。",
+                activityTarget.id(), snapshot.knowledgePoint(), reason,
+                reason == DiagnosisReasonCode.REPEATED_FAILURE ? 78 : 58, now));
         }
         return result.stream().sorted(Comparator.comparingInt(LearningAction::priority).reversed()
                 .thenComparing(LearningAction::updatedAt, Comparator.reverseOrder()).thenComparing(LearningAction::id))
@@ -256,6 +285,32 @@ public final class JdbcLearningDiagnosisService implements LearningDiagnosisServ
         return List.copyOf(result);
     }
 
+    private static List<ActivityEvidenceRecord> loadActivityEvidence(
+            Connection connection, String ownerId, Instant start) throws SQLException {
+        List<ActivityEvidenceRecord> result = new ArrayList<>();
+        try (PreparedStatement statement = connection.prepareStatement("""
+            select e.id,e.activity_id,e.activity_type,e.status,e.reason_code,e.occurred_at,k.name
+            from activity_evaluation_result e
+            join activity_knowledge_point ak on ak.activity_id=e.activity_id
+            join knowledge_point_definition k on k.id=ak.knowledge_point_id
+            where e.owner_id=? and e.occurred_at>=? and e.activity_type<>'SQL'
+            order by e.occurred_at desc,e.id desc,k.name
+            """)) {
+            statement.setString(1, ownerId);
+            statement.setString(2, start.toString());
+            try (ResultSet rows = statement.executeQuery()) {
+                while (rows.next()) {
+                    result.add(new ActivityEvidenceRecord(
+                        rows.getString(1), rows.getString(2), rows.getString(3),
+                        "PASSED".equals(rows.getString(4)), rows.getString(5),
+                        Instant.parse(rows.getString(6)), rows.getString(7)
+                    ));
+                }
+            }
+        }
+        return List.copyOf(result);
+    }
+
     private static List<ActiveSession> loadActiveSessions(Connection connection, String ownerId) throws SQLException {
         List<ActiveSession> result = new ArrayList<>();
         try (PreparedStatement statement = connection.prepareStatement("""
@@ -314,9 +369,30 @@ public final class JdbcLearningDiagnosisService implements LearningDiagnosisServ
         return exercises.values().stream().filter(item -> item.knowledgePoint().equals(point)).findFirst().orElse(null);
     }
 
-    private static int consecutiveFailures(List<EventRecord> attempts) {
+    private static ActivityTarget preferredActivity(Connection connection,
+                                                    List<ActivityEvidenceRecord> evidence,
+                                                    String point) throws SQLException {
+        String failedActivityId = evidence.stream()
+            .filter(item -> item.knowledgePoint().equals(point) && !item.successful())
+            .map(ActivityEvidenceRecord::activityId).findFirst().orElse("");
+        try (PreparedStatement statement = connection.prepareStatement("""
+            select a.id,a.title from learning_activity_definition a
+            join activity_knowledge_point ak on ak.activity_id=a.id
+            join knowledge_point_definition k on k.id=ak.knowledge_point_id
+            where k.name=? and a.enabled=1 and a.activity_type<>'SQL'
+            order by case when a.id=? then 0 else 1 end,a.title limit 1
+            """)) {
+            statement.setString(1, point);
+            statement.setString(2, failedActivityId);
+            try (ResultSet row = statement.executeQuery()) {
+                return row.next() ? new ActivityTarget(row.getString(1), row.getString(2)) : null;
+            }
+        }
+    }
+
+    private static int consecutiveFailures(List<EvidenceRecord> attempts) {
         int count = 0;
-        for (EventRecord attempt : attempts) {
+        for (EvidenceRecord attempt : attempts) {
             if (attempt.successful()) break;
             count++;
         }
@@ -359,5 +435,11 @@ public final class JdbcLearningDiagnosisService implements LearningDiagnosisServ
     private record ExerciseInfo(String id, String title, String knowledgePoint) { }
     private record EventRecord(String sourceId, LearningEventType type, String exerciseId, boolean successful,
                                String errorCode, Instant occurredAt) { }
+    private record EvidenceRecord(String sourceId, String targetId, String kind, boolean successful,
+                                  String reasonCode, Instant occurredAt) { }
+    private record ActivityEvidenceRecord(String sourceId, String activityId, String activityType,
+                                          boolean successful, String reasonCode, Instant occurredAt,
+                                          String knowledgePoint) { }
+    private record ActivityTarget(String id, String title) { }
     private record ActiveSession(String id, String exerciseId, Instant startedAt) { }
 }

@@ -6,7 +6,7 @@
 <?import javafx.scene.control.ProgressIndicator?>
 <?import javafx.scene.control.ScrollPane?>
 <?import javafx.scene.layout.BorderPane?>
-<?import javafx.scene.layout.Region?>
+<?import javafx.scene.layout.HBox?>
 <?import javafx.scene.layout.StackPane?>
 <?import javafx.scene.layout.VBox?>
 
@@ -29,7 +29,17 @@
                                 <Label fx:id="learningNavGroupTitle" text="%MainWindow.2" styleClass="nav-group-title"/>
                                 <Button fx:id="homeNavButton" text="%MainWindow.3" onAction="#onNavigateHome" maxWidth="Infinity" styleClass="nav-button"/>
                                 <Button fx:id="studentExerciseNavButton" text="%MainWindow.4" onAction="#onNavigateStudentExercise" maxWidth="Infinity" styleClass="nav-button"/>
+                            </VBox>
+                            <VBox fx:id="courseNavGroup" spacing="4" styleClass="nav-group">
+                                <Label fx:id="courseNavGroupTitle" text="%alpha2.nav.course" styleClass="nav-group-title"/>
+                                <Button fx:id="courseMapNavButton" text="%alpha2.nav.courseMap" onAction="#onNavigateCourseMap" maxWidth="Infinity" styleClass="nav-button"/>
                                 <Button fx:id="knowledgeCenterNavButton" text="%MainWindow.5" onAction="#onNavigateKnowledgeCenter" maxWidth="Infinity" styleClass="nav-button"/>
+                            </VBox>
+                            <VBox fx:id="toolsNavGroup" spacing="4" styleClass="nav-group">
+                                <Label fx:id="toolsNavGroupTitle" text="%alpha2.nav.experiment" styleClass="nav-group-title"/>
+                                <Button fx:id="sqlPracticeNavButton" text="%alpha2.nav.workspace" onAction="#onNavigateSqlPractice" maxWidth="Infinity" styleClass="nav-button"/>
+                                <Button fx:id="aiAssistantNavButton" text="%MainWindow.13" onAction="#onNavigateAiAssistant" maxWidth="Infinity" styleClass="nav-button"/>
+                                <Button fx:id="tableSchemaNavButton" text="%MainWindow.14" onAction="#onNavigateTableSchema" maxWidth="Infinity" styleClass="nav-button"/>
                             </VBox>
                             <VBox fx:id="teachingNavGroup" spacing="4" styleClass="nav-group">
                                 <Label fx:id="teachingNavGroupTitle" text="%MainWindow.6" styleClass="nav-group-title"/>
@@ -37,12 +47,6 @@
                                 <Button fx:id="exerciseManagementNavButton" text="%MainWindow.8" onAction="#onNavigateExerciseManagement" maxWidth="Infinity" styleClass="nav-button"/>
                                 <Button fx:id="exerciseProgressNavButton" text="%MainWindow.9" onAction="#onNavigateExerciseProgress" maxWidth="Infinity" styleClass="nav-button"/>
                                 <Button fx:id="cloudCenterNavButton" text="%MainWindow.10" onAction="#onNavigateCloudCenter" maxWidth="Infinity" styleClass="nav-button"/>
-                            </VBox>
-                            <VBox fx:id="toolsNavGroup" spacing="4" styleClass="nav-group">
-                                <Label fx:id="toolsNavGroupTitle" text="%MainWindow.11" styleClass="nav-group-title"/>
-                                <Button fx:id="sqlPracticeNavButton" text="%MainWindow.12" onAction="#onNavigateSqlPractice" maxWidth="Infinity" styleClass="nav-button"/>
-                                <Button fx:id="aiAssistantNavButton" text="%MainWindow.13" onAction="#onNavigateAiAssistant" maxWidth="Infinity" styleClass="nav-button"/>
-                                <Button fx:id="tableSchemaNavButton" text="%MainWindow.14" onAction="#onNavigateTableSchema" maxWidth="Infinity" styleClass="nav-button"/>
                             </VBox>
                             <VBox fx:id="systemNavGroup" spacing="4" styleClass="nav-group">
                                 <Label fx:id="systemNavGroupTitle" text="%MainWindow.15" styleClass="nav-group-title"/>
@@ -59,7 +63,18 @@
             </VBox>
         </left>
         <center>
-            <StackPane fx:id="pageContainer" styleClass="page-container"/>
+            <VBox styleClass="content-shell">
+                <HBox alignment="CENTER_LEFT" spacing="12" minHeight="62" prefHeight="62" maxHeight="62"
+                      styleClass="context-bar">
+                    <VBox spacing="2" HBox.hgrow="ALWAYS">
+                        <Label fx:id="contextTitle" text="%alpha2.nav.taskCenter" styleClass="context-title"/>
+                        <Label fx:id="contextSubtitle" text="%alpha2.context.home" styleClass="context-subtitle"/>
+                    </VBox>
+                    <Button text="%alpha2.commandHint" onAction="#onCommandPalette"
+                            mnemonicParsing="false" styleClass="keyboard-hint command-palette-button"/>
+                </HBox>
+                <StackPane fx:id="pageContainer" minHeight="0" styleClass="page-container" VBox.vgrow="ALWAYS"/>
+            </VBox>
         </center>
     </BorderPane>
 

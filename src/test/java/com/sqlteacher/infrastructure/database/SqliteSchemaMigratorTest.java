@@ -26,7 +26,7 @@ class SqliteSchemaMigratorTest {
 
         int version = new SqliteSchemaMigrator().migrate(database);
 
-        assertEquals(11, version);
+        assertEquals(13, version);
         assertTrue(tableExists(database, "schema_version"));
         assertTrue(tableExists(database, "app_event"));
         assertTrue(tableExists(database, "learning_events"));
@@ -63,7 +63,8 @@ class SqliteSchemaMigratorTest {
         assertTrue(tableExists(database, "activity_session"));
         assertTrue(tableExists(database, "activity_knowledge_point"));
         assertTrue(tableExists(database, "activity_evaluation_result"));
-        assertEquals(List.of(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11), appliedVersions(database));
+        assertTrue(tableExists(database, "activity_feedback"));
+        assertEquals(List.of(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13), appliedVersions(database));
     }
 
     @Test
@@ -81,7 +82,7 @@ class SqliteSchemaMigratorTest {
 
         new SqliteSchemaMigrator().migrate(database);
 
-        assertEquals(List.of(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11), appliedVersions(database));
+        assertEquals(List.of(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13), appliedVersions(database));
         assertEquals(1, countRows(database, "app_event"));
         assertTrue(tableExists(database, "learning_events"));
     }
@@ -95,8 +96,8 @@ class SqliteSchemaMigratorTest {
         execute(database, "insert into app_event(event_type, message) values ('FIRST_RUN', 'keep me')");
         int version = migrator.migrate(database);
 
-        assertEquals(11, version);
-        assertEquals(List.of(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11), appliedVersions(database));
+        assertEquals(13, version);
+        assertEquals(List.of(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13), appliedVersions(database));
         assertEquals(1, countRows(database, "app_event"));
     }
 
@@ -139,7 +140,9 @@ class SqliteSchemaMigratorTest {
         execute(database, "insert into schema_version(version, description) values (9, 'hybrid knowledge')");
         execute(database, "insert into schema_version(version, description) values (10, 'study planning')");
         execute(database, "insert into schema_version(version, description) values (11, 'activities')");
-        execute(database, "insert into schema_version(version, description) values (12, 'future version')");
+        execute(database, "insert into schema_version(version, description) values (12, 'binary tree activities')");
+        execute(database, "insert into schema_version(version, description) values (13, 'programming activities')");
+        execute(database, "insert into schema_version(version, description) values (14, 'future version')");
 
         SQLException error = assertThrows(
             SQLException.class,
@@ -147,7 +150,7 @@ class SqliteSchemaMigratorTest {
         );
 
         assertTrue(error.getMessage().contains("newer"));
-        assertEquals(List.of(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12), appliedVersions(database));
+        assertEquals(List.of(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14), appliedVersions(database));
     }
 
     @Test
@@ -171,9 +174,9 @@ class SqliteSchemaMigratorTest {
             """);
 
         assertEquals(1, countRows(database, "exercises"));
-        assertEquals(1, countRows(database, "learning_activity_definition"));
-        assertEquals(1, countRows(database, "activity_knowledge_point"));
-        assertEquals(1, countRows(database, "course_definition"));
+        assertEquals(7, countRows(database, "learning_activity_definition"));
+        assertEquals(8, countRows(database, "activity_knowledge_point"));
+        assertEquals(3, countRows(database, "course_definition"));
         assertThrows(SQLException.class, () -> execute(database, """
             insert into learning_activity_definition(
                 id, course_id, section_id, activity_type, title, description, difficulty,

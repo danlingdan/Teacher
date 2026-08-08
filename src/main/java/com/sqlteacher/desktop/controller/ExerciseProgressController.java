@@ -27,6 +27,7 @@ import javafx.scene.control.ButtonType;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.DatePicker;
 import javafx.scene.control.Label;
+import com.sqlteacher.desktop.component.MetricCard;
 import javafx.scene.control.TableColumn;
 import javafx.scene.control.TableView;
 import javafx.stage.FileChooser;
@@ -59,12 +60,12 @@ public final class ExerciseProgressController {
     @FXML private ComboBox<String> knowledgeFilter;
     @FXML private ComboBox<String> errorFilter;
     @FXML private Button exportButton;
-    @FXML private Label sessionsLabel;
-    @FXML private Label attemptsLabel;
-    @FXML private Label passRateLabel;
-    @FXML private Label completionRateLabel;
-    @FXML private Label averageAttemptsLabel;
-    @FXML private Label durationLabel;
+    @FXML private MetricCard sessionsLabel;
+    @FXML private MetricCard attemptsLabel;
+    @FXML private MetricCard passRateLabel;
+    @FXML private MetricCard completionRateLabel;
+    @FXML private MetricCard averageAttemptsLabel;
+    @FXML private MetricCard durationLabel;
     @FXML private Label statusLabel;
     @FXML private TableView<ExerciseAnalyticsRow> exerciseTable;
     @FXML private TableColumn<ExerciseAnalyticsRow, String> titleColumn;
@@ -356,12 +357,12 @@ public final class ExerciseProgressController {
 
     private void showReport(LearningAnalyticsReport report) {
         var overview = report.overview();
-        sessionsLabel.setText(Integer.toString(overview.sessions()));
-        attemptsLabel.setText(Integer.toString(overview.attempts()));
-        passRateLabel.setText(percent(overview.passRate()));
-        completionRateLabel.setText(percent(overview.completionRate()));
-        averageAttemptsLabel.setText(String.format(Locale.ROOT, "%.2f", overview.averageAttemptsPerCompletedExercise()));
-        durationLabel.setText(overview.averageSubmissionDuration().toMillis() + " ms");
+        sessionsLabel.setValue(Integer.toString(overview.sessions()));
+        attemptsLabel.setValue(Integer.toString(overview.attempts()));
+        passRateLabel.setValue(percent(overview.passRate()));
+        completionRateLabel.setValue(percent(overview.completionRate()));
+        averageAttemptsLabel.setValue(String.format(Locale.ROOT, "%.2f", overview.averageAttemptsPerCompletedExercise()));
+        durationLabel.setValue(overview.averageSubmissionDuration().toMillis() + " ms");
         exerciseTable.getItems().setAll(report.exercises());
         errorTable.getItems().setAll(report.commonErrors());
         knowledgeTable.getItems().setAll(report.knowledgePoints());

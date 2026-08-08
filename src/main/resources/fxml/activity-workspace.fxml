@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.ListView?>
+<?import javafx.scene.control.SplitPane?>
+<?import javafx.scene.control.TextArea?>
+<?import javafx.scene.layout.BorderPane?>
+<?import javafx.scene.layout.StackPane?>
+<?import javafx.scene.layout.VBox?>
+
+<BorderPane fx:id="workspaceRoot" xmlns="http://javafx.com/javafx" xmlns:fx="http://javafx.com/fxml"
+            fx:controller="com.sqlteacher.desktop.controller.ActivityWorkspaceController"
+            styleClass="activity-workspace">
+    <left>
+        <VBox fx:id="activityRail" spacing="10" minWidth="160" prefWidth="190" maxWidth="210" styleClass="workspace-rail">
+            <padding><Insets top="16" right="12" bottom="16" left="16"/></padding>
+            <Label text="%alpha2.workspace.catalog" styleClass="section-title"/>
+            <ListView fx:id="activityList" VBox.vgrow="ALWAYS" styleClass="activity-list"/>
+        </VBox>
+    </left>
+    <center>
+        <StackPane fx:id="runnerHost" styleClass="workspace-runner"/>
+    </center>
+    <right>
+        <VBox fx:id="activityInspector" spacing="12" minWidth="170" prefWidth="190" maxWidth="210" styleClass="workspace-inspector">
+            <padding><Insets top="18" right="16" bottom="18" left="16"/></padding>
+            <Label text="%alpha2.workspace.current" styleClass="section-title"/>
+            <Label fx:id="activityTitle" text="%alpha2.workspace.select" wrapText="true" styleClass="card-title"/>
+            <Label fx:id="activityMetadata" text="—" wrapText="true" styleClass="card-subtitle"/>
+            <Label text="%alpha2.workspace.knowledge" styleClass="section-title"/>
+            <Label fx:id="knowledgePoints" text="—" wrapText="true" styleClass="workspace-knowledge"/>
+            <VBox fx:id="teacherReviewPane" spacing="8" visible="false" managed="false" styleClass="teacher-review-pane">
+                <Label text="%alpha3.review.title" styleClass="section-title"/>
+                <Label fx:id="teacherReviewEvidence" text="%alpha3.review.empty" wrapText="true" styleClass="card-subtitle"/>
+                <TextArea fx:id="teacherFeedbackInput" promptText="%alpha3.review.prompt" wrapText="true" prefRowCount="3"/>
+                <Button text="%alpha3.review.publish" onAction="#publishTeacherFeedback" maxWidth="1.7976931348623157E308" styleClass="primary"/>
+            </VBox>
+        </VBox>
+    </right>
+    <bottom>
+        <Label fx:id="workspaceStatus" text="%alpha2.workspace.loading" styleClass="workspace-status">
+            <BorderPane.margin><Insets top="8" right="16" bottom="10" left="16"/></BorderPane.margin>
+        </Label>
+    </bottom>
+</BorderPane>

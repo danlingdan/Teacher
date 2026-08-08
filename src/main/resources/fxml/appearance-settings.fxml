@@ -10,14 +10,13 @@
 <?import javafx.scene.layout.HBox?>
 <?import javafx.scene.layout.Region?>
 <?import javafx.scene.layout.VBox?>
+<?import com.sqlteacher.desktop.component.PageHeader?>
 
 <VBox xmlns="http://javafx.com/javafx" xmlns:fx="http://javafx.com/fxml"
       fx:controller="com.sqlteacher.desktop.controller.AppearanceSettingsController"
       spacing="18" styleClass="settings-section">
     <padding><Insets top="24" right="28" bottom="24" left="28"/></padding>
-    <Label text="%appearance-settings.1" styleClass="page-title"/>
-    <Label text="%appearance-settings.2"
-           wrapText="true" styleClass="page-subtitle"/>
+    <PageHeader title="%appearance-settings.1" description="%appearance-settings.2"/>
     <GridPane hgap="18" vgap="16" styleClass="settings-grid">
         <columnConstraints>
             <ColumnConstraints minWidth="120" halignment="RIGHT"/>

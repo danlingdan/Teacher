@@ -22,6 +22,8 @@ import com.sqlteacher.application.nl2sql.DefaultNl2SqlSafetyService;
 import com.sqlteacher.application.nl2sql.Nl2SqlService;
 import com.sqlteacher.application.nl2sql.Nl2SqlSafetyService;
 import com.sqlteacher.application.risk.SqlRiskAnalysisService;
+import com.sqlteacher.application.runner.LocalCodeWorkspaceLauncher;
+import com.sqlteacher.application.runner.LocalCodeRunner;
 import com.sqlteacher.application.support.DiagnosticBundleService;
 import com.sqlteacher.application.support.ProblemReportService;
 import com.sqlteacher.application.system.GeneralSoftwareService;
@@ -32,6 +34,8 @@ import com.sqlteacher.infrastructure.cloud.HttpCloudApiClient;
 import com.sqlteacher.infrastructure.cloud.PersistentCloudSessionService;
 import com.sqlteacher.infrastructure.cloud.WindowsDpapiCloudSessionStore;
 import com.sqlteacher.infrastructure.security.WindowsDpapiSecretStore;
+import com.sqlteacher.infrastructure.runner.WindowsLocalCodeWorkspaceLauncher;
+import com.sqlteacher.infrastructure.runner.WindowsLocalIdeCodeRunner;
 import com.sqlteacher.infrastructure.cloud.DefaultCloudLearningSyncService;
 import com.sqlteacher.infrastructure.database.DatabaseServiceConfig;
 import com.sqlteacher.infrastructure.database.SqliteAppDatabaseInitializer;
@@ -177,6 +181,18 @@ public class SqlTeacherApplicationConfig {
         return URI.create(System.getProperty(
             "sqlteacher.cloud.base-url", DEFAULT_CLOUD_BASE_URL
         ));
+    }
+
+    @Bean
+    public LocalCodeWorkspaceLauncher localCodeWorkspaceLauncher(SqlTeacherConfiguration configuration) {
+        return new WindowsLocalCodeWorkspaceLauncher(
+            configuration.dataDirectory().resolve("local-code-workspaces")
+        );
+    }
+
+    @Bean
+    public LocalCodeRunner localCodeRunner(SqlTeacherConfiguration configuration) {
+        return new WindowsLocalIdeCodeRunner(configuration.dataDirectory().resolve("local-code-runs"));
     }
 
     @Bean

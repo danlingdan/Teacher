@@ -806,8 +806,153 @@ final class SqliteSchemaMigrator {
                     end
                     """
             )
+        ),
+        new Migration(
+            12,
+            "Seed v2 alpha.3 binary-tree quiz and trace learning loop",
+            List.of(
+                """
+                    insert into course_definition(
+                        id,version,title,language,license,maintainer,visibility,created_at,updated_at
+                    ) values (
+                        'builtin-data-structures','1','数据结构与算法','zh-CN',
+                        'SQLTeacher built-in content','SQLTeacher','PUBLISHED',
+                        '2026-08-09T00:00:00Z','2026-08-09T00:00:00Z'
+                    )
+                    """,
+                """
+                    insert into course_section(id,course_id,title,sort_order)
+                    values ('binary-tree-traversal','builtin-data-structures','二叉树遍历',0)
+                    """,
+                """
+                    insert into learning_outcome(id,course_id,description,expected_level,sort_order)
+                    values ('tree-outcome-traversal','builtin-data-structures',
+                        '识别并正确执行二叉树前序遍历','APPLY',0)
+                    """,
+                """
+                    insert into knowledge_point_definition(id,course_id,name,aliases_json,cs2023_mappings_json)
+                    values ('ds-tree-traversal','builtin-data-structures','二叉树遍历',
+                        '["前序遍历","树的遍历"]','["AL/BasicAnalysis"]')
+                    """,
+                """
+                    insert into knowledge_point_definition(id,course_id,name,aliases_json,cs2023_mappings_json)
+                    values ('ds-recursion','builtin-data-structures','递归调用',
+                        '["递归"]','["SDF/Algorithms"]')
+                    """,
+                """
+                    insert into knowledge_point_relation(course_id,source_id,target_id,relation_type)
+                    values ('builtin-data-structures','ds-recursion','ds-tree-traversal','PREREQUISITE')
+                    """,
+                """
+                    insert into learning_activity_definition(
+                        id,course_id,section_id,activity_type,title,description,difficulty,estimated_minutes,
+                        definition_version,specification_format_version,specification_json,source_kind,source_id,
+                        enabled,created_at,updated_at
+                    ) values (
+                        'tree-traversal-quiz','builtin-data-structures','binary-tree-traversal','QUIZ',
+                        '遍历概念测验','先判断前序遍历的访问规则，再进入步骤跟踪。','BEGINNER',5,1,1,
+                        '{"formatVersion":1,"questions":[{"id":"order-rule","prompt":"前序遍历的访问规则是什么？","options":[{"id":"root-left-right","text":"根 → 左 → 右"},{"id":"left-root-right","text":"左 → 根 → 右"},{"id":"left-right-root","text":"左 → 右 → 根"}],"correctOptionId":"root-left-right","explanation":"前序遍历先访问根节点，再递归访问左子树和右子树。"}],"passPercent":100}',
+                        'BUILTIN_V2','tree-traversal-quiz',1,'2026-08-09T00:00:00Z','2026-08-09T00:00:00Z'
+                    )
+                    """,
+                """
+                    insert into learning_activity_definition(
+                        id,course_id,section_id,activity_type,title,description,difficulty,estimated_minutes,
+                        definition_version,specification_format_version,specification_json,source_kind,source_id,
+                        enabled,created_at,updated_at
+                    ) values (
+                        'tree-preorder-trace','builtin-data-structures','binary-tree-traversal','TRACE',
+                        '前序遍历步骤跟踪','点击节点构造前序访问序列，并由确定性评价器逐步检查。','BEGINNER',8,1,1,
+                        '{"formatVersion":1,"prompt":"按前序遍历依次点击节点。","traversal":"前序","rootNodeId":"a","nodes":[{"id":"a","label":"A","leftChildId":"b","rightChildId":"c"},{"id":"b","label":"B","leftChildId":"d","rightChildId":"e"},{"id":"c","label":"C","leftChildId":"","rightChildId":"f"},{"id":"d","label":"D","leftChildId":"","rightChildId":""},{"id":"e","label":"E","leftChildId":"","rightChildId":""},{"id":"f","label":"F","leftChildId":"","rightChildId":""}],"expectedNodeIds":["a","b","d","e","c","f"]}',
+                        'BUILTIN_V2','tree-preorder-trace',1,'2026-08-09T00:00:00Z','2026-08-09T00:00:00Z'
+                    )
+                    """,
+                """
+                    insert into activity_knowledge_point(activity_id,knowledge_point_id) values
+                        ('tree-traversal-quiz','ds-tree-traversal'),
+                        ('tree-preorder-trace','ds-tree-traversal'),
+                        ('tree-preorder-trace','ds-recursion')
+                    """,
+                """
+                    create table activity_feedback (
+                        id text primary key,
+                        owner_id text not null,
+                        activity_id text not null references learning_activity_definition(id),
+                        evaluation_id text references activity_evaluation_result(id),
+                        author_id text not null,
+                        status text not null check (status in ('DRAFT','PUBLISHED','ARCHIVED')),
+                        comment text not null,
+                        reason_code text not null default '',
+                        created_at text not null,
+                        updated_at text not null
+                    )
+                    """,
+                "create index activity_feedback_owner_activity on activity_feedback(owner_id,activity_id,status,updated_at desc)"
+            )
+        ),
+        new Migration(
+            13,
+            "Seed v2 alpha.4 programming activities",
+            List.of(
+                """
+                    insert into course_definition(
+                        id,version,title,language,license,maintainer,visibility,created_at,updated_at
+                    ) values (
+                        'builtin-programming-basics','1','编程语言基础','zh-CN',
+                        'SQLTeacher built-in content','SQLTeacher','PUBLISHED',
+                        '2026-08-09T00:00:00Z','2026-08-09T00:00:00Z'
+                    )
+                    """,
+                """
+                    insert into course_section(id,course_id,title,sort_order)
+                    values ('programming-io','builtin-programming-basics','输入、计算与输出',0)
+                    """,
+                """
+                    insert into learning_outcome(id,course_id,description,expected_level,sort_order)
+                    values ('programming-io-outcome','builtin-programming-basics',
+                        '使用一种编程语言读取两个整数并输出它们的和','APPLY',0)
+                    """,
+                """
+                    insert into knowledge_point_definition(id,course_id,name,aliases_json,cs2023_mappings_json)
+                    values ('programming-basic-io','builtin-programming-basics','基本输入输出',
+                        '["标准输入","标准输出"]','["SDF/SoftwareDevelopmentFundamentals"]')
+                    """,
+                codeActivitySql("code-sum-java", "Java 两数求和", "JAVA",
+                    "public class Main { public static void main(String[] args) { } }"),
+                codeActivitySql("code-sum-python", "Python 两数求和", "PYTHON",
+                    "a, b = map(int, input().split())\nprint(a + b)"),
+                codeActivitySql("code-sum-c", "C 两数求和", "C",
+                    "#include <stdio.h>\nint main(void) { return 0; }"),
+                codeActivitySql("code-sum-cpp", "C++ 两数求和", "CPP",
+                    "#include <iostream>\nint main() { return 0; }"),
+                """
+                    insert into activity_knowledge_point(activity_id,knowledge_point_id) values
+                        ('code-sum-java','programming-basic-io'),
+                        ('code-sum-python','programming-basic-io'),
+                        ('code-sum-c','programming-basic-io'),
+                        ('code-sum-cpp','programming-basic-io')
+                    """
+            )
         )
     );
+
+    private static String codeActivitySql(String id, String title, String language, String starterCode) {
+        String specification = "{\"formatVersion\":1,\"language\":\"" + language
+            + "\",\"prompt\":\"读取一行中的两个整数，输出它们的和。\",\"starterCode\":\""
+            + starterCode.replace("\\", "\\\\").replace("\"", "\\\"")
+                .replace("\r", "\\r").replace("\n", "\\n").replace("\t", "\\t")
+            + "\",\"tests\":[{\"id\":\"positive\",\"input\":\"2 3\\n\",\"expectedOutput\":\"5\\n\"},"
+            + "{\"id\":\"mixed\",\"input\":\"-7 4\\n\",\"expectedOutput\":\"-3\\n\"}],"
+            + "\"limits\":{\"wallTime\":\"PT5S\",\"cpuTime\":\"PT3S\",\"memoryBytes\":268435456,"
+            + "\"outputBytes\":65536,\"workspaceBytes\":16777216,\"files\":64,\"processes\":8}}";
+        return "insert into learning_activity_definition("
+            + "id,course_id,section_id,activity_type,title,description,difficulty,estimated_minutes,"
+            + "definition_version,specification_format_version,specification_json,source_kind,source_id,"
+            + "enabled,created_at,updated_at) values ('" + id + "','builtin-programming-basics','programming-io',"
+            + "'CODE','" + title + "','在受控 Runner 中完成两数求和。','BEGINNER',10,1,1,'"
+            + specification.replace("'", "''") + "','BUILTIN_V2','" + id
+            + "',1,'2026-08-09T00:00:00Z','2026-08-09T00:00:00Z')";
+    }
 
     private final List<Migration> migrations;
 

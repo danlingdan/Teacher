@@ -32,6 +32,12 @@ import com.sqlteacher.application.collaboration.AssignmentDeliveryService;
 import com.sqlteacher.application.collaboration.AssignmentTaskContext;
 import com.sqlteacher.application.collaboration.FeedbackDraftEnhancer;
 import com.sqlteacher.application.collaboration.TeachingContentCache;
+import com.sqlteacher.application.course.CourseMapActivity;
+import com.sqlteacher.application.course.CourseMapService;
+import com.sqlteacher.application.activity.ActivityLearningService;
+import com.sqlteacher.application.activity.ActivityReviewService;
+import com.sqlteacher.application.runner.LocalCodeWorkspaceLauncher;
+import com.sqlteacher.application.runner.LocalCodeRunner;
 import com.sqlteacher.application.ai.NetworkAiSettingsService;
 import com.sqlteacher.application.ai.AiProviderProfileService;
 import com.sqlteacher.application.ai.AiProviderProbeService;
@@ -45,15 +51,20 @@ import com.sqlteacher.application.learning.InterventionService;
 import com.sqlteacher.application.learning.StudentLearningQueueService;
 import com.sqlteacher.application.support.DiagnosticBundleService;
 import com.sqlteacher.application.support.ProblemReportService;
-import com.sqlteacher.application.system.CommandPaletteModel;
 import com.sqlteacher.application.system.GeneralSoftwareService;
 import com.sqlteacher.desktop.AppI18n;
 import com.sqlteacher.application.update.UpdateService;
 import com.sqlteacher.desktop.GlobalLoading;
+import com.sqlteacher.desktop.DesktopExecutors;
 import com.sqlteacher.desktop.appearance.UiIcon;
 import com.sqlteacher.desktop.appearance.UiIcons;
 import com.sqlteacher.desktop.appearance.UiLayoutMode;
 import com.sqlteacher.desktop.appearance.UiPreferencesService;
+import com.sqlteacher.desktop.navigation.ShellNavigationModel;
+import com.sqlteacher.desktop.navigation.ShellCommandPalette;
+import com.sqlteacher.desktop.navigation.ShellPageCache;
+import com.sqlteacher.desktop.navigation.ShellRoute;
+import com.sqlteacher.desktop.navigation.PageTransitionCoordinator;
 import javafx.application.Platform;
 import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
@@ -62,7 +73,6 @@ import javafx.scene.control.Button;
 import javafx.scene.control.ButtonBase;
 import javafx.scene.control.ContentDisplay;
 import javafx.scene.control.Label;
-import javafx.scene.control.TextInputDialog;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
@@ -106,6 +116,8 @@ public final class MainWindowController {
 
     /** 首页 FXML 的类路径位置。 */
     private static final String HOME_FXML = "/fxml/home.fxml";
+    private static final String COURSE_MAP_FXML = "/fxml/course-map.fxml";
+    private static final String ACTIVITY_WORKSPACE_FXML = "/fxml/activity-workspace.fxml";
 
     /** SQL 练习子页面 FXML 的类路径位置。 */
     private static final String SQL_PRACTICE_FXML = "/fxml/SqlPractice.fxml";
@@ -173,12 +185,21 @@ public final class MainWindowController {
     private final LearningDiagnosisService learningDiagnosisService;
     private final InterventionService interventionService;
     private final StudentLearningQueueService studentLearningQueueService;
+    private final CourseMapService courseMapService;
+    private final ActivityLearningService activityLearningService;
+    private final ActivityReviewService activityReviewService;
+    private final LocalCodeRunner localCodeRunner;
+    private final LocalCodeWorkspaceLauncher localCodeWorkspaceLauncher;
     private final UiPreferencesService uiPreferences;
     private final UpdateService updateService;
     private final ProblemReportService problemReportService;
     private final DiagnosticBundleService diagnosticBundleService;
     private final GeneralSoftwareService generalSoftwareService;
     private final Runnable switchIdentityAction;
+    private final ShellNavigationModel navigationModel = new ShellNavigationModel();
+    private final ShellCommandPalette commandPalette = new ShellCommandPalette();
+    private final ShellPageCache pageCache = new ShellPageCache();
+    private PageTransitionCoordinator pageTransitions;
 
     /**
      * 表名选中回调：表结构页点击表名时触发，把 {@code AppI18n.get("MainWindowController.2")}
@@ -201,6 +222,7 @@ public final class MainWindowController {
     /** 首页导航按钮（顶部导航栏）。 */
     @FXML
     private Button homeNavButton;
+    @FXML private Button courseMapNavButton;
 
     /** SQL 练习导航按钮（顶部导航栏）。 */
     @FXML
@@ -232,13 +254,17 @@ public final class MainWindowController {
     @FXML
     private Button switchIdentityButton;
     @FXML private VBox learningNavGroup;
+    @FXML private VBox courseNavGroup;
     @FXML private VBox teachingNavGroup;
     @FXML private VBox toolsNavGroup;
     @FXML private VBox systemNavGroup;
     @FXML private Label teachingNavGroupTitle;
     @FXML private Label learningNavGroupTitle;
+    @FXML private Label courseNavGroupTitle;
     @FXML private Label toolsNavGroupTitle;
     @FXML private Label systemNavGroupTitle;
+    @FXML private Label contextTitle;
+    @FXML private Label contextSubtitle;
 
     private UiLayoutMode layoutMode;
 
@@ -272,7 +298,7 @@ public final class MainWindowController {
     private Node aiAssistantPage;
 
     /** 首页视图，懒加载一次后缓存复用。 */
-    private Node homePage;
+    private ActivityWorkspaceController activityWorkspaceController;
     private Node settingsPage;
     private Node studentExercisePage;
     private StudentExerciseController studentExerciseController;
@@ -331,7 +357,12 @@ public final class MainWindowController {
                                 LearningDiagnosisService learningDiagnosisService,
                                 InterventionService interventionService,
                                 StudentLearningQueueService studentLearningQueueService,
-                                UiPreferencesService uiPreferences,
+                                CourseMapService courseMapService,
+                                 ActivityLearningService activityLearningService,
+                                 ActivityReviewService activityReviewService,
+                                 LocalCodeRunner localCodeRunner,
+                                 LocalCodeWorkspaceLauncher localCodeWorkspaceLauncher,
+                                 UiPreferencesService uiPreferences,
                                 UpdateService updateService,
                                 ProblemReportService problemReportService,
                                 DiagnosticBundleService diagnosticBundleService,
@@ -381,6 +412,11 @@ public final class MainWindowController {
         this.learningDiagnosisService = Objects.requireNonNull(learningDiagnosisService);
         this.interventionService = Objects.requireNonNull(interventionService);
         this.studentLearningQueueService = Objects.requireNonNull(studentLearningQueueService);
+        this.courseMapService = Objects.requireNonNull(courseMapService);
+        this.activityLearningService = Objects.requireNonNull(activityLearningService);
+        this.activityReviewService = Objects.requireNonNull(activityReviewService);
+        this.localCodeRunner = Objects.requireNonNull(localCodeRunner);
+        this.localCodeWorkspaceLauncher = Objects.requireNonNull(localCodeWorkspaceLauncher);
         this.uiPreferences = Objects.requireNonNull(uiPreferences);
         this.updateService = Objects.requireNonNull(updateService);
         this.problemReportService = Objects.requireNonNull(problemReportService);
@@ -404,6 +440,8 @@ public final class MainWindowController {
     @FXML
     private void initialize() {
         GlobalLoading.initialize(loadingOverlay, loadingText);
+        pageTransitions = new PageTransitionCoordinator(pageContainer,
+            () -> uiPreferences.current().reducedMotion());
         decorateNavigation();
         applyAccessPolicy();
         bindResponsiveLayout();
@@ -439,6 +477,7 @@ public final class MainWindowController {
         sidebarCaption.setVisible(!compact);
         sidebarCaption.setManaged(!compact);
         setVisibleAndManaged(learningNavGroupTitle, !compact);
+        setVisibleAndManaged(courseNavGroupTitle, !compact);
         setVisibleAndManaged(teachingNavGroupTitle, !compact);
         setVisibleAndManaged(toolsNavGroupTitle, !compact);
         setVisibleAndManaged(systemNavGroupTitle, !compact);
@@ -468,6 +507,7 @@ public final class MainWindowController {
             teachingNavGroupTitle.setText(AppI18n.get("MainWindowController.8"));
         }
         applyCapability(homeNavButton, DesktopCapability.HOME);
+        applyCapability(courseMapNavButton, DesktopCapability.COURSE_MAP);
         applyCapability(sqlPracticeNavButton, DesktopCapability.SQL_PRACTICE);
         applyCapability(studentExerciseNavButton, DesktopCapability.STUDENT_EXERCISE);
         applyCapability(exerciseManagementNavButton, DesktopCapability.EXERCISE_MANAGEMENT);
@@ -478,7 +518,8 @@ public final class MainWindowController {
         applyCapability(settingsNavButton, DesktopCapability.SETTINGS);
         applyCapability(cloudCenterNavButton, DesktopCapability.CLOUD_CENTER);
         applyCapability(teachingContentNavButton, DesktopCapability.TEACHING_CONTENT);
-        updateGroupVisibility(learningNavGroup, homeNavButton, studentExerciseNavButton, knowledgeCenterNavButton);
+        updateGroupVisibility(learningNavGroup, homeNavButton, studentExerciseNavButton);
+        updateGroupVisibility(courseNavGroup, courseMapNavButton, knowledgeCenterNavButton);
         updateGroupVisibility(teachingNavGroup, teachingContentNavButton, exerciseManagementNavButton,
             exerciseProgressNavButton, cloudCenterNavButton);
         updateGroupVisibility(toolsNavGroup, sqlPracticeNavButton, aiAssistantNavButton, tableSchemaNavButton);
@@ -487,6 +528,7 @@ public final class MainWindowController {
 
     private void decorateNavigation() {
         UiIcons.decorate(homeNavButton, UiIcon.HOME, AppI18n.get("MainWindowController.9"));
+        UiIcons.decorate(courseMapNavButton, UiIcon.BOOK, AppI18n.get("alpha2.nav.courseMap"));
         UiIcons.decorate(studentExerciseNavButton, UiIcon.PRACTICE, AppI18n.get("MainWindowController.10"));
         UiIcons.decorate(knowledgeCenterNavButton, UiIcon.BOOK, AppI18n.get("MainWindowController.11"));
         UiIcons.decorate(teachingContentNavButton, UiIcon.LIBRARY, AppI18n.get("MainWindowController.12"));
@@ -523,6 +565,7 @@ public final class MainWindowController {
     @FXML
     private void onNavigateHome() {
         selectNav(homeNavButton);
+        updateContext(homeNavButton, AppI18n.get("alpha2.context.home"));
         try {
             showPage(homePage());
         } catch (RuntimeException error) {
@@ -536,10 +579,11 @@ public final class MainWindowController {
      */
     @FXML
     private void onNavigateSqlPractice() {
-        requireCapability(DesktopCapability.SQL_PRACTICE);
+        requireCapability(DesktopCapability.ACTIVITY_WORKSPACE);
         selectNav(sqlPracticeNavButton);
+        updateContext(sqlPracticeNavButton, AppI18n.get("alpha2.context.workspace"));
         try {
-            showPage(sqlPracticePage());
+            showPage(activityWorkspacePage());
         } catch (RuntimeException error) {
             // 子页面加载失败时保持原页面，由调用方日志或后续错误区处理。
             throw new IllegalStateException(AppI18n.get("MainWindowController.22"), error);
@@ -554,6 +598,7 @@ public final class MainWindowController {
     private void onNavigateTableSchema() {
         requireCapability(DesktopCapability.TABLE_SCHEMA);
         selectNav(tableSchemaNavButton);
+        updateContext(tableSchemaNavButton, AppI18n.get("alpha2.context.schema"));
         try {
             showPage(tableSchemaPage());
         } catch (RuntimeException error) {
@@ -569,6 +614,7 @@ public final class MainWindowController {
     private void onNavigateAiAssistant() {
         requireCapability(DesktopCapability.AI_ASSISTANT);
         selectNav(aiAssistantNavButton);
+        updateContext(aiAssistantNavButton, AppI18n.get("alpha2.context.ai"));
         try {
             showPage(aiAssistantPage());
         } catch (RuntimeException error) {
@@ -578,19 +624,14 @@ public final class MainWindowController {
 
     public void registerKeyboardShortcuts(Scene scene) {
         Objects.requireNonNull(scene, "scene must not be null");
-        Button[] buttons = {
-            homeNavButton, sqlPracticeNavButton, studentExerciseNavButton,
-            exerciseManagementNavButton, exerciseProgressNavButton, knowledgeCenterNavButton,
-            aiAssistantNavButton, tableSchemaNavButton, settingsNavButton
-        };
         KeyCode[] keys = {
             KeyCode.DIGIT1, KeyCode.DIGIT2, KeyCode.DIGIT3,
             KeyCode.DIGIT4, KeyCode.DIGIT5, KeyCode.DIGIT6,
             KeyCode.DIGIT7, KeyCode.DIGIT8, KeyCode.DIGIT9
         };
-        for (int index = 0; index < buttons.length; index++) {
-            Button button = buttons[index];
-            if (!button.isVisible()) continue;
+        var routes = navigationModel.availableRoutes(accessProfile);
+        for (int index = 0; index < Math.min(keys.length, routes.size()); index++) {
+            Button button = routeButton(routes.get(index));
             scene.getAccelerators().put(
                 new KeyCodeCombination(keys[index], KeyCombination.CONTROL_DOWN),
                 button::fire
@@ -600,45 +641,38 @@ public final class MainWindowController {
     }
 
     /** Opens the command palette (Ctrl+K). Destructive actions are never executed here, only navigated to. */
+    @FXML
     private void onCommandPalette() {
-        CommandPaletteModel model = new CommandPaletteModel();
-        model.register("home", AppI18n.get("MainWindowController.25"), "home", false, "home");
-        model.register("practice", AppI18n.get("MainWindowController.26"), "sql practice editor", false, "practice");
-        model.register("student", AppI18n.get("MainWindowController.27"), "student practice", false, "student");
-        model.register("teaching", AppI18n.get("MainWindowController.28"), "exercise management", false, "teaching");
-        model.register("progress", AppI18n.get("MainWindowController.29"), "learning analytics dashboard", false, "progress");
-        model.register("knowledge", AppI18n.get("MainWindowController.30"), "course knowledge", false, "knowledge");
-        model.register("ai", AppI18n.get("MainWindowController.31"), "ai assistant", false, "ai");
-        model.register("schema", AppI18n.get("MainWindowController.32"), "table schema", false, "schema");
-        model.register("settings", AppI18n.get("MainWindowController.33"), "settings", false, "settings");
-        TextInputDialog dialog = new TextInputDialog();
-        dialog.setTitle(AppI18n.get("app.name"));
-        dialog.setHeaderText(AppI18n.get("MainWindowController.34"));
-        dialog.setContentText(AppI18n.get("MainWindowController.35"));
-        dialog.showAndWait().ifPresent(query -> {
-            var matches = model.search(query, 5);
-            if (matches.isEmpty()) return;
-            CommandPaletteModel.Command command = matches.getFirst();
-            Button target = switch (command.target()) {
-                case "home" -> homeNavButton;
-                case "practice" -> sqlPracticeNavButton;
-                case "student" -> studentExerciseNavButton;
-                case "teaching" -> exerciseManagementNavButton;
-                case "progress" -> exerciseProgressNavButton;
-                case "knowledge" -> knowledgeCenterNavButton;
-                case "ai" -> aiAssistantNavButton;
-                case "schema" -> tableSchemaNavButton;
-                case "settings" -> settingsNavButton;
-                default -> null;
-            };
-            if (target != null && target.isVisible()) target.fire();
-        });
+        var routes = navigationModel.availableRoutes(accessProfile);
+        commandPalette.show(routes, route -> routeButton(route).getText(), AppI18n.get("app.name"),
+                AppI18n.get("MainWindowController.34"), AppI18n.get("MainWindowController.35"))
+            .map(this::routeButton)
+            .filter(Button::isVisible)
+            .ifPresent(Button::fire);
+    }
+
+    private Button routeButton(ShellRoute route) {
+        return switch (route) {
+            case HOME -> homeNavButton;
+            case STUDENT_EXERCISE -> studentExerciseNavButton;
+            case COURSE_MAP -> courseMapNavButton;
+            case KNOWLEDGE -> knowledgeCenterNavButton;
+            case ACTIVITY_WORKSPACE -> sqlPracticeNavButton;
+            case TABLE_SCHEMA -> tableSchemaNavButton;
+            case AI_ASSISTANT -> aiAssistantNavButton;
+            case TEACHING_CONTENT -> teachingContentNavButton;
+            case EXERCISE_MANAGEMENT -> exerciseManagementNavButton;
+            case EXERCISE_PROGRESS -> exerciseProgressNavButton;
+            case CLOUD_CENTER -> cloudCenterNavButton;
+            case SETTINGS -> settingsNavButton;
+        };
     }
 
     @FXML
     private void onNavigateSettings() {
         requireCapability(DesktopCapability.SETTINGS);
         selectNav(settingsNavButton);
+        updateContext(settingsNavButton, AppI18n.get("alpha2.context.settings"));
         try {
             showPage(settingsPage());
         } catch (RuntimeException error) {
@@ -650,6 +684,7 @@ public final class MainWindowController {
     private void onNavigateStudentExercise() {
         requireCapability(DesktopCapability.STUDENT_EXERCISE);
         selectNav(studentExerciseNavButton);
+        updateContext(studentExerciseNavButton, AppI18n.get("alpha2.context.student"));
         showPage(studentExercisePage());
     }
 
@@ -657,6 +692,7 @@ public final class MainWindowController {
     private void onNavigateExerciseManagement() {
         requireCapability(DesktopCapability.EXERCISE_MANAGEMENT);
         selectNav(exerciseManagementNavButton);
+        updateContext(exerciseManagementNavButton, AppI18n.get("alpha2.context.management"));
         showPage(exerciseManagementPage());
     }
 
@@ -664,6 +700,7 @@ public final class MainWindowController {
     private void onNavigateExerciseProgress() {
         requireCapability(DesktopCapability.EXERCISE_PROGRESS);
         selectNav(exerciseProgressNavButton);
+        updateContext(exerciseProgressNavButton, AppI18n.get("alpha2.context.progress"));
         showPage(exerciseProgressPage());
     }
 
@@ -671,6 +708,7 @@ public final class MainWindowController {
     private void onNavigateKnowledgeCenter() {
         requireCapability(DesktopCapability.KNOWLEDGE_CENTER);
         selectNav(knowledgeCenterNavButton);
+        updateContext(knowledgeCenterNavButton, AppI18n.get("alpha2.context.knowledge"));
         showPage(knowledgeCenterPage());
     }
 
@@ -678,6 +716,7 @@ public final class MainWindowController {
     private void onNavigateCloudCenter() {
         requireCapability(DesktopCapability.CLOUD_CENTER);
         selectNav(cloudCenterNavButton);
+        updateContext(cloudCenterNavButton, AppI18n.get("alpha2.context.cloud"));
         showPage(cloudCenterPage());
     }
 
@@ -685,6 +724,7 @@ public final class MainWindowController {
     private void onNavigateTeachingContent() {
         requireCapability(DesktopCapability.TEACHING_CONTENT);
         selectNav(teachingContentNavButton);
+        updateContext(teachingContentNavButton, AppI18n.get("alpha2.context.content"));
         showPage(teachingContentPage());
     }
 
@@ -703,20 +743,16 @@ public final class MainWindowController {
     /** 当前全部导航按钮集合，新增页面时在此登记。 */
     private List<ButtonBase> navButtons() {
         return List.of(
-            homeNavButton, sqlPracticeNavButton, studentExerciseNavButton, exerciseManagementNavButton,
+            homeNavButton, courseMapNavButton, sqlPracticeNavButton, studentExerciseNavButton, exerciseManagementNavButton,
             exerciseProgressNavButton,
             knowledgeCenterNavButton, aiAssistantNavButton, tableSchemaNavButton, settingsNavButton,
             cloudCenterNavButton, teachingContentNavButton
         );
     }
 
-    /**
-     * 将目标节点设为右侧容器的唯一子节点，实现页面切换。
-     * 切换前先清空旧子节点，防止多层透明页面堆叠。
-     */
+    /** Keeps the outgoing page visible until the incoming page is laid out, then cross-fades. */
     private void showPage(Node page) {
-        pageContainer.getChildren().clear();
-        pageContainer.getChildren().setAll(page);
+        pageTransitions.show(page);
     }
 
     /** 懒加载并缓存 SQL 练习页视图，避免重复加载丢失界面状态。 */
@@ -856,10 +892,72 @@ public final class MainWindowController {
 
     /** 懒加载并缓存首页视图，避免重复加载。 */
     private Node homePage() {
-        if (homePage == null) {
-            homePage = loadHomePage();
+        return pageCache.getOrLoad(ShellRoute.HOME, this::loadHomePage);
+    }
+
+    @FXML
+    private void onNavigateCourseMap() {
+        requireCapability(DesktopCapability.COURSE_MAP);
+        selectNav(courseMapNavButton);
+        updateContext(courseMapNavButton, AppI18n.get("alpha2.context.courseMap"));
+        showPage(courseMapPage());
+    }
+
+    private Node courseMapPage() {
+        return pageCache.getOrLoad(ShellRoute.COURSE_MAP, () -> loadPage(COURSE_MAP_FXML,
+            CourseMapController.class, () -> new CourseMapController(courseMapService, this::openActivity)));
+    }
+
+    private Node activityWorkspacePage() {
+        return pageCache.getOrLoad(ShellRoute.ACTIVITY_WORKSPACE, () -> {
+            URL fxml = MainWindowController.class.getResource(ACTIVITY_WORKSPACE_FXML);
+            if (fxml == null) throw new IllegalStateException("Missing FXML resource: " + ACTIVITY_WORKSPACE_FXML);
+            FXMLLoader loader = new FXMLLoader(fxml, AppI18n.bundle());
+            loader.setControllerFactory(type -> {
+                if (type == ActivityWorkspaceController.class) {
+                    activityWorkspaceController = new ActivityWorkspaceController(
+                        courseMapService, activityLearningService, activityReviewService,
+                        localCodeRunner, localCodeWorkspaceLauncher, accessProfile, sqlPracticePage()
+                    );
+                    return activityWorkspaceController;
+                }
+                throw new IllegalStateException("Unexpected controller type for activity workspace: " + type);
+            });
+            try {
+                return loader.load();
+            } catch (IOException error) {
+                throw new IllegalStateException("Failed to load " + ACTIVITY_WORKSPACE_FXML, error);
+            }
+        });
+    }
+
+    private <T> Node loadPage(String resource, Class<T> controllerType, java.util.function.Supplier<T> factory) {
+        URL fxml = MainWindowController.class.getResource(resource);
+        if (fxml == null) throw new IllegalStateException("Missing FXML resource: " + resource);
+        FXMLLoader loader = new FXMLLoader(fxml, AppI18n.bundle());
+        loader.setControllerFactory(type -> {
+            if (type == controllerType) return factory.get();
+            throw new IllegalStateException("Unexpected controller type for " + resource + ": " + type);
+        });
+        try {
+            return loader.load();
+        } catch (IOException error) {
+            throw new IllegalStateException("Failed to load " + resource, error);
         }
-        return homePage;
+    }
+
+    private void openActivity(CourseMapActivity activity) {
+        requireCapability(DesktopCapability.ACTIVITY_WORKSPACE);
+        Node page = activityWorkspacePage();
+        activityWorkspaceController.selectActivity(activity);
+        selectNav(sqlPracticeNavButton);
+        updateContext(sqlPracticeNavButton, activity.title());
+        showPage(page);
+    }
+
+    private void updateContext(Button source, String subtitle) {
+        contextTitle.setText(source.getText());
+        contextSubtitle.setText(subtitle);
     }
 
     private void requireCapability(DesktopCapability capability) {
@@ -1078,8 +1176,10 @@ public final class MainWindowController {
                 HomeController controller = new HomeController(studentLearningQueueService, applicationExceptionMapper);
                 controller.setOnNavigateAiAssistant(this::onNavigateAiAssistant);
                 controller.setOnNavigateSqlPractice(this::onNavigateSqlPractice);
+                controller.setOnNavigateCourseMap(this::onNavigateCourseMap);
                 controller.setOnNavigateTableSchema(this::onNavigateTableSchema);
                 controller.setOnOpenExercise(this::openExercise);
+                controller.setOnOpenActivity(this::openActivityById);
                 controller.setOnOpenKnowledge(this::openKnowledgePoint);
                 controller.setOnOpenAssignment(this::openAssignment);
                 controller.setOnReviewFeedback(this::onNavigateTeachingContent);
@@ -1100,6 +1200,29 @@ public final class MainWindowController {
         studentExerciseController.openExercise(exerciseId);
         selectNav(studentExerciseNavButton);
         showPage(page);
+    }
+
+    private void openActivityById(String activityId) {
+        requireCapability(DesktopCapability.ACTIVITY_WORKSPACE);
+        GlobalLoading.show(AppI18n.get("alpha3.loading.title"));
+        DesktopExecutors.background().execute(() -> {
+            try {
+                CourseMapActivity target = courseMapService.load().courses().stream()
+                    .flatMap(course -> course.sections().stream())
+                    .flatMap(section -> section.activities().stream())
+                    .filter(activity -> activity.id().equals(activityId))
+                    .findFirst().orElseThrow(() -> new IllegalStateException("Activity is not available: " + activityId));
+                Platform.runLater(() -> {
+                    GlobalLoading.hide();
+                    openActivity(target);
+                });
+            } catch (RuntimeException error) {
+                Platform.runLater(() -> {
+                    GlobalLoading.hide();
+                    throw error;
+                });
+            }
+        });
     }
 
     private void openKnowledgePoint(String knowledgePoint) {

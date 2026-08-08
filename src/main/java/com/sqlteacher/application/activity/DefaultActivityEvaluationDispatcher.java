@@ -4,6 +4,7 @@ import com.sqlteacher.domain.activity.ActivityArtifact;
 import com.sqlteacher.domain.activity.ActivitySpecification;
 import com.sqlteacher.domain.activity.ActivityType;
 import com.sqlteacher.domain.activity.LearningActivityDefinition;
+import com.sqlteacher.application.runner.RunnerCancellation;
 
 import java.util.EnumMap;
 import java.util.List;
@@ -27,8 +28,15 @@ public final class DefaultActivityEvaluationDispatcher implements ActivityEvalua
 
     @Override
     public ActivityEvaluationResult evaluate(LearningActivityDefinition definition, ActivityArtifact artifact) {
+        return evaluate(definition, artifact, RunnerCancellation.NONE);
+    }
+
+    @Override
+    public ActivityEvaluationResult evaluate(LearningActivityDefinition definition, ActivityArtifact artifact,
+                                             RunnerCancellation cancellation) {
         Objects.requireNonNull(definition, "definition must not be null");
         Objects.requireNonNull(artifact, "artifact must not be null");
+        Objects.requireNonNull(cancellation, "cancellation must not be null");
         ActivityEvaluator<?, ?> evaluator = evaluators.get(definition.type());
         if (evaluator == null) {
             throw new UnsupportedActivityException(
@@ -42,19 +50,35 @@ public final class DefaultActivityEvaluationDispatcher implements ActivityEvalua
                 "ACTIVITY_ARTIFACT_UNSUPPORTED", "The artifact does not match the activity definition"
             );
         }
-        return evaluateTyped(evaluator, definition, definition.specification(), artifact);
+        return evaluateTyped(evaluator, definition, definition.specification(), artifact, cancellation);
     }
 
     private static <S extends ActivitySpecification, A extends ActivityArtifact> ActivityEvaluationResult evaluateTyped(
         ActivityEvaluator<S, A> evaluator,
         LearningActivityDefinition definition,
         ActivitySpecification specification,
-        ActivityArtifact artifact
+        ActivityArtifact artifact,
+        RunnerCancellation cancellation
     ) {
+        if (evaluator instanceof CancellableActivityEvaluator<?, ?>) {
+            return evaluateCancellable(evaluator, definition, specification, artifact, cancellation);
+        }
         return evaluator.evaluate(
             definition,
             evaluator.specificationType().cast(specification),
             evaluator.artifactType().cast(artifact)
         );
+    }
+
+    @SuppressWarnings("unchecked")
+    private static <S extends ActivitySpecification, A extends ActivityArtifact>
+            ActivityEvaluationResult evaluateCancellable(ActivityEvaluator<S, A> evaluator,
+                                                          LearningActivityDefinition definition,
+                                                          ActivitySpecification specification,
+                                                          ActivityArtifact artifact,
+                                                          RunnerCancellation cancellation) {
+        var cancellable = (CancellableActivityEvaluator<S, A>) evaluator;
+        return cancellable.evaluate(definition, evaluator.specificationType().cast(specification),
+            evaluator.artifactType().cast(artifact), cancellation);
     }
 }

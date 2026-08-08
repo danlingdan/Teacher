@@ -134,6 +134,11 @@
     -fx-background-color: -st-bg-input;
     -fx-border-color: -st-border-subtle;
     -fx-text-fill: -st-text-secondary;
+    -fx-pref-width: 300px;
+    -fx-max-width: 300px;
+    -fx-wrap-text: true;
+    -fx-alignment: center-left;
+    -fx-text-alignment: left;
 }
 
 .example-chip:hover {
@@ -144,3 +149,82 @@
 
 .sql-result-hint { -fx-text-fill: -st-success; }
 .sql-error-hint { -fx-text-fill: -st-danger; }
+
+/* SQLTeacher UI Kit: shared primitives for every new or migrated page. */
+.page-header {
+    -fx-alignment: center-left;
+    -fx-min-height: 72px;
+}
+
+.page-header-actions { -fx-alignment: center-right; }
+
+.page-eyebrow {
+    -fx-font-size: 10px;
+    -fx-font-weight: 700;
+    -fx-text-fill: -st-accent-fg;
+}
+
+.state-panel {
+    -fx-padding: 28px;
+    -fx-background-color: -st-bg-subtle;
+    -fx-background-radius: 12px;
+    -fx-border-color: -st-border-muted;
+    -fx-border-radius: 12px;
+}
+
+.state-panel-title {
+    -fx-font-size: 15px;
+    -fx-font-weight: 700;
+    -fx-text-fill: -st-text-primary;
+}
+
+.state-panel-message,
+.metric-detail { -fx-text-fill: -st-text-muted; }
+
+.metric-card {
+    -fx-padding: 16px;
+    -fx-background-color: -st-bg-surface;
+    -fx-background-radius: 12px;
+    -fx-border-color: -st-border-muted;
+    -fx-border-radius: 12px;
+}
+
+.metric-label {
+    -fx-font-size: 11px;
+    -fx-text-fill: -st-text-muted;
+}
+
+.metric-value {
+    -fx-font-size: 24px;
+    -fx-font-weight: 700;
+    -fx-text-fill: -st-text-primary;
+}
+
+.ui-icon-shape {
+    -fx-icon-color: -st-text-muted;
+    -fx-fill: -st-text-muted;
+}
+
+.sql-editor.code-area {
+    -fx-font-family: "JetBrains Mono", "Cascadia Code", "Consolas", monospace;
+    -fx-font-size: 13px;
+    -fx-padding: 0;
+}
+
+.sql-editor .paragraph-box:has-caret { -fx-background-color: -st-bg-subtle; }
+
+.sql-editor .lineno {
+    -fx-background-color: -st-bg-subtle;
+    -fx-text-fill: -st-text-muted;
+}
+
+.sql-keyword { -fx-fill: -st-accent-fg; -fx-font-weight: 700; }
+.sql-string { -fx-fill: -st-success; }
+.sql-comment { -fx-fill: -st-text-muted; -fx-font-style: italic; }
+.sql-number { -fx-fill: -st-warning; }
+.sql-operator { -fx-fill: -st-info; }
+
+.sql-editor-placeholder {
+    -fx-padding: 12px;
+    -fx-text-fill: -st-text-muted;
+}

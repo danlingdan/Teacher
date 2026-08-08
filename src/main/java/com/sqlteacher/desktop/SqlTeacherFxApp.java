@@ -31,6 +31,11 @@ import com.sqlteacher.application.collaboration.DesktopAccessProfile;
 import com.sqlteacher.application.collaboration.AssignmentDeliveryService;
 import com.sqlteacher.application.collaboration.FeedbackDraftEnhancer;
 import com.sqlteacher.application.collaboration.TeachingContentCache;
+import com.sqlteacher.application.course.CourseMapService;
+import com.sqlteacher.application.activity.ActivityLearningService;
+import com.sqlteacher.application.activity.ActivityReviewService;
+import com.sqlteacher.application.runner.LocalCodeWorkspaceLauncher;
+import com.sqlteacher.application.runner.LocalCodeRunner;
 import com.sqlteacher.application.ai.NetworkAiSettingsService;
 import com.sqlteacher.application.ai.AiProviderProfileService;
 import com.sqlteacher.application.ai.AiProviderProbeService;
@@ -131,6 +136,11 @@ public final class SqlTeacherFxApp extends Application {
     private LearningDiagnosisService learningDiagnosisService;
     private InterventionService interventionService;
     private StudentLearningQueueService studentLearningQueueService;
+    private CourseMapService courseMapService;
+    private ActivityLearningService activityLearningService;
+    private ActivityReviewService activityReviewService;
+    private LocalCodeRunner localCodeRunner;
+    private LocalCodeWorkspaceLauncher localCodeWorkspaceLauncher;
     private InMemoryLearningEventOwnerContext learningEventOwnerContext;
     private UiPreferencesService uiPreferencesService;
     private UpdateService updateService;
@@ -198,6 +208,11 @@ public final class SqlTeacherFxApp extends Application {
             learningDiagnosisService = context.getBean(LearningDiagnosisService.class);
             interventionService = context.getBean(InterventionService.class);
             studentLearningQueueService = context.getBean(StudentLearningQueueService.class);
+            courseMapService = context.getBean(CourseMapService.class);
+            activityLearningService = context.getBean(ActivityLearningService.class);
+            activityReviewService = context.getBean(ActivityReviewService.class);
+            localCodeRunner = context.getBean(LocalCodeRunner.class);
+            localCodeWorkspaceLauncher = context.getBean(LocalCodeWorkspaceLauncher.class);
             learningEventOwnerContext = context.getBean(InMemoryLearningEventOwnerContext.class);
             uiPreferencesService = UiPreferencesService.shared();
             updateService = context.getBean(UpdateService.class);
@@ -339,6 +354,11 @@ public final class SqlTeacherFxApp extends Application {
                     learningDiagnosisService,
                     interventionService,
                     studentLearningQueueService,
+                    courseMapService,
+                    activityLearningService,
+                    activityReviewService,
+                    localCodeRunner,
+                    localCodeWorkspaceLauncher,
                     uiPreferencesService,
                     updateService,
                     problemReportService,

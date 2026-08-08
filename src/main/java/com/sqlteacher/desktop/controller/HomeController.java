@@ -25,6 +25,7 @@ public final class HomeController {
     private final ApplicationExceptionMapper exceptionMapper;
 
     @FXML private Label sqlIcon;
+    @FXML private Label courseIcon;
     @FXML private Label aiIcon;
     @FXML private Label schemaIcon;
     @FXML private ListView<StudentLearningQueueItem> learningQueue;
@@ -35,8 +36,10 @@ public final class HomeController {
 
     private Runnable onNavigateAiAssistant;
     private Runnable onNavigateSqlPractice;
+    private Runnable onNavigateCourseMap;
     private Runnable onNavigateTableSchema;
     private Consumer<String> onOpenExercise;
+    private Consumer<String> onOpenActivity;
     private Consumer<String> onOpenKnowledge;
     private Consumer<AssignmentTaskContext> onOpenAssignment;
     private Runnable onReviewFeedback;
@@ -49,6 +52,7 @@ public final class HomeController {
     @FXML
     private void initialize() {
         sqlIcon.setGraphic(UiIcons.create(UiIcon.CODE, 30));
+        courseIcon.setGraphic(UiIcons.create(UiIcon.BOOK, 30));
         aiIcon.setGraphic(UiIcons.create(UiIcon.SPARK, 30));
         schemaIcon.setGraphic(UiIcons.create(UiIcon.TABLE, 30));
         learningQueue.setCellFactory(ignored -> new ListCell<>() {
@@ -75,12 +79,20 @@ public final class HomeController {
         this.onNavigateSqlPractice = onNavigateSqlPractice;
     }
 
+    public void setOnNavigateCourseMap(Runnable onNavigateCourseMap) {
+        this.onNavigateCourseMap = onNavigateCourseMap;
+    }
+
     public void setOnNavigateTableSchema(Runnable onNavigateTableSchema) {
         this.onNavigateTableSchema = onNavigateTableSchema;
     }
 
     public void setOnOpenExercise(Consumer<String> onOpenExercise) {
         this.onOpenExercise = onOpenExercise;
+    }
+
+    public void setOnOpenActivity(Consumer<String> onOpenActivity) {
+        this.onOpenActivity = onOpenActivity;
     }
 
     public void setOnOpenKnowledge(Consumer<String> onOpenKnowledge) {
@@ -111,6 +123,9 @@ public final class HomeController {
             onOpenAssignment.accept(selected.assignmentTask());
         } else if (!selected.notificationId().isBlank() && onReviewFeedback != null) {
             onReviewFeedback.run();
+        } else if (selected.action().type() == com.sqlteacher.application.learning.LearningActionType.RETRY_ACTIVITY
+                && !selected.action().exerciseId().isBlank() && onOpenActivity != null) {
+            onOpenActivity.accept(selected.action().exerciseId());
         } else if (!selected.action().exerciseId().isBlank() && onOpenExercise != null) {
             onOpenExercise.accept(selected.action().exerciseId());
         } else if (!selected.action().knowledgePoint().isBlank() && onOpenKnowledge != null) {
@@ -176,6 +191,11 @@ public final class HomeController {
         if (onNavigateSqlPractice != null) {
             onNavigateSqlPractice.run();
         }
+    }
+
+    @FXML
+    private void onCourseMapCardClick() {
+        if (onNavigateCourseMap != null) onNavigateCourseMap.run();
     }
 
     @FXML

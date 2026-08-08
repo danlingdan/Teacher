@@ -38,6 +38,7 @@
 <?import javafx.scene.layout.Region?>
 <?import javafx.scene.layout.StackPane?>
 <?import javafx.scene.layout.VBox?>
+<?import com.sqlteacher.desktop.component.PageHeader?>
 
 <ScrollPane xmlns="http://javafx.com/javafx"
             xmlns:fx="http://javafx.com/fxml"
@@ -54,14 +55,7 @@
                 <children>
 
                     <!-- 标题区：小图标徽标 + 主标题 + 弱化副标题，整体居中。 -->
-                    <VBox styleClass="title-area" alignment="CENTER" spacing="6.0">
-                        <children>
-                            <Region styleClass="title-badge"/>
-                            <Label styleClass="page-title" text="%ai-assistant.1"/>
-                            <Label styleClass="page-subtitle"
-                                   text="%ai-assistant.2"/>
-                        </children>
-                    </VBox>
+                    <PageHeader title="%ai-assistant.1" description="%ai-assistant.2"/>
 
                     <!-- 统一 AI 来源：本地 Ollama 与 OpenAI-compatible 网络模型在同一入口切换。 -->
                     <VBox styleClass="panel-card" spacing="10.0">

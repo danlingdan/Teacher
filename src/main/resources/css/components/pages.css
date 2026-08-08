@@ -642,3 +642,149 @@
     -fx-background-color: -st-accent-soft;
     -fx-text-fill: -st-text-primary;
 }
+
+.home-dashboard { -fx-background-color: -st-bg-canvas; }
+
+.compact-action-grid .home-card {
+    -fx-padding: 16;
+    -fx-min-width: 0;
+    -fx-pref-width: 260;
+    -fx-min-height: 152;
+    -fx-pref-height: 152;
+    -fx-background-radius: 12;
+    -fx-border-radius: 12;
+}
+
+.compact-action-grid { -fx-padding: 0; }
+.compact-action-grid .card-icon { -fx-min-height: 26; }
+.compact-action-grid .card-description { -fx-font-size: 12px; }
+
+/* ===== Alpha.2 application shell and learning workspace ===== */
+.content-shell,
+.course-map-page,
+.activity-workspace {
+    -fx-background-color: -st-bg-canvas;
+}
+
+.context-bar {
+    -fx-padding: 11 22 11 22;
+    -fx-min-height: 62;
+    -fx-pref-height: 62;
+    -fx-background-color: -st-bg-surface;
+    -fx-border-color: transparent transparent -st-border-subtle transparent;
+}
+
+.context-title {
+    -fx-font-size: 15px;
+    -fx-font-weight: 700;
+    -fx-text-fill: -st-text-primary;
+}
+
+.context-subtitle,
+.keyboard-hint,
+.course-map-summary,
+.workspace-status,
+.workspace-knowledge {
+    -fx-text-fill: -st-text-secondary;
+}
+
+.keyboard-hint {
+    -fx-padding: 5 9 5 9;
+    -fx-background-color: -st-bg-surface-raised;
+    -fx-border-color: -st-border-subtle;
+    -fx-background-radius: 7;
+    -fx-border-radius: 7;
+}
+
+.command-palette-button {
+    -fx-cursor: hand;
+}
+
+.course-map-card {
+    -fx-padding: 18;
+    -fx-background-radius: 14;
+    -fx-border-radius: 14;
+}
+
+.course-activity-button {
+    -fx-min-width: 180;
+    -fx-pref-width: 180;
+    -fx-max-width: 180;
+    -fx-min-height: 68;
+    -fx-alignment: CENTER_LEFT;
+    -fx-background-color: -st-bg-surface-raised;
+    -fx-border-color: -st-border-subtle;
+    -fx-text-fill: -st-text-primary;
+    -fx-background-radius: 10;
+    -fx-border-radius: 10;
+}
+
+.course-activity-button:hover {
+    -fx-background-color: -st-accent-soft;
+    -fx-border-color: -st-accent;
+}
+
+.workspace-rail,
+.workspace-inspector {
+    -fx-background-color: -st-bg-surface;
+    -fx-border-color: -st-border-subtle;
+}
+
+.workspace-rail { -fx-border-width: 0 1 0 0; }
+.workspace-inspector { -fx-border-width: 0 0 0 1; }
+.workspace-runner { -fx-background-color: -st-bg-canvas; }
+
+.activity-list {
+    -fx-background-color: -st-bg-surface-raised;
+    -fx-border-color: -st-border-subtle;
+    -fx-background-radius: 10;
+    -fx-border-radius: 10;
+}
+/* Alpha.3 deterministic quiz and binary-tree trace workspace. */
+.activity-interaction-pane { -fx-background-color: -st-bg-canvas; }
+.activity-interaction-scroll { -fx-background-color: transparent; -fx-background: transparent; }
+.activity-interaction-scroll > .viewport { -fx-background-color: transparent; }
+.quiz-question-card { -fx-padding: 18px; -fx-spacing: 10px; }
+.quiz-option { -fx-padding: 7px 4px; }
+.activity-prompt { -fx-font-size: 15px; -fx-font-weight: 700; -fx-text-fill: -st-text-primary; }
+.activity-feedback { -fx-padding: 11px 14px; -fx-background-color: -st-bg-subtle; -fx-background-radius: 9px; }
+.activity-feedback.success { -fx-text-fill: -st-success; }
+.activity-feedback.danger { -fx-text-fill: -st-danger; }
+.activity-feedback.teacher-feedback { -fx-border-color: -st-info-border; -fx-border-radius: 9px; }
+.binary-tree-canvas {
+    -fx-background-color: -st-bg-surface;
+    -fx-background-radius: 14px;
+    -fx-border-color: -st-border-muted;
+    -fx-border-radius: 14px;
+}
+.tree-edge { -fx-stroke: -st-border-strong; -fx-stroke-width: 2px; }
+.tree-node-button {
+    -fx-min-width: 48px; -fx-min-height: 48px;
+    -fx-pref-width: 48px; -fx-pref-height: 48px;
+    -fx-max-width: 48px; -fx-max-height: 48px;
+    -fx-background-radius: 24px;
+    -fx-background-color: -st-accent;
+    -fx-text-fill: white;
+    -fx-font-weight: 700;
+}
+.tree-node-button:hover { -fx-background-color: -st-accent-hover; }
+.tree-node-button:disabled { -fx-opacity: 0.62; }
+.trace-sequence { -fx-padding: 12px; -fx-font-size: 15px; -fx-text-fill: -st-accent-fg; }
+.teacher-review-pane { -fx-padding: 12px 0 0 0; -fx-border-color: -st-border-muted transparent transparent transparent; }
+.runner-boundary-note {
+    -fx-padding: 10 12;
+    -fx-background-color: -st-accent-soft;
+    -fx-background-radius: 8;
+    -fx-text-fill: -color-fg-default;
+}
+
+.code-activity-editor {
+    -fx-font-family: "Cascadia Code", "JetBrains Mono", Consolas, monospace;
+    -fx-font-size: 13px;
+    -fx-background-color: -color-bg-default;
+}
+
+.code-console {
+    -fx-font-family: "Cascadia Code", "JetBrains Mono", Consolas, monospace;
+    -fx-font-size: 12px;
+}

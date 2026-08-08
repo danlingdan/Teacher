@@ -3,11 +3,19 @@ package com.sqlteacher.infrastructure.database;
 import com.sqlteacher.application.activity.ActivityBackedSqlExerciseEvaluationService;
 import com.sqlteacher.application.activity.ActivityEvaluationDispatcher;
 import com.sqlteacher.application.activity.ActivityEvaluator;
+import com.sqlteacher.application.activity.ActivityLearningService;
+import com.sqlteacher.application.activity.ActivityReviewService;
 import com.sqlteacher.application.activity.DefaultActivityEvaluationDispatcher;
+import com.sqlteacher.application.activity.CodeActivityEvaluator;
+import com.sqlteacher.application.activity.QuizActivityEvaluator;
 import com.sqlteacher.application.activity.SqlActivityEvaluator;
+import com.sqlteacher.application.activity.TraceActivityEvaluator;
+import com.sqlteacher.application.runner.CodeRunner;
+import com.sqlteacher.infrastructure.runner.WslSandboxCodeRunner;
 import com.sqlteacher.application.connection.ConnectionManagementService;
 import com.sqlteacher.application.connection.DatabaseConnectionTestService;
 import com.sqlteacher.application.connection.DatabaseCredentialSession;
+import com.sqlteacher.application.course.CourseMapService;
 import com.sqlteacher.application.event.DefaultLearningEventService;
 import com.sqlteacher.application.event.LearningEventQueryService;
 import com.sqlteacher.application.event.LearningEventRecorder;
@@ -55,6 +63,7 @@ import com.sqlteacher.infrastructure.knowledge.OllamaEmbeddingProvider;
 import com.sqlteacher.infrastructure.knowledge.SqliteKnowledgeIndexService;
 import com.sqlteacher.infrastructure.knowledge.SqliteKnowledgeReadStateService;
 import org.springframework.context.annotation.Bean;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
 import org.springframework.beans.factory.ObjectProvider;
@@ -165,6 +174,11 @@ public class DatabaseServiceConfig {
     }
 
     @Bean
+    public CourseMapService courseMapService(JdbcConnectionFactory connectionFactory) {
+        return new JdbcCourseMapService(connectionFactory);
+    }
+
+    @Bean
     public DeterministicSqlExerciseEvaluationService deterministicSqlExerciseEvaluationService(
             SqlRiskAnalysisService riskAnalysisService,
             SqlTeacherConfiguration configuration) {
@@ -178,9 +192,45 @@ public class DatabaseServiceConfig {
     }
 
     @Bean
+    public ActivityEvaluator<?, ?> quizActivityEvaluator() {
+        return new QuizActivityEvaluator();
+    }
+
+    @Bean
+    public ActivityEvaluator<?, ?> traceActivityEvaluator() {
+        return new TraceActivityEvaluator();
+    }
+
+    @Bean
+    public CodeRunner codeRunner() {
+        return new WslSandboxCodeRunner();
+    }
+
+    @Bean
+    public ActivityEvaluator<?, ?> codeActivityEvaluator(@Qualifier("codeRunner") CodeRunner runner) {
+        return new CodeActivityEvaluator(runner);
+    }
+
+    @Bean
     public ActivityEvaluationDispatcher activityEvaluationDispatcher(
             List<ActivityEvaluator<?, ?>> evaluators) {
         return new DefaultActivityEvaluationDispatcher(evaluators);
+    }
+
+    @Bean
+    public ActivityLearningService activityLearningService(
+            JdbcConnectionFactory connectionFactory,
+            LearningEventOwnerProvider ownerProvider,
+            LearningEventService learningEventService,
+            ActivityEvaluationDispatcher dispatcher) {
+        return new JdbcActivityLearningService(
+            connectionFactory, ownerProvider, learningEventService, dispatcher
+        );
+    }
+
+    @Bean
+    public ActivityReviewService activityReviewService(JdbcConnectionFactory connectionFactory) {
+        return new JdbcActivityReviewService(connectionFactory);
     }
 
     @Bean

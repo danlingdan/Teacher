@@ -3,6 +3,8 @@
 <?import javafx.geometry.Insets?>
 <?import javafx.scene.control.*?>
 <?import javafx.scene.layout.*?>
+<?import com.sqlteacher.desktop.component.PageHeader?>
+<?import com.sqlteacher.desktop.component.MetricCard?>
 
 <BorderPane xmlns="http://javafx.com/javafx" xmlns:fx="http://javafx.com/fxml"
             fx:controller="com.sqlteacher.desktop.controller.ExerciseProgressController"
@@ -10,16 +12,13 @@
     <top>
         <VBox spacing="12" styleClass="title-area">
             <padding><Insets top="18" right="24" bottom="12" left="24"/></padding>
-            <HBox alignment="CENTER_LEFT">
-                <VBox spacing="5">
-                    <Label text="%exercise-progress.1" styleClass="page-title"/>
-                    <Label text="%exercise-progress.2" styleClass="page-subtitle"/>
-                </VBox>
-                <Region HBox.hgrow="ALWAYS"/>
-                <Button text="%exercise-progress.3" onAction="#onResetLearningData" styleClass="danger-outline-button"/>
-                <Button fx:id="exportButton" text="%exercise-progress.4" onAction="#onExport" styleClass="secondary-button" disable="true"/>
-                <Button text="%exercise-progress.5" onAction="#onRefresh" styleClass="refresh-button"/>
-            </HBox>
+            <PageHeader title="%exercise-progress.1" description="%exercise-progress.2">
+                <actions>
+                    <Button text="%exercise-progress.3" onAction="#onResetLearningData" styleClass="danger-outline-button"/>
+                    <Button fx:id="exportButton" text="%exercise-progress.4" onAction="#onExport" styleClass="secondary-button" disable="true"/>
+                    <Button text="%exercise-progress.5" onAction="#onRefresh" styleClass="refresh-button"/>
+                </actions>
+            </PageHeader>
             <HBox spacing="8" alignment="CENTER_LEFT" styleClass="analytics-filter-bar">
                 <Label text="%exercise-progress.6"/><DatePicker fx:id="startDatePicker" prefWidth="130"/>
                 <Label text="%exercise-progress.7"/><DatePicker fx:id="endDatePicker" prefWidth="130"/>
@@ -34,12 +33,12 @@
     <center>
         <VBox spacing="10" styleClass="progress-content">
             <TilePane prefColumns="6" hgap="10" vgap="8">
-                <VBox styleClass="progress-card"><Label text="%exercise-progress.13" styleClass="model-status"/><Label fx:id="sessionsLabel" text="0" styleClass="progress-value"/></VBox>
-                <VBox styleClass="progress-card"><Label text="%exercise-progress.14" styleClass="model-status"/><Label fx:id="attemptsLabel" text="0" styleClass="progress-value"/></VBox>
-                <VBox styleClass="progress-card"><Label text="%exercise-progress.15" styleClass="model-status"/><Label fx:id="passRateLabel" text="0%" styleClass="progress-value"/></VBox>
-                <VBox styleClass="progress-card"><Label text="%exercise-progress.16" styleClass="model-status"/><Label fx:id="completionRateLabel" text="0%" styleClass="progress-value"/></VBox>
-                <VBox styleClass="progress-card"><Label text="%exercise-progress.17" styleClass="model-status"/><Label fx:id="averageAttemptsLabel" text="0" styleClass="progress-value"/></VBox>
-                <VBox styleClass="progress-card"><Label text="%exercise-progress.18" styleClass="model-status"/><Label fx:id="durationLabel" text="0 ms" styleClass="progress-value"/></VBox>
+                <MetricCard fx:id="sessionsLabel" label="%exercise-progress.13" value="0"/>
+                <MetricCard fx:id="attemptsLabel" label="%exercise-progress.14" value="0"/>
+                <MetricCard fx:id="passRateLabel" label="%exercise-progress.15" value="0%"/>
+                <MetricCard fx:id="completionRateLabel" label="%exercise-progress.16" value="0%"/>
+                <MetricCard fx:id="averageAttemptsLabel" label="%exercise-progress.17" value="0"/>
+                <MetricCard fx:id="durationLabel" label="%exercise-progress.18" value="0 ms"/>
             </TilePane>
             <TabPane VBox.vgrow="ALWAYS" tabClosingPolicy="UNAVAILABLE">
                 <tabs>

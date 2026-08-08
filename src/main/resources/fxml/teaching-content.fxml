@@ -3,19 +3,18 @@
 <?import javafx.geometry.Insets?>
 <?import javafx.scene.control.*?>
 <?import javafx.scene.layout.*?>
+<?import com.sqlteacher.desktop.component.PageHeader?>
 
 <BorderPane xmlns="http://javafx.com/javafx" xmlns:fx="http://javafx.com/fxml"
             fx:controller="com.sqlteacher.desktop.controller.TeachingContentController"
             styleClass="teaching-workbench">
     <top>
         <VBox spacing="8" styleClass="student-workflow-header">
-            <HBox alignment="CENTER_LEFT" spacing="12">
-                <VBox spacing="4" HBox.hgrow="ALWAYS">
-                    <Label text="%teaching-content.1" styleClass="page-title"/>
-                    <Label text="%teaching-content.2" styleClass="page-subtitle"/>
-                </VBox>
-                <Button text="%teaching-content.3" onAction="#onRefresh" styleClass="secondary-button"/>
-            </HBox>
+            <PageHeader title="%teaching-content.1" description="%teaching-content.2">
+                <actions>
+                    <Button text="%teaching-content.3" onAction="#onRefresh" styleClass="secondary-button"/>
+                </actions>
+            </PageHeader>
             <Label fx:id="statusLabel" text="%teaching-content.4" wrapText="true" styleClass="status-info"/>
         </VBox>
     </top>

@@ -38,6 +38,7 @@
 <?import javafx.scene.layout.Region?>
 <?import javafx.scene.layout.StackPane?>
 <?import javafx.scene.layout.VBox?>
+<?import com.sqlteacher.desktop.component.PageHeader?>
 
 <ScrollPane xmlns="http://javafx.com/javafx"
             xmlns:fx="http://javafx.com/fxml"
@@ -57,14 +58,7 @@
                     <children>
 
                         <!-- 标题区：小图标徽标 + 主标题 + 弱化副标题，整体居中。 -->
-                        <VBox styleClass="title-area" alignment="CENTER" spacing="6.0">
-                            <children>
-                                <Region styleClass="title-badge"/>
-                                <Label styleClass="page-title" text="%TableSchemaView.1"/>
-                                <Label styleClass="page-subtitle"
-                                       text="%TableSchemaView.2"/>
-                            </children>
-                        </VBox>
+                        <PageHeader title="%TableSchemaView.1" description="%TableSchemaView.2"/>
 
                         <!-- 主分栏：左侧树形 + 右侧数据预览。 -->
                         <HBox spacing="14.0" VBox.vgrow="ALWAYS" HBox.hgrow="ALWAYS">

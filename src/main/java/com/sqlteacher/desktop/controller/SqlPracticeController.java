@@ -14,6 +14,8 @@ import com.sqlteacher.desktop.SqlRiskConfirmDialogUtil;
 import com.sqlteacher.desktop.viewmodel.DesktopConnections;
 import com.sqlteacher.desktop.viewmodel.SqlExecutionViewModel;
 import com.sqlteacher.desktop.viewmodel.SqlResultRowViewModel;
+import com.sqlteacher.desktop.editor.SqlCodeHighlighter;
+import com.sqlteacher.desktop.component.StatePanel;
 import javafx.application.Platform;
 import javafx.beans.property.ReadOnlyStringWrapper;
 import javafx.collections.FXCollections;
@@ -25,7 +27,8 @@ import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.TableColumn;
 import javafx.scene.control.TableView;
-import javafx.scene.control.TextArea;
+import org.fxmisc.richtext.CodeArea;
+import org.fxmisc.richtext.LineNumberFactory;
 
 import java.time.Duration;
 import java.util.List;
@@ -93,7 +96,7 @@ public final class SqlPracticeController {
 
     /** 多行 SQL 输入框，对应 FXML 中 fx:id="sqlInputArea"。 */
     @FXML
-    private TextArea sqlInputArea;
+    private CodeArea sqlInputArea;
 
     /** 执行按钮，对应 FXML 中 fx:id="executeSqlButton"（预留：执行期可临时禁用）。 */
     @FXML
@@ -112,7 +115,7 @@ public final class SqlPracticeController {
 
     /** 空态占位 Label，对应 fx:id="emptyPlaceholder"；仅 EMPTY / 初始可见。 */
     @FXML
-    private Label emptyPlaceholder;
+    private StatePanel emptyPlaceholder;
 
     /** 底部错误提示 Label，对应 fx:id="errorLabel"；仅 ERROR 场景可见。 */
     @FXML
@@ -166,6 +169,11 @@ public final class SqlPracticeController {
      */
     @FXML
     private void initialize() {
+        sqlInputArea.setParagraphGraphicFactory(LineNumberFactory.get(sqlInputArea));
+        sqlInputArea.multiPlainChanges()
+            .successionEnds(Duration.ofMillis(120))
+            .subscribe(ignored -> sqlInputArea.setStyleSpans(0, SqlCodeHighlighter.highlight(sqlInputArea.getText())));
+
         // 列宽自适应：在所有列之间均分表格宽度，随右侧主容器缩放自动铺满，无需为列写死宽度。
         resultTable.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_ALL_COLUMNS);
 
@@ -303,9 +311,10 @@ public final class SqlPracticeController {
      * @param sql 要填充的 SQL 语句，不可为 {@code null}
      */
     public void fillSql(String sql) {
-        sqlInputArea.setText(sql);
+        sqlInputArea.replaceText(sql);
         sqlInputArea.requestFocus();
-        sqlInputArea.positionCaret(sql.length());
+        sqlInputArea.moveTo(sql.length());
+        sqlInputArea.requestFollowCaret();
     }
 
     /**
@@ -347,7 +356,7 @@ public final class SqlPracticeController {
     private void showEmptyState() {
         clearTable();
         setNodeVisible(resultTable, false);
-        emptyPlaceholder.setText(EMPTY_PLACEHOLDER_MESSAGE);
+        emptyPlaceholder.setTitle(EMPTY_PLACEHOLDER_MESSAGE);
         setNodeVisible(emptyPlaceholder, true);
         setNodeVisible(errorLabel, false);
         setNodeVisible(resultStatusLabel, false);
@@ -360,7 +369,7 @@ public final class SqlPracticeController {
     private void showLoadingState() {
         clearTable();
         setNodeVisible(resultTable, false);
-        emptyPlaceholder.setText(LOADING_MESSAGE);
+        emptyPlaceholder.setTitle(LOADING_MESSAGE);
         setNodeVisible(emptyPlaceholder, true);
         setNodeVisible(errorLabel, false);
         setNodeVisible(resultStatusLabel, false);

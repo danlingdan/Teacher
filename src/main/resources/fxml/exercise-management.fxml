@@ -3,6 +3,7 @@
 <?import javafx.geometry.Insets?>
 <?import javafx.scene.control.*?>
 <?import javafx.scene.layout.*?>
+<?import com.sqlteacher.desktop.component.PageHeader?>
 
 <BorderPane xmlns="http://javafx.com/javafx" xmlns:fx="http://javafx.com/fxml"
             fx:controller="com.sqlteacher.desktop.controller.ExerciseManagementController"
@@ -10,8 +11,7 @@
     <top>
         <VBox spacing="6" styleClass="title-area">
             <padding><Insets top="20" right="24" bottom="14" left="24"/></padding>
-            <Label text="%exercise-management.1" styleClass="page-title"/>
-            <Label text="%exercise-management.2" styleClass="page-subtitle"/>
+            <PageHeader title="%exercise-management.1" description="%exercise-management.2"/>
         </VBox>
     </top>
     <center>

@@ -14,6 +14,8 @@ class DesktopAccessProfileTest {
         var guest = DesktopAccessProfile.guest();
 
         assertTrue(guest.can(DesktopCapability.SQL_PRACTICE));
+        assertTrue(guest.can(DesktopCapability.COURSE_MAP));
+        assertTrue(guest.can(DesktopCapability.ACTIVITY_WORKSPACE));
         assertTrue(guest.can(DesktopCapability.STUDENT_EXERCISE));
         assertFalse(guest.can(DesktopCapability.CLOUD_CENTER));
         assertFalse(guest.can(DesktopCapability.EXERCISE_MANAGEMENT));

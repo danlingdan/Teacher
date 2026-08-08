@@ -9,24 +9,18 @@
 <?import javafx.scene.layout.Region?>
 <?import javafx.scene.layout.TilePane?>
 <?import javafx.scene.layout.VBox?>
+<?import com.sqlteacher.desktop.component.PageHeader?>
 
 <ScrollPane xmlns="http://javafx.com/javafx" xmlns:fx="http://javafx.com/fxml"
             fx:controller="com.sqlteacher.desktop.controller.HomeController"
             styleClass="home-scroll" fitToWidth="true" hbarPolicy="NEVER" vbarPolicy="AS_NEEDED">
     <content>
-<VBox styleClass="home-page" alignment="TOP_CENTER" spacing="24"
+<VBox styleClass="home-page home-dashboard" alignment="TOP_LEFT" spacing="20"
       maxWidth="Infinity" maxHeight="Infinity">
-    <VBox styleClass="intro-section" alignment="CENTER" spacing="12" VBox.vgrow="ALWAYS">
-        <VBox.margin><Insets top="32" right="32" bottom="16" left="32"/></VBox.margin>
-        <Label styleClass="intro-tag" text="AI + Database Education"/>
-        <Label styleClass="intro-title" text="SQLTeacher"/>
-        <Label styleClass="intro-description"
-               text="%home.1"/>
-        <Region styleClass="intro-divider"/>
-    </VBox>
+    <padding><Insets top="24" right="28" bottom="28" left="28"/></padding>
+    <PageHeader eyebrow="SQLTeacher 2.0 · Alpha.2" title="%home.22" description="%home.1"/>
 
-    <VBox styleClass="learning-queue-panel" spacing="10" maxWidth="910" fillWidth="true">
-        <VBox.margin><Insets right="32" left="32"/></VBox.margin>
+    <VBox styleClass="learning-queue-panel" spacing="10" maxWidth="Infinity" fillWidth="true">
         <HBox alignment="CENTER_LEFT" spacing="10">
             <VBox spacing="3" HBox.hgrow="ALWAYS">
                 <Label styleClass="section-title" text="%home.2"/>
@@ -44,15 +38,20 @@
         </HBox>
     </VBox>
 
-    <TilePane styleClass="cards-container" alignment="CENTER" hgap="20" vgap="20"
-              prefColumns="3" prefTileWidth="270" prefTileHeight="260" VBox.vgrow="ALWAYS">
-        <VBox.margin><Insets right="32" bottom="32" left="32"/></VBox.margin>
+    <VBox spacing="4">
+        <Label styleClass="section-title" text="%home.quickActions"/>
+        <Label styleClass="model-status" text="%home.quickActionsDescription"/>
+    </VBox>
+
+    <TilePane styleClass="cards-container compact-action-grid" alignment="TOP_LEFT" hgap="14" vgap="14"
+              prefColumns="2" prefTileWidth="260" prefTileHeight="152"
+              prefWidth="534" maxWidth="534" VBox.vgrow="ALWAYS">
 
         <Button onAction="#onSqlPracticeCardClick" contentDisplay="GRAPHIC_ONLY"
-                mnemonicParsing="false" maxWidth="Infinity"
+                mnemonicParsing="false" minWidth="260" prefWidth="260" maxWidth="260"
                 accessibleText="%home.7" styleClass="home-card">
             <graphic>
-                <VBox alignment="TOP_LEFT" spacing="12" maxWidth="Infinity">
+                <VBox alignment="TOP_LEFT" spacing="8" prefWidth="228" maxWidth="228">
                     <Label fx:id="sqlIcon" styleClass="card-icon" accessibleText="%home.8"/>
                     <Label styleClass="card-title" text="%home.9"/>
                     <Label styleClass="card-description" wrapText="true"
@@ -63,11 +62,25 @@
             </graphic>
         </Button>
 
+        <Button onAction="#onCourseMapCardClick" contentDisplay="GRAPHIC_ONLY"
+                mnemonicParsing="false" minWidth="260" prefWidth="260" maxWidth="260"
+                accessibleText="%home.23" styleClass="home-card">
+            <graphic>
+                <VBox alignment="TOP_LEFT" spacing="8" prefWidth="228" maxWidth="228">
+                    <Label fx:id="courseIcon" styleClass="card-icon" accessibleText="%home.23"/>
+                    <Label styleClass="card-title" text="%home.23"/>
+                    <Label styleClass="card-description" wrapText="true" text="%home.24"/>
+                    <Region VBox.vgrow="ALWAYS"/>
+                    <Label styleClass="card-arrow" text="%home.11"/>
+                </VBox>
+            </graphic>
+        </Button>
+
         <Button onAction="#onAiAssistantCardClick" contentDisplay="GRAPHIC_ONLY"
-                mnemonicParsing="false" maxWidth="Infinity"
+                mnemonicParsing="false" minWidth="260" prefWidth="260" maxWidth="260"
                 accessibleText="%home.12" styleClass="home-card">
             <graphic>
-                <VBox alignment="TOP_LEFT" spacing="12" maxWidth="Infinity">
+                <VBox alignment="TOP_LEFT" spacing="8" prefWidth="228" maxWidth="228">
                     <Label fx:id="aiIcon" styleClass="card-icon" accessibleText="%home.13"/>
                     <Label styleClass="card-title" text="%home.14"/>
                     <Label styleClass="card-description" wrapText="true"
@@ -79,10 +92,10 @@
         </Button>
 
         <Button onAction="#onTableSchemaCardClick" contentDisplay="GRAPHIC_ONLY"
-                mnemonicParsing="false" maxWidth="Infinity"
+                mnemonicParsing="false" minWidth="260" prefWidth="260" maxWidth="260"
                 accessibleText="%home.17" styleClass="home-card">
             <graphic>
-                <VBox alignment="TOP_LEFT" spacing="12" maxWidth="Infinity">
+                <VBox alignment="TOP_LEFT" spacing="8" prefWidth="228" maxWidth="228">
                     <Label fx:id="schemaIcon" styleClass="card-icon" accessibleText="%home.18"/>
                     <Label styleClass="card-title" text="%home.19"/>
                     <Label styleClass="card-description" wrapText="true"

@@ -15,6 +15,10 @@
     -st-accent: #7c6cff;
     -st-accent-hover: #9083ff;
     -st-accent-soft: #2a2856;
+    -st-accent-fg: -st-accent-hover;
+    -st-bg-subtle: -st-bg-surface-raised;
+    -st-border-muted: -st-border-subtle;
+    -st-info: #60a5fa;
     -st-success: #4ade80;
     -st-warning: #fbbf24;
     -st-danger: #fb7185;
@@ -55,6 +59,10 @@
     -st-accent: #6557e8;
     -st-accent-hover: #5547d8;
     -st-accent-soft: #ebe9ff;
+    -st-accent-fg: -st-accent-hover;
+    -st-bg-subtle: -st-bg-surface-raised;
+    -st-border-muted: -st-border-subtle;
+    -st-info: #2563eb;
     -st-success: #16834b;
     -st-warning: #a35a00;
     -st-danger: #c53048;

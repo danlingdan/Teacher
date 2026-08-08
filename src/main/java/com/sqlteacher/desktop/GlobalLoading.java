@@ -1,5 +1,7 @@
 package com.sqlteacher.desktop;
 
+import com.sqlteacher.desktop.appearance.UiPreferencesService;
+import javafx.animation.FadeTransition;
 import javafx.animation.PauseTransition;
 import javafx.application.Platform;
 import javafx.scene.control.Label;
@@ -33,6 +35,9 @@ public final class GlobalLoading {
 
     /** 默认自动隐藏超时：60 秒。超过该时间未收到 hide 则强制关闭遮罩。 */
     private static final Duration DEFAULT_AUTO_HIDE_TIMEOUT = Duration.seconds(60);
+    private static final Duration SHOW_DELAY = Duration.millis(120);
+    private static final Duration FADE_IN_DURATION = Duration.millis(140);
+    private static final Duration FADE_OUT_DURATION = Duration.millis(100);
 
     /** 单例引用，由主窗口控制器初始化。 */
     private static GlobalLoading instance;
@@ -51,6 +56,8 @@ public final class GlobalLoading {
 
     /** 超时自动隐藏定时器，防止调用方异常分支未 hide 导致遮罩卡死。 */
     private PauseTransition autoHideTimer;
+    private PauseTransition showDelayTimer;
+    private FadeTransition visibilityAnimation;
 
     private GlobalLoading(StackPane overlay, Label messageLabel) {
         this.overlay = Objects.requireNonNull(overlay, "overlay must not be null");
@@ -129,9 +136,18 @@ public final class GlobalLoading {
         cancelAutoHideTimer();
         showCounter.incrementAndGet();
         messageLabel.setText(message == null || message.isBlank() ? "加载中…" : message);
-        overlay.setVisible(true);
-        overlay.setManaged(true);
-        overlay.toFront();
+        cancelVisibilityAnimation();
+        if (overlay.isVisible()) {
+            overlay.setMouseTransparent(false);
+            animateOpacity(1.0, FADE_IN_DURATION, null);
+        } else if (showDelayTimer == null) {
+            showDelayTimer = new PauseTransition(SHOW_DELAY);
+            showDelayTimer.setOnFinished(event -> {
+                showDelayTimer = null;
+                if (showCounter.get() > 0) revealOverlay();
+            });
+            showDelayTimer.playFromStart();
+        }
         scheduleAutoHide();
     }
 
@@ -140,8 +156,8 @@ public final class GlobalLoading {
         int count = showCounter.decrementAndGet();
         if (count <= 0) {
             showCounter.set(0);
-            overlay.setVisible(false);
-            overlay.setManaged(false);
+            cancelShowDelay();
+            concealOverlay();
         } else {
             // 仍有其他 show 未关闭，重新启动超时兜底。
             scheduleAutoHide();
@@ -150,9 +166,59 @@ public final class GlobalLoading {
 
     private void doForceHide() {
         cancelAutoHideTimer();
+        cancelShowDelay();
+        cancelVisibilityAnimation();
         showCounter.set(0);
+        hideImmediately();
+    }
+
+    private void revealOverlay() {
+        overlay.setOpacity(0.0);
+        overlay.setVisible(true);
+        overlay.setManaged(true);
+        overlay.setMouseTransparent(false);
+        overlay.toFront();
+        if (reducedMotion()) {
+            overlay.setOpacity(1.0);
+        } else {
+            animateOpacity(1.0, FADE_IN_DURATION, null);
+        }
+    }
+
+    private void concealOverlay() {
+        if (!overlay.isVisible()) {
+            hideImmediately();
+            return;
+        }
+        overlay.setMouseTransparent(true);
+        if (reducedMotion()) {
+            hideImmediately();
+        } else {
+            animateOpacity(0.0, FADE_OUT_DURATION, this::hideImmediately);
+        }
+    }
+
+    private void animateOpacity(double target, Duration duration, Runnable onFinished) {
+        cancelVisibilityAnimation();
+        visibilityAnimation = new FadeTransition(duration, overlay);
+        visibilityAnimation.setFromValue(overlay.getOpacity());
+        visibilityAnimation.setToValue(target);
+        visibilityAnimation.setOnFinished(event -> {
+            visibilityAnimation = null;
+            if (onFinished != null) onFinished.run();
+        });
+        visibilityAnimation.playFromStart();
+    }
+
+    private void hideImmediately() {
+        overlay.setOpacity(0.0);
         overlay.setVisible(false);
         overlay.setManaged(false);
+        overlay.setMouseTransparent(true);
+    }
+
+    private static boolean reducedMotion() {
+        return UiPreferencesService.shared().current().reducedMotion();
     }
 
     private void scheduleAutoHide() {
@@ -166,6 +232,22 @@ public final class GlobalLoading {
             autoHideTimer.stop();
             autoHideTimer.setOnFinished(null);
             autoHideTimer = null;
+        }
+    }
+
+    private void cancelShowDelay() {
+        if (showDelayTimer != null) {
+            showDelayTimer.stop();
+            showDelayTimer.setOnFinished(null);
+            showDelayTimer = null;
+        }
+    }
+
+    private void cancelVisibilityAnimation() {
+        if (visibilityAnimation != null) {
+            visibilityAnimation.stop();
+            visibilityAnimation.setOnFinished(null);
+            visibilityAnimation = null;
         }
     }
 }

@@ -4,14 +4,13 @@
 <?import javafx.scene.control.CheckBox?>
 <?import javafx.scene.control.Label?>
 <?import javafx.scene.layout.VBox?>
+<?import com.sqlteacher.desktop.component.PageHeader?>
 
 <VBox xmlns="http://javafx.com/javafx" xmlns:fx="http://javafx.com/fxml"
       fx:controller="com.sqlteacher.desktop.controller.SqlSafetySettingsController"
       spacing="18" styleClass="settings-section">
     <padding><Insets top="24" right="28" bottom="24" left="28"/></padding>
-    <Label text="%sql-safety-settings.1" styleClass="page-title"/>
-    <Label text="%sql-safety-settings.2"
-           wrapText="true" styleClass="page-subtitle"/>
+    <PageHeader title="%sql-safety-settings.1" description="%sql-safety-settings.2"/>
     <VBox spacing="12" styleClass="settings-grid, safety-settings-card">
         <CheckBox fx:id="unrestrictedModeCheck" text="%sql-safety-settings.3"
                   onAction="#onToggleUnrestrictedMode" styleClass="safety-mode-toggle"/>

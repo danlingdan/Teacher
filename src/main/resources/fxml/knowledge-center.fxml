@@ -3,6 +3,7 @@
 <?import javafx.geometry.Insets?>
 <?import javafx.scene.control.*?>
 <?import javafx.scene.layout.*?>
+<?import com.sqlteacher.desktop.component.PageHeader?>
 
 <BorderPane xmlns="http://javafx.com/javafx" xmlns:fx="http://javafx.com/fxml"
             fx:controller="com.sqlteacher.desktop.controller.KnowledgeCenterController"
@@ -10,17 +11,14 @@
     <top>
         <VBox spacing="10" styleClass="title-area">
             <padding><Insets top="16" right="20" bottom="10" left="20"/></padding>
-            <HBox alignment="CENTER_LEFT" spacing="8">
-                <VBox spacing="4">
-                    <Label text="%knowledge-center.1" styleClass="page-title"/>
-                    <Label text="%knowledge-center.2" styleClass="page-subtitle"/>
-                </VBox>
-                <Region HBox.hgrow="ALWAYS"/>
-                <Label fx:id="indexStatusLabel" text="%knowledge-center.3" styleClass="page-subtitle"/>
-                <Button text="%knowledge-center.4" onAction="#onRebuildIndex" styleClass="secondary-button"/>
-                <Button text="%knowledge-center.5" onAction="#onRefresh" styleClass="secondary-button"/>
-                <Button fx:id="importButton" text="%knowledge-center.6" onAction="#onImport" styleClass="refresh-button"/>
-            </HBox>
+            <PageHeader title="%knowledge-center.1" description="%knowledge-center.2">
+                <actions>
+                    <Label fx:id="indexStatusLabel" text="%knowledge-center.3" styleClass="page-subtitle"/>
+                    <Button text="%knowledge-center.4" onAction="#onRebuildIndex" styleClass="secondary-button"/>
+                    <Button text="%knowledge-center.5" onAction="#onRefresh" styleClass="secondary-button"/>
+                    <Button fx:id="importButton" text="%knowledge-center.6" onAction="#onImport" styleClass="refresh-button"/>
+                </actions>
+            </PageHeader>
             <HBox spacing="8" alignment="CENTER_LEFT">
                 <TextField fx:id="courseField" promptText="%knowledge-center.7" prefWidth="180"/>
                 <TextField fx:id="sectionField" promptText="%knowledge-center.8" prefWidth="180"/>

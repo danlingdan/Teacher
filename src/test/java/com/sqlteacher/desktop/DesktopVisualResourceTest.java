@@ -26,6 +26,10 @@ class DesktopVisualResourceTest {
         assertTrue(light.contains(".theme-light .app-sidebar .nav-button:hover .ui-icon-shape"));
         assertTrue(tokens.contains("-st-bg-canvas"));
         assertTrue(tokens.contains("-st-info-surface"));
+        assertTrue(tokens.contains("-st-accent-fg"));
+        assertTrue(tokens.contains("-st-bg-subtle"));
+        assertTrue(tokens.contains("-st-border-muted"));
+        assertTrue(tokens.contains("-st-info:"));
         assertTrue(tokens.contains("-color-accent-emphasis"));
         assertTrue(components.contains(".sql-workbench-split"));
         assertTrue(pages.contains(".table-schema-page"));
@@ -71,7 +75,11 @@ class DesktopVisualResourceTest {
         assertTrue(shell.contains("fx:id=\"mainWindowRoot\""));
         assertTrue(shell.contains("fx:id=\"appSidebar\""));
         assertTrue(home.contains("TilePane"));
+        assertTrue(home.contains("PageHeader"));
+        assertTrue(home.contains("compact-action-grid"));
         assertTrue(sql.contains("fx:id=\"workbenchSplit\""));
+        assertTrue(sql.contains("org.fxmisc.richtext.CodeArea"));
+        assertFalse(sql.contains("javafx.scene.control.TextArea"));
         assertFalse(sql.contains("sql-practice-scroll"));
         assertTrue(cloud.contains("fx:id=\"signedOutPrompt\""));
         assertTrue(cloud.contains("styleClass=\"authenticated-content\""));
@@ -99,6 +107,23 @@ class DesktopVisualResourceTest {
         assertFalse(home.contains("🔧"));
         assertFalse(home.contains("✨"));
         assertFalse(home.contains("📊"));
+    }
+
+    @Test
+    void pageLevelHeadingsShouldUseTheSharedUiKit() throws IOException {
+        String[] pages = {
+            "/fxml/home.fxml", "/fxml/course-map.fxml", "/fxml/SqlPractice.fxml",
+            "/fxml/TableSchemaView.fxml", "/fxml/ai-assistant.fxml", "/fxml/student-exercise.fxml",
+            "/fxml/exercise-management.fxml", "/fxml/exercise-progress.fxml",
+            "/fxml/knowledge-center.fxml", "/fxml/teaching-content.fxml", "/fxml/cloud-center.fxml",
+            "/fxml/connection-settings.fxml", "/fxml/appearance-settings.fxml",
+            "/fxml/sql-safety-settings.fxml"
+        };
+        for (String page : pages) {
+            assertTrue(resource(page).contains("PageHeader"), () -> "Missing shared PageHeader: " + page);
+        }
+        assertTrue(resource("/fxml/exercise-progress.fxml").contains("MetricCard"));
+        assertTrue(resource("/fxml/SqlPractice.fxml").contains("StatePanel"));
     }
 
     private static String resource(String path) throws IOException {

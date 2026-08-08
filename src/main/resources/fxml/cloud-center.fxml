@@ -3,6 +3,7 @@
 <?import javafx.geometry.Insets?>
 <?import javafx.scene.control.*?>
 <?import javafx.scene.layout.*?>
+<?import com.sqlteacher.desktop.component.PageHeader?>
 
 <ScrollPane xmlns="http://javafx.com/javafx"
             xmlns:fx="http://javafx.com/fxml"
@@ -14,22 +15,15 @@
     <content>
         <VBox spacing="16" styleClass="cloud-center-page">
             <children>
-                <HBox alignment="CENTER_LEFT" spacing="12" styleClass="cloud-page-header">
-                    <children>
-                        <Region styleClass="cloud-title-badge"/>
-                        <VBox spacing="3">
-                            <children>
-                                <Label text="%cloud-center.1" styleClass="page-title, cloud-page-title"/>
-                                <Label text="%cloud-center.2" styleClass="page-subtitle, cloud-page-subtitle"/>
-                            </children>
-                        </VBox>
-                        <Region HBox.hgrow="ALWAYS"/>
+                <PageHeader title="%cloud-center.1" description="%cloud-center.2"
+                            styleClass="page-header cloud-page-header">
+                    <actions>
                         <ProgressIndicator fx:id="busyIndicator"
                                            visible="false" managed="false"
                                            prefWidth="26" prefHeight="26"
                                            styleClass="cloud-busy-indicator"/>
-                    </children>
-                </HBox>
+                    </actions>
+                </PageHeader>
 
                 <HBox fx:id="statusBanner" alignment="CENTER_LEFT" spacing="10" styleClass="cloud-status-banner, status-info">
                     <children>

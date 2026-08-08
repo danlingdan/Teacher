@@ -5,6 +5,7 @@ import com.sqlteacher.application.config.DatabaseConfiguration;
 import com.sqlteacher.application.config.SqlTeacherConfiguration;
 import com.sqlteacher.application.event.LearningEventOwnerProvider;
 import com.sqlteacher.application.learning.MasteryLevel;
+import com.sqlteacher.application.learning.LearningActionType;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -78,6 +79,29 @@ class JdbcLearningDiagnosisServiceTest {
     }
 
     @Test
+    void shouldCombineQuizAndTraceEvidenceAndRecommendTheActivity() throws Exception {
+        JdbcConnectionFactory connections = initialize();
+        insertActivityEvaluation(connections, "eval-1", "owner-a", "tree-traversal-quiz", "QUIZ",
+            false, "QUIZ_BELOW_PASS_SCORE", NOW.minusSeconds(30));
+        insertActivityEvaluation(connections, "eval-2", "owner-a", "tree-preorder-trace", "TRACE",
+            false, "TRACE_ORDER_INCORRECT", NOW.minusSeconds(20));
+        insertActivityEvaluation(connections, "eval-3", "owner-a", "tree-preorder-trace", "TRACE",
+            false, "TRACE_ORDER_INCORRECT", NOW.minusSeconds(10));
+        insertActivityEvaluation(connections, "other-owner", "owner-b", "tree-preorder-trace", "TRACE",
+            true, "TRACE_PASSED", NOW.minusSeconds(5));
+
+        var dashboard = service(connections, "owner-a").refresh();
+        var traversal = dashboard.mastery().stream()
+            .filter(item -> item.knowledgePoint().equals("二叉树遍历")).findFirst().orElseThrow();
+
+        assertEquals(3, traversal.attempts());
+        assertEquals(MasteryLevel.NEEDS_PRACTICE, traversal.level());
+        assertTrue(dashboard.actions().stream().anyMatch(action ->
+            action.type() == LearningActionType.RETRY_ACTIVITY
+                && action.exerciseId().equals("tree-preorder-trace")));
+    }
+
+    @Test
     void shouldDiagnoseFiveThousandEventsWithinPerformanceBudget() throws Exception {
         JdbcConnectionFactory connections = initialize();
         String attributes = LearningEventAttributesCodec.serialize(Map.of(
@@ -135,6 +159,25 @@ class JdbcLearningDiagnosisServiceTest {
             statement.setString(4, "exercise"); statement.setBoolean(5, successful);
             statement.setString(6, attributes); statement.setString(7, occurredAt.toString());
             statement.executeUpdate();
+        }
+    }
+
+    private static void insertActivityEvaluation(JdbcConnectionFactory connections, String id, String owner,
+                                                 String activityId, String activityType, boolean successful,
+                                                 String reasonCode, Instant occurredAt) throws Exception {
+        try (Connection connection = connections.open("app"); PreparedStatement statement = connection.prepareStatement("""
+            insert into activity_evaluation_result(
+                id,owner_id,activity_id,activity_version,activity_type,status,reason_code,criteria_json,
+                evidence_summary_json,evaluator_version,evidence_version,duration_ms,artifact_hash,occurred_at
+            ) values (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            """)) {
+            statement.setString(1, id); statement.setString(2, owner); statement.setString(3, activityId);
+            statement.setInt(4, 1); statement.setString(5, activityType);
+            statement.setString(6, successful ? "PASSED" : "FAILED"); statement.setString(7, reasonCode);
+            statement.setString(8, "[]"); statement.setString(9, "{}");
+            statement.setString(10, "test-v1"); statement.setString(11, "activity-evidence-v2");
+            statement.setLong(12, 1); statement.setString(13, id + "-hash");
+            statement.setString(14, occurredAt.toString()); statement.executeUpdate();
         }
     }
 }
