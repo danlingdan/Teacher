@@ -7,9 +7,11 @@ import com.sqlteacher.application.activity.ActivityLearningService;
 import com.sqlteacher.application.activity.ActivityReviewService;
 import com.sqlteacher.application.activity.DefaultActivityEvaluationDispatcher;
 import com.sqlteacher.application.activity.CodeActivityEvaluator;
+import com.sqlteacher.application.activity.LabActivityEvaluator;
 import com.sqlteacher.application.activity.QuizActivityEvaluator;
 import com.sqlteacher.application.activity.ProjectActivityEvaluator;
 import com.sqlteacher.application.activity.ProjectPortfolioService;
+import com.sqlteacher.application.activity.ReadingActivityEvaluator;
 import com.sqlteacher.application.activity.SimulationActivityEvaluator;
 import com.sqlteacher.application.activity.SqlActivityEvaluator;
 import com.sqlteacher.application.activity.TraceActivityEvaluator;
@@ -207,6 +209,16 @@ public class DatabaseServiceConfig {
     @Bean
     public ActivityEvaluator<?, ?> simulationActivityEvaluator() {
         return new SimulationActivityEvaluator();
+    }
+
+    @Bean
+    public ActivityEvaluator<?, ?> labActivityEvaluator() {
+        return new LabActivityEvaluator();
+    }
+
+    @Bean
+    public ActivityEvaluator<?, ?> readingActivityEvaluator() {
+        return new ReadingActivityEvaluator();
     }
 
     @Bean

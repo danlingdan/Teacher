@@ -16,10 +16,12 @@ import com.sqlteacher.domain.activity.ActivityDifficulty;
 import com.sqlteacher.domain.activity.ActivitySpecification;
 import com.sqlteacher.domain.activity.ActivityType;
 import com.sqlteacher.domain.activity.CodeActivitySpecification;
+import com.sqlteacher.domain.activity.LabActivitySpecification;
 import com.sqlteacher.domain.activity.LearningActivityDefinition;
 import com.sqlteacher.domain.activity.QuizActivitySpecification;
 import com.sqlteacher.domain.activity.ProjectActivitySpecification;
 import com.sqlteacher.domain.activity.ProjectActivityArtifact;
+import com.sqlteacher.domain.activity.ReadingActivitySpecification;
 import com.sqlteacher.domain.activity.SimulationActivitySpecification;
 import com.sqlteacher.domain.activity.TraceActivitySpecification;
 
@@ -183,8 +185,10 @@ public final class JdbcActivityLearningService implements ActivityLearningServic
     private ActivitySpecification decode(ActivityType type, String specificationJson) throws JsonProcessingException {
         return switch (type) {
             case CODE -> json.readValue(specificationJson, CodeActivitySpecification.class);
+            case LAB -> json.readValue(specificationJson, LabActivitySpecification.class);
             case PROJECT -> json.readValue(specificationJson, ProjectActivitySpecification.class);
             case QUIZ -> json.readValue(specificationJson, QuizActivitySpecification.class);
+            case READING -> json.readValue(specificationJson, ReadingActivitySpecification.class);
             case SIMULATION -> json.readValue(specificationJson, SimulationActivitySpecification.class);
             case TRACE -> json.readValue(specificationJson, TraceActivitySpecification.class);
             default -> throw new SqlTeacherException("ACTIVITY_TYPE_UNSUPPORTED",

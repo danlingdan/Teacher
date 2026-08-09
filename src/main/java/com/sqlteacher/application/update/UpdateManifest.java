@@ -10,7 +10,9 @@ public record UpdateManifest(int schemaVersion, String product, String channel, 
                              SemanticVersion minimumSupportedVersion, Rollout rollout) {
     public UpdateManifest {
         if (schemaVersion != 1) throw new IllegalArgumentException("unsupported update schema");
-        if (!"SQLTeacher".equals(product) || !"stable".equals(channel)) throw new IllegalArgumentException("unsupported update product or channel");
+        if (!"SQLTeacher".equals(product) || !java.util.Set.of("stable", "alpha", "beta", "rc").contains(channel)) {
+            throw new IllegalArgumentException("unsupported update product or channel");
+        }
         if (installerSize <= 0 || portableSize <= 0 || installerSize > 512L * 1024 * 1024 || portableSize > 512L * 1024 * 1024) {
             throw new IllegalArgumentException("update artifact size is invalid");
         }

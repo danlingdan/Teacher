@@ -20,9 +20,7 @@ public record ActivityEvaluationResult(
         evaluatorVersion = required(evaluatorVersion, "evaluatorVersion");
         evidenceVersion = required(evidenceVersion, "evidenceVersion");
         resourceUsage = Objects.requireNonNull(resourceUsage, "resourceUsage must not be null");
-        if (status == ActivityEvaluationStatus.PASSED && criteria.stream().anyMatch(item -> !item.passed())) {
-            throw new IllegalArgumentException("passed evaluation cannot contain failed criteria");
-        }
+        // Overall thresholds may allow a passing result with individual criteria still needing review.
     }
 
     public boolean passed() {

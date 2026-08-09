@@ -6,6 +6,8 @@ import com.sqlteacher.application.activity.TraceActivityEvaluator;
 import com.sqlteacher.application.activity.SimulationActivityEvaluator;
 import com.sqlteacher.application.activity.ProjectActivityEvaluator;
 import com.sqlteacher.application.activity.CodeActivityEvaluator;
+import com.sqlteacher.application.activity.LabActivityEvaluator;
+import com.sqlteacher.application.activity.ReadingActivityEvaluator;
 import com.sqlteacher.application.activity.ActivityResourceUsage;
 import com.sqlteacher.application.runner.CodeRunResult;
 import com.sqlteacher.application.runner.CodeRunner;
@@ -26,6 +28,10 @@ import com.sqlteacher.domain.activity.CodeActivitySpecification;
 import com.sqlteacher.domain.activity.ProjectActivityArtifact;
 import com.sqlteacher.domain.activity.ProjectActivitySpecification;
 import com.sqlteacher.domain.activity.CodeLanguage;
+import com.sqlteacher.domain.activity.LabActivityArtifact;
+import com.sqlteacher.domain.activity.LabActivitySpecification;
+import com.sqlteacher.domain.activity.ReadingActivityArtifact;
+import com.sqlteacher.domain.activity.ReadingActivitySpecification;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -167,6 +173,45 @@ class JdbcActivityLearningServiceTest {
                 + "where owner_id='student-simulation' and activity_type='SIMULATION'"));
             assertEquals(13, scalar(statement, "select count(*) from learning_events "
                 + "where activity_type='SIMULATION'"));
+        }
+    }
+
+    @Test
+    void shouldLoadAndPersistTheBetaLabAndReadingActivities() throws Exception {
+        DatabaseConfiguration databases = new DatabaseConfiguration(tempDir.resolve("beta-app.db"),
+            tempDir.resolve("beta-demo.db"));
+        new SqliteSchemaMigrator().migrate(databases.appDatabasePath());
+        JdbcConnectionFactory connections = new JdbcConnectionFactory(databases);
+        var owner = (com.sqlteacher.application.event.LearningEventOwnerProvider) () -> "student-beta";
+        var events = new DefaultLearningEventService(new JdbcLearningEventRecorder(connections), owner);
+        var dispatcher = new DefaultActivityEvaluationDispatcher(List.of(
+            new LabActivityEvaluator(), new ReadingActivityEvaluator()));
+        var service = new JdbcActivityLearningService(connections, owner, events, dispatcher,
+            Clock.fixed(Instant.parse("2026-08-09T03:30:00Z"), ZoneOffset.UTC));
+
+        var lab = service.loadDefinition("programming-debug-lab");
+        var labSpec = (LabActivitySpecification) lab.specification();
+        Map<String, String> observations = new java.util.LinkedHashMap<>();
+        labSpec.steps().forEach(step -> observations.put(step.observationKey(), "已记录：" + step.title()));
+        var labSubmission = service.submit(lab.id(), new LabActivityArtifact(
+            labSpec.steps().stream().map(step -> step.id()).toList(), observations,
+            "缺陷源于输入切分边界，修复后正常输入、空白输入和负数输入的固定回归均通过；"
+                + "本次观测能够复现并解释错误，同时保留输出摘要，后续仍需增加异常编码、超长输入和取消路径样例。"));
+
+        var reading = service.loadDefinition("tree-complexity-reading");
+        var readingSpec = (ReadingActivitySpecification) reading.specification();
+        var readingSubmission = service.submit(reading.id(),
+            new ReadingActivityArtifact(true, Map.of("order", "根 左 右", "time", "O(n)")));
+
+        assertEquals(ActivityType.LAB, lab.type());
+        assertEquals(3, labSpec.steps().size());
+        assertTrue(labSubmission.evaluation().passed());
+        assertEquals(ActivityType.READING, reading.type());
+        assertEquals("Apache-2.0", readingSpec.license());
+        assertTrue(readingSubmission.evaluation().passed());
+        try (Connection connection = connections.open("app"); Statement statement = connection.createStatement()) {
+            assertEquals(2, scalar(statement, "select count(*) from activity_evaluation_result "
+                + "where owner_id='student-beta' and activity_type in ('LAB','READING')"));
         }
     }
 

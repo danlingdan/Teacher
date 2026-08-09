@@ -68,7 +68,7 @@ jobs:
               throw 'Packaged launcher does not contain the production cloud API URL.'
           }
 
-      - name: Create signed stable update manifest
+      - name: Create signed channel-specific update manifest
         shell: pwsh
         env:
           SQLTEACHER_UPDATE_SIGNING_KEY: ${{ secrets.SQLTEACHER_UPDATE_SIGNING_KEY }}

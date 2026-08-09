@@ -3,6 +3,7 @@ package com.sqlteacher.infrastructure.database;
 import com.sqlteacher.application.event.LearningEventOwnerProvider;
 import com.sqlteacher.application.event.LearningEventType;
 import com.sqlteacher.application.learning.DiagnosisReasonCode;
+import com.sqlteacher.application.learning.ActivityEvidencePolicy;
 import com.sqlteacher.application.learning.LearningAction;
 import com.sqlteacher.application.learning.LearningActionType;
 import com.sqlteacher.application.learning.LearningDashboard;
@@ -32,7 +33,7 @@ import java.util.Objects;
 
 /** Deterministic, owner-isolated learning diagnosis. Derived snapshots are safe to rebuild. */
 public final class JdbcLearningDiagnosisService implements LearningDiagnosisService {
-    public static final String POLICY_VERSION = "v2.0.0-alpha3-r1";
+    public static final String POLICY_VERSION = "v2.0.0-beta1-r1+" + ActivityEvidencePolicy.VERSION;
     static final int MIN_EVIDENCE = 3;
     static final int MAX_ATTEMPTS_PER_POINT = 20;
     static final int MAX_ACTIONS = 7;
@@ -147,11 +148,14 @@ public final class JdbcLearningDiagnosisService implements LearningDiagnosisServ
             int passes = (int) attempts.stream().filter(EvidenceRecord::successful).count();
             int failures = attempts.size() - passes;
             int hints = hintsByPoint.getOrDefault(point, 0);
-            int percent = attempts.isEmpty() ? 0
-                : Math.max(0, Math.min(100, (passes * 100 / attempts.size()) - Math.min(20, hints * 5)));
+            int totalWeight = attempts.stream().mapToInt(item -> ActivityEvidencePolicy.weight(item.kind())).sum();
+            int successfulWeight = attempts.stream().filter(EvidenceRecord::successful)
+                .mapToInt(item -> ActivityEvidencePolicy.weight(item.kind())).sum();
+            int percent = totalWeight == 0 ? 0
+                : Math.max(0, Math.min(100, (successfulWeight * 100 / totalWeight) - Math.min(20, hints * 5)));
             MasteryLevel level;
             List<DiagnosisReasonCode> reasons = new ArrayList<>();
-            if (attempts.size() < MIN_EVIDENCE) {
+            if (attempts.size() < MIN_EVIDENCE || totalWeight < 200) {
                 level = MasteryLevel.UNKNOWN;
                 reasons.add(DiagnosisReasonCode.INSUFFICIENT_EVIDENCE);
             } else if (percent <= 40 || consecutiveFailures(attempts) >= 2) {

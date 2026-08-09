@@ -2,6 +2,7 @@ package com.sqlteacher.infrastructure.update;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sqlteacher.application.update.UpdateManifest;
+import com.sqlteacher.application.update.SemanticVersion;
 import org.junit.jupiter.api.Test;
 
 import java.security.KeyPairGenerator;
@@ -62,6 +63,30 @@ class SecureUpdateServiceTest {
         assertEquals(SecureUpdateService.ResumeMode.RESTART, SecureUpdateService.resumeMode(100, 200));
         assertEquals(SecureUpdateService.ResumeMode.RESTART, SecureUpdateService.resumeMode(0, 206));
         assertEquals(SecureUpdateService.ResumeMode.RESTART, SecureUpdateService.resumeMode(0, 200));
+    }
+
+    @Test void verifiesPrereleaseManifestsButKeepsStableInstallationsOnTheStableChannel() throws Exception {
+        var pair = KeyPairGenerator.getInstance("Ed25519").generateKeyPair();
+        Properties keys = new Properties();
+        keys.setProperty("test-key", Base64.getEncoder().encodeToString(pair.getPublic().getEncoded()));
+        Map<String, Object> beta = payloadMap();
+        beta.put("channel", "beta");
+        beta.put("version", "2.0.0-beta.1");
+        byte[] payload = JSON.writeValueAsBytes(beta);
+
+        UpdateManifest manifest = SecureUpdateService.verifyAndParse(
+            envelope("test-key", payload, sign(pair.getPrivate(), payload)), keys);
+
+        assertEquals("beta", manifest.channel());
+        assertFalse(SecureUpdateService.channelAllowedForBuild(SemanticVersion.parse("1.11.1"), "beta"));
+        assertTrue(SecureUpdateService.channelAllowedForBuild(SemanticVersion.parse("2.0.0-beta.1"), "beta"));
+        assertTrue(SecureUpdateService.channelAllowedForBuild(SemanticVersion.parse("2.0.0-beta.1"), "stable"));
+        assertFalse(SecureUpdateService.channelAllowedForBuild(SemanticVersion.parse("2.0.0-alpha.7"), "beta"));
+        assertTrue(SecureUpdateService.channelAllowedForBuild(SemanticVersion.parse("2.0.0-rc.1"), "rc"));
+        assertTrue(SecureUpdateService.channelAllowedForBuild(SemanticVersion.parse("2.0.0-rc.1"), "stable"));
+        assertFalse(SecureUpdateService.channelAllowedForBuild(SemanticVersion.parse("2.0.0-rc.1"), "beta"));
+        assertTrue(SecureUpdateService.channelAllowedForBuild(SemanticVersion.parse("2.0.0"), "stable"));
+        assertFalse(SecureUpdateService.channelAllowedForBuild(SemanticVersion.parse("2.0.0"), "rc"));
     }
 
     private static byte[] payload() throws Exception {

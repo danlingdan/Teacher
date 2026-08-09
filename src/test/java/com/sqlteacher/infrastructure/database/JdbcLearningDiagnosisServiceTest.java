@@ -102,6 +102,28 @@ class JdbcLearningDiagnosisServiceTest {
     }
 
     @Test
+    void shouldRequireMoreReadingEvidenceThanExecutableActivityEvidence() throws Exception {
+        JdbcConnectionFactory connections = initialize();
+        for (int index = 1; index <= 3; index++) {
+            insertActivityEvaluation(connections, "reading-" + index, "owner-a", "tree-complexity-reading",
+                "READING", true, "READING_RECALL_PASSED", NOW.minusSeconds(10L * index));
+        }
+        var service = service(connections, "owner-a");
+        var initial = service.refresh().mastery().stream()
+            .filter(item -> item.knowledgePoint().equals("二叉树遍历")).findFirst().orElseThrow();
+        assertEquals(MasteryLevel.UNKNOWN, initial.level());
+
+        for (int index = 4; index <= 5; index++) {
+            insertActivityEvaluation(connections, "reading-" + index, "owner-a", "tree-complexity-reading",
+                "READING", true, "READING_RECALL_PASSED", NOW.minusSeconds(10L * index));
+        }
+        var calibrated = service.refresh().mastery().stream()
+            .filter(item -> item.knowledgePoint().equals("二叉树遍历")).findFirst().orElseThrow();
+        assertEquals(MasteryLevel.MASTERED, calibrated.level());
+        assertEquals(5, calibrated.attempts());
+    }
+
+    @Test
     void shouldDiagnoseFiveThousandEventsWithinPerformanceBudget() throws Exception {
         JdbcConnectionFactory connections = initialize();
         String attributes = LearningEventAttributesCodec.serialize(Map.of(

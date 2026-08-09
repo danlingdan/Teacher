@@ -4,7 +4,10 @@
 
 ## 正式版本门禁
 
-- [v2.0.0-alpha.7](2026-08-09-v2-alpha7-stage-gate.md)（本地候选，未发布）
+- [v2.0.0](2026-08-09-v2.0.0-stage-gate.md)（正式发布门禁）
+- [v2.0.0-rc.1](2026-08-09-v2-rc1-stage-gate.md)（本地发布候选，外部门禁待完成）
+- [v2.0.0-beta.1](2026-08-09-v2-beta1-stage-gate.md)（本地候选，未发布）
+- [v2.0.0-alpha.7](2026-08-09-v2-alpha7-stage-gate.md)（预发布）
 - [v2.0.0-alpha.6](2026-08-09-v2-alpha6-stage-gate.md)（本地候选，未发布）
 - [v2.0.0-alpha.5](2026-08-09-v2-alpha5-stage-gate.md)（本地候选，未发布）
 - [v2.0.0-alpha.4](2026-08-09-v2-alpha4-stage-gate.md)（预发布）

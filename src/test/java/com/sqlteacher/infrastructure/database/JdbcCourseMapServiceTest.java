@@ -31,8 +31,8 @@ class JdbcCourseMapServiceTest {
 
         var snapshot = new JdbcCourseMapService(new JdbcConnectionFactory(databases)).load();
 
-        assertEquals(11, snapshot.courses().size());
-        assertEquals(35, snapshot.activityCount());
+        assertEquals(12, snapshot.courses().size());
+        assertEquals(38, snapshot.activityCount());
         var sqlCourse = snapshot.courses().stream().filter(course -> course.id().equals("builtin-data-management"))
             .findFirst().orElseThrow();
         assertEquals(1, sqlCourse.sections().size());
@@ -44,20 +44,24 @@ class JdbcCourseMapServiceTest {
         var treeCourse = snapshot.courses().stream().filter(course -> course.id().equals("builtin-data-structures"))
             .findFirst().orElseThrow();
         assertEquals(
-            java.util.Set.of(ActivityType.QUIZ, ActivityType.TRACE),
+            java.util.Set.of(ActivityType.QUIZ, ActivityType.TRACE, ActivityType.READING),
             treeCourse.sections().getFirst().activities().stream().map(item -> item.type())
                 .collect(java.util.stream.Collectors.toSet())
         );
         var programming = snapshot.courses().stream()
             .filter(course -> course.id().equals("builtin-programming-basics")).findFirst().orElseThrow();
-        assertEquals(4, programming.sections().getFirst().activities().size());
-        assertEquals(java.util.Set.of(ActivityType.CODE),
+        assertEquals(5, programming.sections().getFirst().activities().size());
+        assertEquals(java.util.Set.of(ActivityType.CODE, ActivityType.LAB),
             programming.sections().getFirst().activities().stream().map(item -> item.type())
                 .collect(java.util.stream.Collectors.toSet()));
         assertEquals(7, snapshot.courses().stream()
             .filter(course -> course.sections().stream().flatMap(section -> section.activities().stream())
                 .allMatch(activity -> activity.type() == ActivityType.SIMULATION))
             .count());
+        var capstone = snapshot.courses().stream()
+            .filter(course -> course.id().equals("builtin-capstone-project")).findFirst().orElseThrow();
+        assertEquals(java.util.Set.of(ActivityType.PROJECT), capstone.sections().getFirst().activities().stream()
+            .map(item -> item.type()).collect(java.util.stream.Collectors.toSet()));
         assertEquals(
             java.util.Set.of(
                 "builtin-software-engineering", "builtin-programming-languages",

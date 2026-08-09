@@ -11,10 +11,14 @@ import com.sqlteacher.desktop.appearance.UiPreferencesService;
 import com.sqlteacher.domain.activity.CodeActivityArtifact;
 import com.sqlteacher.domain.activity.CodeActivitySpecification;
 import com.sqlteacher.domain.activity.LearningActivityDefinition;
+import com.sqlteacher.domain.activity.LabActivityArtifact;
+import com.sqlteacher.domain.activity.LabActivitySpecification;
 import com.sqlteacher.domain.activity.QuizActivityArtifact;
 import com.sqlteacher.domain.activity.QuizActivitySpecification;
 import com.sqlteacher.domain.activity.ProjectActivityArtifact;
 import com.sqlteacher.domain.activity.ProjectActivitySpecification;
+import com.sqlteacher.domain.activity.ReadingActivityArtifact;
+import com.sqlteacher.domain.activity.ReadingActivitySpecification;
 import com.sqlteacher.domain.activity.SimulationAction;
 import com.sqlteacher.domain.activity.SimulationActivityArtifact;
 import com.sqlteacher.domain.activity.SimulationActivitySpecification;
@@ -103,8 +107,10 @@ public final class ActivityInteractionPane extends VBox {
         content.getChildren().clear();
         switch (definition.specification()) {
             case CodeActivitySpecification code -> renderCode(code);
+            case LabActivitySpecification lab -> renderLab(lab);
             case QuizActivitySpecification quiz -> renderQuiz(quiz);
             case ProjectActivitySpecification project -> renderProject(project);
+            case ReadingActivitySpecification reading -> renderReading(reading);
             case SimulationActivitySpecification simulation -> renderSimulation(simulation);
             case TraceActivitySpecification trace -> renderTrace(trace);
             default -> showUnsupported();
@@ -454,6 +460,75 @@ public final class ActivityInteractionPane extends VBox {
             new Label(AppI18n.get("alpha7.projectMilestones")), milestoneList,
             new Label(AppI18n.get("alpha7.projectEvidence")), evidence,
             new Label(AppI18n.get("alpha7.projectReflection")), reflection, actions);
+    }
+
+    private void renderLab(LabActivitySpecification specification) {
+        Map<String, CheckBox> completed = new LinkedHashMap<>();
+        Map<String, TextArea> observations = new LinkedHashMap<>();
+        VBox steps = new VBox(10);
+        for (var step : specification.steps()) {
+            VBox card = new VBox(7);
+            card.getStyleClass().add("panel-card");
+            CheckBox done = new CheckBox(step.title());
+            done.setAccessibleText(AppI18n.format("beta.labStepAccessible", step.title()));
+            Label instruction = new Label(step.instruction());
+            instruction.setWrapText(true);
+            TextArea observation = new TextArea();
+            observation.setPromptText(AppI18n.get("beta.labObservationPrompt"));
+            observation.setPrefRowCount(2);
+            observation.setWrapText(true);
+            completed.put(step.id(), done);
+            observations.put(step.observationKey(), observation);
+            card.getChildren().addAll(done, instruction, observation);
+            steps.getChildren().add(card);
+        }
+        TextArea conclusion = new TextArea();
+        conclusion.setPromptText(AppI18n.format("beta.labConclusionPrompt", specification.minimumConclusionCharacters()));
+        conclusion.setPrefRowCount(4);
+        conclusion.setWrapText(true);
+        Button submit = primaryButton(AppI18n.get("beta.submitLab"));
+        submit.setOnAction(ignored -> {
+            Map<String, String> values = new LinkedHashMap<>();
+            observations.forEach((key, value) -> values.put(key, value.getText()));
+            submit(submit, new LabActivityArtifact(completed.entrySet().stream()
+                .filter(entry -> entry.getValue().isSelected()).map(Map.Entry::getKey).toList(),
+                values, conclusion.getText()));
+        });
+        content.getChildren().addAll(heading(specification.prompt()), steps,
+            new Label(AppI18n.get("beta.labConclusion")), conclusion, submit);
+    }
+
+    private void renderReading(ReadingActivitySpecification specification) {
+        Label provenance = new Label(AppI18n.format("beta.readingSource", specification.sourceTitle(),
+            specification.license()));
+        provenance.setWrapText(true);
+        provenance.getStyleClass().add("runner-boundary-note");
+        Label article = new Label(specification.content());
+        article.setWrapText(true);
+        article.getStyleClass().add("reading-content");
+        CheckBox readToEnd = new CheckBox(AppI18n.get("beta.readingComplete"));
+        Map<String, TextArea> answers = new LinkedHashMap<>();
+        VBox checks = new VBox(10);
+        for (var check : specification.checks()) {
+            VBox card = new VBox(7);
+            card.getStyleClass().add("panel-card");
+            Label prompt = new Label(check.prompt());
+            prompt.setWrapText(true);
+            TextArea answer = new TextArea();
+            answer.setPromptText(AppI18n.get("beta.readingAnswerPrompt"));
+            answer.setPrefRowCount(2);
+            answer.setWrapText(true);
+            answers.put(check.id(), answer);
+            card.getChildren().addAll(prompt, answer);
+            checks.getChildren().add(card);
+        }
+        Button submit = primaryButton(AppI18n.get("beta.submitReading"));
+        submit.setOnAction(ignored -> {
+            Map<String, String> values = new LinkedHashMap<>();
+            answers.forEach((key, value) -> values.put(key, value.getText()));
+            submit(submit, new ReadingActivityArtifact(readToEnd.isSelected(), values));
+        });
+        content.getChildren().addAll(provenance, article, readToEnd, checks, submit);
     }
 
     private static void replaySimulation(SimulationActivitySpecification specification, List<String> actionIds,

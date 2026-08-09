@@ -25,5 +25,6 @@
 16. [离线系统模拟实验](16-offline-simulation-labs.md)
 17. [专业基础离线实验](17-professional-foundation-labs.md)
 18. [项目学习、课程包与 Cloud 2.0](18-project-course-package-cloud2.md)
+19. [Beta 学习活动、证据与兼容契约](19-beta-learning-contracts.md)
 
 返回 [文档中心](../README.md)。

@@ -1081,8 +1081,98 @@ final class SqliteSchemaMigrator {
                     )
                     """
             )
+        ),
+        new Migration(
+            17,
+            "Freeze v2 consolidated beta activity, content provenance, and course-path contracts",
+            List.of(
+                """
+                    create table course_content_provenance (
+                        course_id text primary key references course_definition(id) on delete cascade,
+                        source_title text not null,
+                        source_reference text not null,
+                        license text not null,
+                        author text not null,
+                        content_version text not null,
+                        reviewed_at text not null
+                    )
+                    """,
+                """
+                    insert into course_content_provenance(course_id,source_title,source_reference,license,author,content_version,reviewed_at)
+                    select id,'SQLTeacher original built-in curriculum','project://docs/guide','Apache-2.0',
+                        'SQLTeacher contributors',version,'2026-08-09T00:00:00Z'
+                    from course_definition
+                    """,
+                """
+                    insert into course_definition(id,version,title,language,license,maintainer,visibility,created_at,updated_at)
+                    values ('builtin-capstone-project','1','综合项目','zh-CN','Apache-2.0','SQLTeacher contributors',
+                        'PUBLISHED','2026-08-09T00:00:00Z','2026-08-09T00:00:00Z')
+                    """,
+                "insert into course_section(id,course_id,title,sort_order) values ('capstone-delivery','builtin-capstone-project','跨课程项目交付',0)",
+                "insert into learning_outcome(id,course_id,description,expected_level,sort_order) values ('capstone-outcome','builtin-capstone-project','综合运用多门课程知识完成可复核交付','CREATE',0)",
+                "insert into knowledge_point_definition(id,course_id,name,aliases_json,cs2023_mappings_json) values ('capstone-evidence','builtin-capstone-project','跨课程证据链','[]','[\"SEP/ProfessionalPractice\"]')",
+                capstoneProjectActivitySql(),
+                "insert into activity_knowledge_point(activity_id,knowledge_point_id) values ('capstone-evidence-project','capstone-evidence')",
+                labActivitySql(),
+                "insert into activity_knowledge_point(activity_id,knowledge_point_id) values ('programming-debug-lab','programming-basic-io')",
+                readingActivitySql(),
+                "insert into activity_knowledge_point(activity_id,knowledge_point_id) values ('tree-complexity-reading','ds-tree-traversal')",
+                """
+                    insert into course_content_provenance(course_id,source_title,source_reference,license,author,content_version,reviewed_at)
+                    values ('builtin-capstone-project','SQLTeacher original capstone curriculum','project://docs/guide/18-project-course-package-cloud2.md',
+                        'Apache-2.0','SQLTeacher contributors','1','2026-08-09T00:00:00Z')
+                    """,
+                """
+                    create table cross_course_knowledge_relation (
+                        source_knowledge_point_id text not null references knowledge_point_definition(id),
+                        target_knowledge_point_id text not null references knowledge_point_definition(id),
+                        relation_type text not null check (relation_type in ('PREREQUISITE','TRANSFER','RELATED')),
+                        rationale text not null,
+                        primary key(source_knowledge_point_id,target_knowledge_point_id,relation_type)
+                    )
+                    """,
+                "insert into cross_course_knowledge_relation values ('ds-tree-traversal','capstone-evidence','TRANSFER','算法证据可作为综合项目的可复核交付物')",
+                "insert into cross_course_knowledge_relation values ('se-ci-quality-gate','capstone-evidence','PREREQUISITE','综合项目必须建立自动质量门禁')",
+                "insert into cross_course_knowledge_relation values ('security-input-validation','capstone-evidence','RELATED','项目证据应包含输入与授权边界')"
+            )
         )
     );
+
+    private static String capstoneProjectActivitySql() {
+        String specification = """
+            {"formatVersion":1,"prompt":"完成一个跨课程综合项目，并提交范围、实现、验证和复盘证据。","milestones":[{"id":"scope","title":"范围冻结","acceptanceCriterion":"记录目标、非目标、许可和数据边界"},{"id":"implementation","title":"实现闭环","acceptanceCriterion":"实现具有真实运行路径且不包含占位入口"},{"id":"verification","title":"验证与交付","acceptanceCriterion":"固定测试、风险检查和复盘均可复现"}],"rubric":[{"id":"correctness","title":"正确性与证据","weight":35},{"id":"integration","title":"跨课程整合","weight":35},{"id":"reflection","title":"限制与改进","weight":30}],"minimumEvidenceCharacters":120,"minimumReflectionCharacters":80}
+            """.strip();
+        return "insert into learning_activity_definition(id,course_id,section_id,activity_type,title,description,difficulty,estimated_minutes,"
+            + "definition_version,specification_format_version,specification_json,source_kind,source_id,enabled,created_at,updated_at) values ("
+            + "'capstone-evidence-project','builtin-capstone-project','capstone-delivery','PROJECT','跨课程证据项目',"
+            + "'自动门禁验证交付完整性；教师量规负责最终能力判断。','ADVANCED',180,1,1,'"
+            + specification.replace("'", "''") + "','BUILTIN_V2','capstone-evidence-project',1,"
+            + "'2026-08-09T00:00:00Z','2026-08-09T00:00:00Z')";
+    }
+
+    private static String labActivitySql() {
+        String specification = """
+            {"formatVersion":1,"prompt":"在本地 IDE 中复现、定位并修复一个输入解析缺陷，记录每一步观测。","steps":[{"id":"reproduce","title":"复现缺陷","instruction":"使用固定输入运行程序并记录实际输出。","observationKey":"actual-output"},{"id":"diagnose","title":"定位原因","instruction":"比较期望与实际控制流，记录根因。","observationKey":"root-cause"},{"id":"verify","title":"验证修复","instruction":"运行正常与边界输入，记录测试摘要。","observationKey":"test-summary"}],"minimumConclusionCharacters":60}
+            """.strip();
+        return "insert into learning_activity_definition(id,course_id,section_id,activity_type,title,description,difficulty,estimated_minutes,"
+            + "definition_version,specification_format_version,specification_json,source_kind,source_id,enabled,created_at,updated_at) values ("
+            + "'programming-debug-lab','builtin-programming-basics','programming-io','LAB','输入解析调试实验',"
+            + "'本地运行由学生主动发起；评价仅检查步骤、观测和结论结构。','INTERMEDIATE',35,1,1,'"
+            + specification.replace("'", "''") + "','BUILTIN_V2','programming-debug-lab',1,"
+            + "'2026-08-09T00:00:00Z','2026-08-09T00:00:00Z')";
+    }
+
+    private static String readingActivitySql() {
+        String specification = """
+            {"formatVersion":1,"sourceTitle":"SQLTeacher 原创：遍历与复杂度","license":"Apache-2.0","content":"树遍历把结构关系转换为确定访问序列。前序遍历先访问根，再递归访问左子树和右子树；若每个结点只处理一次，时间复杂度与结点数 n 成正比，即 O(n)。递归实现的额外空间由树高 h 决定，最坏退化树为 O(n)，平衡树为 O(log n)。阅读完成只记录接触内容，必须通过主动回忆才能形成评价证据。","checks":[{"id":"order","prompt":"前序遍历访问根、左子树、右子树的顺序是什么？","expectedAnswer":"根 左 右","explanation":"回忆顺序应为：根 左 右。"},{"id":"time","prompt":"每个结点只处理一次时，遍历的时间复杂度是什么？","expectedAnswer":"O(n)","explanation":"每个结点访问一次，因此为 O(n)。"}],"passPercent":100}
+            """.strip();
+        return "insert into learning_activity_definition(id,course_id,section_id,activity_type,title,description,difficulty,estimated_minutes,"
+            + "definition_version,specification_format_version,specification_json,source_kind,source_id,enabled,created_at,updated_at) values ("
+            + "'tree-complexity-reading','builtin-data-structures','binary-tree-traversal','READING','遍历与复杂度主动阅读',"
+            + "'显示来源和许可，并以主动回忆而非阅读状态形成评价。','BEGINNER',8,1,1,'"
+            + specification.replace("'", "''") + "','BUILTIN_V2','tree-complexity-reading',1,"
+            + "'2026-08-09T00:00:00Z','2026-08-09T00:00:00Z')";
+    }
 
     private static String projectActivitySql() {
         String specification = """

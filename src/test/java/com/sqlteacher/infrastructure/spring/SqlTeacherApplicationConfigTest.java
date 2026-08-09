@@ -63,7 +63,7 @@ class SqlTeacherApplicationConfigTest {
             assertNotNull(context.getBean(ActivityEvaluationDispatcher.class));
             assertNotNull(context.getBean(ActivityLearningService.class));
             assertNotNull(context.getBean(ActivityReviewService.class));
-            assertEquals(6, context.getBeansOfType(ActivityEvaluator.class).size());
+            assertEquals(8, context.getBeansOfType(ActivityEvaluator.class).size());
             assertEquals(2, context.getBeansOfType(CodeRunner.class).size());
             assertNotNull(context.getBean(LocalCodeRunner.class));
             assertNotNull(context.getBean(ExercisePracticeService.class));

@@ -1,6 +1,6 @@
 # 阶段实施记录
 
-Stage 0 至 Stage 15 已完成的记录统一归档在此。目录名保留原阶段编号，便于历史链接、提交记录和发布证据相互对应。
+Stage 0 至 Stage 18 已完成的记录统一归档在此。目录名保留原阶段编号，便于历史链接、提交记录和发布证据相互对应。
 
 | 阶段 | 主题 | 入口 |
 | --- | --- | --- |
@@ -20,5 +20,8 @@ Stage 0 至 Stage 15 已完成的记录统一归档在此。目录名保留原�
 | Stage 13 | v2.0 alpha.5 系统课程确定性模拟 | [stage13/](stage13/) |
 | Stage 14 | v2.0 alpha.6 专业基础课程单元 | [stage14/](stage14/) |
 | Stage 15 | v2.0 alpha.7 项目学习与 Cloud 2.0 | [stage15/](stage15/) |
+| Stage 16 | v2.0 一次性 Beta 功能与系统收敛 | [stage16/](stage16/) |
+| Stage 17 | v2.0 RC.1 发布冻结与本地候选验证 | [stage17/](stage17/) |
+| Stage 18 | v2.0 GA 正式发布与云端同步 | [stage18/](stage18/) |
 
 返回 [历史资料](../README.md) 或 [文档中心](../../README.md)。

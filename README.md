@@ -13,7 +13,7 @@
   [![Platform](https://img.shields.io/badge/Windows-10%20%7C%2011-0078D4?logo=windows11&logoColor=white)](https://github.com/danlingdan/Teacher/releases/latest)
   [![License](https://img.shields.io/badge/License-Apache%202.0-4D7A97.svg)](LICENSE)
 
-  [下载最新版](https://github.com/danlingdan/Teacher/releases/latest) · [文档中心](docs/README.md) · [使用指南](docs/guide/README.md) · [更新日志](docs/releases/v1.11.5.md) · [问题反馈](https://github.com/danlingdan/Teacher/issues)
+  [下载最新版](https://github.com/danlingdan/Teacher/releases/latest) · [文档中心](docs/README.md) · [使用指南](docs/guide/README.md) · [v2.0 更新日志](docs/releases/v2.0.0.md) · [问题反馈](https://github.com/danlingdan/Teacher/issues)
 </div>
 
 ---
@@ -33,6 +33,14 @@ SQLTeacher 面向计算机专业课程教学与自主实践。它把本地代码
 | 👩‍🏫 教学协作 | 班级、任务、提交、教师反馈、学情看板、干预队列和脱敏 CSV 导出 |
 | 🛡️ 通用软件能力 | 可信更新、问题反馈、诊断包、备份恢复、代理、无障碍和隐私说明 |
 | 🌐 多语言与账号治理 | 完整英文界面、命令面板、可信密码重置、活跃会话、数据导出与账号注销 |
+
+## v2.0 亮点
+
+- **完整活动内核**：SQL、测验、跟踪、模拟、代码、实验、项目和主动阅读共用确定性学习闭环。
+- **12 条专业路径**：课程来源、许可、跨课程关系、项目证据和成果档案均有可追溯记录。
+- **真实学习 IDE**：本地工具链和联网运行由学生主动控制，正式评价保留独立受控 Runner。
+- **可解释诊断**：按活动类型校准证据权重，阅读完成和 AI 草稿不会被当作掌握事实。
+- **正式发布**：在 Alpha、合并 Beta 与 RC 冻结后，以可复现的测试、Windows 包、SBOM 和签名更新清单进入稳定通道。
 
 ## v1.11 亮点
 
@@ -68,8 +76,8 @@ flowchart LR
 
 前往 [GitHub Releases](https://github.com/danlingdan/Teacher/releases/latest) 下载：
 
-- `SQLTeacher-1.11.5.exe`：推荐，标准 Windows 安装器；
-- `SQLTeacher-1.11.5-windows-x64.zip`：免安装便携版；
+- `SQLTeacher-2.0.0.exe`：推荐，标准 Windows 安装器；
+- `SQLTeacher-2.0.0-windows-x64.zip`：免安装便携版；
 - `SHA256SUMS.txt`：发布文件完整性校验值。
 
 正式包自带 Java 运行时，无需另装 JDK。用户数据默认保存在 `%LOCALAPPDATA%\SQLTeacher`，升级应用不会覆盖该目录。

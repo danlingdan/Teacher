@@ -816,3 +816,11 @@
     -fx-font-family: "Cascadia Code", "JetBrains Mono", Consolas, monospace;
     -fx-font-size: 12px;
 }
+.reading-content {
+    -fx-padding: 16px;
+    -fx-background-color: -color-bg-subtle;
+    -fx-background-radius: 10px;
+    -fx-border-color: -color-border-default;
+    -fx-border-radius: 10px;
+    -fx-line-spacing: 4px;
+}

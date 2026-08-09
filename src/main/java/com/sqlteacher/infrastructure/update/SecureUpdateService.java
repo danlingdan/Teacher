@@ -91,6 +91,9 @@ public final class SecureUpdateService implements UpdateService {
             HttpResponse<byte[]> response = client.send(request, HttpResponse.BodyHandlers.ofByteArray());
             if (response.statusCode() != 200 || response.body().length > 128 * 1024) throw new IllegalStateException("更新服务暂时不可用");
             UpdateManifest manifest = verifyAndParse(response.body(), keys);
+            if (!channelAllowedForBuild(current.version(), manifest.channel())) {
+                throw new IllegalStateException("更新清单通道与当前安装通道不兼容");
+            }
             AtomicJsonFile.write(stateFile, new UpdateState(Instant.now(), manifest.version().toString()));
             system.completeTask(task);
             if (!manifest.platform().equalsIgnoreCase(current.platform()) || !architectureMatches(manifest.architecture(), current.architecture())) {
@@ -261,6 +264,13 @@ public final class SecureUpdateService implements UpdateService {
                 URI.create(text(node, "portableUrl", 2048)), node.path("portableSize").asLong(), text(node, "portableSha256", 64),
                 SemanticVersion.parse(text(node, "minimumSupportedVersion", 128)), rollout);
         } catch (Exception error) { throw new IllegalArgumentException("update manifest is not trusted", error); }
+    }
+
+    static boolean channelAllowedForBuild(SemanticVersion current, String manifestChannel) {
+        if (current.stable()) return "stable".equals(manifestChannel);
+        String prerelease = current.prerelease();
+        String currentChannel = prerelease.contains(".") ? prerelease.substring(0, prerelease.indexOf('.')) : prerelease;
+        return "stable".equals(manifestChannel) || currentChannel.equals(manifestChannel);
     }
     private static String text(JsonNode node, String field, int max) {
         String value = node.path(field).asText("").strip();
