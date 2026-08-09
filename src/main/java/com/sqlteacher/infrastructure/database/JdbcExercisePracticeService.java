@@ -255,12 +255,10 @@ public final class JdbcExercisePracticeService implements ExercisePracticeServic
 
     private SqlExecutionResult executeStudentQuery(String sessionId, String sql) {
         SqlRiskAnalysis risk = riskAnalysisService.analyze(sql, DatabaseDialect.SQLITE);
-        boolean unrestricted = safetyModeService.isUnrestrictedModeEnabled();
-        if (!unrestricted && (!risk.executable() || risk.multiStatement() || !"SELECT".equals(risk.statementType()))) {
+        if (!risk.executable() || risk.multiStatement() || !"SELECT".equals(risk.statementType())) {
             return new SqlExecutionResult(
                 false, List.of(), List.of(), 0, false,
-                "练习环境在标准安全模式下只允许执行单条 SELECT 查询。"
-                    + "如确需运行禁用 SQL，可在“设置 > SQL 安全”中启用无限模式。",
+                "此练习按查询结果评价，只接受单条 SELECT。数据修改请在实验工作区完成并确认风险。",
                 Duration.ZERO
             );
         }
@@ -269,7 +267,7 @@ public final class JdbcExercisePracticeService implements ExercisePracticeServic
             SqliteDriver.ensureLoaded();
             try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + sessionDatabase(sessionId));
                  Statement settings = connection.createStatement()) {
-                if (!unrestricted) settings.execute("pragma query_only = on");
+                settings.execute("pragma query_only = on");
                 try (Statement statement = connection.createStatement()) {
                     statement.setQueryTimeout(QUERY_TIMEOUT_SECONDS);
                     statement.setMaxRows(MAX_RESULT_ROWS + 1);

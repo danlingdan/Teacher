@@ -69,7 +69,7 @@ class JdbcSqlExecutionServiceTest {
     }
 
     @Test
-    void shouldBypassApplicationSafetyGatesInUnrestrictedMode(@TempDir Path tempDirectory) throws Exception {
+    void developerModeShouldStillRequireConfirmationForDestructiveSql(@TempDir Path tempDirectory) throws Exception {
         JdbcConnectionFactory connectionFactory = createInitializedFactory(tempDirectory);
         JdbcSqlExecutionService service = new JdbcSqlExecutionService(
             (connectionId, timeout) -> connectionFactory.open(connectionId),
@@ -79,15 +79,65 @@ class JdbcSqlExecutionServiceTest {
             new DefaultLearningEventService(new JdbcLearningEventRecorder(connectionFactory))
         );
 
+        SqlTeacherException confirmation = assertThrows(SqlTeacherException.class, () -> service.execute(
+            new SqlExecutionRequest("demo", "DROP TABLE student", 100, Duration.ofSeconds(5))));
+        assertEquals("SQL_CONFIRMATION_REQUIRED", confirmation.errorCode());
+
         SqlExecutionResult result = service.execute(new SqlExecutionRequest(
-            "demo", "DROP TABLE student", 100, Duration.ofSeconds(5)
-        ));
+            "demo", "DROP TABLE student", 100, Duration.ofSeconds(5), true));
 
         assertTrue(result.success());
         try (Connection connection = connectionFactory.open("demo");
              Statement statement = connection.createStatement()) {
             assertThrows(SQLException.class, () -> statement.executeQuery("SELECT * FROM student"));
         }
+    }
+
+    @Test
+    void developerModeShouldNeverAllowDropDatabaseOrMultipleStatements() throws Exception {
+        JdbcConnectionProvider provider = (connectionId, timeout) -> {
+            throw new AssertionError("Forbidden SQL must not open a connection");
+        };
+        JdbcSqlExecutionService service = new JdbcSqlExecutionService(provider, new SqlResultMapper(),
+            new DefaultSqlRiskAnalysisService(), enabledSafetyMode(), new MockLearningEventService());
+
+        for (String sql : java.util.List.of("DROP DATABASE school", "GRANT ALL ON school.* TO user", "SELECT 1; SELECT 2")) {
+            SqlTeacherException error = assertThrows(SqlTeacherException.class, () -> service.execute(
+                new SqlExecutionRequest("demo", sql, 100, Duration.ofSeconds(5), true)));
+            assertEquals("SQL_BLOCKED", error.errorCode(), sql);
+        }
+    }
+
+    @Test
+    void developerModeShouldRunRoutineInsertWithoutConfirmation(@TempDir Path tempDirectory) throws Exception {
+        JdbcConnectionFactory connectionFactory = createInitializedFactory(tempDirectory);
+        JdbcSqlExecutionService service = new JdbcSqlExecutionService(
+            (connectionId, timeout) -> connectionFactory.open(connectionId),
+            new SqlResultMapper(), new DefaultSqlRiskAnalysisService(), enabledSafetyMode(),
+            new MockLearningEventService());
+
+        SqlExecutionResult result = service.execute(new SqlExecutionRequest(
+            "demo", "INSERT INTO student(id, name, score) VALUES (6, 'Frank', 81)",
+            100, Duration.ofSeconds(5)));
+        assertTrue(result.success());
+        assertEquals(1, result.affectedRows());
+    }
+
+    @Test
+    void developerModeShouldRespectReadOnlyConnection() {
+        JdbcConnectionProvider provider = new JdbcConnectionProvider() {
+            @Override public Connection open(String connectionId, Duration timeout) {
+                throw new AssertionError("Read-only policy must reject before opening the connection");
+            }
+            @Override public boolean isReadOnly(String connectionId) { return true; }
+        };
+        JdbcSqlExecutionService service = new JdbcSqlExecutionService(provider, new SqlResultMapper(),
+            new DefaultSqlRiskAnalysisService(), enabledSafetyMode(), new MockLearningEventService());
+
+        SqlTeacherException error = assertThrows(SqlTeacherException.class, () -> service.execute(
+            new SqlExecutionRequest("demo", "INSERT INTO student VALUES (1, 'A', 1)",
+                100, Duration.ofSeconds(5))));
+        assertEquals("SQL_READ_ONLY_CONNECTION", error.errorCode());
     }
 
     @Test

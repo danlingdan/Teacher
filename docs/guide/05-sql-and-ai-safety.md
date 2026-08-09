@@ -21,7 +21,7 @@ SQLTeacher 必须保证模型不能直接执行 SQL，所有 SQL 必须经过 Ja
 → Validation 校验
 → SQL Builder 生成 SQL
 → SQL Risk Analyzer 检查
-→ 用户确认
+→ 按本机策略决定是否需要用户确认
 → JDBC 执行
 ```
 
@@ -30,12 +30,12 @@ SQLTeacher 必须保证模型不能直接执行 SQL，所有 SQL 必须经过 Ja
 首版安全要求：
 
 - 禁止模型直接持有 JDBC `Connection`。
-- 禁止未确认执行高风险 SQL。
+- 禁止未确认执行高风险 SQL；开发者模式只减少普通操作确认。
 - 禁止默认执行多语句。
 - 禁止默认执行 `DROP DATABASE`。
 - 禁止默认执行 `GRANT`、`REVOKE`。
 - 查询默认限制最大 500 行。
-- 外部真实库执行 `UPDATE`、`DELETE`、`ALTER` 必须二次确认。
+- 执行 `UPDATE`、`DELETE`、`ALTER`、`DROP TABLE`、`TRUNCATE` 必须最终确认。
 - 所有 SQL 执行必须记录审计事件。
 - 错误信息展示给用户前应转换为教学友好说明。
 
@@ -44,9 +44,12 @@ SQLTeacher 必须保证模型不能直接执行 SQL，所有 SQL 必须经过 Ja
 | 等级 | 示例 | 策略 |
 |---|---|---|
 | 低 | `SELECT` | 允许执行，限制行数 |
-| 中 | `INSERT`、`CREATE` | 需要确认 |
+| 中 | `INSERT`、`CREATE` | 开发者模式直接执行；谨慎模式确认 |
 | 高 | `UPDATE`、`DELETE`、`ALTER` | 二次确认 |
-| 禁止 | `DROP DATABASE`、`GRANT`、`REVOKE` | 直接拦截 |
+| 高 | `DROP TABLE`、`TRUNCATE` | 开发者模式允许，但必须最终确认 |
+| 禁止 | 多语句、数据库/账号/角色管理、`GRANT`、`REVOKE` | 直接拦截 |
+
+开发者模式是新安装的默认设置。它不改变 AI 的草稿边界、课程查询评测合同、只读连接、数据库账号权限、结果与超时限制或审计记录。
 
 风险判断至少考虑：
 

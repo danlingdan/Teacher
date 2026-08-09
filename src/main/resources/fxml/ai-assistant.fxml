@@ -160,6 +160,13 @@
                                       promptText="%ai-assistant.23"
                                       wrapText="true"
                                       prefRowCount="4"/>
+                            <HBox alignment="CENTER_LEFT" spacing="10.0">
+                                <children>
+                                    <Label text="%v21.assistance.mode" styleClass="model-label"/>
+                                    <ComboBox fx:id="assistanceModeSelector" prefWidth="180"/>
+                                    <Label text="%v21.assistance.hint" wrapText="true" styleClass="model-status" HBox.hgrow="ALWAYS"/>
+                                </children>
+                            </HBox>
                             <Label fx:id="privacyPreviewLabel" styleClass="model-status" wrapText="true"
                                    text="%ai-assistant.24"/>
                             <HBox styleClass="sql-action-row" alignment="CENTER_RIGHT" spacing="12.0">

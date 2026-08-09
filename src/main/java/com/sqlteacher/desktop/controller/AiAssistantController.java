@@ -4,6 +4,8 @@ import com.sqlteacher.desktop.AppI18n;
 import com.sqlteacher.application.ai.*;
 import com.sqlteacher.application.connection.ConnectionManagementService;
 import com.sqlteacher.application.connection.DatabaseConnectionProfile;
+import com.sqlteacher.application.databaselearning.TeachingAssistanceMode;
+import com.sqlteacher.application.databaselearning.TeachingPromptComposer;
 import com.sqlteacher.application.nl2sql.Nl2SqlPlan;
 import com.sqlteacher.application.nl2sql.Nl2SqlRequest;
 import com.sqlteacher.application.nl2sql.Nl2SqlSafetyResult;
@@ -69,16 +71,19 @@ public final class AiAssistantController {
     private final Runnable switchPageCallback;
     private final SqlRiskAnalysisService sqlRiskAnalysisService;
     private final ConnectionManagementService connectionManagementService;
+    private final TeachingPromptComposer teachingPromptComposer = new TeachingPromptComposer();
     private Nl2SqlSafetyResult currentResult;
     private boolean applyingModelSelection;
     private boolean modelOperationInProgress;
     private boolean generationInProgress;
     private boolean applyingProviderSelection;
     private boolean applyingProfileSelection;
+    private boolean networkContextConfirmedThisSession;
     private Task<?> activeAiTask;
 
     @FXML
     private TextArea questionInput;
+    @FXML private ComboBox<TeachingAssistanceMode> assistanceModeSelector;
 
     @FXML
     private ComboBox<String> modelSelector;
@@ -183,6 +188,16 @@ public final class AiAssistantController {
             log.error("questionInput is null, FXML binding failed");
         }
         providerSelector.getItems().setAll(LOCAL_SOURCE, NETWORK_SOURCE);
+        assistanceModeSelector.getItems().setAll(TeachingAssistanceMode.values());
+        assistanceModeSelector.setConverter(new javafx.util.StringConverter<>() {
+            @Override public String toString(TeachingAssistanceMode mode) {
+                if (mode == null) return "";
+                return AppI18n.get(mode == TeachingAssistanceMode.GUIDED
+                    ? "v21.assistance.guided" : "v21.assistance.direct");
+            }
+            @Override public TeachingAssistanceMode fromString(String value) { return null; }
+        });
+        assistanceModeSelector.setValue(TeachingAssistanceMode.GUIDED);
         refreshProfileSelector();
         applyingProviderSelection = true;
         try {
@@ -357,6 +372,9 @@ public final class AiAssistantController {
     private void prepareGeneration(boolean revision) {
         String question = questionInput == null ? null : questionInput.getText();
         if (question == null || question.isBlank()) { showAlert(Alert.AlertType.WARNING, AppI18n.get("AiAssistantController.22"), EMPTY_INPUT_MESSAGE); return; }
+        String composedQuestion = teachingPromptComposer.compose(
+            assistanceModeSelector == null || assistanceModeSelector.getValue() == null
+                ? TeachingAssistanceMode.GUIDED : assistanceModeSelector.getValue(), question);
         if (!hasActiveProvider()) {
             showAlert(Alert.AlertType.WARNING, AppI18n.get("AiAssistantController.23"),
                 isNetworkSelected() ? AppI18n.get("AiAssistantController.24") : AppI18n.get("AiAssistantController.25"));
@@ -373,7 +391,7 @@ public final class AiAssistantController {
         Task<PreparedGeneration> previewTask = new Task<>() {
             @Override protected PreparedGeneration call() {
                 DatabaseConnectionProfile profile = DesktopConnections.currentProfile(connectionManagementService);
-                Nl2SqlRequest request = new Nl2SqlRequest(question, profile.id(), profile.dialect());
+                Nl2SqlRequest request = new Nl2SqlRequest(composedQuestion, profile.id(), profile.dialect());
                 AiContextPreview preview = revision
                     ? nl2SqlSafetyService.previewRevision(request, currentResult.plan(), instruction)
                     : nl2SqlSafetyService.preview(request);
@@ -757,12 +775,14 @@ public final class AiAssistantController {
     }
 
     private boolean confirmNetworkContext(AiContextPreview preview) {
+        if (networkContextConfirmedThisSession) return true;
         Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
         alert.setTitle(AppI18n.get("AiAssistantController.52"));
         alert.setHeaderText(AppI18n.get("AiAssistantController.53") + preview.characterCount() + AppI18n.get("AiAssistantController.54"));
         alert.setContentText(AppI18n.get("AiAssistantController.55") + preview.categories() + AppI18n.get("AiAssistantController.56") + String.join(AppI18n.get("AiAssistantController.57"), preview.sources())
             + AppI18n.get("AiAssistantController.58"));
-        return alert.showAndWait().filter(ButtonType.OK::equals).isPresent();
+        networkContextConfirmedThisSession = alert.showAndWait().filter(ButtonType.OK::equals).isPresent();
+        return networkContextConfirmedThisSession;
     }
 
     private void updateHistoryStatus() {

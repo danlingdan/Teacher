@@ -8,6 +8,7 @@ import com.sqlteacher.application.execution.SqlExecutionService;
 import com.sqlteacher.application.risk.SqlRiskAnalysis;
 import com.sqlteacher.application.risk.SqlRiskAnalysisService;
 import com.sqlteacher.application.risk.SqlSafetyModeService;
+import com.sqlteacher.application.risk.DeveloperSqlExecutionPolicy;
 import com.sqlteacher.desktop.DesktopExecutors;
 import com.sqlteacher.desktop.GlobalLoading;
 import com.sqlteacher.desktop.SqlRiskConfirmDialogUtil;
@@ -211,8 +212,9 @@ public final class SqlPracticeController {
         }
 
         // ② 高危SQL风险检查：命中高危规则弹出二次确认弹窗。
-        SqlRiskAnalysis risk = sqlRiskAnalysisService.analyze(sql);
-        if (!safetyModeService.isUnrestrictedModeEnabled() && risk.confirmationRequired()) {
+        SqlRiskAnalysis risk = DeveloperSqlExecutionPolicy.apply(
+            sqlRiskAnalysisService.analyze(sql), safetyModeService.isDeveloperModeEnabled());
+        if (risk.confirmationRequired()) {
             SqlRiskConfirmDialogUtil.showRiskConfirmDialog(sql, () -> executeSqlInternal(sql, true));
             return;
         }

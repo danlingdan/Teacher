@@ -3,9 +3,6 @@ import com.sqlteacher.desktop.AppI18n;
 
 import com.sqlteacher.application.risk.SqlSafetyModeService;
 import javafx.fxml.FXML;
-import javafx.scene.control.Alert;
-import javafx.scene.control.ButtonBar;
-import javafx.scene.control.ButtonType;
 import javafx.scene.control.CheckBox;
 import javafx.scene.control.Label;
 
@@ -23,50 +20,30 @@ public final class SqlSafetySettingsController {
 
     @FXML
     private void initialize() {
-        unrestrictedModeCheck.setSelected(safetyModeService.isUnrestrictedModeEnabled());
+        unrestrictedModeCheck.setSelected(safetyModeService.isDeveloperModeEnabled());
         renderStatus();
     }
 
     @FXML
     private void onToggleUnrestrictedMode() {
         boolean requested = unrestrictedModeCheck.isSelected();
-        if (requested && !confirmEnable()) {
-            unrestrictedModeCheck.setSelected(false);
-            renderStatus();
-            return;
-        }
         try {
-            safetyModeService.setUnrestrictedModeEnabled(requested);
+            safetyModeService.setDeveloperModeEnabled(requested);
             renderStatus();
         } catch (RuntimeException error) {
-            unrestrictedModeCheck.setSelected(safetyModeService.isUnrestrictedModeEnabled());
+            unrestrictedModeCheck.setSelected(safetyModeService.isDeveloperModeEnabled());
             statusLabel.setText(error.getMessage() == null ? AppI18n.get("SqlSafetySettingsController.1") : error.getMessage());
             setStatusStyle("status-error");
         }
     }
 
-    private boolean confirmEnable() {
-        ButtonType enable = new ButtonType(AppI18n.get("SqlSafetySettingsController.2"), ButtonBar.ButtonData.OK_DONE);
-        Alert alert = new Alert(
-            Alert.AlertType.WARNING,
-            AppI18n.get("SqlSafetySettingsController.3")
-                + AppI18n.get("SqlSafetySettingsController.4")
-                + AppI18n.get("SqlSafetySettingsController.5"),
-            enable,
-            ButtonType.CANCEL
-        );
-        alert.setTitle(AppI18n.get("SqlSafetySettingsController.6"));
-        alert.setHeaderText(AppI18n.get("SqlSafetySettingsController.7"));
-        return alert.showAndWait().filter(enable::equals).isPresent();
-    }
-
     private void renderStatus() {
-        if (safetyModeService.isUnrestrictedModeEnabled()) {
+        if (safetyModeService.isDeveloperModeEnabled()) {
             statusLabel.setText(AppI18n.get("SqlSafetySettingsController.8"));
-            setStatusStyle("status-error");
+            setStatusStyle("status-success");
         } else {
             statusLabel.setText(AppI18n.get("SqlSafetySettingsController.9"));
-            setStatusStyle("status-success");
+            setStatusStyle("status-info");
         }
     }
 

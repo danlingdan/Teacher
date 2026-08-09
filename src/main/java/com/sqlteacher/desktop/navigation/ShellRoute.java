@@ -5,6 +5,7 @@ import com.sqlteacher.application.collaboration.DesktopCapability;
 /** Route metadata independent from JavaFX nodes and controller instances. */
 public enum ShellRoute {
     HOME("home", ShellWorkspace.LEARNING, DesktopCapability.HOME, "任务中心", "task home"),
+    DATABASE_LEARNING("database-learning", ShellWorkspace.COURSE, DesktopCapability.DATABASE_LEARNING, "数据库学习", "database learning modeling web data"),
     STUDENT_EXERCISE("student", ShellWorkspace.LEARNING, DesktopCapability.STUDENT_EXERCISE, "闯关练习", "student practice"),
     COURSE_MAP("course", ShellWorkspace.COURSE, DesktopCapability.COURSE_MAP, "课程地图", "course activity map"),
     KNOWLEDGE("knowledge", ShellWorkspace.COURSE, DesktopCapability.KNOWLEDGE_CENTER, "课程知识", "course knowledge"),

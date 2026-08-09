@@ -126,6 +126,22 @@ class DefaultSqlRiskAnalysisServiceTest {
     }
 
     @Test
+    void shouldForbidDatabasePrivilegeAdministration() {
+        for (String sql : java.util.List.of(
+            "GRANT SELECT ON school.* TO student",
+            "REVOKE ALL ON school.* FROM student",
+            "DROP SCHEMA school",
+            "CREATE USER student IDENTIFIED BY 'secret'",
+            "ALTER USER student IDENTIFIED BY 'changed'",
+            "DROP ROLE teacher"
+        )) {
+            SqlRiskAnalysis result = service.analyze(sql);
+            assertFalse(result.executable(), sql);
+            assertEquals(SqlRiskLevel.FORBIDDEN, result.level(), sql);
+        }
+    }
+
+    @Test
     void shouldBlockMysqlFileOutputLockingAndDangerousFunctions() {
         for (String sql : java.util.List.of(
             "SELECT * FROM student INTO OUTFILE '/tmp/students.csv'",

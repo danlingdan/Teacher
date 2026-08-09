@@ -239,7 +239,7 @@ public final class ConnectionSettingsController {
     private void clearForm() {
         idField.clear(); nameField.clear(); pathField.clear(); clearServerFields(); passwordField.clear();
         dialectBox.setValue(DatabaseDialect.SQLITE);
-        readOnlyCheck.setSelected(true); enabledCheck.setSelected(true);
+        readOnlyCheck.setSelected(false); enabledCheck.setSelected(true);
         updateActions(null); updateTargetFields(); showStatus(AppI18n.get("ConnectionSettingsController.16"), false);
     }
 

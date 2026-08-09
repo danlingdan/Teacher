@@ -34,6 +34,9 @@ import com.sqlteacher.application.collaboration.FeedbackDraftEnhancer;
 import com.sqlteacher.application.collaboration.TeachingContentCache;
 import com.sqlteacher.application.course.CourseMapActivity;
 import com.sqlteacher.application.course.CourseMapService;
+import com.sqlteacher.application.databaselearning.DefaultDatabaseModelingService;
+import com.sqlteacher.application.databaselearning.DefaultLearningGoalCatalogService;
+import com.sqlteacher.application.databaselearning.DefaultWebDataLabService;
 import com.sqlteacher.application.activity.ActivityLearningService;
 import com.sqlteacher.application.activity.ActivityReviewService;
 import com.sqlteacher.application.activity.ProjectPortfolioService;
@@ -118,6 +121,7 @@ public final class MainWindowController {
     /** 首页 FXML 的类路径位置。 */
     private static final String HOME_FXML = "/fxml/home.fxml";
     private static final String COURSE_MAP_FXML = "/fxml/course-map.fxml";
+    private static final String DATABASE_LEARNING_FXML = "/fxml/database-learning.fxml";
     private static final String ACTIVITY_WORKSPACE_FXML = "/fxml/activity-workspace.fxml";
 
     /** SQL 练习子页面 FXML 的类路径位置。 */
@@ -225,6 +229,7 @@ public final class MainWindowController {
     @FXML
     private Button homeNavButton;
     @FXML private Button courseMapNavButton;
+    @FXML private Button databaseLearningNavButton;
 
     /** SQL 练习导航按钮（顶部导航栏）。 */
     @FXML
@@ -511,6 +516,7 @@ public final class MainWindowController {
             teachingNavGroupTitle.setText(AppI18n.get("MainWindowController.8"));
         }
         applyCapability(homeNavButton, DesktopCapability.HOME);
+        applyCapability(databaseLearningNavButton, DesktopCapability.DATABASE_LEARNING);
         applyCapability(courseMapNavButton, DesktopCapability.COURSE_MAP);
         applyCapability(sqlPracticeNavButton, DesktopCapability.SQL_PRACTICE);
         applyCapability(studentExerciseNavButton, DesktopCapability.STUDENT_EXERCISE);
@@ -523,7 +529,7 @@ public final class MainWindowController {
         applyCapability(cloudCenterNavButton, DesktopCapability.CLOUD_CENTER);
         applyCapability(teachingContentNavButton, DesktopCapability.TEACHING_CONTENT);
         updateGroupVisibility(learningNavGroup, homeNavButton, studentExerciseNavButton);
-        updateGroupVisibility(courseNavGroup, courseMapNavButton, knowledgeCenterNavButton);
+        updateGroupVisibility(courseNavGroup, databaseLearningNavButton, courseMapNavButton, knowledgeCenterNavButton);
         updateGroupVisibility(teachingNavGroup, teachingContentNavButton, exerciseManagementNavButton,
             exerciseProgressNavButton, cloudCenterNavButton);
         updateGroupVisibility(toolsNavGroup, sqlPracticeNavButton, aiAssistantNavButton, tableSchemaNavButton);
@@ -532,6 +538,7 @@ public final class MainWindowController {
 
     private void decorateNavigation() {
         UiIcons.decorate(homeNavButton, UiIcon.HOME, AppI18n.get("MainWindowController.9"));
+        UiIcons.decorate(databaseLearningNavButton, UiIcon.DATABASE, AppI18n.get("v21.nav.databaseLearning"));
         UiIcons.decorate(courseMapNavButton, UiIcon.BOOK, AppI18n.get("alpha2.nav.courseMap"));
         UiIcons.decorate(studentExerciseNavButton, UiIcon.PRACTICE, AppI18n.get("MainWindowController.10"));
         UiIcons.decorate(knowledgeCenterNavButton, UiIcon.BOOK, AppI18n.get("MainWindowController.11"));
@@ -658,6 +665,7 @@ public final class MainWindowController {
     private Button routeButton(ShellRoute route) {
         return switch (route) {
             case HOME -> homeNavButton;
+            case DATABASE_LEARNING -> databaseLearningNavButton;
             case STUDENT_EXERCISE -> studentExerciseNavButton;
             case COURSE_MAP -> courseMapNavButton;
             case KNOWLEDGE -> knowledgeCenterNavButton;
@@ -747,7 +755,7 @@ public final class MainWindowController {
     /** 当前全部导航按钮集合，新增页面时在此登记。 */
     private List<ButtonBase> navButtons() {
         return List.of(
-            homeNavButton, courseMapNavButton, sqlPracticeNavButton, studentExerciseNavButton, exerciseManagementNavButton,
+            homeNavButton, databaseLearningNavButton, courseMapNavButton, sqlPracticeNavButton, studentExerciseNavButton, exerciseManagementNavButton,
             exerciseProgressNavButton,
             knowledgeCenterNavButton, aiAssistantNavButton, tableSchemaNavButton, settingsNavButton,
             cloudCenterNavButton, teachingContentNavButton
@@ -910,6 +918,26 @@ public final class MainWindowController {
     private Node courseMapPage() {
         return pageCache.getOrLoad(ShellRoute.COURSE_MAP, () -> loadPage(COURSE_MAP_FXML,
             CourseMapController.class, () -> new CourseMapController(courseMapService, this::openActivity)));
+    }
+
+    @FXML
+    private void onNavigateDatabaseLearning() {
+        requireCapability(DesktopCapability.DATABASE_LEARNING);
+        selectNav(databaseLearningNavButton);
+        updateContext(databaseLearningNavButton, AppI18n.get("v21.context.databaseLearning"));
+        showPage(databaseLearningPage());
+    }
+
+    private Node databaseLearningPage() {
+        return pageCache.getOrLoad(ShellRoute.DATABASE_LEARNING, () -> loadPage(DATABASE_LEARNING_FXML,
+            DatabaseLearningController.class, () -> new DatabaseLearningController(
+                new DefaultLearningGoalCatalogService(courseMapService),
+                new DefaultDatabaseModelingService(),
+                new DefaultWebDataLabService(safeWebContentFetcher),
+                this::openActivity,
+                sql -> { fillSqlCallback.accept(sql); onNavigateSqlPractice(); },
+                this::onNavigateAiAssistant
+            )));
     }
 
     private Node activityWorkspacePage() {

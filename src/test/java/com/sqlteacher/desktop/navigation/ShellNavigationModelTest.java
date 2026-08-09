@@ -15,9 +15,10 @@ class ShellNavigationModelTest {
         var routes = model.availableRoutes(DesktopAccessProfile.guest());
 
         assertTrue(routes.contains(ShellRoute.HOME));
+        assertTrue(routes.contains(ShellRoute.DATABASE_LEARNING));
         assertTrue(routes.contains(ShellRoute.COURSE_MAP));
         assertTrue(routes.contains(ShellRoute.ACTIVITY_WORKSPACE));
         assertFalse(routes.contains(ShellRoute.TEACHING_CONTENT));
-        assertEquals(1, model.routesIn(ShellWorkspace.COURSE, DesktopAccessProfile.guest()).size());
+        assertEquals(2, model.routesIn(ShellWorkspace.COURSE, DesktopAccessProfile.guest()).size());
     }
 }

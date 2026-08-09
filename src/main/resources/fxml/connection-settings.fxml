@@ -54,7 +54,7 @@
                         <PasswordField fx:id="passwordField" promptText="%connection-settings.18" GridPane.columnIndex="1" GridPane.rowIndex="8"/>
                     </GridPane>
                     <HBox spacing="18">
-                        <CheckBox fx:id="readOnlyCheck" text="%connection-settings.19" selected="true"/>
+                        <CheckBox fx:id="readOnlyCheck" text="%connection-settings.19" selected="false"/>
                         <CheckBox fx:id="enabledCheck" text="%connection-settings.20" selected="true"/>
                     </HBox>
                     <Label fx:id="statusLabel" visible="false" managed="false" wrapText="true" styleClass="sql-result-hint"/>

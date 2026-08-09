@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?import com.sqlteacher.desktop.component.PageHeader?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+
+<ScrollPane xmlns="http://javafx.com/javafx" xmlns:fx="http://javafx.com/fxml"
+            fx:controller="com.sqlteacher.desktop.controller.DatabaseLearningController"
+            fitToWidth="true" hbarPolicy="NEVER" vbarPolicy="AS_NEEDED" styleClass="sql-practice-scroll">
+    <content>
+        <VBox alignment="TOP_CENTER" styleClass="sql-practice-page">
+            <VBox maxWidth="1100" spacing="16" styleClass="page-content">
+                <PageHeader title="%v21.databaseLearning.title" description="%v21.databaseLearning.description"/>
+                <VBox spacing="16">
+                    <VBox spacing="10" styleClass="panel-card">
+                        <Label text="%v21.goal.title" styleClass="card-title"/>
+                        <ComboBox fx:id="goalSelector" maxWidth="Infinity"/>
+                        <Label fx:id="goalOutcomeLabel" wrapText="true" styleClass="model-status"/>
+                        <ListView fx:id="activityList" prefHeight="180"/>
+                        <HBox alignment="CENTER_RIGHT" spacing="10">
+                            <Button text="%v21.goal.assistant" onAction="#onOpenAssistant" styleClass="secondary-button"/>
+                            <Button fx:id="openActivityButton" text="%v21.goal.open" onAction="#onOpenActivity" disable="true" styleClass="sql-execute-button"/>
+                        </HBox>
+                    </VBox>
+                    <VBox spacing="10" styleClass="panel-card">
+                        <Label text="%v21.model.title" styleClass="card-title"/>
+                        <FlowPane hgap="8" vgap="8">
+                            <Button text="%v21.model.enrollment" onAction="#onUseEnrollmentExample" styleClass="secondary-button"/>
+                            <Button text="%v21.model.order" onAction="#onUseOrderExample" styleClass="secondary-button"/>
+                            <Button text="%v21.model.library" onAction="#onUseLibraryExample" styleClass="secondary-button"/>
+                        </FlowPane>
+                        <TextArea fx:id="requirementInput" promptText="%v21.model.prompt" prefRowCount="4" wrapText="true"/>
+                        <Button text="%v21.model.create" onAction="#onCreateModel" styleClass="sql-execute-button"/>
+                        <TextArea fx:id="modelOutput" editable="false" wrapText="true" prefRowCount="10"/>
+                        <Button fx:id="copyDdlButton" text="%v21.model.copy" onAction="#onCopyDdl" styleClass="secondary-button"/>
+                    </VBox>
+                </VBox>
+                <VBox spacing="10" styleClass="panel-card">
+                    <Label text="%v21.data.title" styleClass="card-title"/>
+                    <Label text="%v21.data.description" wrapText="true" styleClass="model-status"/>
+                    <HBox spacing="10">
+                        <TextField fx:id="sourceUrlField" promptText="%v21.data.url" HBox.hgrow="ALWAYS"/>
+                        <Button fx:id="fetchButton" text="%v21.data.preview" onAction="#onFetchPreview" styleClass="sql-execute-button"/>
+                    </HBox>
+                    <TextArea fx:id="dataPreviewArea" editable="false" wrapText="false" prefRowCount="8"/>
+                    <Label fx:id="dataStatusLabel" text="%v21.data.idle" wrapText="true" styleClass="model-status"/>
+                    <HBox spacing="10" alignment="CENTER_RIGHT">
+                        <TextField fx:id="targetTableField" promptText="%v21.data.table" prefWidth="260"/>
+                        <Button fx:id="buildInsertButton" text="%v21.data.build" onAction="#onBuildInsert" disable="true" styleClass="secondary-button"/>
+                    </HBox>
+                </VBox>
+            </VBox>
+        </VBox>
+    </content>
+</ScrollPane>

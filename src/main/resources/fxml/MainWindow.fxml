@@ -32,6 +32,7 @@
                             </VBox>
                             <VBox fx:id="courseNavGroup" spacing="4" styleClass="nav-group">
                                 <Label fx:id="courseNavGroupTitle" text="%alpha2.nav.course" styleClass="nav-group-title"/>
+                                <Button fx:id="databaseLearningNavButton" text="%v21.nav.databaseLearning" onAction="#onNavigateDatabaseLearning" maxWidth="Infinity" styleClass="nav-button"/>
                                 <Button fx:id="courseMapNavButton" text="%alpha2.nav.courseMap" onAction="#onNavigateCourseMap" maxWidth="Infinity" styleClass="nav-button"/>
                                 <Button fx:id="knowledgeCenterNavButton" text="%MainWindow.5" onAction="#onNavigateKnowledgeCenter" maxWidth="Infinity" styleClass="nav-button"/>
                             </VBox>

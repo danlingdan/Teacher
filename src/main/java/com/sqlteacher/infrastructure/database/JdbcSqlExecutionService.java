@@ -7,6 +7,7 @@ import com.sqlteacher.application.event.LearningEventService;
 import com.sqlteacher.application.risk.SqlRiskAnalysis;
 import com.sqlteacher.application.risk.SqlRiskAnalysisService;
 import com.sqlteacher.application.risk.SqlSafetyModeService;
+import com.sqlteacher.application.risk.DeveloperSqlExecutionPolicy;
 import com.sqlteacher.domain.SqlTeacherException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -60,11 +61,10 @@ public final class JdbcSqlExecutionService implements SqlExecutionService {
                 request.sql().length()
         );
 
-        SqlRiskAnalysis risk = riskAnalysisService.analyze(
+        SqlRiskAnalysis risk = DeveloperSqlExecutionPolicy.apply(riskAnalysisService.analyze(
             request.sql(),
             connectionProvider.dialect(request.connectionId())
-        );
-        boolean unrestricted = safetyModeService.isUnrestrictedModeEnabled();
+        ), safetyModeService.isDeveloperModeEnabled());
 
         log.debug("Risk analysis result: level={}, executable={}, confirmationRequired={}, type={}",
                 risk.level(),
@@ -73,7 +73,7 @@ public final class JdbcSqlExecutionService implements SqlExecutionService {
                 risk.statementType()
         );
 
-        if (!unrestricted && !risk.executable()) {
+        if (!risk.executable()) {
             // Record risk blocked event
             eventService.recordSqlRiskBlocked(
                     request.connectionId(),
@@ -85,12 +85,12 @@ public final class JdbcSqlExecutionService implements SqlExecutionService {
             throw new SqlTeacherException(
                     "SQL_BLOCKED",
                     risk.reasons().isEmpty()
-                            ? standardModeHint("SQL 被安全规则拦截。")
-                            : standardModeHint(risk.reasons().getFirst())
+                            ? "SQL 被执行边界拦截。"
+                            : risk.reasons().getFirst()
             );
         }
 
-        if (!unrestricted && connectionProvider.isReadOnly(request.connectionId())
+        if (connectionProvider.isReadOnly(request.connectionId())
                 && !"SELECT".equals(risk.statementType())) {
             eventService.recordSqlRiskBlocked(
                 request.connectionId(),
@@ -104,7 +104,7 @@ public final class JdbcSqlExecutionService implements SqlExecutionService {
             );
         }
 
-        if (!unrestricted && risk.confirmationRequired() && !request.riskConfirmed()) {
+        if (risk.confirmationRequired() && !request.riskConfirmed()) {
             eventService.recordSqlRiskBlocked(
                     request.connectionId(),
                     risk.statementType(),
@@ -217,10 +217,6 @@ public final class JdbcSqlExecutionService implements SqlExecutionService {
 
     private static int queryProbeLimit(int maxRows) {
         return maxRows == Integer.MAX_VALUE ? Integer.MAX_VALUE : maxRows + 1;
-    }
-
-    private static String standardModeHint(String reason) {
-        return reason + " 如确需执行，可在“设置 > SQL 安全”中启用无限模式。";
     }
 
     private static void validate(SqlExecutionRequest request) {

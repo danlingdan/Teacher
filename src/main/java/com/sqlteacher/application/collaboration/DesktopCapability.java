@@ -3,6 +3,7 @@ package com.sqlteacher.application.collaboration;
 /** User-visible desktop modules controlled by the authenticated application identity. */
 public enum DesktopCapability {
     HOME,
+    DATABASE_LEARNING,
     COURSE_MAP,
     ACTIVITY_WORKSPACE,
     SQL_PRACTICE,

@@ -10,16 +10,23 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class FileSqlSafetyModeServiceTest {
     @Test
-    void shouldDefaultToStandardModeAndPersistChanges(@TempDir Path tempDirectory) {
+    void shouldDefaultToDeveloperModeAndPersistChanges(@TempDir Path tempDirectory) {
         Path settings = tempDirectory.resolve("nested/sql-safety.properties");
         FileSqlSafetyModeService service = new FileSqlSafetyModeService(settings);
 
-        assertFalse(service.isUnrestrictedModeEnabled());
+        assertTrue(service.isDeveloperModeEnabled());
 
         service.setUnrestrictedModeEnabled(true);
         assertTrue(new FileSqlSafetyModeService(settings).isUnrestrictedModeEnabled());
 
         service.setUnrestrictedModeEnabled(false);
         assertFalse(new FileSqlSafetyModeService(settings).isUnrestrictedModeEnabled());
+    }
+
+    @Test
+    void shouldReadLegacyUnrestrictedModeChoice(@TempDir Path tempDirectory) throws Exception {
+        Path settings = tempDirectory.resolve("sql-safety.properties");
+        java.nio.file.Files.writeString(settings, "unrestricted-mode=false\n");
+        assertFalse(new FileSqlSafetyModeService(settings).isDeveloperModeEnabled());
     }
 }

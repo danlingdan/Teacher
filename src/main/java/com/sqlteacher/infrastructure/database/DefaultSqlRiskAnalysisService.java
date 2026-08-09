@@ -34,6 +34,11 @@ public final class DefaultSqlRiskAnalysisService implements SqlRiskAnalysisServi
         boolean multiStatement = hasMultipleStatements(normalized);
         String statementType = firstKeyword(normalized);
 
+        if (isForbiddenAdministrativeStatement(normalized, statementType)) {
+            return forbidden(statementType + "_ADMIN", false,
+                statementType + " administrative statements are not allowed.");
+        }
+
         if (multiStatement) {
             return new SqlRiskAnalysis(
                     SqlRiskLevel.HIGH,
@@ -135,6 +140,17 @@ public final class DefaultSqlRiskAnalysisService implements SqlRiskAnalysisServi
             return forbidden("SELECT", false, "MySQL file, lock, or delay functions are not allowed.");
         }
         return null;
+    }
+
+    private static boolean isForbiddenAdministrativeStatement(String sql, String statementType) {
+        if (statementType.equals("GRANT") || statementType.equals("REVOKE")) return true;
+        String tokens = maskQuotedText(sql).toUpperCase(Locale.ROOT);
+        return switch (statementType) {
+            case "DROP" -> tokens.matches("(?s)^DROP\\s+(DATABASE|SCHEMA|USER|ROLE)\\b.*");
+            case "CREATE" -> tokens.matches("(?s)^CREATE\\s+(USER|ROLE)\\b.*");
+            case "ALTER" -> tokens.matches("(?s)^ALTER\\s+USER\\b.*");
+            default -> false;
+        };
     }
 
     private SqlRiskAnalysis forbidden(

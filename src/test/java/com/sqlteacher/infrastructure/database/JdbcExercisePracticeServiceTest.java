@@ -44,13 +44,13 @@ class JdbcExercisePracticeServiceTest {
         assertTrue(query.execution().success());
         assertEquals(6, query.execution().rows().size());
         assertFalse(mutation.execution().success());
-        assertTrue(mutation.execution().message().contains("设置 > SQL 安全"));
+        assertTrue(mutation.execution().message().contains("只接受单条 SELECT"));
         assertEquals(2, count(fixture.appDb(), "exercise_attempts"));
         assertEquals(6, countStudents(fixture.sessionDatabase(session.id())));
     }
 
     @Test
-    void shouldAllowStudentMutationInUnrestrictedMode() throws Exception {
+    void developerModeShouldNotBypassQueryExerciseContract() throws Exception {
         Fixture fixture = fixture(true);
         ExerciseSession session = fixture.service().start("query-02");
 
@@ -58,8 +58,8 @@ class JdbcExercisePracticeServiceTest {
             session.id(), "delete from student where id = 1"
         );
 
-        assertTrue(mutation.execution().success());
-        assertEquals(5, countStudents(fixture.sessionDatabase(session.id())));
+        assertFalse(mutation.execution().success());
+        assertEquals(6, countStudents(fixture.sessionDatabase(session.id())));
     }
 
     @Test

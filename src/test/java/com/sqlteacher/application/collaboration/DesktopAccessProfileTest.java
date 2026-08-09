@@ -15,6 +15,7 @@ class DesktopAccessProfileTest {
 
         assertTrue(guest.can(DesktopCapability.SQL_PRACTICE));
         assertTrue(guest.can(DesktopCapability.COURSE_MAP));
+        assertTrue(guest.can(DesktopCapability.DATABASE_LEARNING));
         assertTrue(guest.can(DesktopCapability.ACTIVITY_WORKSPACE));
         assertTrue(guest.can(DesktopCapability.STUDENT_EXERCISE));
         assertFalse(guest.can(DesktopCapability.CLOUD_CENTER));

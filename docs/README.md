@@ -4,12 +4,12 @@
 
 ## 当前基线
 
-- 当前代码版本：`2.0.1`
+- 当前代码版本：`2.1.0`
 - 当前正式版本：[v2.0.1](releases/v2.0.1.md)
-- 当前迭代计划：[v2.0.1 教学文案整顿](plans/2026-08-09-v2.0.1-teaching-copy-plan.md)
+- 当前迭代计划：[v2.1 目标驱动数据库学习（已完成）](plans/2026-08-09-v2.1-goal-driven-database-learning-plan.md)
 - 最新公开预发布说明：[v2.0.0-alpha.7](releases/v2.0.0-alpha.7.md)
 - 最新稳定版说明：[v1.11.5](releases/v1.11.5.md)
-- 最近一轮功能计划：[v2.0 计算机专业学习平台总计划](plans/2026-08-02-v2.0-computer-science-learning-platform-plan.md)
+- 最近一轮功能计划：[v2.1 目标驱动数据库学习计划](plans/2026-08-09-v2.1-goal-driven-database-learning-plan.md)
 - 对应实施记录：[v2.0 GA 发布记录](history/stages/stage18/2026-08-09-v2-ga-release.md)
 - 当前生产部署记录：[v2.0.0 云端部署记录](operations/2026-08-09-v2.0.0-cloud-deployment.md)
 

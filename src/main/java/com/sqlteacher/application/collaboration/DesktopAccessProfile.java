@@ -15,6 +15,7 @@ public record DesktopAccessProfile(
 ) {
     private static final Set<DesktopCapability> GUEST_CAPABILITIES = Set.copyOf(EnumSet.of(
         DesktopCapability.HOME,
+        DesktopCapability.DATABASE_LEARNING,
         DesktopCapability.COURSE_MAP,
         DesktopCapability.ACTIVITY_WORKSPACE,
         DesktopCapability.SQL_PRACTICE,

@@ -15,7 +15,7 @@
         <CheckBox fx:id="unrestrictedModeCheck" text="%sql-safety-settings.3"
                   onAction="#onToggleUnrestrictedMode" styleClass="safety-mode-toggle"/>
         <Label text="%sql-safety-settings.4"
-               wrapText="true" styleClass="safety-warning-text"/>
+               wrapText="true" styleClass="page-subtitle"/>
         <Label text="%sql-safety-settings.5"
                wrapText="true" styleClass="page-subtitle"/>
     </VBox>

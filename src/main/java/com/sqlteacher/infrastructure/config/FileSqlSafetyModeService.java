@@ -18,7 +18,8 @@ import java.util.Properties;
 /** Persists the device-local SQL safety choice under the application data directory. */
 public final class FileSqlSafetyModeService implements SqlSafetyModeService {
     private static final Logger log = LoggerFactory.getLogger(FileSqlSafetyModeService.class);
-    private static final String KEY = "unrestricted-mode";
+    private static final String KEY = "developer-mode";
+    private static final String LEGACY_KEY = "unrestricted-mode";
 
     private final Path settingsFile;
     private volatile boolean unrestrictedModeEnabled;
@@ -67,14 +68,16 @@ public final class FileSqlSafetyModeService implements SqlSafetyModeService {
     }
 
     private boolean load() {
-        if (!Files.isRegularFile(settingsFile)) return false;
+        if (!Files.isRegularFile(settingsFile)) return true;
         Properties properties = new Properties();
         try (InputStream input = Files.newInputStream(settingsFile)) {
             properties.load(input);
-            return Boolean.parseBoolean(properties.getProperty(KEY, "false"));
+            if (properties.containsKey(KEY)) return Boolean.parseBoolean(properties.getProperty(KEY));
+            if (properties.containsKey(LEGACY_KEY)) return Boolean.parseBoolean(properties.getProperty(LEGACY_KEY));
+            return true;
         } catch (IOException error) {
-            log.warn("Failed to load SQL safety settings; falling back to standard mode", error);
-            return false;
+            log.warn("Failed to load SQL safety settings; falling back to developer mode", error);
+            return true;
         }
     }
 }
