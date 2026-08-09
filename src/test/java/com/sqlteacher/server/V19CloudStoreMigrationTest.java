@@ -19,11 +19,11 @@ class V19CloudStoreMigrationTest {
         new V14CloudStore(database);
         new V19CloudStore(database);
         new V19CloudStore(database);
-        assertEquals(5, maxVersion(database));
+        assertEquals(6, maxVersion(database));
 
         try (var connection = DriverManager.getConnection("jdbc:sqlite:" + database);
              var statement = connection.createStatement()) {
-            statement.executeUpdate("insert into cloud_schema_version(version,description,applied_at) values(6,'future',current_timestamp)");
+            statement.executeUpdate("insert into cloud_schema_version(version,description,applied_at) values(7,'future',current_timestamp)");
         }
         assertThrows(SQLException.class, () -> new V19CloudStore(database));
     }

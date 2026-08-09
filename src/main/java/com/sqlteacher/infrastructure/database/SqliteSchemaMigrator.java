@@ -933,8 +933,206 @@ final class SqliteSchemaMigrator {
                         ('code-sum-cpp','programming-basic-io')
                     """
             )
+        ),
+        new Migration(
+            14,
+            "Seed v2 alpha.5 systems simulations",
+            List.of(
+                simulationCourseDefinitionSql("builtin-computer-systems", "计算机系统"),
+                simulationSectionSql("instruction-cycle", "builtin-computer-systems", "指令周期"),
+                simulationOutcomeSql("builtin-computer-systems", "跟踪一条指令从取指、译码到执行的状态变化"),
+                simulationKnowledgeSql("systems-instruction-cycle", "builtin-computer-systems", "指令周期",
+                    "AR/Architecture"),
+                simulationActivitySql("systems-instruction-cycle", "builtin-computer-systems", "instruction-cycle",
+                    "CPU 指令周期", "操作控制器完成一条指令的取指、译码与执行，并观察关键寄存器。",
+                    """
+                    {"formatVersion":1,"prompt":"按 CPU 指令周期推进状态，并观察 PC、IR 和控制信号。","initialStateId":"ready","goalStateId":"executed","states":[{"id":"ready","title":"准备取指","description":"PC 指向下一条指令，存储器尚未响应。","observations":["PC=0x1000","IR=空","控制信号=空闲"]},{"id":"fetched","title":"取指完成","description":"指令从存储器进入 IR，PC 指向顺序下一条指令。","observations":["PC=0x1004","IR=ADD R1,R2,R3","MAR=0x1000"]},{"id":"decoded","title":"译码完成","description":"控制器识别操作码并读取源寄存器。","observations":["操作=ADD","源操作数=7,5","目标寄存器=R1"]},{"id":"executed","title":"执行并写回","description":"ALU 完成加法，结果写回目标寄存器。","observations":["ALU 结果=12","R1=12","状态=完成"]}],"actions":[{"id":"fetch","label":"发出取指控制信号","fromStateId":"ready","toStateId":"fetched","explanation":"根据 PC 读取指令并更新 PC。"},{"id":"decode","label":"译码并读取寄存器","fromStateId":"fetched","toStateId":"decoded","explanation":"解析操作码和寄存器字段。"},{"id":"execute","label":"执行并写回结果","fromStateId":"decoded","toStateId":"executed","explanation":"ALU 计算并将结果写回 R1。"}],"checkpoints":[{"id":"fetch","stateId":"fetched","title":"取指","successMessage":"已观察到 PC 更新和 IR 装载。","failureReasonCode":"SYSTEMS_FETCH_NOT_REACHED"},{"id":"decode","stateId":"decoded","title":"译码","successMessage":"已识别操作码与操作数。","failureReasonCode":"SYSTEMS_DECODE_NOT_REACHED"},{"id":"execute","stateId":"executed","title":"执行写回","successMessage":"已完成 ALU 执行与寄存器写回。","failureReasonCode":"SYSTEMS_EXECUTE_NOT_REACHED"}]}
+                    """),
+                simulationKnowledgeLinkSql("systems-instruction-cycle", "systems-instruction-cycle"),
+                simulationCourseDefinitionSql("builtin-operating-systems", "操作系统"),
+                simulationSectionSql("process-scheduling", "builtin-operating-systems", "进程调度"),
+                simulationOutcomeSql("builtin-operating-systems", "按短作业优先策略完成就绪队列调度"),
+                simulationKnowledgeSql("os-process-scheduling", "builtin-operating-systems", "短作业优先调度",
+                    "OS/Scheduling"),
+                simulationActivitySql("os-sjf-scheduling", "builtin-operating-systems", "process-scheduling",
+                    "短作业优先调度", "根据到达时间和 CPU burst 选择、分派并完成最短作业。",
+                    """
+                    {"formatVersion":1,"prompt":"就绪队列中 P1=6ms、P2=2ms、P3=4ms；按非抢占式 SJF 完成第一次调度。","initialStateId":"queue","goalStateId":"completed","states":[{"id":"queue","title":"就绪队列","description":"三个进程同时到达，调度器需要比较 CPU burst。","observations":["P1=6ms","P2=2ms","P3=4ms"]},{"id":"selected","title":"已选择 P2","description":"P2 的 burst 最短，被调度器选中。","observations":["候选=P2","等待队列=P1,P3","策略=SJF"]},{"id":"running","title":"P2 运行","description":"完成上下文切换后，P2 占用 CPU。","observations":["CPU=P2","剩余时间=2ms","上下文切换=1 次"]},{"id":"completed","title":"P2 完成","description":"P2 退出，调度器将重新比较 P1 与 P3。","observations":["P2 周转时间=2ms","下一候选=P3","完成队列=P2"]}],"actions":[{"id":"select-shortest","label":"选择 burst 最短的 P2","fromStateId":"queue","toStateId":"selected","explanation":"SJF 在同时到达的进程中选择 P2。"},{"id":"dispatch","label":"分派 P2 到 CPU","fromStateId":"selected","toStateId":"running","explanation":"保存调度状态并切换到 P2。"},{"id":"complete","label":"运行 2ms 至完成","fromStateId":"running","toStateId":"completed","explanation":"P2 用完 CPU burst 并退出。"}],"checkpoints":[{"id":"selection","stateId":"selected","title":"正确选进程","successMessage":"已按最短 CPU burst 选择 P2。","failureReasonCode":"OS_SJF_SELECTION_NOT_REACHED"},{"id":"dispatch","stateId":"running","title":"完成分派","successMessage":"P2 已进入运行态。","failureReasonCode":"OS_DISPATCH_NOT_REACHED"},{"id":"completion","stateId":"completed","title":"完成首个作业","successMessage":"P2 已运行完成并记录周转时间。","failureReasonCode":"OS_PROCESS_COMPLETION_NOT_REACHED"}]}
+                    """),
+                simulationKnowledgeLinkSql("os-sjf-scheduling", "os-process-scheduling"),
+                simulationCourseDefinitionSql("builtin-computer-networks", "计算机网络"),
+                simulationSectionSql("packet-delivery", "builtin-computer-networks", "分组转发"),
+                simulationOutcomeSql("builtin-computer-networks", "解释帧封装、下一跳解析、路由转发与交付"),
+                simulationKnowledgeSql("network-packet-delivery", "builtin-computer-networks",
+                    "局域网到远端主机的分组传递", "NC/NetworkLayer"),
+                simulationActivitySql("network-packet-delivery", "builtin-computer-networks", "packet-delivery",
+                    "跨网段分组传递", "把应用数据从主机 A 经默认网关传递到远端主机 B。",
+                    """
+                    {"formatVersion":1,"prompt":"主机 A 与 B 不在同一子网；依次完成封装、下一跳解析、路由转发和交付。","initialStateId":"payload","goalStateId":"delivered","states":[{"id":"payload","title":"应用数据待发送","description":"传输层数据已交给网络层，尚未形成链路帧。","observations":["源 IP=10.0.0.2","目的 IP=10.0.1.8","TTL=64"]},{"id":"encapsulated","title":"IP 分组已封装","description":"主机确认目的地址不在本地子网，需要交给默认网关。","observations":["下一跳=10.0.0.1","目的 IP 保持不变","需要解析网关 MAC"]},{"id":"resolved","title":"下一跳已解析","description":"ARP 缓存获得默认网关 MAC，可以发送以太网帧。","observations":["目的 MAC=网关 MAC","帧载荷=原 IP 分组","ARP=命中"]},{"id":"forwarded","title":"路由器已转发","description":"路由器解封装入站帧、递减 TTL，并为出站链路重新封装。","observations":["TTL=63","目的 IP=10.0.1.8","出接口=LAN2"]},{"id":"delivered","title":"主机 B 已接收","description":"目的主机验收帧并把分组向上传递。","observations":["IP 校验=通过","目的端口=已分用","状态=交付"]}],"actions":[{"id":"encapsulate","label":"判断子网并封装 IP 分组","fromStateId":"payload","toStateId":"encapsulated","explanation":"保留最终目的 IP，并把默认网关作为下一跳。"},{"id":"resolve","label":"解析默认网关 MAC","fromStateId":"encapsulated","toStateId":"resolved","explanation":"使用 ARP 获得本地链路下一跳地址。"},{"id":"forward","label":"由路由器查表并转发","fromStateId":"resolved","toStateId":"forwarded","explanation":"递减 TTL 并在出站链路重新封装。"},{"id":"deliver","label":"目的主机验收并上交","fromStateId":"forwarded","toStateId":"delivered","explanation":"主机 B 解封装并把数据交给上层协议。"}],"checkpoints":[{"id":"encapsulation","stateId":"encapsulated","title":"网络层封装","successMessage":"已保留最终目的 IP 并选择默认网关。","failureReasonCode":"NETWORK_ENCAPSULATION_NOT_REACHED"},{"id":"next-hop","stateId":"resolved","title":"下一跳解析","successMessage":"已获得网关 MAC 并形成链路帧。","failureReasonCode":"NETWORK_NEXT_HOP_NOT_REACHED"},{"id":"forwarding","stateId":"forwarded","title":"路由转发","successMessage":"已完成 TTL 更新和出站封装。","failureReasonCode":"NETWORK_FORWARDING_NOT_REACHED"},{"id":"delivery","stateId":"delivered","title":"目的交付","successMessage":"分组已由主机 B 接收并向上交付。","failureReasonCode":"NETWORK_DELIVERY_NOT_REACHED"}]}
+                    """),
+                simulationKnowledgeLinkSql("network-packet-delivery", "network-packet-delivery")
+            )
+        ),
+        new Migration(
+            15,
+            "Seed v2 alpha.6 professional foundations",
+            List.of(
+                simulationCourseDefinitionSql("builtin-software-engineering", "软件工程"),
+                simulationSectionSql("ci-quality-gate", "builtin-software-engineering", "持续集成质量门禁"),
+                simulationOutcomeSql("builtin-software-engineering", "把验收标准、自动测试和评审证据连接到发布决策"),
+                simulationKnowledgeSql("se-ci-quality-gate", "builtin-software-engineering", "持续集成质量门禁",
+                    "SE/SoftwareProcess"),
+                simulationActivitySql("se-ci-quality-gate", "builtin-software-engineering", "ci-quality-gate",
+                    "从需求变更到发布门禁", "使用固定变更说明构造可追溯的测试与发布证据，不执行真实 Git 或 CI 命令。",
+                    """
+                    {"formatVersion":1,"prompt":"订单折扣规则发生变化；依次建立验收测试、运行固定 CI 检查并完成发布评审。","initialStateId":"change","goalStateId":"release-ready","states":[{"id":"change","title":"需求变更待验证","description":"折扣边界从 100 元调整为 80 元，尚无对应验收证据。","observations":["变更=订单满 80 元享受折扣","风险=边界值回归","追踪状态=未建立"]},{"id":"tests-selected","title":"验收测试已映射","description":"需求示例已转换为边界值和回归测试。","observations":["79 元=不折扣","80 元=折扣","历史规则=回归"]},{"id":"pipeline-passed","title":"固定 CI 检查通过","description":"单元、契约和回归测试均在内置结果集中通过。","observations":["单元测试=通过","契约测试=通过","回归测试=通过"]},{"id":"release-ready","title":"发布证据已评审","description":"需求、测试与评审记录可相互追踪，可以进入发布候选。","observations":["追踪链=完整","高风险缺陷=0","结论=可候选发布"]}],"actions":[{"id":"map-tests","label":"把验收标准映射为测试","fromStateId":"change","toStateId":"tests-selected","explanation":"为边界值和历史行为建立可复核测试。"},{"id":"run-ci","label":"运行内置 CI 结果集","fromStateId":"tests-selected","toStateId":"pipeline-passed","explanation":"检查单元、契约和回归结果，不调用外部 CI。"},{"id":"review-gate","label":"评审追踪与发布门禁","fromStateId":"pipeline-passed","toStateId":"release-ready","explanation":"确认需求、测试和发布结论之间的证据链。"}],"checkpoints":[{"id":"acceptance-tests","stateId":"tests-selected","title":"验收标准已测试化","successMessage":"边界值与回归测试已覆盖变更。","failureReasonCode":"SE_ACCEPTANCE_TESTS_NOT_REACHED"},{"id":"ci","stateId":"pipeline-passed","title":"CI 质量检查","successMessage":"固定测试集全部通过。","failureReasonCode":"SE_CI_NOT_REACHED"},{"id":"release-gate","stateId":"release-ready","title":"发布门禁评审","successMessage":"追踪链完整且无未处理高风险缺陷。","failureReasonCode":"SE_RELEASE_GATE_NOT_REACHED"}]}
+                    """),
+                simulationKnowledgeLinkSql("se-ci-quality-gate", "se-ci-quality-gate"),
+                simulationCourseDefinitionSql("builtin-programming-languages", "程序设计语言与编译"),
+                simulationSectionSql("lexer-pipeline", "builtin-programming-languages", "词法分析"),
+                simulationOutcomeSql("builtin-programming-languages", "把字符流转换为带类型的 Token 序列并验证词法结果"),
+                simulationKnowledgeSql("compiler-lexer-pipeline", "builtin-programming-languages", "词法分析流水线",
+                    "PL/LanguageTranslation"),
+                simulationActivitySql("compiler-lexer-pipeline", "builtin-programming-languages", "lexer-pipeline",
+                    "从字符流到 Token 序列", "对固定表达式执行扫描、分类与词法验收，不运行外部编译器。",
+                    """
+                    {"formatVersion":1,"prompt":"对源文本 sum=12+3; 完成确定性词法分析。","initialStateId":"source","goalStateId":"accepted","states":[{"id":"source","title":"字符流待扫描","description":"词法分析器尚未划分词素。","observations":["输入=sum=12+3;","当前位置=0","Token=空"]},{"id":"scanned","title":"词素边界已识别","description":"最长匹配规则已划分标识符、运算符、整数和分隔符。","observations":["sum | = | 12 | + | 3 | ;","空白=忽略","未知字符=0"]},{"id":"classified","title":"Token 类型已分类","description":"每个词素都映射到确定的 Token 类型。","observations":["IDENT(sum)","ASSIGN","INT(12), PLUS, INT(3), SEMICOLON"]},{"id":"accepted","title":"词法结果已验收","description":"Token 顺序完整且没有未知字符。","observations":["Token 数=6","错误数=0","状态=可交给语法分析器"]}],"actions":[{"id":"scan","label":"按最长匹配扫描词素","fromStateId":"source","toStateId":"scanned","explanation":"逐字符识别词素边界并跳过无意义空白。"},{"id":"classify","label":"为词素分配 Token 类型","fromStateId":"scanned","toStateId":"classified","explanation":"将标识符、整数、运算符和分隔符分类。"},{"id":"validate-stream","label":"校验 Token 顺序与完整性","fromStateId":"classified","toStateId":"accepted","explanation":"确认 Token 流可安全交给后续语法分析。"}],"checkpoints":[{"id":"scan","stateId":"scanned","title":"词素划分","successMessage":"字符流已按最长匹配划分。","failureReasonCode":"COMPILER_TOKENIZATION_NOT_REACHED"},{"id":"classification","stateId":"classified","title":"Token 分类","successMessage":"全部词素已获得确定类型。","failureReasonCode":"COMPILER_CLASSIFICATION_NOT_REACHED"},{"id":"acceptance","stateId":"accepted","title":"词法验收","successMessage":"Token 流完整且无未知字符。","failureReasonCode":"COMPILER_STREAM_NOT_ACCEPTED"}]}
+                    """),
+                simulationKnowledgeLinkSql("compiler-lexer-pipeline", "compiler-lexer-pipeline"),
+                simulationCourseDefinitionSql("builtin-discrete-mathematics", "离散数学与理论基础"),
+                simulationSectionSql("induction-proof", "builtin-discrete-mathematics", "数学归纳法"),
+                simulationOutcomeSql("builtin-discrete-mathematics", "按基础步、归纳假设和归纳步组织结构化证明"),
+                simulationKnowledgeSql("discrete-induction-proof", "builtin-discrete-mathematics", "数学归纳法结构",
+                    "MS/MathematicalFoundations"),
+                simulationActivitySql("discrete-induction-proof", "builtin-discrete-mathematics", "induction-proof",
+                    "自然数求和归纳证明", "用结构化步骤证明 1+2+...+n=n(n+1)/2，评价器只检查固定证明结构。",
+                    """
+                    {"formatVersion":1,"prompt":"按数学归纳法完成自然数前 n 项和公式的结构化证明。","initialStateId":"claim","goalStateId":"proved","states":[{"id":"claim","title":"命题已陈述","description":"需要证明对所有 n≥1，1+...+n=n(n+1)/2。","observations":["定义域=n≥1","量词=任意自然数","方法=数学归纳法"]},{"id":"base","title":"基础步成立","description":"代入 n=1 后等式两边均为 1。","observations":["左边=1","右边=1×2/2=1","P(1)=真"]},{"id":"hypothesis","title":"归纳假设已声明","description":"假设 P(k) 成立，且 k≥1。","observations":["1+...+k=k(k+1)/2","假设范围=固定 k","不可假设 P(k+1)"]},{"id":"step","title":"归纳步完成","description":"在假设基础上加入 k+1 并化简得到 P(k+1)。","observations":["k(k+1)/2+(k+1)","=(k+1)(k+2)/2","P(k)⇒P(k+1)"]},{"id":"proved","title":"归纳结论成立","description":"基础步与归纳步共同推出命题对所有 n≥1 成立。","observations":["基础步=通过","归纳步=通过","结论=∀n≥1 P(n)"]}],"actions":[{"id":"verify-base","label":"验证 n=1 的基础步","fromStateId":"claim","toStateId":"base","explanation":"直接计算等式两边并确认 P(1)。"},{"id":"state-hypothesis","label":"声明 P(k) 的归纳假设","fromStateId":"base","toStateId":"hypothesis","explanation":"只假设固定 k 的命题成立。"},{"id":"derive-next","label":"由 P(k) 推导 P(k+1)","fromStateId":"hypothesis","toStateId":"step","explanation":"加入 k+1 并进行代数化简。"},{"id":"conclude","label":"应用归纳原理得出结论","fromStateId":"step","toStateId":"proved","explanation":"由基础步和归纳步覆盖所有 n≥1。"}],"checkpoints":[{"id":"base","stateId":"base","title":"基础步","successMessage":"P(1) 已直接验证。","failureReasonCode":"DISCRETE_BASE_CASE_NOT_REACHED"},{"id":"hypothesis","stateId":"hypothesis","title":"归纳假设","successMessage":"P(k) 的范围已正确声明。","failureReasonCode":"DISCRETE_HYPOTHESIS_NOT_REACHED"},{"id":"step","stateId":"step","title":"归纳步","successMessage":"已从 P(k) 推导 P(k+1)。","failureReasonCode":"DISCRETE_INDUCTIVE_STEP_NOT_REACHED"},{"id":"conclusion","stateId":"proved","title":"归纳结论","successMessage":"证明结构已完整闭合。","failureReasonCode":"DISCRETE_PROOF_NOT_COMPLETE"}]}
+                    """),
+                simulationKnowledgeLinkSql("discrete-induction-proof", "discrete-induction-proof"),
+                simulationCourseDefinitionSql("builtin-ai-foundations", "AI 与数据基础"),
+                simulationSectionSql("classification-evaluation", "builtin-ai-foundations", "分类评价与局限"),
+                simulationOutcomeSql("builtin-ai-foundations", "从固定混淆矩阵计算指标并识别数据与评价局限"),
+                simulationKnowledgeSql("ai-classification-evaluation", "builtin-ai-foundations", "分类模型评价",
+                    "AI/MachineLearning"),
+                simulationActivitySql("ai-classification-evaluation", "builtin-ai-foundations", "classification-evaluation",
+                    "固定分类结果评价", "使用内置匿名样本计算 precision、recall 并记录局限，不调用或训练真实模型。",
+                    """
+                    {"formatVersion":1,"prompt":"根据 20 条固定分类结果构造混淆矩阵、计算指标并完成责任边界检查。","initialStateId":"cases","goalStateId":"audited","states":[{"id":"cases","title":"匿名预测结果待汇总","description":"20 条固定结果只包含真实标签与预测标签。","observations":["正类样本=9","负类样本=11","不含个人信息"]},{"id":"matrix","title":"混淆矩阵已构造","description":"逐条计数得到 TP、FP、FN、TN。","observations":["TP=8","FP=2","FN=1","TN=9"]},{"id":"metrics","title":"核心指标已计算","description":"使用固定公式计算 precision 与 recall。","observations":["precision=8/(8+2)=0.80","recall=8/(8+1)≈0.889","accuracy=17/20=0.85"]},{"id":"audited","title":"评价局限已记录","description":"指标不能替代数据代表性、代价和人工责任审查。","observations":["样本量=20，较小","类别代价需业务定义","模型输出不直接决定权威状态"]}],"actions":[{"id":"build-matrix","label":"汇总 TP、FP、FN、TN","fromStateId":"cases","toStateId":"matrix","explanation":"只依据固定标签对进行确定性计数。"},{"id":"compute-metrics","label":"计算 precision 与 recall","fromStateId":"matrix","toStateId":"metrics","explanation":"按标准公式计算并保留分母。"},{"id":"audit-limits","label":"检查样本、代价与责任边界","fromStateId":"metrics","toStateId":"audited","explanation":"记录小样本和指标不能替代责任判断的限制。"}],"checkpoints":[{"id":"matrix","stateId":"matrix","title":"混淆矩阵","successMessage":"四类计数与固定结果一致。","failureReasonCode":"AI_CONFUSION_MATRIX_NOT_REACHED"},{"id":"metrics","stateId":"metrics","title":"分类指标","successMessage":"precision 与 recall 已按公式计算。","failureReasonCode":"AI_METRICS_NOT_REACHED"},{"id":"limits","stateId":"audited","title":"责任边界","successMessage":"已记录数据和指标的适用限制。","failureReasonCode":"AI_LIMITS_NOT_AUDITED"}]}
+                    """),
+                simulationKnowledgeLinkSql("ai-classification-evaluation", "ai-classification-evaluation"),
+                simulationCourseDefinitionSql("builtin-security-foundations", "计算机安全基础"),
+                simulationSectionSql("input-validation", "builtin-security-foundations", "输入验证与授权"),
+                simulationOutcomeSql("builtin-security-foundations", "按约束验证、对象授权和上下文编码处理不可信输入"),
+                simulationKnowledgeSql("security-input-validation", "builtin-security-foundations", "不可信输入防御链",
+                    "SEC/SecureSoftware"),
+                simulationActivitySql("security-input-validation", "builtin-security-foundations", "input-validation",
+                    "不可信输入防御链", "在纯数据模拟中为资料更新请求建立验证、授权和编码门禁，不执行载荷或网络操作。",
+                    """
+                    {"formatVersion":1,"prompt":"处理一条来自客户端的资料更新请求；依次完成结构约束、对象授权和输出编码。","initialStateId":"untrusted","goalStateId":"handled","states":[{"id":"untrusted","title":"请求尚未信任","description":"客户端字段、对象标识和显示名称都不能直接使用。","observations":["来源=客户端","对象=user-42","displayName=待验证文本"]},{"id":"constrained","title":"结构与长度已验证","description":"只接受允许字段、正确类型和有限长度。","observations":["字段白名单=通过","长度≤80","未知字段=拒绝"]},{"id":"authorized","title":"对象级授权已通过","description":"当前主体仅能修改自己的 user-42 资料。","observations":["主体=user-42","目标=user-42","权限=PROFILE_WRITE_SELF"]},{"id":"encoded","title":"显示上下文已编码","description":"保存原始业务值前完成规范化，展示时执行上下文编码。","observations":["控制字符=拒绝","规范化=完成","HTML 上下文=编码"]},{"id":"handled","title":"请求被安全处理","description":"只有通过全部门禁的数据才进入受控更新路径。","observations":["验证=通过","授权=通过","编码=通过"]}],"actions":[{"id":"validate-schema","label":"执行字段、类型和长度约束","fromStateId":"untrusted","toStateId":"constrained","explanation":"在业务处理前拒绝不符合契约的数据。"},{"id":"authorize-object","label":"验证主体与目标对象权限","fromStateId":"constrained","toStateId":"authorized","explanation":"服务端根据真实主体执行对象级授权。"},{"id":"encode-context","label":"规范化并按显示上下文编码","fromStateId":"authorized","toStateId":"encoded","explanation":"避免把未经处理的文本拼接到输出上下文。"},{"id":"accept-request","label":"进入受控资料更新路径","fromStateId":"encoded","toStateId":"handled","explanation":"仅在全部防御门禁通过后接受请求。"}],"checkpoints":[{"id":"constraints","stateId":"constrained","title":"输入约束","successMessage":"字段、类型和长度已验证。","failureReasonCode":"SEC_INPUT_CONSTRAINTS_NOT_REACHED"},{"id":"authorization","stateId":"authorized","title":"对象级授权","successMessage":"主体具有目标对象的明确权限。","failureReasonCode":"SEC_AUTHORIZATION_NOT_REACHED"},{"id":"encoding","stateId":"encoded","title":"上下文编码","successMessage":"文本已按目标显示上下文处理。","failureReasonCode":"SEC_OUTPUT_ENCODING_NOT_REACHED"},{"id":"handling","stateId":"handled","title":"受控处理","successMessage":"请求仅在全部门禁通过后被接受。","failureReasonCode":"SEC_SAFE_HANDLING_NOT_REACHED"}]}
+                    """),
+                simulationKnowledgeLinkSql("security-input-validation", "security-input-validation")
+            )
+        ),
+        new Migration(
+            16,
+            "Add v2 alpha.7 project learning and synchronization records",
+            List.of(
+                "insert into course_section(id,course_id,title,sort_order) values ('team-project','builtin-software-engineering','项目制实践',1)",
+                "insert into knowledge_point_definition(id,course_id,name,aliases_json,cs2023_mappings_json) values ('se-project-delivery','builtin-software-engineering','可追溯项目交付','[]','[\"SE/ProjectManagement\"]')",
+                projectActivitySql(),
+                "insert into activity_knowledge_point(activity_id,knowledge_point_id) values ('se-versioned-project','se-project-delivery')",
+                """
+                    create table course_package_operation (
+                        operation_id text primary key,
+                        actor_id text not null,
+                        package_id text not null,
+                        course_id text not null,
+                        course_version text not null,
+                        content_sha256 text not null,
+                        license text not null,
+                        status text not null check (status in ('PREVIEWED','IMPORTED','REJECTED','ROLLED_BACK')),
+                        result_json text not null,
+                        created_at text not null
+                    )
+                    """,
+                "create index course_package_course_version on course_package_operation(course_id,course_version,created_at desc)",
+                """
+                    create table cloud_sync_operation (
+                        operation_id text primary key,
+                        owner_id text not null,
+                        aggregate_type text not null,
+                        aggregate_id text not null,
+                        aggregate_version integer not null check (aggregate_version >= 0),
+                        payload_sha256 text not null,
+                        summary_json text not null,
+                        status text not null check (status in ('PENDING','SYNCED','CONFLICT','REJECTED')),
+                        conflict_code text not null default '',
+                        created_at text not null,
+                        updated_at text not null
+                    )
+                    """,
+                "create index cloud_sync_owner_status on cloud_sync_operation(owner_id,status,created_at)",
+                """
+                    create table cloud_sync_cursor (
+                        owner_id text primary key,
+                        cursor integer not null check (cursor >= 0),
+                        updated_at text not null
+                    )
+                    """
+            )
         )
     );
+
+    private static String projectActivitySql() {
+        String specification = """
+            {"formatVersion":1,"prompt":"以个人或小组方式完成一个可复核的小型学习工具，按版本提交里程碑、交付证据与反思。","milestones":[{"id":"scope","title":"范围与验收标准","acceptanceCriterion":"目标、非目标和验收示例均已记录"},{"id":"implementation","title":"实现与自动检查","acceptanceCriterion":"核心实现和固定自动检查均可复现"},{"id":"review","title":"交付评审","acceptanceCriterion":"已记录限制、反馈与后续改进"}],"rubric":[{"id":"correctness","title":"正确性与证据","weight":40},{"id":"design","title":"设计与可维护性","weight":30},{"id":"reflection","title":"复盘与改进","weight":30}],"minimumEvidenceCharacters":80,"minimumReflectionCharacters":60}
+            """.strip();
+        return "insert into learning_activity_definition("
+            + "id,course_id,section_id,activity_type,title,description,difficulty,estimated_minutes,"
+            + "definition_version,specification_format_version,specification_json,source_kind,source_id,"
+            + "enabled,created_at,updated_at) values ('se-versioned-project','builtin-software-engineering',"
+            + "'team-project','PROJECT','版本化项目交付','自动门禁只验证里程碑与证据完整性；最终能力结论由教师量规评审。',"
+            + "'INTERMEDIATE',90,1,1,'" + specification.replace("'", "''")
+            + "','BUILTIN_V2','se-versioned-project',1,'2026-08-09T00:00:00Z','2026-08-09T00:00:00Z')";
+    }
+
+    private static String simulationCourseDefinitionSql(String courseId, String courseTitle) {
+        return "insert into course_definition(id,version,title,language,license,maintainer,visibility,created_at,updated_at)"
+            + " values ('" + courseId + "','1','" + courseTitle + "','zh-CN','SQLTeacher built-in content',"
+            + "'SQLTeacher','PUBLISHED','2026-08-09T00:00:00Z','2026-08-09T00:00:00Z')";
+    }
+
+    private static String simulationSectionSql(String sectionId, String courseId, String title) {
+        return "insert into course_section(id,course_id,title,sort_order) values ('" + sectionId + "','"
+            + courseId + "','" + title + "',0)";
+    }
+
+    private static String simulationOutcomeSql(String courseId, String outcome) {
+        return "insert into learning_outcome(id,course_id,description,expected_level,sort_order) values ('"
+            + courseId + "-outcome','" + courseId + "','" + outcome + "','APPLY',0)";
+    }
+
+    private static String simulationKnowledgeSql(String id, String courseId, String title, String mapping) {
+        return "insert into knowledge_point_definition(id,course_id,name,aliases_json,cs2023_mappings_json) values ('"
+            + id + "','" + courseId + "','" + title + "','[]','[\"" + mapping + "\"]')";
+    }
+
+    private static String simulationActivitySql(String id, String courseId, String sectionId, String title,
+                                                String description, String specification) {
+        return "insert into learning_activity_definition("
+            + "id,course_id,section_id,activity_type,title,description,difficulty,estimated_minutes,"
+            + "definition_version,specification_format_version,specification_json,source_kind,source_id,"
+            + "enabled,created_at,updated_at) values ('" + id + "','" + courseId + "','" + sectionId
+            + "','SIMULATION','" + title + "','" + description + "','BEGINNER',12,1,1,'"
+            + specification.strip().replace("'", "''") + "','BUILTIN_V2','" + id
+            + "',1,'2026-08-09T00:00:00Z','2026-08-09T00:00:00Z')";
+    }
+
+    private static String simulationKnowledgeLinkSql(String activityId, String knowledgeId) {
+        return "insert into activity_knowledge_point(activity_id,knowledge_point_id) values ('" + activityId
+            + "','" + knowledgeId + "')";
+    }
 
     private static String codeActivitySql(String id, String title, String language, String starterCode) {
         String specification = "{\"formatVersion\":1,\"language\":\"" + language

@@ -5,7 +5,7 @@
 
   **本地优先、可验证的计算机专业学习 IDE**
 
-  从 Java、Python、C/C++ 与 SQL 实践，到课程知识、确定性评价、学习诊断和云端教学协作。
+  从 Java、Python、C/C++、SQL 与系统模拟实践，到课程知识、确定性评价、学习诊断和云端教学协作。
 
   [![Release](https://img.shields.io/github/v/release/danlingdan/Teacher?display_name=tag&sort=semver)](https://github.com/danlingdan/Teacher/releases/latest)
   [![Build](https://github.com/danlingdan/Teacher/actions/workflows/release.yml/badge.svg)](https://github.com/danlingdan/Teacher/actions/workflows/release.yml)
@@ -25,6 +25,7 @@ SQLTeacher 面向计算机专业课程教学与自主实践。它把本地代码
 | 能力 | 说明 |
 | --- | --- |
 | 💻 本地学习 IDE | Java、Python、C/C++ 编辑、标准输入、控制台、本机联网运行、终端与可选安全评价 |
+| 🧭 离线专业模拟 | 指令周期、系统调度、网络、软件工程、编译、离散数学、AI 与安全基础实验 |
 | 🧪 安全 SQL 实验 | SQLite 演示库、结构浏览、结果限制、多语句拦截和高风险操作确认 |
 | 🤖 受控 AI 助手 | 支持本地 Ollama 和用户配置的网络 AI；模型只生成草稿，不能直接执行 SQL |
 | 🎯 可验证学习闭环 | 练习、任务、反馈、知识点诊断和学习计划均保留可解释的确定性依据 |

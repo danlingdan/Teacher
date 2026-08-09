@@ -16,6 +16,9 @@ import java.time.Instant;
 
 /** Desktop boundary for the authenticated SQLTeacher cloud API. */
 public interface CloudApiClient {
+    default CloudCapabilityProfile capabilities() {
+        throw new UnsupportedOperationException("Capability negotiation is unavailable");
+    }
     CloudAuthenticationService.Session login(String email, char[] password);
 
     CloudAuthenticationService.Session register(String email, String displayName, char[] password);
@@ -187,6 +190,15 @@ public interface CloudApiClient {
 
     List<CloudSyncItem> downloadSyncItems(String accessToken, long afterVersion);
 
+    default List<CloudArtifactSyncResult> uploadArtifactSyncItems(String accessToken,
+                                                                  List<CloudArtifactSyncItem> items) {
+        throw new UnsupportedOperationException("Cloud 2.0 synchronization is unavailable");
+    }
+
+    default CloudArtifactSyncPage downloadArtifactSyncItems(String accessToken, long afterCursor) {
+        throw new UnsupportedOperationException("Cloud 2.0 synchronization is unavailable");
+    }
+
     default CourseCatalog createCourse(String accessToken, String name, String description) {
         throw new UnsupportedOperationException("Course content is unavailable");
     }
@@ -291,6 +303,15 @@ public interface CloudApiClient {
 
     default CourseBundleImportResult importCourseBundle(String accessToken, String bundleJson, String operationId) {
         throw new UnsupportedOperationException("Course import is unavailable");
+    }
+
+    default CoursePackagePreview previewCoursePackage(String accessToken, String packageJson) {
+        throw new UnsupportedOperationException("Secure course packages are unavailable");
+    }
+
+    default CourseBundleImportResult importCoursePackage(String accessToken, String packageJson, String operationId,
+                                                          String expectedSha256, boolean licenseConfirmed) {
+        throw new UnsupportedOperationException("Secure course packages are unavailable");
     }
 
     default CloudKnowledgeArticle publishCloudKnowledge(String accessToken, String courseId, String sectionId,

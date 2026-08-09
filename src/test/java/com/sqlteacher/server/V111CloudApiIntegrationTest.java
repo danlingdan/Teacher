@@ -3,6 +3,7 @@ package com.sqlteacher.server;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -21,6 +22,7 @@ import static org.junit.jupiter.api.Assertions.*;
  * registration -> sessions -> account export -> deletion apply/cancel, plus a
  * screenshot report that is withdrawn and exported by its query token.
  */
+@Tag("integration")
 class V111CloudApiIntegrationTest {
     private static final ObjectMapper JSON = new ObjectMapper();
     @TempDir Path directory;

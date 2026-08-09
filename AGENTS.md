@@ -139,6 +139,7 @@ Choose the narrowest command that proves the change, then widen for risk:
 ```powershell
 mvn -q test "-Dtest=RelevantTest"
 mvn -q test "-Dtest=FirstTest,SecondTest"
+mvn -q test -Pfast
 mvn test
 mvn -q exec:java "-Dexec.mainClass=com.sqlteacher.TechnologyVerificationApp"
 mvn -q exec:java "-Dexec.mainClass=com.sqlteacher.StageOneVerificationApp"
@@ -148,6 +149,7 @@ mvn javafx:run
 
 - Quote comma-separated Maven `-Dtest` selectors in PowerShell.
 - Run focused tests first.
+- Use `-Pfast` for broad local feedback without `integration`, `runner`, or `live` tagged tests; it is not a release gate.
 - Run full `mvn test` for cross-module, schema, security, accumulated, or release-bound changes.
 - Use CLI verification apps in headless environments; run `mvn javafx:run` only with graphics.
 - Packaging or release changes require the current packaging script and release workflow gates.

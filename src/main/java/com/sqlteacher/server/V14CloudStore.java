@@ -9,8 +9,12 @@ import com.sqlteacher.application.collaboration.AssignmentStatus;
 import com.sqlteacher.application.collaboration.AssignmentSubmission;
 import com.sqlteacher.application.collaboration.ClassAssignment;
 import com.sqlteacher.application.collaboration.CloudNotification;
+import com.sqlteacher.application.collaboration.CloudArtifactSyncItem;
+import com.sqlteacher.application.collaboration.CloudArtifactSyncPage;
+import com.sqlteacher.application.collaboration.CloudArtifactSyncResult;
 import com.sqlteacher.application.collaboration.ContentStatus;
 import com.sqlteacher.application.collaboration.CourseBundleImportResult;
+import com.sqlteacher.application.collaboration.CoursePackagePreview;
 import com.sqlteacher.application.collaboration.CourseCatalog;
 import com.sqlteacher.application.collaboration.CourseSection;
 import com.sqlteacher.application.collaboration.ExerciseRecommendation;
@@ -1012,6 +1016,253 @@ final class V14CloudStore {
         } catch (SQLException error) { throw database(error); }
     }
 
+    CoursePackagePreview previewCoursePackage(AuthenticatedUser actor, String packageJson) {
+        requireTeacherRole(actor);
+        SecureCoursePackage coursePackage = parseSecureCoursePackage(packageJson);
+        Map<String, Object> payload;
+        try {
+            payload = JSON.readValue(coursePackage.payloadJson(), new TypeReference<>() { });
+        } catch (JsonProcessingException error) {
+            throw new IllegalArgumentException("Course package payload JSON is invalid", error);
+        }
+        if (!Integer.valueOf(1).equals(payload.get("formatVersion"))) {
+            throw new IllegalArgumentException("Unsupported course payload format");
+        }
+        Map<String, Object> course = objectMap(payload.get("course"));
+        String title = required(String.valueOf(course.get("name")), "name", 120);
+        List<?> sections = boundedItems(payload.get("sections"), 100, "sections");
+        List<?> points = boundedItems(payload.get("knowledgePoints"), 1_000, "knowledgePoints");
+        List<?> exercises = boundedItems(payload.get("exercises"), 2_000, "exercises");
+        CoursePackagePreview.Conflict conflict = packageConflict(actor.id(), coursePackage);
+        return new CoursePackagePreview(coursePackage.packageId(), title, coursePackage.courseVersion(),
+            coursePackage.license(), coursePackage.contentSha256(), sections.size(), points.size(), exercises.size(),
+            conflict);
+    }
+
+    CourseBundleImportResult importCoursePackage(AuthenticatedUser actor, String packageJson, String operationId,
+                                                  String expectedSha256, boolean licenseConfirmed) {
+        if (!licenseConfirmed) throw new SecurityException("Course package license confirmation is required");
+        CoursePackagePreview preview = previewCoursePackage(actor, packageJson);
+        String expected = required(expectedSha256, "expectedSha256", 64).toLowerCase(Locale.ROOT);
+        if (!preview.contentSha256().equals(expected)) {
+            throw new IllegalArgumentException("Course package changed after preview");
+        }
+        if (preview.conflict() == CoursePackagePreview.Conflict.VERSION_CONFLICT) {
+            throw new IllegalStateException("Course package version conflicts with previously imported content");
+        }
+        SecureCoursePackage coursePackage = parseSecureCoursePackage(packageJson);
+        if (preview.conflict() == CoursePackagePreview.Conflict.SAME_CONTENT) {
+            return existingPackageImportResult(actor.id(), coursePackage);
+        }
+        CourseBundleImportResult result = importCourse(actor, coursePackage.payloadJson(), operationId);
+        try (Connection connection = open(); PreparedStatement statement = connection.prepareStatement("""
+            insert or ignore into v20_course_package_operations(actor_user_id,operation_id,package_id,course_id,
+                course_version,content_sha256,license,created_at) values(?,?,?,?,?,?,?,?)
+            """)) {
+            statement.setString(1, actor.id()); statement.setString(2, requiredOperation(operationId));
+            statement.setString(3, coursePackage.packageId()); statement.setString(4, result.courseId());
+            statement.setString(5, coursePackage.courseVersion()); statement.setString(6, coursePackage.contentSha256());
+            statement.setString(7, coursePackage.license()); statement.setString(8, Instant.now().toString());
+            statement.executeUpdate();
+            return result;
+        } catch (SQLException error) {
+            throw database(error);
+        }
+    }
+
+    private CourseBundleImportResult existingPackageImportResult(String actorId, SecureCoursePackage coursePackage) {
+        try (Connection connection = open(); PreparedStatement statement = connection.prepareStatement("""
+            select course_id from v20_course_package_operations
+            where actor_user_id=? and package_id=? and course_version=? and content_sha256=?
+            """)) {
+            statement.setString(1, actorId); statement.setString(2, coursePackage.packageId());
+            statement.setString(3, coursePackage.courseVersion()); statement.setString(4, coursePackage.contentSha256());
+            try (ResultSet row = statement.executeQuery()) {
+                if (!row.next()) throw new IllegalStateException("Course package import audit is incomplete");
+                return importResult(connection, row.getString(1));
+            }
+        } catch (SQLException error) {
+            throw database(error);
+        }
+    }
+
+    List<CloudArtifactSyncResult> uploadArtifactSync(AuthenticatedUser actor, List<CloudArtifactSyncItem> items) {
+        if (items == null || items.size() > 200) throw new IllegalArgumentException("Artifact sync batch is too large");
+        List<CloudArtifactSyncResult> results = new ArrayList<>();
+        try (Connection connection = open()) {
+            connection.setAutoCommit(false);
+            try {
+                for (CloudArtifactSyncItem item : items) results.add(storeArtifactSync(connection, actor.id(), item));
+                connection.commit();
+                return List.copyOf(results);
+            } catch (RuntimeException | SQLException error) {
+                connection.rollback();
+                throw error;
+            }
+        } catch (SQLException error) {
+            throw database(error);
+        }
+    }
+
+    CloudArtifactSyncPage downloadArtifactSync(AuthenticatedUser actor, long afterCursor) {
+        if (afterCursor < 0) throw new IllegalArgumentException("afterCursor must not be negative");
+        try (Connection connection = open(); PreparedStatement statement = connection.prepareStatement("""
+            select cursor,operation_id,aggregate_type,aggregate_id,aggregate_version,payload_sha256,summary_json,
+                occurred_at from v20_artifact_sync where actor_user_id=? and cursor>? order by cursor limit 200
+            """)) {
+            statement.setString(1, actor.id()); statement.setLong(2, afterCursor);
+            List<CloudArtifactSyncItem> items = new ArrayList<>();
+            long cursor = afterCursor;
+            try (ResultSet row = statement.executeQuery()) {
+                while (row.next()) {
+                    cursor = row.getLong("cursor");
+                    items.add(new CloudArtifactSyncItem(row.getString("operation_id"), row.getString("aggregate_type"),
+                        row.getString("aggregate_id"), row.getLong("aggregate_version"),
+                        row.getString("payload_sha256"), row.getString("summary_json"),
+                        Instant.parse(row.getString("occurred_at")), cursor));
+                }
+            }
+            return new CloudArtifactSyncPage(items, cursor);
+        } catch (SQLException error) {
+            throw database(error);
+        }
+    }
+
+    private CloudArtifactSyncResult storeArtifactSync(Connection connection, String actorId,
+                                                       CloudArtifactSyncItem item) throws SQLException {
+        validateArtifactSyncItem(item);
+        try (PreparedStatement existing = connection.prepareStatement("""
+            select cursor,aggregate_type,aggregate_id,aggregate_version,payload_sha256
+            from v20_artifact_sync where actor_user_id=? and operation_id=?
+            """)) {
+            existing.setString(1, actorId); existing.setString(2, item.operationId());
+            try (ResultSet row = existing.executeQuery()) {
+                if (row.next()) {
+                    boolean same = row.getString("aggregate_type").equals(item.aggregateType())
+                        && row.getString("aggregate_id").equals(item.aggregateId())
+                        && row.getLong("aggregate_version") == item.aggregateVersion()
+                        && row.getString("payload_sha256").equals(item.payloadSha256());
+                    return new CloudArtifactSyncResult(item.operationId(), same
+                        ? CloudArtifactSyncResult.Status.DUPLICATE : CloudArtifactSyncResult.Status.CONFLICT,
+                        row.getLong("cursor"), row.getLong("aggregate_version"),
+                        same ? "" : "SYNC_OPERATION_REUSED");
+                }
+            }
+        }
+        long currentVersion = -1;
+        try (PreparedStatement current = connection.prepareStatement("""
+            select max(aggregate_version) from v20_artifact_sync
+            where actor_user_id=? and aggregate_type=? and aggregate_id=?
+            """)) {
+            current.setString(1, actorId); current.setString(2, item.aggregateType()); current.setString(3, item.aggregateId());
+            try (ResultSet row = current.executeQuery()) {
+                if (row.next() && row.getObject(1) != null) currentVersion = row.getLong(1);
+            }
+        }
+        if (currentVersion >= item.aggregateVersion() || (currentVersion >= 0 && item.aggregateVersion() > currentVersion + 1)) {
+            return new CloudArtifactSyncResult(item.operationId(), CloudArtifactSyncResult.Status.CONFLICT, 0,
+                currentVersion, currentVersion >= item.aggregateVersion() ? "SYNC_STALE_VERSION" : "SYNC_VERSION_GAP");
+        }
+        try (PreparedStatement insert = connection.prepareStatement("""
+            insert into v20_artifact_sync(actor_user_id,operation_id,aggregate_type,aggregate_id,aggregate_version,
+                payload_sha256,summary_json,occurred_at) values(?,?,?,?,?,?,?,?)
+            """, Statement.RETURN_GENERATED_KEYS)) {
+            insert.setString(1, actorId); insert.setString(2, item.operationId()); insert.setString(3, item.aggregateType());
+            insert.setString(4, item.aggregateId()); insert.setLong(5, item.aggregateVersion());
+            insert.setString(6, item.payloadSha256()); insert.setString(7, item.summaryJson());
+            insert.setString(8, item.occurredAt().toString()); insert.executeUpdate();
+            try (ResultSet key = insert.getGeneratedKeys()) {
+                long cursor = key.next() ? key.getLong(1) : 0;
+                return new CloudArtifactSyncResult(item.operationId(), CloudArtifactSyncResult.Status.ACCEPTED,
+                    cursor, item.aggregateVersion(), "");
+            }
+        }
+    }
+
+    private static void validateArtifactSyncItem(CloudArtifactSyncItem item) {
+        Set<String> allowedTypes = Set.of("COURSE_VERSION", "ASSIGNMENT_SNAPSHOT", "EVALUATION_SUMMARY",
+            "FEEDBACK", "PROJECT_METADATA");
+        if (!allowedTypes.contains(item.aggregateType())) throw new IllegalArgumentException("Unknown sync aggregate type");
+        if (item.summaryJson().getBytes(StandardCharsets.UTF_8).length > 16_384) {
+            throw new IllegalArgumentException("Sync summary is too large");
+        }
+        try {
+            var node = JSON.readTree(item.summaryJson());
+            if (!node.isObject() || containsPrivateSyncField(node)) {
+                throw new IllegalArgumentException("Sync summary contains disallowed fields");
+            }
+        } catch (JsonProcessingException error) {
+            throw new IllegalArgumentException("Sync summary JSON is invalid", error);
+        }
+    }
+
+    private static boolean containsPrivateSyncField(com.fasterxml.jackson.databind.JsonNode node) {
+        Set<String> forbidden = Set.of("source", "sourcecode", "code", "repositoryurl", "token", "password",
+            "secret", "path", "content");
+        var fields = node.fields();
+        while (fields.hasNext()) {
+            var field = fields.next();
+            if (forbidden.contains(field.getKey().replace("_", "").toLowerCase(Locale.ROOT))
+                    || (field.getValue().isContainerNode() && containsPrivateSyncField(field.getValue()))) return true;
+        }
+        if (node.isArray()) for (var value : node) if (containsPrivateSyncField(value)) return true;
+        return false;
+    }
+
+    private SecureCoursePackage parseSecureCoursePackage(String packageJson) {
+        if (packageJson == null || packageJson.length() > 2_200_000) {
+            throw new IllegalArgumentException("Course package is invalid or too large");
+        }
+        Map<String, Object> envelope;
+        try {
+            envelope = JSON.readValue(packageJson, new TypeReference<>() { });
+        } catch (JsonProcessingException error) {
+            throw new IllegalArgumentException("Course package JSON is invalid", error);
+        }
+        if (!Integer.valueOf(2).equals(envelope.get("formatVersion"))) {
+            throw new IllegalArgumentException("Unsupported secure course package format");
+        }
+        String packageId = required(String.valueOf(envelope.get("packageId")), "packageId", 160);
+        String courseVersion = required(String.valueOf(envelope.get("courseVersion")), "courseVersion", 64);
+        String license = required(String.valueOf(envelope.get("license")), "license", 160);
+        String payload = String.valueOf(envelope.get("payloadJson"));
+        if (payload.isBlank() || payload.length() > 2_000_000) {
+            throw new IllegalArgumentException("payloadJson is invalid");
+        }
+        String claimed = required(String.valueOf(envelope.get("contentSha256")), "contentSha256", 64)
+            .toLowerCase(Locale.ROOT);
+        if (!claimed.matches("[0-9a-f]{64}") || !claimed.equals(sha256(payload))) {
+            throw new IllegalArgumentException("Course package content hash is invalid");
+        }
+        return new SecureCoursePackage(packageId, courseVersion, license, claimed, payload);
+    }
+
+    private CoursePackagePreview.Conflict packageConflict(String actorId, SecureCoursePackage coursePackage) {
+        try (Connection connection = open(); PreparedStatement statement = connection.prepareStatement("""
+            select content_sha256 from v20_course_package_operations
+            where actor_user_id=? and package_id=? and course_version=? order by created_at desc limit 1
+            """)) {
+            statement.setString(1, actorId); statement.setString(2, coursePackage.packageId());
+            statement.setString(3, coursePackage.courseVersion());
+            try (ResultSet row = statement.executeQuery()) {
+                if (!row.next()) return CoursePackagePreview.Conflict.NONE;
+                return coursePackage.contentSha256().equals(row.getString(1))
+                    ? CoursePackagePreview.Conflict.SAME_CONTENT : CoursePackagePreview.Conflict.VERSION_CONFLICT;
+            }
+        } catch (SQLException error) {
+            throw database(error);
+        }
+    }
+
+    private static List<?> boundedItems(Object value, int maximum, String name) {
+        List<?> items = objectList(value);
+        if (items.size() > maximum) throw new IllegalArgumentException("Too many course package " + name);
+        return items;
+    }
+
+    private record SecureCoursePackage(String packageId, String courseVersion, String license,
+                                       String contentSha256, String payloadJson) { }
+
     List<CloudKnowledgeArticle> listKnowledge(AuthenticatedUser actor, String courseId) {
         requireKnowledgeCourseVisible(actor, courseId);
         String sql = actor.hasRole(UserRole.ADMIN) || isCourseOwner(actor, courseId)
@@ -1277,6 +1528,17 @@ final class V14CloudStore {
             statement.executeUpdate("create index if not exists idx_cloud_knowledge_scope on cloud_knowledge_articles(course_id,visibility,updated_at desc)");
             statement.executeUpdate("create index if not exists idx_cloud_knowledge_chunks on cloud_knowledge_chunks(article_id,revision_id,chunk_index)");
             statement.executeUpdate("create index if not exists idx_cloud_knowledge_outbox_pending on cloud_knowledge_index_outbox(status,next_attempt_at,created_at)");
+            statement.executeUpdate("create table if not exists v20_course_package_operations(actor_user_id text not null references users(id),"
+                + "operation_id text not null,package_id text not null,course_id text not null references courses(id),course_version text not null,"
+                + "content_sha256 text not null,license text not null,created_at text not null,primary key(actor_user_id,operation_id),"
+                + "unique(actor_user_id,package_id,course_version))");
+            statement.executeUpdate("create table if not exists v20_artifact_sync(cursor integer primary key autoincrement,"
+                + "actor_user_id text not null references users(id),operation_id text not null,aggregate_type text not null,aggregate_id text not null,"
+                + "aggregate_version integer not null,payload_sha256 text not null,summary_json text not null,occurred_at text not null,"
+                + "unique(actor_user_id,operation_id),unique(actor_user_id,aggregate_type,aggregate_id,aggregate_version))");
+            statement.executeUpdate("create index if not exists idx_v20_artifact_sync_owner_cursor on v20_artifact_sync(actor_user_id,cursor)");
+            statement.executeUpdate("insert or ignore into cloud_schema_version(version,description,applied_at) values"
+                + "(6,'v2.0 secure course packages and capability sync',current_timestamp)");
         }
     }
 

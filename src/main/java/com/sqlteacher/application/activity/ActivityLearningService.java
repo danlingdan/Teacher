@@ -13,5 +13,9 @@ public interface ActivityLearningService {
 
     ActivitySubmission submit(String activityId, ActivityArtifact artifact, RunnerCancellation cancellation);
 
+    default int nextSubmissionVersion(String activityId) {
+        return 1;
+    }
+
     java.util.Optional<ActivityFeedback> latestFeedback(String activityId);
 }

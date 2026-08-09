@@ -34,6 +34,7 @@ import com.sqlteacher.application.collaboration.TeachingContentCache;
 import com.sqlteacher.application.course.CourseMapService;
 import com.sqlteacher.application.activity.ActivityLearningService;
 import com.sqlteacher.application.activity.ActivityReviewService;
+import com.sqlteacher.application.activity.ProjectPortfolioService;
 import com.sqlteacher.application.runner.LocalCodeWorkspaceLauncher;
 import com.sqlteacher.application.runner.LocalCodeRunner;
 import com.sqlteacher.application.ai.NetworkAiSettingsService;
@@ -139,6 +140,7 @@ public final class SqlTeacherFxApp extends Application {
     private CourseMapService courseMapService;
     private ActivityLearningService activityLearningService;
     private ActivityReviewService activityReviewService;
+    private ProjectPortfolioService projectPortfolioService;
     private LocalCodeRunner localCodeRunner;
     private LocalCodeWorkspaceLauncher localCodeWorkspaceLauncher;
     private InMemoryLearningEventOwnerContext learningEventOwnerContext;
@@ -211,6 +213,7 @@ public final class SqlTeacherFxApp extends Application {
             courseMapService = context.getBean(CourseMapService.class);
             activityLearningService = context.getBean(ActivityLearningService.class);
             activityReviewService = context.getBean(ActivityReviewService.class);
+            projectPortfolioService = context.getBean(ProjectPortfolioService.class);
             localCodeRunner = context.getBean(LocalCodeRunner.class);
             localCodeWorkspaceLauncher = context.getBean(LocalCodeWorkspaceLauncher.class);
             learningEventOwnerContext = context.getBean(InMemoryLearningEventOwnerContext.class);
@@ -357,6 +360,7 @@ public final class SqlTeacherFxApp extends Application {
                     courseMapService,
                     activityLearningService,
                     activityReviewService,
+                    projectPortfolioService,
                     localCodeRunner,
                     localCodeWorkspaceLauncher,
                     uiPreferencesService,

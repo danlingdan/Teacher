@@ -80,6 +80,19 @@ public final class HttpCloudApiClient implements CloudApiClient {
         }
     }
 
+    @Override
+    public com.sqlteacher.application.collaboration.CloudCapabilityProfile capabilities() {
+        Map<String, Object> raw = request("app/capabilities", "GET", null, null, new TypeReference<>() { });
+        Object values = raw.get("capabilities");
+        java.util.Set<String> capabilities = values instanceof List<?> list
+            ? list.stream().map(String::valueOf).collect(java.util.stream.Collectors.toUnmodifiableSet())
+            : java.util.Set.of();
+        return new com.sqlteacher.application.collaboration.CloudCapabilityProfile(
+            String.valueOf(raw.get("apiVersion")), String.valueOf(raw.get("minimumClientVersion")), capabilities,
+            ((Number) raw.getOrDefault("maximumSyncBatch", 500)).intValue(),
+            ((Number) raw.getOrDefault("maximumSummaryBytes", 16_384)).intValue());
+    }
+
     private static boolean isLoopback(URI uri) {
         String host = uri.getHost();
         if (host == null || host.isBlank()) {
@@ -293,6 +306,21 @@ public final class HttpCloudApiClient implements CloudApiClient {
     }
 
     @Override
+    public List<com.sqlteacher.application.collaboration.CloudArtifactSyncResult> uploadArtifactSyncItems(
+            String token, List<com.sqlteacher.application.collaboration.CloudArtifactSyncItem> items) {
+        Map<String, List<com.sqlteacher.application.collaboration.CloudArtifactSyncResult>> result = request(
+            "v20/sync/artifacts", "POST", Map.of("items", items), token, new TypeReference<>() { });
+        return List.copyOf(result.getOrDefault("results", List.of()));
+    }
+
+    @Override
+    public com.sqlteacher.application.collaboration.CloudArtifactSyncPage downloadArtifactSyncItems(
+            String token, long afterCursor) {
+        return request("v20/sync/artifacts?afterCursor=" + afterCursor, "GET", null, token,
+            com.sqlteacher.application.collaboration.CloudArtifactSyncPage.class);
+    }
+
+    @Override
     public CourseCatalog createCourse(String token, String name, String description) {
         return request("v14/courses", "POST", Map.of("name", name, "description", description == null ? "" : description),
             token, CourseCatalog.class);
@@ -485,6 +513,21 @@ public final class HttpCloudApiClient implements CloudApiClient {
     public CourseBundleImportResult importCourseBundle(String token, String bundleJson, String operationId) {
         return request("v14/courses/import", "POST", Map.of("bundleJson", bundleJson,
             "operationId", operationId), token, CourseBundleImportResult.class);
+    }
+
+    @Override
+    public com.sqlteacher.application.collaboration.CoursePackagePreview previewCoursePackage(
+            String token, String packageJson) {
+        return request("v20/course-packages/preview", "POST", Map.of("packageJson", packageJson), token,
+            com.sqlteacher.application.collaboration.CoursePackagePreview.class);
+    }
+
+    @Override
+    public CourseBundleImportResult importCoursePackage(String token, String packageJson, String operationId,
+                                                         String expectedSha256, boolean licenseConfirmed) {
+        return request("v20/course-packages/import", "POST", Map.of(
+            "packageJson", packageJson, "operationId", operationId, "expectedSha256", expectedSha256,
+            "licenseConfirmed", licenseConfirmed), token, CourseBundleImportResult.class);
     }
 
     @Override

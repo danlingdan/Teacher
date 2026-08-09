@@ -5,6 +5,7 @@ import com.sqlteacher.application.runner.RunnerFailureReason;
 import com.sqlteacher.domain.activity.CodeExecutionLimits;
 import com.sqlteacher.domain.activity.CodeLanguage;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledOnOs;
 import org.junit.jupiter.api.condition.OS;
@@ -21,6 +22,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 @EnabledOnOs(OS.WINDOWS)
+@Tag("runner")
 class WslSandboxCodeRunnerTest {
     private static WslSandboxCodeRunner runner;
 

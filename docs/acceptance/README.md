@@ -4,6 +4,9 @@
 
 ## 正式版本门禁
 
+- [v2.0.0-alpha.7](2026-08-09-v2-alpha7-stage-gate.md)（本地候选，未发布）
+- [v2.0.0-alpha.6](2026-08-09-v2-alpha6-stage-gate.md)（本地候选，未发布）
+- [v2.0.0-alpha.5](2026-08-09-v2-alpha5-stage-gate.md)（本地候选，未发布）
 - [v2.0.0-alpha.4](2026-08-09-v2-alpha4-stage-gate.md)（预发布）
 - [v2.0.0-alpha.3](2026-08-09-v2-alpha3-stage-gate.md)（预发布）
 - [v2.0.0-alpha.2](2026-08-09-v2-alpha2-stage-gate.md)（预发布）

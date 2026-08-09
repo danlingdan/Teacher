@@ -65,6 +65,35 @@ MySQL 集成测试如果依赖本地环境，必须在测试说明中写清：
 - 初始化脚本。
 - 清理方式。
 
+### 3.1 测试分层与日常反馈
+
+测试标签按运行环境划分：
+
+| 标签 | 内容 | 默认完整测试 |
+| --- | --- | --- |
+| 无标签 | 领域、应用、普通持久化、资源和契约测试 | 运行 |
+| `integration` | Cloud Server、端到端桌面流程、DPAPI 与环境持久化 | 运行 |
+| `runner` | Windows 本地工具链与 WSL 隔离 Runner | 运行 |
+| `live` | 需要显式配置的真实 AI Provider 冒烟 | 满足开关时运行，否则跳过 |
+
+修改单一功能时优先运行相关测试类：
+
+```powershell
+mvn -q test "-Dtest=FirstTest,SecondTest"
+```
+
+需要较广覆盖但尚未到里程碑门禁时，使用快速 profile：
+
+```powershell
+mvn -q test -Pfast
+```
+
+`fast` 排除 `integration`、`runner` 和 `live`，只用于日常反馈。跨模块、schema、安全、累计功能和发布候选仍必须执行默认完整套件：
+
+```powershell
+mvn test
+```
+
 ## 4. AI 回归测试
 
 至少准备 100 条样例，分阶段完成：

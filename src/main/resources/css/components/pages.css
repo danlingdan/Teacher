@@ -778,6 +778,34 @@
     -fx-text-fill: -color-fg-default;
 }
 
+/* Reusable offline deterministic simulation workspace. */
+.simulation-offline-note {
+    -fx-padding: 10 12;
+    -fx-background-color: -st-success-surface;
+    -fx-background-radius: 9px;
+    -fx-text-fill: -st-text-secondary;
+}
+.simulation-state-card {
+    -fx-padding: 18px;
+    -fx-spacing: 9px;
+    -fx-background-color: -st-bg-surface-raised;
+    -fx-border-color: -st-accent;
+    -fx-background-radius: 14px;
+    -fx-border-radius: 14px;
+}
+.simulation-state-title { -fx-font-size: 19px; -fx-font-weight: 700; -fx-text-fill: -st-accent-fg; }
+.simulation-observation { -fx-font-family: "Cascadia Code", Consolas, monospace; -fx-text-fill: -st-text-secondary; }
+.simulation-history, .simulation-explanation {
+    -fx-padding: 10 12;
+    -fx-background-color: -st-bg-subtle;
+    -fx-background-radius: 9px;
+    -fx-text-fill: -st-text-secondary;
+}
+.simulation-checkpoints { -fx-padding: 12px; -fx-background-color: -st-bg-surface; -fx-background-radius: 10px; }
+.simulation-checkpoint { -fx-text-fill: -st-text-muted; }
+.simulation-checkpoint.reached { -fx-text-fill: -st-success; -fx-font-weight: 700; }
+.button.suggested { -fx-border-color: -st-accent; -fx-border-radius: 6px; }
+
 .code-activity-editor {
     -fx-font-family: "Cascadia Code", "JetBrains Mono", Consolas, monospace;
     -fx-font-size: 13px;

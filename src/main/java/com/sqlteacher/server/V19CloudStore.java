@@ -383,7 +383,7 @@ final class V19CloudStore {
     private void initialize() throws SQLException {
         try (Connection connection = open(); Statement statement = connection.createStatement()) {
             try (ResultSet row = statement.executeQuery("select coalesce(max(version),0) from cloud_schema_version")) {
-                if (row.next() && row.getInt(1) > 5) {
+                if (row.next() && row.getInt(1) > 6) {
                     throw new SQLException("Cloud database schema is newer than this SQLTeacher version");
                 }
             }

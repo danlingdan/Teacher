@@ -3,6 +3,7 @@ package com.sqlteacher.server;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -15,6 +16,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+@Tag("integration")
 class V110CloudApiIntegrationTest {
     private static final ObjectMapper JSON = new ObjectMapper();
     @TempDir Path directory;
@@ -26,8 +28,9 @@ class V110CloudApiIntegrationTest {
         server = new SqlTeacherCloudServer(directory.resolve("cloud.db"), 0); server.start();
         HttpClient client = HttpClient.newHttpClient(); URI base = URI.create("http://127.0.0.1:" + server.port());
         JsonNode capabilities = JSON.readTree(client.send(HttpRequest.newBuilder(base.resolve("/api/v1/app/capabilities")).GET().build(), HttpResponse.BodyHandlers.ofString()).body());
-        assertEquals("1.11", capabilities.get("apiVersion").asText());
+        assertEquals("2.0", capabilities.get("apiVersion").asText());
         assertTrue(capabilities.get("capabilities").toString().contains("SIGNED_UPDATES"));
+        assertTrue(capabilities.get("capabilities").toString().contains("ARTIFACT_SYNC_V2"));
 
         Map<String, Object> report = Map.of("idempotencyKey", "api-draft", "installId", "test-install", "type", "BUG",
             "severity", "PARTIAL_FAILURE", "summary", "Cannot update", "description", "The signed download did not start",

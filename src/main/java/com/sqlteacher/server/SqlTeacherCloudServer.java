@@ -24,6 +24,7 @@ import com.sqlteacher.application.collaboration.SubmissionOperationConflictExcep
 import com.sqlteacher.application.collaboration.ClassroomService;
 import com.sqlteacher.application.collaboration.CloudAuthenticationService;
 import com.sqlteacher.application.collaboration.CloudSyncItem;
+import com.sqlteacher.application.collaboration.CloudArtifactSyncItem;
 import com.sqlteacher.application.collaboration.ClassAssignment;
 import com.sqlteacher.application.collaboration.RetentionCategory;
 import com.sqlteacher.application.collaboration.RetentionJob;
@@ -124,6 +125,7 @@ public final class SqlTeacherCloudServer {
         this.server.createContext("/api/v1/sync/events", this::syncEvents);
         this.server.createContext("/api/v1/admin", this::admin);
         this.server.createContext("/api/v1/v14", this::v14);
+        this.server.createContext("/api/v1/v20", this::v20);
         this.server.createContext("/api/v1/v19", this::v19);
         this.server.setExecutor(Executors.newVirtualThreadPerTaskExecutor());
     }
@@ -604,6 +606,49 @@ public final class SqlTeacherCloudServer {
         }
     }
 
+    private void v20(HttpExchange exchange) throws IOException {
+        try {
+            AuthenticatedUser actor = store.authenticate(token(exchange));
+            String path = exchange.getRequestURI().getPath();
+            if ("/api/v1/v20/course-packages/preview".equals(path)
+                    && "POST".equals(exchange.getRequestMethod())) {
+                Map<String, Object> body = objectRequest(exchange);
+                respond(exchange, 200, v14Store.previewCoursePackage(actor, string(body, "packageJson")));
+                return;
+            }
+            if ("/api/v1/v20/course-packages/import".equals(path)
+                    && "POST".equals(exchange.getRequestMethod())) {
+                Map<String, Object> body = objectRequest(exchange);
+                boolean confirmed = Boolean.parseBoolean(String.valueOf(body.getOrDefault("licenseConfirmed", false)));
+                respond(exchange, 201, v14Store.importCoursePackage(actor, string(body, "packageJson"),
+                    string(body, "operationId"), string(body, "expectedSha256"), confirmed));
+                return;
+            }
+            if ("/api/v1/v20/sync/artifacts".equals(path) && "POST".equals(exchange.getRequestMethod())) {
+                Map<String, Object> body = objectRequest(exchange);
+                List<CloudArtifactSyncItem> items = JSON.convertValue(body.getOrDefault("items", List.of()),
+                    new TypeReference<List<CloudArtifactSyncItem>>() { });
+                respond(exchange, 200, Map.of("results", v14Store.uploadArtifactSync(actor, items)));
+                return;
+            }
+            if ("/api/v1/v20/sync/artifacts".equals(path) && "GET".equals(exchange.getRequestMethod())) {
+                long afterCursor = queryLong(exchange.getRequestURI().getRawQuery(), "afterCursor", 0);
+                respond(exchange, 200, v14Store.downloadArtifactSync(actor, afterCursor));
+                return;
+            }
+            respond(exchange, 404, errorResponse("NOT_FOUND", "Cloud 2.0 endpoint was not found."));
+        } catch (SecurityException error) {
+            respond(exchange, 403, errorResponse("FORBIDDEN", error.getMessage()));
+        } catch (IllegalStateException error) {
+            respond(exchange, 409, errorResponse("COURSE_PACKAGE_CONFLICT", error.getMessage()));
+        } catch (IllegalArgumentException error) {
+            respond(exchange, 400, errorResponse("INVALID_COURSE_PACKAGE", error.getMessage()));
+        } catch (RuntimeException error) {
+            logUnexpectedFailure("v2.0 operation", error);
+            respond(exchange, 500, errorResponse("SERVER_ERROR", "Cloud 2.0 operation failed."));
+        }
+    }
+
     private void admin(HttpExchange exchange) throws IOException {
         try {
             AuthenticatedUser actor = store.authenticate(token(exchange));
@@ -719,11 +764,13 @@ public final class SqlTeacherCloudServer {
     private void appSupport(HttpExchange exchange) throws IOException {
         String path = exchange.getRequestURI().getPath();
         if ("/api/v1/app/capabilities".equals(path) && "GET".equals(exchange.getRequestMethod())) {
-            respond(exchange, 200, Map.of("apiVersion", "1.11", "minimumClientVersion", "1.9.0",
+            respond(exchange, 200, Map.of("apiVersion", "2.0", "minimumClientVersion", "1.9.0",
                 "serverTime", Instant.now().toString(), "maintenance", false,
+                "maximumSyncBatch", 200, "maximumSummaryBytes", 16384,
                 "capabilities", List.of("SIGNED_UPDATES", "PROBLEM_REPORTS", "CHANGE_PASSWORD", "REPORT_STATUS",
                     "REPORT_WITHDRAWAL", "REPORT_EXPORT", "SCREENSHOT_ATTACHMENT", "SESSIONS", "ACCOUNT_EXPORT",
-                    "ACCOUNT_DELETION", "PASSWORD_RESET", "ROLLOUT")));
+                    "ACCOUNT_DELETION", "PASSWORD_RESET", "ROLLOUT", "COURSE_PACKAGE_V2",
+                    "ARTIFACT_SYNC_V2", "EXPLICIT_SYNC_CONFLICTS", "PROJECT_METADATA_SYNC")));
             return;
         }
         if ("/api/v1/app/update-manifest".equals(path) && "GET".equals(exchange.getRequestMethod())) {

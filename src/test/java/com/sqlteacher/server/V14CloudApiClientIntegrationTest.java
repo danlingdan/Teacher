@@ -4,6 +4,8 @@ import com.sqlteacher.application.collaboration.AssignmentSubmissionRequest;
 import com.sqlteacher.application.collaboration.FeedbackStatus;
 import com.sqlteacher.application.collaboration.ContentStatus;
 import com.sqlteacher.application.collaboration.CloudApiRequestException;
+import com.sqlteacher.application.collaboration.CloudArtifactSyncItem;
+import com.sqlteacher.application.collaboration.CloudArtifactSyncResult;
 import com.sqlteacher.application.collaboration.NotificationType;
 import com.sqlteacher.application.collaboration.UserRole;
 import com.sqlteacher.application.planning.ObjectiveResourceType;
@@ -12,14 +14,19 @@ import com.sqlteacher.application.planning.StudyPlanActionState;
 import com.sqlteacher.infrastructure.cloud.HttpCloudApiClient;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.net.URI;
 import java.nio.file.Path;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.sql.DriverManager;
 import java.time.Instant;
 import java.util.List;
+import java.util.HexFormat;
+import java.util.Map;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -27,6 +34,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
+@Tag("integration")
 class V14CloudApiClientIntegrationTest {
     @TempDir Path directory;
     private SqlTeacherCloudServer server;
@@ -177,10 +185,50 @@ class V14CloudApiClientIntegrationTest {
             invalidBundle.toString(), UUID.randomUUID().toString()));
         assertEquals(courseCountBeforeFailure, tableCount(database, "courses"));
 
+        String packageJson = securePackage(bundle, "course:client-workflow", "1", "CC-BY-4.0");
+        var preview = client.previewCoursePackage(teacher, packageJson);
+        assertEquals("CC-BY-4.0", preview.license());
+        assertEquals(1, preview.exercises());
+        assertThrows(CloudApiRequestException.class, () -> client.importCoursePackage(teacher, packageJson,
+            UUID.randomUUID().toString(), preview.contentSha256(), false));
+        String secureOperation = UUID.randomUUID().toString();
+        var secureImport = client.importCoursePackage(teacher, packageJson, secureOperation,
+            preview.contentSha256(), true);
+        assertEquals(secureImport.courseId(), client.importCoursePackage(teacher, packageJson, secureOperation,
+            preview.contentSha256(), true).courseId());
+        int coursesAfterSecureImport = tableCount(database, "courses");
+        assertEquals(secureImport.courseId(), client.importCoursePackage(teacher, packageJson,
+            UUID.randomUUID().toString(), preview.contentSha256(), true).courseId());
+        assertEquals(coursesAfterSecureImport, tableCount(database, "courses"));
+        assertEquals(com.sqlteacher.application.collaboration.CoursePackagePreview.Conflict.SAME_CONTENT,
+            client.previewCoursePackage(teacher, packageJson).conflict());
+        var tampered = new ObjectMapper().readTree(packageJson);
+        ((com.fasterxml.jackson.databind.node.ObjectNode) tampered).put("payloadJson",
+            bundle.replace("SQL Client", "SQL Client changed"));
+        assertThrows(CloudApiRequestException.class, () -> client.previewCoursePackage(teacher, tampered.toString()));
+
+        assertTrue(client.capabilities().supports("EXPLICIT_SYNC_CONFLICTS"));
+        String syncHash = "a".repeat(64);
+        var syncV1 = new CloudArtifactSyncItem("sync-op-1", "PROJECT_METADATA", "project-1", 1,
+            syncHash, "{\"resultHash\":\"" + syncHash + "\",\"reasonCode\":\"READY\"}", Instant.now(), 0);
+        var accepted = client.uploadArtifactSyncItems(student, List.of(syncV1)).getFirst();
+        assertEquals(CloudArtifactSyncResult.Status.ACCEPTED, accepted.status());
+        assertEquals(CloudArtifactSyncResult.Status.DUPLICATE,
+            client.uploadArtifactSyncItems(student, List.of(syncV1)).getFirst().status());
+        var conflict = new CloudArtifactSyncItem("sync-op-conflict", "PROJECT_METADATA", "project-1", 1,
+            "b".repeat(64), "{\"reasonCode\":\"CHANGED\"}", Instant.now(), 0);
+        assertEquals("SYNC_STALE_VERSION", client.uploadArtifactSyncItems(student, List.of(conflict))
+            .getFirst().conflictCode());
+        assertEquals(1, client.downloadArtifactSyncItems(student, 0).items().size());
+        var privatePayload = new CloudArtifactSyncItem("sync-private", "PROJECT_METADATA", "project-2", 1,
+            syncHash, "{\"sourceCode\":\"private\"}", Instant.now(), 0);
+        assertThrows(CloudApiRequestException.class,
+            () -> client.uploadArtifactSyncItems(student, List.of(privatePayload)));
+
         try (var connection = DriverManager.getConnection("jdbc:sqlite:" + database);
              var statement = connection.createStatement();
              var row = statement.executeQuery("select max(version) from cloud_schema_version")) {
-            assertEquals(5, row.getInt(1));
+            assertEquals(6, row.getInt(1));
         }
 
         try (var connection = DriverManager.getConnection("jdbc:sqlite:" + database);
@@ -210,6 +258,14 @@ class V14CloudApiClientIntegrationTest {
              var row = statement.executeQuery("select count(*) from " + table)) {
             return row.getInt(1);
         }
+    }
+
+    private static String securePackage(String payload, String packageId, String version, String license)
+            throws Exception {
+        String sha = HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
+            .digest(payload.getBytes(StandardCharsets.UTF_8)));
+        return new ObjectMapper().writeValueAsString(Map.of("formatVersion", 2, "packageId", packageId,
+            "courseVersion", version, "license", license, "contentSha256", sha, "payloadJson", payload));
     }
 
     private void promoteAdmin(Path database, String userId) throws Exception {

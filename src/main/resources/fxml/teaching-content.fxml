@@ -171,6 +171,21 @@
                     </ScrollPane>
                 </Tab>
 
+                <Tab text="%alpha7.portfolioTab">
+                    <VBox spacing="12" styleClass="page-content">
+                        <padding><Insets top="18" right="22" bottom="24" left="22"/></padding>
+                        <HBox alignment="CENTER_LEFT" spacing="10">
+                            <VBox spacing="4" HBox.hgrow="ALWAYS">
+                                <Label text="%alpha7.portfolioTitle" styleClass="section-title"/>
+                                <Label text="%alpha7.portfolioDescription" wrapText="true" styleClass="page-subtitle"/>
+                            </VBox>
+                            <Button text="%alpha7.portfolioRefresh" onAction="#onRefreshPortfolio" styleClass="secondary-button"/>
+                            <Button text="%alpha7.portfolioExport" onAction="#onExportPortfolio" styleClass="primary-button"/>
+                        </HBox>
+                        <ListView fx:id="portfolioList" VBox.vgrow="ALWAYS"/>
+                    </VBox>
+                </Tab>
+
                 <Tab text="%teaching-content.72">
                     <VBox spacing="12" styleClass="page-content">
                         <padding><Insets top="18" right="22" bottom="24" left="22"/></padding>

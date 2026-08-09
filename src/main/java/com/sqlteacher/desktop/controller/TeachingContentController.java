@@ -1,6 +1,8 @@
 package com.sqlteacher.desktop.controller;
 import com.sqlteacher.desktop.AppI18n;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+
 import com.sqlteacher.application.collaboration.CloudApiClient;
 import com.sqlteacher.application.collaboration.CloudNotification;
 import com.sqlteacher.application.collaboration.CloudSessionService;
@@ -19,6 +21,7 @@ import com.sqlteacher.application.collaboration.SharedExerciseVersion;
 import com.sqlteacher.application.collaboration.SubmissionFeedback;
 import com.sqlteacher.application.collaboration.TeachingContentCache;
 import com.sqlteacher.application.collaboration.CachedCourseContent;
+import com.sqlteacher.application.activity.ProjectPortfolioService;
 import com.sqlteacher.application.planning.CourseObjective;
 import com.sqlteacher.application.planning.ObjectiveResourceType;
 import com.sqlteacher.application.planning.ObjectiveClassSummary;
@@ -28,12 +31,15 @@ import com.sqlteacher.desktop.DeadlineValueConverter;
 import javafx.application.Platform;
 import javafx.fxml.FXML;
 import javafx.scene.control.Button;
+import javafx.scene.control.Alert;
+import javafx.scene.control.ButtonType;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.DatePicker;
 import javafx.scene.control.Label;
 import javafx.scene.control.ListView;
 import javafx.scene.control.TextArea;
 import javafx.scene.control.TextField;
+import javafx.scene.control.TextInputDialog;
 import javafx.scene.control.Tab;
 import javafx.scene.control.TabPane;
 import javafx.scene.layout.VBox;
@@ -41,19 +47,25 @@ import javafx.stage.FileChooser;
 
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.util.List;
+import java.util.HexFormat;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /** v1.4 desktop workflow for shared course content, feedback, mastery and notifications. */
 public final class TeachingContentController {
+    private static final ObjectMapper JSON = new ObjectMapper().findAndRegisterModules();
     private final CloudApiClient api;
     private final CloudSessionService sessions;
     private final DesktopAccessProfile accessProfile;
     private final FeedbackDraftEnhancer feedbackDraftEnhancer;
     private final TeachingContentCache cache;
+    private final ProjectPortfolioService portfolioService;
     private final AtomicBoolean running = new AtomicBoolean();
 
     @FXML private Label statusLabel;
@@ -103,6 +115,7 @@ public final class TeachingContentController {
     @FXML private ListView<String> objectiveSummaryList;
     @FXML private TextArea interventionActionField;
     @FXML private Button confirmInterventionButton;
+    @FXML private ListView<String> portfolioList;
 
     private List<CourseCatalog> courses = List.of();
     private List<CourseSection> sections = List.of();
@@ -116,12 +129,13 @@ public final class TeachingContentController {
 
     public TeachingContentController(CloudApiClient api, CloudSessionService sessions,
                                      DesktopAccessProfile accessProfile, FeedbackDraftEnhancer feedbackDraftEnhancer,
-                                     TeachingContentCache cache) {
+                                     TeachingContentCache cache, ProjectPortfolioService portfolioService) {
         this.api = java.util.Objects.requireNonNull(api);
         this.sessions = java.util.Objects.requireNonNull(sessions);
         this.accessProfile = java.util.Objects.requireNonNull(accessProfile);
         this.feedbackDraftEnhancer = java.util.Objects.requireNonNull(feedbackDraftEnhancer);
         this.cache = java.util.Objects.requireNonNull(cache);
+        this.portfolioService = java.util.Objects.requireNonNull(portfolioService);
     }
 
     @FXML
@@ -732,6 +746,12 @@ public final class TeachingContentController {
         requireTeacher();
         CourseCatalog course = selectedCourse();
         if (course == null) return;
+        TextInputDialog licenseDialog = new TextInputDialog("CC-BY-4.0");
+        licenseDialog.setTitle(AppI18n.get("alpha7.packageLicenseTitle"));
+        licenseDialog.setHeaderText(AppI18n.get("alpha7.packageLicenseHeader"));
+        licenseDialog.setContentText(AppI18n.get("alpha7.packageLicensePrompt"));
+        String license = licenseDialog.showAndWait().map(String::trim).filter(value -> !value.isBlank()).orElse(null);
+        if (license == null) return;
         FileChooser chooser = new FileChooser();
         chooser.setTitle(AppI18n.get("TeachingContentController.118"));
         chooser.setInitialFileName("sqlteacher-course-" + course.id() + ".json");
@@ -739,7 +759,16 @@ public final class TeachingContentController {
         var file = chooser.showSaveDialog(courseList.getScene().getWindow());
         if (file == null) return;
         run(AppI18n.get("TeachingContentController.119"), () -> {
-            Files.writeString(file.toPath(), api.exportCourseBundle(token(), course.id()), StandardCharsets.UTF_8);
+            String payload = api.exportCourseBundle(token(), course.id());
+            String packageJson = JSON.writeValueAsString(Map.of(
+                "formatVersion", 2,
+                "packageId", "course:" + course.id(),
+                "courseVersion", Long.toString(course.version()),
+                "license", license,
+                "contentSha256", sha256(payload),
+                "payloadJson", payload
+            ));
+            Files.writeString(file.toPath(), packageJson, StandardCharsets.UTF_8);
             Platform.runLater(() -> showStatus(AppI18n.get("TeachingContentController.120"), false));
         });
     }
@@ -753,8 +782,32 @@ public final class TeachingContentController {
         var file = chooser.showOpenDialog(courseList.getScene().getWindow());
         if (file == null) return;
         run(AppI18n.get("TeachingContentController.122"), () -> {
-            String bundle = Files.readString(file.toPath(), StandardCharsets.UTF_8);
-            var result = api.importCourseBundle(token(), bundle, UUID.randomUUID().toString());
+            String packageJson = Files.readString(file.toPath(), StandardCharsets.UTF_8);
+            var preview = api.previewCoursePackage(token(), packageJson);
+            var decision = new java.util.concurrent.atomic.AtomicBoolean();
+            var shown = new java.util.concurrent.CountDownLatch(1);
+            Platform.runLater(() -> {
+                Alert confirmation = new Alert(Alert.AlertType.CONFIRMATION,
+                    AppI18n.format("alpha7.packagePreview", preview.courseTitle(), preview.courseVersion(),
+                        preview.license(), preview.sections(), preview.knowledgePoints(), preview.exercises(),
+                        preview.contentSha256(), preview.conflict()), ButtonType.CANCEL, ButtonType.OK);
+                confirmation.setTitle(AppI18n.get("alpha7.packagePreviewTitle"));
+                confirmation.setHeaderText(AppI18n.get("alpha7.packagePreviewHeader"));
+                decision.set(confirmation.showAndWait().filter(ButtonType.OK::equals).isPresent());
+                shown.countDown();
+            });
+            try {
+                shown.await();
+            } catch (InterruptedException error) {
+                Thread.currentThread().interrupt();
+                throw new IllegalStateException(AppI18n.get("alpha7.packageImportInterrupted"), error);
+            }
+            if (!decision.get()) {
+                Platform.runLater(() -> showStatus(AppI18n.get("alpha7.packageImportCancelled"), false));
+                return;
+            }
+            var result = api.importCoursePackage(token(), packageJson, UUID.randomUUID().toString(),
+                preview.contentSha256(), true);
             List<CourseCatalog> loaded = api.listCourses(token());
             cache.saveCourses(accountId(), loaded);
             Platform.runLater(() -> {
@@ -764,6 +817,46 @@ public final class TeachingContentController {
                 showStatus(AppI18n.get("TeachingContentController.123") + result.exercises() + AppI18n.get("TeachingContentController.124"), false);
             });
         });
+    }
+
+    @FXML
+    private void onRefreshPortfolio() {
+        run(AppI18n.get("alpha7.portfolioLoading"), () -> {
+            var entries = portfolioService.listOwnEntries();
+            Platform.runLater(() -> {
+                portfolioList.getItems().setAll(entries.stream().map(item -> AppI18n.format("alpha7.portfolioEntry",
+                    item.title(), item.submissionVersion(), item.gateStatus(), item.reviewState(),
+                    item.artifactSha256().substring(0, 12))).toList());
+                showStatus(AppI18n.format("alpha7.portfolioLoaded", entries.size()), false);
+            });
+        });
+    }
+
+    @FXML
+    private void onExportPortfolio() {
+        Alert confirmation = new Alert(Alert.AlertType.CONFIRMATION, AppI18n.get("alpha7.portfolioExportConfirm"),
+            ButtonType.CANCEL, ButtonType.OK);
+        confirmation.setTitle(AppI18n.get("alpha7.portfolioExportTitle"));
+        if (confirmation.showAndWait().filter(ButtonType.OK::equals).isEmpty()) return;
+        FileChooser chooser = new FileChooser();
+        chooser.setTitle(AppI18n.get("alpha7.portfolioExportTitle"));
+        chooser.setInitialFileName("sqlteacher-private-portfolio.json");
+        chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("JSON", "*.json"));
+        var file = chooser.showSaveDialog(portfolioList.getScene().getWindow());
+        if (file == null) return;
+        run(AppI18n.get("alpha7.portfolioExporting"), () -> {
+            Files.writeString(file.toPath(), portfolioService.exportOwnPortfolio(true), StandardCharsets.UTF_8);
+            Platform.runLater(() -> showStatus(AppI18n.get("alpha7.portfolioExported"), false));
+        });
+    }
+
+    private static String sha256(String value) {
+        try {
+            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
+                .digest(value.getBytes(StandardCharsets.UTF_8)));
+        } catch (NoSuchAlgorithmException impossible) {
+            throw new IllegalStateException("SHA-256 is unavailable", impossible);
+        }
     }
 
     private void refreshSelectedCourse() {

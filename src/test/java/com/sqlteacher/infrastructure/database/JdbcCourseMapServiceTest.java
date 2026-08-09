@@ -31,8 +31,8 @@ class JdbcCourseMapServiceTest {
 
         var snapshot = new JdbcCourseMapService(new JdbcConnectionFactory(databases)).load();
 
-        assertEquals(3, snapshot.courses().size());
-        assertEquals(26, snapshot.activityCount());
+        assertEquals(11, snapshot.courses().size());
+        assertEquals(35, snapshot.activityCount());
         var sqlCourse = snapshot.courses().stream().filter(course -> course.id().equals("builtin-data-management"))
             .findFirst().orElseThrow();
         assertEquals(1, sqlCourse.sections().size());
@@ -54,5 +54,23 @@ class JdbcCourseMapServiceTest {
         assertEquals(java.util.Set.of(ActivityType.CODE),
             programming.sections().getFirst().activities().stream().map(item -> item.type())
                 .collect(java.util.stream.Collectors.toSet()));
+        assertEquals(7, snapshot.courses().stream()
+            .filter(course -> course.sections().stream().flatMap(section -> section.activities().stream())
+                .allMatch(activity -> activity.type() == ActivityType.SIMULATION))
+            .count());
+        assertEquals(
+            java.util.Set.of(
+                "builtin-software-engineering", "builtin-programming-languages",
+                "builtin-discrete-mathematics", "builtin-ai-foundations", "builtin-security-foundations"
+            ),
+            snapshot.courses().stream()
+                .filter(course -> course.id().startsWith("builtin-")
+                    && course.sections().stream().flatMap(section -> section.activities().stream())
+                        .anyMatch(activity -> java.util.Set.of(
+                            "se-ci-quality-gate", "compiler-lexer-pipeline", "discrete-induction-proof",
+                            "ai-classification-evaluation", "security-input-validation"
+                        ).contains(activity.id())))
+                .map(course -> course.id()).collect(java.util.stream.Collectors.toSet())
+        );
     }
 }

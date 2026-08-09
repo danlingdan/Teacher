@@ -47,7 +47,7 @@ class CloudKnowledgeIndexServiceTest {
         assertEquals(1, studentHits.size());
         assertEquals("Published", studentHits.getFirst().title());
         assertEquals(List.of("PUBLISHED"), vectors.lastVisibility);
-        assertEquals(4, scalar(database, "select max(version) from cloud_schema_version"));
+        assertEquals(6, scalar(database, "select max(version) from cloud_schema_version"));
         assertEquals(1, scalar(database, "select count(*) from cloud_knowledge_embedding_profile"));
         assertEquals(2, service.rebuild());
         assertEquals(2, store.pendingKnowledgeIndexCount());

@@ -8,6 +8,9 @@ import com.sqlteacher.application.activity.ActivityReviewService;
 import com.sqlteacher.application.activity.DefaultActivityEvaluationDispatcher;
 import com.sqlteacher.application.activity.CodeActivityEvaluator;
 import com.sqlteacher.application.activity.QuizActivityEvaluator;
+import com.sqlteacher.application.activity.ProjectActivityEvaluator;
+import com.sqlteacher.application.activity.ProjectPortfolioService;
+import com.sqlteacher.application.activity.SimulationActivityEvaluator;
 import com.sqlteacher.application.activity.SqlActivityEvaluator;
 import com.sqlteacher.application.activity.TraceActivityEvaluator;
 import com.sqlteacher.application.runner.CodeRunner;
@@ -202,6 +205,16 @@ public class DatabaseServiceConfig {
     }
 
     @Bean
+    public ActivityEvaluator<?, ?> simulationActivityEvaluator() {
+        return new SimulationActivityEvaluator();
+    }
+
+    @Bean
+    public ActivityEvaluator<?, ?> projectActivityEvaluator() {
+        return new ProjectActivityEvaluator();
+    }
+
+    @Bean
     public CodeRunner codeRunner() {
         return new WslSandboxCodeRunner();
     }
@@ -231,6 +244,12 @@ public class DatabaseServiceConfig {
     @Bean
     public ActivityReviewService activityReviewService(JdbcConnectionFactory connectionFactory) {
         return new JdbcActivityReviewService(connectionFactory);
+    }
+
+    @Bean
+    public ProjectPortfolioService projectPortfolioService(JdbcConnectionFactory connectionFactory,
+                                                            LearningEventOwnerProvider ownerProvider) {
+        return new JdbcProjectPortfolioService(connectionFactory, ownerProvider);
     }
 
     @Bean

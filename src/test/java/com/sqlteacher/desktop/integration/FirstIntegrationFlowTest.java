@@ -11,6 +11,7 @@ import com.sqlteacher.domain.SqlTeacherException;
 import com.sqlteacher.infrastructure.database.DatabaseServiceConfig;
 import com.sqlteacher.infrastructure.database.SqliteAppDatabaseInitializer;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 
@@ -23,6 +24,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+@Tag("integration")
 class FirstIntegrationFlowTest {
 
     @Test

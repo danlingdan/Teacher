@@ -6,6 +6,7 @@ import com.sqlteacher.application.runner.RunnerFailureReason;
 import com.sqlteacher.domain.activity.CodeExecutionLimits;
 import com.sqlteacher.domain.activity.CodeLanguage;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Path;
@@ -17,6 +18,7 @@ import java.net.InetSocketAddress;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
+@Tag("runner")
 class WindowsLocalIdeCodeRunnerTest {
     @TempDir Path tempDir;
 

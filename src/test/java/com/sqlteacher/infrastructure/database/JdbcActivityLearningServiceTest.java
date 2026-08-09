@@ -3,6 +3,8 @@ package com.sqlteacher.infrastructure.database;
 import com.sqlteacher.application.activity.DefaultActivityEvaluationDispatcher;
 import com.sqlteacher.application.activity.QuizActivityEvaluator;
 import com.sqlteacher.application.activity.TraceActivityEvaluator;
+import com.sqlteacher.application.activity.SimulationActivityEvaluator;
+import com.sqlteacher.application.activity.ProjectActivityEvaluator;
 import com.sqlteacher.application.activity.CodeActivityEvaluator;
 import com.sqlteacher.application.activity.ActivityResourceUsage;
 import com.sqlteacher.application.runner.CodeRunResult;
@@ -15,10 +17,14 @@ import com.sqlteacher.application.collaboration.DesktopAccessProfile;
 import com.sqlteacher.application.collaboration.UserRole;
 import com.sqlteacher.domain.activity.ActivityType;
 import com.sqlteacher.domain.activity.QuizActivityArtifact;
+import com.sqlteacher.domain.activity.SimulationActivityArtifact;
+import com.sqlteacher.domain.activity.SimulationActivitySpecification;
 import com.sqlteacher.domain.activity.TraceActivityArtifact;
 import com.sqlteacher.domain.activity.TraceActivitySpecification;
 import com.sqlteacher.domain.activity.CodeActivityArtifact;
 import com.sqlteacher.domain.activity.CodeActivitySpecification;
+import com.sqlteacher.domain.activity.ProjectActivityArtifact;
+import com.sqlteacher.domain.activity.ProjectActivitySpecification;
 import com.sqlteacher.domain.activity.CodeLanguage;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -36,6 +42,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class JdbcActivityLearningServiceTest {
@@ -117,6 +124,83 @@ class JdbcActivityLearningServiceTest {
             assertEquals(1, scalar(statement, "select count(*) from activity_evaluation_result "
                 + "where owner_id='student-code' and activity_type='CODE'"));
         }
+    }
+
+    @Test
+    void shouldRunAllBuiltInSimulationCoursesOffline() throws Exception {
+        DatabaseConfiguration databases = new DatabaseConfiguration(tempDir.resolve("simulation-app.db"),
+            tempDir.resolve("simulation-demo.db"));
+        new SqliteSchemaMigrator().migrate(databases.appDatabasePath());
+        JdbcConnectionFactory connections = new JdbcConnectionFactory(databases);
+        var owner = (com.sqlteacher.application.event.LearningEventOwnerProvider) () -> "student-simulation";
+        var events = new DefaultLearningEventService(new JdbcLearningEventRecorder(connections), owner);
+        var dispatcher = new DefaultActivityEvaluationDispatcher(List.of(new SimulationActivityEvaluator()));
+        var service = new JdbcActivityLearningService(connections, owner, events, dispatcher,
+            Clock.fixed(Instant.parse("2026-08-09T03:00:00Z"), ZoneOffset.UTC));
+
+        Map<String, String> alpha6FailureReasons = Map.of(
+            "se-ci-quality-gate", "SE_ACCEPTANCE_TESTS_NOT_REACHED",
+            "compiler-lexer-pipeline", "COMPILER_TOKENIZATION_NOT_REACHED",
+            "discrete-induction-proof", "DISCRETE_BASE_CASE_NOT_REACHED",
+            "ai-classification-evaluation", "AI_CONFUSION_MATRIX_NOT_REACHED",
+            "security-input-validation", "SEC_INPUT_CONSTRAINTS_NOT_REACHED"
+        );
+
+        for (String activityId : List.of(
+                "systems-instruction-cycle", "os-sjf-scheduling", "network-packet-delivery",
+                "se-ci-quality-gate", "compiler-lexer-pipeline", "discrete-induction-proof",
+                "ai-classification-evaluation", "security-input-validation")) {
+            var definition = service.loadDefinition(activityId);
+            var specification = (SimulationActivitySpecification) definition.specification();
+            if (alpha6FailureReasons.containsKey(activityId)) {
+                var incomplete = service.submit(activityId, new SimulationActivityArtifact(List.of()));
+                assertEquals(alpha6FailureReasons.get(activityId), incomplete.evaluation().reasonCode());
+            }
+            var submission = service.submit(activityId, new SimulationActivityArtifact(
+                specification.actions().stream().map(action -> action.id()).toList()));
+            assertEquals(ActivityType.SIMULATION, definition.type());
+            assertTrue(submission.evaluation().passed(), activityId);
+            assertEquals("SIMULATION_PASSED", submission.evaluation().reasonCode());
+        }
+        try (Connection connection = connections.open("app"); Statement statement = connection.createStatement()) {
+            assertEquals(13, scalar(statement, "select count(*) from activity_evaluation_result "
+                + "where owner_id='student-simulation' and activity_type='SIMULATION'"));
+            assertEquals(13, scalar(statement, "select count(*) from learning_events "
+                + "where activity_type='SIMULATION'"));
+        }
+    }
+
+    @Test
+    void shouldVersionProjectSubmissionsAndExposeOnlyTheOwnersPortfolio() throws Exception {
+        DatabaseConfiguration databases = new DatabaseConfiguration(tempDir.resolve("project-app.db"),
+            tempDir.resolve("project-demo.db"));
+        new SqliteSchemaMigrator().migrate(databases.appDatabasePath());
+        JdbcConnectionFactory connections = new JdbcConnectionFactory(databases);
+        var activeOwner = new java.util.concurrent.atomic.AtomicReference<>("student-project");
+        var owner = (com.sqlteacher.application.event.LearningEventOwnerProvider) activeOwner::get;
+        var events = new DefaultLearningEventService(new JdbcLearningEventRecorder(connections), owner);
+        var service = new JdbcActivityLearningService(connections, owner, events,
+            new DefaultActivityEvaluationDispatcher(List.of(new ProjectActivityEvaluator())),
+            Clock.fixed(Instant.parse("2026-08-09T04:00:00Z"), ZoneOffset.UTC));
+        var specification = (ProjectActivitySpecification) service.loadDefinition("se-versioned-project").specification();
+        List<String> milestones = specification.milestones().stream().map(item -> item.id()).toList();
+        String evidence = "这是一段足够长且不包含源码的交付证据摘要，用于说明固定测试、验收结果、限制和可复核的项目交付过程。";
+        String reflection = "本次实现仍有清晰限制，后续会根据教师反馈继续拆分模块、补足失败路径并更新交付证据。";
+
+        assertEquals(1, service.nextSubmissionVersion("se-versioned-project"));
+        service.submit("se-versioned-project", new ProjectActivityArtifact(1, milestones, evidence, reflection));
+        assertEquals(2, service.nextSubmissionVersion("se-versioned-project"));
+        assertThrows(com.sqlteacher.domain.SqlTeacherException.class, () -> service.submit("se-versioned-project",
+            new ProjectActivityArtifact(1, milestones, evidence, reflection)));
+        service.submit("se-versioned-project", new ProjectActivityArtifact(2, milestones, evidence, reflection));
+
+        var portfolio = new JdbcProjectPortfolioService(connections, owner);
+        assertEquals(List.of(2, 1), portfolio.listOwnEntries().stream()
+            .map(com.sqlteacher.application.activity.ProjectPortfolioEntry::submissionVersion).toList());
+        assertTrue(portfolio.exportOwnPortfolio(true).contains("PRIVATE_EXPORT"));
+        assertThrows(SecurityException.class, () -> portfolio.exportOwnPortfolio(false));
+        activeOwner.set("another-student");
+        assertTrue(portfolio.listOwnEntries().isEmpty());
     }
 
     private static int scalar(Statement statement, String sql) throws Exception {

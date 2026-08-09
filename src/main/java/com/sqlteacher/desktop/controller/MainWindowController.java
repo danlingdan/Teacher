@@ -36,6 +36,7 @@ import com.sqlteacher.application.course.CourseMapActivity;
 import com.sqlteacher.application.course.CourseMapService;
 import com.sqlteacher.application.activity.ActivityLearningService;
 import com.sqlteacher.application.activity.ActivityReviewService;
+import com.sqlteacher.application.activity.ProjectPortfolioService;
 import com.sqlteacher.application.runner.LocalCodeWorkspaceLauncher;
 import com.sqlteacher.application.runner.LocalCodeRunner;
 import com.sqlteacher.application.ai.NetworkAiSettingsService;
@@ -188,6 +189,7 @@ public final class MainWindowController {
     private final CourseMapService courseMapService;
     private final ActivityLearningService activityLearningService;
     private final ActivityReviewService activityReviewService;
+    private final ProjectPortfolioService projectPortfolioService;
     private final LocalCodeRunner localCodeRunner;
     private final LocalCodeWorkspaceLauncher localCodeWorkspaceLauncher;
     private final UiPreferencesService uiPreferences;
@@ -360,6 +362,7 @@ public final class MainWindowController {
                                 CourseMapService courseMapService,
                                  ActivityLearningService activityLearningService,
                                  ActivityReviewService activityReviewService,
+                                 ProjectPortfolioService projectPortfolioService,
                                  LocalCodeRunner localCodeRunner,
                                  LocalCodeWorkspaceLauncher localCodeWorkspaceLauncher,
                                  UiPreferencesService uiPreferences,
@@ -415,6 +418,7 @@ public final class MainWindowController {
         this.courseMapService = Objects.requireNonNull(courseMapService);
         this.activityLearningService = Objects.requireNonNull(activityLearningService);
         this.activityReviewService = Objects.requireNonNull(activityReviewService);
+        this.projectPortfolioService = Objects.requireNonNull(projectPortfolioService);
         this.localCodeRunner = Objects.requireNonNull(localCodeRunner);
         this.localCodeWorkspaceLauncher = Objects.requireNonNull(localCodeWorkspaceLauncher);
         this.uiPreferences = Objects.requireNonNull(uiPreferences);
@@ -1141,7 +1145,7 @@ public final class MainWindowController {
             loader.setControllerFactory(type -> {
                 if (type == TeachingContentController.class) {
                     return new TeachingContentController(cloudApiClient, cloudSessionService, accessProfile,
-                        feedbackDraftEnhancer, teachingContentCache);
+                        feedbackDraftEnhancer, teachingContentCache, projectPortfolioService);
                 }
                 throw new IllegalStateException("Unexpected controller type for teaching content: " + type);
             });

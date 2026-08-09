@@ -30,12 +30,14 @@ import com.sqlteacher.application.runner.CodeRunner;
 import com.sqlteacher.application.runner.LocalCodeRunner;
 import com.sqlteacher.infrastructure.database.JdbcLearningEventRecorder;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Tag;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
+@Tag("integration")
 class SqlTeacherApplicationConfigTest {
     @Test
     void shouldUseProductionCloudApiByDefault() {
@@ -61,7 +63,7 @@ class SqlTeacherApplicationConfigTest {
             assertNotNull(context.getBean(ActivityEvaluationDispatcher.class));
             assertNotNull(context.getBean(ActivityLearningService.class));
             assertNotNull(context.getBean(ActivityReviewService.class));
-            assertEquals(4, context.getBeansOfType(ActivityEvaluator.class).size());
+            assertEquals(6, context.getBeansOfType(ActivityEvaluator.class).size());
             assertEquals(2, context.getBeansOfType(CodeRunner.class).size());
             assertNotNull(context.getBean(LocalCodeRunner.class));
             assertNotNull(context.getBean(ExercisePracticeService.class));

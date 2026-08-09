@@ -13,6 +13,11 @@ import com.sqlteacher.domain.activity.CodeActivitySpecification;
 import com.sqlteacher.domain.activity.LearningActivityDefinition;
 import com.sqlteacher.domain.activity.QuizActivityArtifact;
 import com.sqlteacher.domain.activity.QuizActivitySpecification;
+import com.sqlteacher.domain.activity.ProjectActivityArtifact;
+import com.sqlteacher.domain.activity.ProjectActivitySpecification;
+import com.sqlteacher.domain.activity.SimulationAction;
+import com.sqlteacher.domain.activity.SimulationActivityArtifact;
+import com.sqlteacher.domain.activity.SimulationActivitySpecification;
 import com.sqlteacher.domain.activity.TraceActivityArtifact;
 import com.sqlteacher.domain.activity.TraceActivitySpecification;
 import com.sqlteacher.domain.activity.TraceNode;
@@ -22,12 +27,14 @@ import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.control.Button;
+import javafx.scene.control.CheckBox;
 import javafx.scene.control.Label;
 import javafx.scene.control.RadioButton;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.TextArea;
 import javafx.scene.control.ToggleGroup;
 import javafx.scene.layout.HBox;
+import javafx.scene.layout.FlowPane;
 import javafx.scene.layout.Pane;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
@@ -46,6 +53,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 
 /** Extensible non-SQL activity surface. Evaluation remains in application services. */
@@ -96,6 +104,8 @@ public final class ActivityInteractionPane extends VBox {
         switch (definition.specification()) {
             case CodeActivitySpecification code -> renderCode(code);
             case QuizActivitySpecification quiz -> renderQuiz(quiz);
+            case ProjectActivitySpecification project -> renderProject(project);
+            case SimulationActivitySpecification simulation -> renderSimulation(simulation);
             case TraceActivitySpecification trace -> renderTrace(trace);
             default -> showUnsupported();
         }
@@ -259,6 +269,205 @@ public final class ActivityInteractionPane extends VBox {
         HBox actions = new HBox(10, undo, reset, submit);
         actions.setAlignment(Pos.CENTER_RIGHT);
         content.getChildren().addAll(heading(specification.prompt()), tree, sequence, actions);
+    }
+
+    private void renderSimulation(SimulationActivitySpecification specification) {
+        Map<String, com.sqlteacher.domain.activity.SimulationState> states = specification.statesById();
+        Map<String, SimulationAction> actions = specification.actionsById();
+        List<String> actionIds = new ArrayList<>();
+        var currentState = new AtomicReference<>(specification.initialStateId());
+        var visitedStates = new java.util.HashSet<String>();
+        visitedStates.add(specification.initialStateId());
+        var invalidStep = new AtomicBoolean();
+
+        Label offline = new Label(AppI18n.get("simulation.offline"));
+        offline.setWrapText(true);
+        offline.getStyleClass().add("simulation-offline-note");
+        VBox stateCard = new VBox(9);
+        stateCard.getStyleClass().add("simulation-state-card");
+        Label stateTitle = new Label();
+        stateTitle.getStyleClass().add("simulation-state-title");
+        Label stateDescription = new Label();
+        stateDescription.setWrapText(true);
+        VBox observations = new VBox(6);
+        Label history = new Label();
+        history.setWrapText(true);
+        history.getStyleClass().add("simulation-history");
+        Label explanation = new Label(AppI18n.get("simulation.chooseAction"));
+        explanation.setWrapText(true);
+        explanation.getStyleClass().add("simulation-explanation");
+        stateCard.getChildren().addAll(stateTitle, stateDescription, observations);
+
+        VBox checkpoints = new VBox(7);
+        checkpoints.getStyleClass().add("simulation-checkpoints");
+        Map<String, Label> checkpointLabels = new LinkedHashMap<>();
+        for (var checkpoint : specification.checkpoints()) {
+            Label item = new Label();
+            item.setWrapText(true);
+            item.getStyleClass().add("simulation-checkpoint");
+            checkpointLabels.put(checkpoint.id(), item);
+            checkpoints.getChildren().add(item);
+        }
+
+        FlowPane actionBar = new FlowPane(9, 9);
+        actionBar.setPrefWrapLength(720);
+        Map<String, Button> actionButtons = new LinkedHashMap<>();
+        for (SimulationAction action : specification.actions()) {
+            Button button = new Button(action.label());
+            button.setAccessibleText(AppI18n.format("simulation.actionAccessible", action.label()));
+            actionButtons.put(action.id(), button);
+            actionBar.getChildren().add(button);
+        }
+
+        Runnable refresh = () -> {
+            var state = states.get(currentState.get());
+            stateTitle.setText(state.title());
+            stateDescription.setText(state.description());
+            observations.getChildren().setAll(state.observations().stream().map(value -> {
+                Label item = new Label("• " + value);
+                item.setWrapText(true);
+                item.getStyleClass().add("simulation-observation");
+                return item;
+            }).toList());
+            history.setText(actionIds.isEmpty() ? AppI18n.get("simulation.historyEmpty")
+                : AppI18n.format("simulation.history", actionIds.stream().map(actions::get)
+                    .filter(Objects::nonNull).map(SimulationAction::label)
+                    .collect(java.util.stream.Collectors.joining(" → "))));
+            for (var checkpoint : specification.checkpoints()) {
+                boolean reached = visitedStates.contains(checkpoint.stateId());
+                Label item = checkpointLabels.get(checkpoint.id());
+                item.setText(AppI18n.format(reached ? "simulation.checkpointReached" : "simulation.checkpointPending",
+                    checkpoint.title()));
+                item.getStyleClass().removeAll("reached");
+                if (reached) item.getStyleClass().add("reached");
+            }
+            boolean finished = currentState.get().equals(specification.goalStateId());
+            actionButtons.forEach((id, button) -> {
+                SimulationAction action = actions.get(id);
+                button.setDisable(invalidStep.get() || finished);
+                button.getStyleClass().removeAll("suggested");
+                if (!invalidStep.get() && action.fromStateId().equals(currentState.get())) {
+                    button.getStyleClass().add("suggested");
+                }
+            });
+            stateCard.setAccessibleText(AppI18n.format("simulation.stateAccessible", state.title(),
+                state.description()));
+        };
+
+        actionButtons.forEach((id, button) -> button.setOnAction(ignored -> {
+            SimulationAction action = actions.get(id);
+            actionIds.add(id);
+            if (!action.fromStateId().equals(currentState.get())) {
+                invalidStep.set(true);
+                feedback.getStyleClass().removeAll("success");
+                feedback.getStyleClass().add("danger");
+                feedback.setText(AppI18n.format("simulation.invalidTransition", action.label()));
+            } else {
+                currentState.set(action.toStateId());
+                visitedStates.add(action.toStateId());
+                explanation.setText(action.explanation());
+                pulse(stateCard);
+            }
+            refresh.run();
+        }));
+
+        Button undo = new Button(AppI18n.get("simulation.undo"));
+        undo.setOnAction(ignored -> {
+            if (actionIds.isEmpty()) return;
+            actionIds.removeLast();
+            replaySimulation(specification, actionIds, currentState, visitedStates);
+            invalidStep.set(false);
+            feedback.setText("");
+            explanation.setText(AppI18n.get("simulation.chooseAction"));
+            refresh.run();
+        });
+        Button reset = new Button(AppI18n.get("simulation.reset"));
+        reset.setOnAction(ignored -> {
+            actionIds.clear();
+            currentState.set(specification.initialStateId());
+            visitedStates.clear();
+            visitedStates.add(specification.initialStateId());
+            invalidStep.set(false);
+            feedback.setText("");
+            explanation.setText(AppI18n.get("simulation.chooseAction"));
+            refresh.run();
+        });
+        Button submit = primaryButton(AppI18n.get("simulation.submit"));
+        submit.setOnAction(ignored -> submit(submit, new SimulationActivityArtifact(actionIds)));
+        HBox controls = new HBox(9, undo, reset, submit);
+        controls.setAlignment(Pos.CENTER_RIGHT);
+        refresh.run();
+        content.getChildren().addAll(heading(specification.prompt()), offline, stateCard,
+            new Label(AppI18n.get("simulation.actions")), actionBar, explanation,
+            new Label(AppI18n.get("simulation.checkpoints")), checkpoints, history, controls);
+    }
+
+    private void renderProject(ProjectActivitySpecification specification) {
+        VBox milestoneList = new VBox(9);
+        List<CheckBox> milestoneChecks = new ArrayList<>();
+        for (var milestone : specification.milestones()) {
+            CheckBox item = new CheckBox(milestone.title() + " — " + milestone.acceptanceCriterion());
+            item.setUserData(milestone.id());
+            item.setWrapText(true);
+            milestoneChecks.add(item);
+            milestoneList.getChildren().add(item);
+        }
+        TextArea evidence = new TextArea();
+        evidence.setPromptText(AppI18n.format("alpha7.projectEvidencePrompt",
+            specification.minimumEvidenceCharacters()));
+        evidence.setPrefRowCount(5);
+        evidence.setWrapText(true);
+        TextArea reflection = new TextArea();
+        reflection.setPromptText(AppI18n.format("alpha7.projectReflectionPrompt",
+            specification.minimumReflectionCharacters()));
+        reflection.setPrefRowCount(4);
+        reflection.setWrapText(true);
+        Label reviewBoundary = new Label(AppI18n.get("alpha7.projectReviewBoundary"));
+        reviewBoundary.setWrapText(true);
+        reviewBoundary.getStyleClass().add("runner-boundary-note");
+        Button submit = primaryButton(AppI18n.get("alpha7.submitProject"));
+        submit.setDisable(true);
+        var nextVersion = new java.util.concurrent.atomic.AtomicInteger(0);
+        String requestedId = definition.id();
+        DesktopExecutors.background().execute(() -> {
+            try {
+                int version = learningService.nextSubmissionVersion(requestedId);
+                Platform.runLater(() -> {
+                    if (definition != null && definition.id().equals(requestedId)) {
+                        nextVersion.set(version);
+                        submit.setText(AppI18n.format("alpha7.submitProjectVersion", version));
+                        submit.setDisable(false);
+                    }
+                });
+            } catch (RuntimeException error) {
+                Platform.runLater(() -> feedback.setText(AppI18n.format("alpha3.evaluateFailed", safeMessage(error))));
+            }
+        });
+        submit.setOnAction(ignored -> submit(submit, new ProjectActivityArtifact(
+            nextVersion.get(),
+            milestoneChecks.stream().filter(CheckBox::isSelected).map(item -> String.valueOf(item.getUserData())).toList(),
+            evidence.getText(), reflection.getText()
+        )));
+        HBox actions = new HBox(submit);
+        actions.setAlignment(Pos.CENTER_RIGHT);
+        content.getChildren().addAll(heading(specification.prompt()), reviewBoundary,
+            new Label(AppI18n.get("alpha7.projectMilestones")), milestoneList,
+            new Label(AppI18n.get("alpha7.projectEvidence")), evidence,
+            new Label(AppI18n.get("alpha7.projectReflection")), reflection, actions);
+    }
+
+    private static void replaySimulation(SimulationActivitySpecification specification, List<String> actionIds,
+                                         AtomicReference<String> currentState, java.util.Set<String> visitedStates) {
+        currentState.set(specification.initialStateId());
+        visitedStates.clear();
+        visitedStates.add(specification.initialStateId());
+        Map<String, SimulationAction> actions = specification.actionsById();
+        for (String id : actionIds) {
+            SimulationAction action = actions.get(id);
+            if (action == null || !action.fromStateId().equals(currentState.get())) return;
+            currentState.set(action.toStateId());
+            visitedStates.add(action.toStateId());
+        }
     }
 
     private Pane treePane(TraceActivitySpecification specification, Map<String, Button> buttons) {

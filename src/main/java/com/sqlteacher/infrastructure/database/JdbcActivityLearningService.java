@@ -18,6 +18,9 @@ import com.sqlteacher.domain.activity.ActivityType;
 import com.sqlteacher.domain.activity.CodeActivitySpecification;
 import com.sqlteacher.domain.activity.LearningActivityDefinition;
 import com.sqlteacher.domain.activity.QuizActivitySpecification;
+import com.sqlteacher.domain.activity.ProjectActivitySpecification;
+import com.sqlteacher.domain.activity.ProjectActivityArtifact;
+import com.sqlteacher.domain.activity.SimulationActivitySpecification;
 import com.sqlteacher.domain.activity.TraceActivitySpecification;
 
 import java.nio.charset.StandardCharsets;
@@ -79,6 +82,11 @@ public final class JdbcActivityLearningService implements ActivityLearningServic
         Objects.requireNonNull(artifact, "artifact must not be null");
         Objects.requireNonNull(cancellation, "cancellation must not be null");
         LearningActivityDefinition definition = loadDefinition(activityId);
+        if (artifact instanceof ProjectActivityArtifact project
+                && project.submissionVersion() != nextSubmissionVersion(activityId)) {
+            throw new SqlTeacherException("PROJECT_VERSION_CONFLICT",
+                "Project submission version is stale; refresh before submitting");
+        }
         ActivityEvaluationResult evaluation = dispatcher.evaluate(definition, artifact, cancellation);
         if (cancellation.isCancelled()) {
             throw new SqlTeacherException("ACTIVITY_CANCELLED", "Activity evaluation was cancelled");
@@ -131,6 +139,24 @@ public final class JdbcActivityLearningService implements ActivityLearningServic
         }
     }
 
+    @Override
+    public int nextSubmissionVersion(String activityId) {
+        if (activityId == null || activityId.isBlank()) throw new IllegalArgumentException("activityId must not be blank");
+        try (Connection connection = connectionFactory.open("app");
+             PreparedStatement statement = connection.prepareStatement("""
+                 select count(*) from activity_evaluation_result
+                 where owner_id=? and activity_id=? and activity_type='PROJECT'
+                 """)) {
+            statement.setString(1, normalizedOwner());
+            statement.setString(2, activityId.trim());
+            try (ResultSet row = statement.executeQuery()) {
+                return row.next() ? row.getInt(1) + 1 : 1;
+            }
+        } catch (SQLException error) {
+            throw new SqlTeacherException("PROJECT_VERSION_LOAD_FAILED", "Failed to load project version", error);
+        }
+    }
+
     private LearningActivityDefinition loadDefinition(Connection connection, String activityId)
             throws SQLException, JsonProcessingException {
         try (PreparedStatement statement = connection.prepareStatement("""
@@ -157,7 +183,9 @@ public final class JdbcActivityLearningService implements ActivityLearningServic
     private ActivitySpecification decode(ActivityType type, String specificationJson) throws JsonProcessingException {
         return switch (type) {
             case CODE -> json.readValue(specificationJson, CodeActivitySpecification.class);
+            case PROJECT -> json.readValue(specificationJson, ProjectActivitySpecification.class);
             case QUIZ -> json.readValue(specificationJson, QuizActivitySpecification.class);
+            case SIMULATION -> json.readValue(specificationJson, SimulationActivitySpecification.class);
             case TRACE -> json.readValue(specificationJson, TraceActivitySpecification.class);
             default -> throw new SqlTeacherException("ACTIVITY_TYPE_UNSUPPORTED",
                 "The generic learning service does not load " + type + " activities");

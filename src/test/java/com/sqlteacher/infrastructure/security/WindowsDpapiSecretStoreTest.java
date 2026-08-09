@@ -1,6 +1,7 @@
 package com.sqlteacher.infrastructure.security;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.condition.EnabledOnOs;
 import org.junit.jupiter.api.condition.OS;
 import org.junit.jupiter.api.io.TempDir;
@@ -14,6 +15,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @EnabledOnOs(OS.WINDOWS)
+@Tag("integration")
 class WindowsDpapiSecretStoreTest {
     @Test
     void shouldEncryptRoundTripAndClearSecret(@TempDir Path tempDirectory) throws Exception {

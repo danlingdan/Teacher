@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sqlteacher.application.ai.*;
 import com.sqlteacher.application.config.AiConfiguration;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -17,6 +18,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /** Explicitly enabled live smoke tests; never part of ordinary offline regression. */
 @EnabledIfSystemProperty(named = "sqlteacher.live.ai", matches = "true")
+@Tag("live")
 class LiveAiProviderSmokeTest {
     private static final ObjectMapper JSON = new ObjectMapper();
     @TempDir Path tempDirectory;

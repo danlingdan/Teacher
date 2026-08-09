@@ -22,5 +22,8 @@
 13. [课程协作、反馈与通知](13-v1.4-course-collaboration.md)
 14. [UI、主题与设置权限](14-v1.5-ui-themes-and-settings.md)
 15. [本地学习 IDE 与代码 Runner 配置](15-local-ide-and-runner-setup.md)
+16. [离线系统模拟实验](16-offline-simulation-labs.md)
+17. [专业基础离线实验](17-professional-foundation-labs.md)
+18. [项目学习、课程包与 Cloud 2.0](18-project-course-package-cloud2.md)
 
 返回 [文档中心](../README.md)。

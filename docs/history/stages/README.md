@@ -1,6 +1,6 @@
 # 阶段实施记录
 
-Stage 0 至 Stage 12 已完成的记录统一归档在此。目录名保留原阶段编号，便于历史链接、提交记录和发布证据相互对应。
+Stage 0 至 Stage 15 已完成的记录统一归档在此。目录名保留原阶段编号，便于历史链接、提交记录和发布证据相互对应。
 
 | 阶段 | 主题 | 入口 |
 | --- | --- | --- |
@@ -17,5 +17,8 @@ Stage 0 至 Stage 12 已完成的记录统一归档在此。目录名保留原�
 | Stage 10 | v2.0 alpha.2 UI 2.0 应用壳与通用实验工作区 | [stage10/](stage10/) |
 | Stage 11 | v2.0 alpha.3 二叉树非 SQL 学习闭环 | [stage11/](stage11/) |
 | Stage 12 | v2.0 alpha.4 本地学习 IDE 与代码 Runner | [stage12/](stage12/) |
+| Stage 13 | v2.0 alpha.5 系统课程确定性模拟 | [stage13/](stage13/) |
+| Stage 14 | v2.0 alpha.6 专业基础课程单元 | [stage14/](stage14/) |
+| Stage 15 | v2.0 alpha.7 项目学习与 Cloud 2.0 | [stage15/](stage15/) |
 
 返回 [历史资料](../README.md) 或 [文档中心](../../README.md)。

@@ -18,7 +18,7 @@
 <VBox styleClass="home-page home-dashboard" alignment="TOP_LEFT" spacing="20"
       maxWidth="Infinity" maxHeight="Infinity">
     <padding><Insets top="24" right="28" bottom="28" left="28"/></padding>
-    <PageHeader eyebrow="SQLTeacher 2.0 · Alpha.4" title="%home.22" description="%home.1"/>
+    <PageHeader eyebrow="SQLTeacher 2.0 · Alpha.6" title="%home.22" description="%home.1"/>
 
     <VBox styleClass="learning-queue-panel" spacing="10" maxWidth="Infinity" fillWidth="true">
         <HBox alignment="CENTER_LEFT" spacing="10">

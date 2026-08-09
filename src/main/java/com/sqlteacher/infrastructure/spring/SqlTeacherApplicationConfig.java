@@ -6,9 +6,11 @@ import com.sqlteacher.application.config.SqlTeacherConfiguration;
 import com.sqlteacher.application.collaboration.CloudApiClient;
 import com.sqlteacher.application.collaboration.CloudSessionService;
 import com.sqlteacher.application.collaboration.CloudLearningSyncService;
+import com.sqlteacher.application.collaboration.CloudArtifactSyncService;
 import com.sqlteacher.application.collaboration.FeedbackDraftEnhancer;
 import com.sqlteacher.application.event.LearningEventQueryService;
 import com.sqlteacher.application.event.LearningEventRecorder;
+import com.sqlteacher.application.event.LearningEventOwnerProvider;
 import com.sqlteacher.application.connection.ConnectionManagementService;
 import com.sqlteacher.application.database.DatabaseInitializationService;
 import com.sqlteacher.application.error.ApplicationExceptionMapper;
@@ -37,6 +39,7 @@ import com.sqlteacher.infrastructure.security.WindowsDpapiSecretStore;
 import com.sqlteacher.infrastructure.runner.WindowsLocalCodeWorkspaceLauncher;
 import com.sqlteacher.infrastructure.runner.WindowsLocalIdeCodeRunner;
 import com.sqlteacher.infrastructure.cloud.DefaultCloudLearningSyncService;
+import com.sqlteacher.infrastructure.cloud.JdbcCloudArtifactSyncService;
 import com.sqlteacher.infrastructure.database.DatabaseServiceConfig;
 import com.sqlteacher.infrastructure.database.SqliteAppDatabaseInitializer;
 import com.sqlteacher.infrastructure.database.JdbcConnectionFactory;
@@ -230,5 +233,11 @@ public class SqlTeacherApplicationConfig {
             LearningEventQueryService query, LearningEventRecorder recorder, SqlTeacherConfiguration configuration) {
         return new DefaultCloudLearningSyncService(api, sessions, query, recorder,
             configuration.dataDirectory().resolve("cloud-state"));
+    }
+
+    @Bean
+    public CloudArtifactSyncService cloudArtifactSyncService(JdbcConnectionFactory connections,
+            LearningEventOwnerProvider owners, CloudApiClient api, CloudSessionService sessions) {
+        return new JdbcCloudArtifactSyncService(connections, owners, api, sessions);
     }
 }
