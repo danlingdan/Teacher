@@ -4,6 +4,8 @@ import com.sqlteacher.application.connection.DatabaseConnectionProfile;
 import com.sqlteacher.application.connection.DatabaseDialect;
 import com.sqlteacher.application.connection.ServerConnectionTarget;
 import com.sqlteacher.application.connection.SqliteConnectionTarget;
+import com.sqlteacher.application.connection.FileDatabaseConnectionTarget;
+import com.sqlteacher.application.connection.GenericJdbcConnectionTarget;
 import org.junit.jupiter.api.Test;
 
 import java.nio.file.Path;
@@ -53,5 +55,22 @@ class ConnectionSettingsControllerTest {
                 "localhost", "not-a-port", "course", "teacher", true, true
             )
         );
+    }
+
+    @Test
+    void shouldBuildEmbeddedAndGenericJdbcProfiles() {
+        DatabaseConnectionProfile duckDb = ConnectionSettingsController.buildProfile(
+            "course.duckdb", "Course DuckDB", DatabaseDialect.DUCKDB, "data/course.duckdb",
+            "", "", "", "", false, true
+        );
+        assertEquals(DatabaseDialect.DUCKDB, ((FileDatabaseConnectionTarget) duckDb.target()).dialect());
+
+        DatabaseConnectionProfile generic = ConnectionSettingsController.buildProfile(
+            "course.generic", "Vendor JDBC", DatabaseDialect.GENERIC, "", "", "", "", "teacher",
+            "jdbc:vendor:course", "com.vendor.Driver", "drivers/vendor.jar", true, true
+        );
+        GenericJdbcConnectionTarget target = (GenericJdbcConnectionTarget) generic.target();
+        assertEquals("jdbc:vendor:course", target.jdbcUrl());
+        assertEquals(Path.of("drivers", "vendor.jar"), target.driverJar());
     }
 }

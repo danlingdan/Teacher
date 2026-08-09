@@ -13,11 +13,26 @@ SQL 与 AI 仍遵守项目现有安全规范。本指南不放宽 SQL 确认、�
 
 | 语言 | 本地运行工具链 | 最低准备 |
 | --- | --- | --- |
-| Java | Windows JDK | 安装 JDK 21，并确保 `java`、`javac` 在 PATH 中 |
-| Python | WSL Ubuntu | `wsl --install -d Ubuntu`，并在 Ubuntu 中安装 `python3` |
-| C/C++ | MSVC x64 Developer Shell | Visual Studio 或 Build Tools 的“使用 C++ 的桌面开发”工作负载 |
+| Java | Windows JDK | JDK 21；可由“设置 → 开发环境”自动安装 Temurin 21 |
+| Python | Windows Python 或 WSL Ubuntu | 优先使用原生 Python 3；缺失时可自动安装 Python 3.13 |
+| C/C++ | MSVC、GCC/Cygwin/MinGW 或 Clang | 自动复用已安装工具链，也可安装 MSVC Build Tools |
 
 “打开终端”会把当前源码导出到 `local-code-workspaces/` 后打开对应工具链。程序在该终端中的文件、网络、依赖安装和命令行为由学生负责。
+
+## 自动下载安装
+
+打开“设置 → 开发环境”后，SQLTeacher 会在后台探测 Temurin JDK、Python、Ollama、
+MSVC Build Tools 和 WSL Ubuntu。缺少组件时可点击“自动安装”：
+
+1. 页面先展示固定的软件来源、许可证、管理员权限和重启影响；
+2. 用户确认后，JDK、Python、Ollama 与 MSVC 通过 Windows Package Manager 的固定包 ID 安装；
+3. WSL 通过 Windows 自带的 `wsl --install -d Ubuntu --no-launch` 安装；
+4. 安装可取消，完成后自动复检；若 Windows 功能或 PATH 尚未刷新，会显示需要重启或初始化；
+5. SQLTeacher 不静默提权、不自动重启，也不卸载用户已有的软件。
+
+该功能要求系统具备 WinGet；WSL 安装要求 Windows 提供 `wsl.exe`。WinGet 不可用、离线、
+安装器退出失败或用户取消时，页面保留失败状态并允许重试。Ollama 安装完成后仍需在 AI 助手中
+下载或选择具体模型，模型许可不等同于 Ollama 软件许可。
 
 ## 可选安全评价环境
 

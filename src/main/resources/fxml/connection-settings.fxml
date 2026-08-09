@@ -52,6 +52,12 @@
                         <TextField fx:id="usernameField" GridPane.columnIndex="1" GridPane.rowIndex="7"/>
                         <Label text="%connection-settings.17" GridPane.rowIndex="8" styleClass="form-label"/>
                         <PasswordField fx:id="passwordField" promptText="%connection-settings.18" GridPane.columnIndex="1" GridPane.rowIndex="8"/>
+                        <Label text="%connection-settings.25" GridPane.rowIndex="9" styleClass="form-label"/>
+                        <TextField fx:id="jdbcUrlField" promptText="jdbc:vendor:..." GridPane.columnIndex="1" GridPane.rowIndex="9"/>
+                        <Label text="%connection-settings.26" GridPane.rowIndex="10" styleClass="form-label"/>
+                        <TextField fx:id="driverClassField" promptText="com.vendor.jdbc.Driver" GridPane.columnIndex="1" GridPane.rowIndex="10"/>
+                        <Label text="%connection-settings.27" GridPane.rowIndex="11" styleClass="form-label"/>
+                        <TextField fx:id="driverJarField" GridPane.columnIndex="1" GridPane.rowIndex="11"/>
                     </GridPane>
                     <HBox spacing="18">
                         <CheckBox fx:id="readOnlyCheck" text="%connection-settings.19" selected="false"/>

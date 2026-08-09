@@ -5,6 +5,8 @@ import com.sqlteacher.application.connection.ConnectionManagementService;
 import com.sqlteacher.application.connection.DatabaseConnectionProfile;
 import com.sqlteacher.application.connection.DatabaseConnectionTarget;
 import com.sqlteacher.application.connection.DatabaseDialect;
+import com.sqlteacher.application.connection.FileDatabaseConnectionTarget;
+import com.sqlteacher.application.connection.GenericJdbcConnectionTarget;
 import com.sqlteacher.application.connection.ServerConnectionTarget;
 import com.sqlteacher.application.connection.SqliteConnectionTarget;
 import com.sqlteacher.domain.SqlTeacherException;
@@ -40,6 +42,7 @@ public final class JdbcConnectionManagementService implements ConnectionManageme
             List<DatabaseConnectionProfile> profiles = new ArrayList<>();
             try (PreparedStatement statement = connection.prepareStatement("""
                 select id, display_name, dialect, sqlite_path, host, port, database_name, username,
+                       jdbc_url, driver_class, driver_jar,
                        read_only, enabled, built_in
                 from connection_profiles
                 order by built_in desc,
@@ -103,7 +106,8 @@ public final class JdbcConnectionManagementService implements ConnectionManageme
             repairSelection(connection);
             try (PreparedStatement statement = connection.prepareStatement("""
                 select p.id, p.display_name, p.dialect, p.sqlite_path, p.host, p.port,
-                       p.database_name, p.username, p.read_only, p.enabled, p.built_in
+                       p.database_name, p.username, p.jdbc_url, p.driver_class, p.driver_jar,
+                       p.read_only, p.enabled, p.built_in
                 from connection_selection s
                 join connection_profiles p on p.id = s.connection_id
                 where s.singleton_id = 1 and p.enabled = 1
@@ -221,20 +225,30 @@ public final class JdbcConnectionManagementService implements ConnectionManageme
         Integer port = null;
         String databaseName = null;
         String username = null;
+        String jdbcUrl = null;
+        String driverClass = null;
+        String driverJar = null;
         if (target instanceof SqliteConnectionTarget sqliteTarget) {
             sqlitePath = sqliteTarget.databasePath().toString();
+        } else if (target instanceof FileDatabaseConnectionTarget fileTarget) {
+            sqlitePath = fileTarget.databasePath().toString();
         } else if (target instanceof ServerConnectionTarget serverTarget) {
             host = serverTarget.host();
             port = serverTarget.port();
             databaseName = serverTarget.databaseName();
             username = serverTarget.username();
+        } else if (target instanceof GenericJdbcConnectionTarget genericTarget) {
+            jdbcUrl = genericTarget.jdbcUrl();
+            driverClass = genericTarget.driverClass();
+            driverJar = genericTarget.driverJar().toString();
+            username = genericTarget.username();
         }
 
         try (PreparedStatement statement = connection.prepareStatement("""
             insert into connection_profiles(
                 id, display_name, dialect, sqlite_path, host, port, database_name, username,
-                read_only, enabled, built_in
-            ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+                jdbc_url, driver_class, driver_jar, read_only, enabled, built_in
+            ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
             on conflict(id) do update set
                 display_name = excluded.display_name,
                 dialect = excluded.dialect,
@@ -243,6 +257,9 @@ public final class JdbcConnectionManagementService implements ConnectionManageme
                 port = excluded.port,
                 database_name = excluded.database_name,
                 username = excluded.username,
+                jdbc_url = excluded.jdbc_url,
+                driver_class = excluded.driver_class,
+                driver_jar = excluded.driver_jar,
                 read_only = excluded.read_only,
                 enabled = excluded.enabled,
                 updated_at = current_timestamp
@@ -260,8 +277,11 @@ public final class JdbcConnectionManagementService implements ConnectionManageme
             }
             statement.setString(7, databaseName);
             statement.setString(8, username);
-            statement.setInt(9, profile.readOnly() ? 1 : 0);
-            statement.setInt(10, profile.enabled() ? 1 : 0);
+            statement.setString(9, jdbcUrl);
+            statement.setString(10, driverClass);
+            statement.setString(11, driverJar);
+            statement.setInt(12, profile.readOnly() ? 1 : 0);
+            statement.setInt(13, profile.enabled() ? 1 : 0);
             if (statement.executeUpdate() == 0) {
                 throw new IllegalArgumentException("Built-in connection profiles cannot be replaced");
             }
@@ -274,6 +294,7 @@ public final class JdbcConnectionManagementService implements ConnectionManageme
     ) throws SQLException {
         try (PreparedStatement statement = connection.prepareStatement("""
             select id, display_name, dialect, sqlite_path, host, port, database_name, username,
+                   jdbc_url, driver_class, driver_jar,
                    read_only, enabled, built_in
             from connection_profiles
             where id = ?
@@ -289,6 +310,15 @@ public final class JdbcConnectionManagementService implements ConnectionManageme
         DatabaseDialect dialect = DatabaseDialect.valueOf(resultSet.getString("dialect"));
         DatabaseConnectionTarget target = dialect == DatabaseDialect.SQLITE
             ? new SqliteConnectionTarget(Path.of(resultSet.getString("sqlite_path")))
+            : dialect.fileBased()
+            ? new FileDatabaseConnectionTarget(dialect, Path.of(resultSet.getString("sqlite_path")))
+            : dialect.generic()
+            ? new GenericJdbcConnectionTarget(
+                resultSet.getString("jdbc_url"),
+                resultSet.getString("driver_class"),
+                Path.of(resultSet.getString("driver_jar")),
+                resultSet.getString("username")
+            )
             : new ServerConnectionTarget(
                 dialect,
                 resultSet.getString("host"),

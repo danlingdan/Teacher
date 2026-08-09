@@ -12,6 +12,7 @@ import org.junit.jupiter.api.io.TempDir;
 import java.nio.file.Path;
 import java.nio.file.Files;
 import java.util.List;
+import java.util.Map;
 import com.sun.net.httpserver.HttpServer;
 import java.net.InetSocketAddress;
 
@@ -45,8 +46,11 @@ class WindowsLocalIdeCodeRunnerTest {
             int main() { int a,b; std::cin >> a >> b; std::cout << a+b << "\\n"; }
             """);
 
-        for (var result : List.of(java, python, c, cpp)) {
-            assertEquals(RunnerFailureReason.NONE, result.failureReason(), result.standardError());
+        for (var entry : List.of(Map.entry("java", java), Map.entry("python", python),
+            Map.entry("c", c), Map.entry("cpp", cpp))) {
+            var result = entry.getValue();
+            assertEquals(RunnerFailureReason.NONE, result.failureReason(),
+                () -> entry.getKey() + ": " + result);
             assertEquals("5", result.standardOutput().trim());
         }
     }

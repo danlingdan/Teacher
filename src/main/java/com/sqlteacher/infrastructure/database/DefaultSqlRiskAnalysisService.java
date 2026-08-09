@@ -125,7 +125,7 @@ public final class DefaultSqlRiskAnalysisService implements SqlRiskAnalysisServi
             String statementType,
             DatabaseDialect dialect
     ) {
-        if ((dialect != DatabaseDialect.MYSQL && dialect != DatabaseDialect.MARIADB)
+        if (dialect.family() != DatabaseDialect.Family.MYSQL
                 || !"SELECT".equals(statementType)) {
             return null;
         }

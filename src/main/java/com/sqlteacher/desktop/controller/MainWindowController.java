@@ -56,6 +56,7 @@ import com.sqlteacher.application.learning.StudentLearningQueueService;
 import com.sqlteacher.application.support.DiagnosticBundleService;
 import com.sqlteacher.application.support.ProblemReportService;
 import com.sqlteacher.application.system.GeneralSoftwareService;
+import com.sqlteacher.application.component.ManagedComponentService;
 import com.sqlteacher.desktop.AppI18n;
 import com.sqlteacher.application.update.UpdateService;
 import com.sqlteacher.desktop.GlobalLoading;
@@ -201,6 +202,7 @@ public final class MainWindowController {
     private final ProblemReportService problemReportService;
     private final DiagnosticBundleService diagnosticBundleService;
     private final GeneralSoftwareService generalSoftwareService;
+    private final ManagedComponentService managedComponentService;
     private final Runnable switchIdentityAction;
     private final ShellNavigationModel navigationModel = new ShellNavigationModel();
     private final ShellCommandPalette commandPalette = new ShellCommandPalette();
@@ -375,6 +377,7 @@ public final class MainWindowController {
                                 ProblemReportService problemReportService,
                                 DiagnosticBundleService diagnosticBundleService,
                                 GeneralSoftwareService generalSoftwareService,
+                                ManagedComponentService managedComponentService,
                                 DesktopAccessProfile accessProfile,
                                 Runnable switchIdentityAction) {
         this.sqlExecutionService = Objects.requireNonNull(sqlExecutionService, "sqlExecutionService must not be null");
@@ -431,6 +434,7 @@ public final class MainWindowController {
         this.problemReportService = Objects.requireNonNull(problemReportService);
         this.diagnosticBundleService = Objects.requireNonNull(diagnosticBundleService);
         this.generalSoftwareService = Objects.requireNonNull(generalSoftwareService);
+        this.managedComponentService = Objects.requireNonNull(managedComponentService);
         this.accessProfile = Objects.requireNonNull(accessProfile, "accessProfile must not be null");
         this.switchIdentityAction = Objects.requireNonNull(switchIdentityAction, "switchIdentityAction must not be null");
         this.fillSqlCallback = sql -> {
@@ -1021,7 +1025,9 @@ public final class MainWindowController {
                         generalSoftwareService,
                         cloudApiClient,
                         cloudSessionService,
-                        switchIdentityAction
+                        switchIdentityAction,
+                        localCodeRunner,
+                        managedComponentService
                     );
                 }
                 throw new IllegalStateException("Unexpected controller type for settings: " + type);

@@ -12,6 +12,8 @@ import com.sqlteacher.application.support.DiagnosticBundleService;
 import com.sqlteacher.application.support.ProblemReportService;
 import com.sqlteacher.application.system.GeneralSoftwareService;
 import com.sqlteacher.application.update.UpdateService;
+import com.sqlteacher.application.runner.LocalCodeRunner;
+import com.sqlteacher.application.component.ManagedComponentService;
 import com.sqlteacher.desktop.appearance.UiPreferencesService;
 import com.sqlteacher.application.risk.SqlSafetyModeService;
 import javafx.fxml.FXML;
@@ -40,10 +42,13 @@ public final class SettingsController {
     private final com.sqlteacher.application.collaboration.CloudApiClient cloudApiClient;
     private final com.sqlteacher.application.collaboration.CloudSessionService cloudSessionService;
     private final Runnable switchIdentityAction;
+    private final LocalCodeRunner localCodeRunner;
+    private final ManagedComponentService managedComponentService;
 
     @FXML private Tab appearanceTab;
     @FXML private Tab sqlSafetyTab;
     @FXML private Tab connectionsTab;
+    @FXML private Tab environmentTab;
     @FXML private Tab dataTab;
     @FXML private Tab generalSoftwareTab;
 
@@ -63,7 +68,9 @@ public final class SettingsController {
             GeneralSoftwareService generalSoftwareService,
             com.sqlteacher.application.collaboration.CloudApiClient cloudApiClient,
             com.sqlteacher.application.collaboration.CloudSessionService cloudSessionService,
-            Runnable switchIdentityAction) {
+            Runnable switchIdentityAction,
+            LocalCodeRunner localCodeRunner,
+            ManagedComponentService managedComponentService) {
         this.connectionManagementService = Objects.requireNonNull(connectionManagementService);
         this.databaseConnectionTestService = Objects.requireNonNull(databaseConnectionTestService);
         this.applicationExceptionMapper = Objects.requireNonNull(applicationExceptionMapper);
@@ -80,6 +87,8 @@ public final class SettingsController {
         this.cloudApiClient = Objects.requireNonNull(cloudApiClient);
         this.cloudSessionService = Objects.requireNonNull(cloudSessionService);
         this.switchIdentityAction = Objects.requireNonNull(switchIdentityAction);
+        this.localCodeRunner = Objects.requireNonNull(localCodeRunner);
+        this.managedComponentService = Objects.requireNonNull(managedComponentService);
     }
 
     @FXML
@@ -87,6 +96,7 @@ public final class SettingsController {
         appearanceTab.setContent(load("/fxml/appearance-settings.fxml", AppearanceSettingsController.class));
         sqlSafetyTab.setContent(load("/fxml/sql-safety-settings.fxml", SqlSafetySettingsController.class));
         connectionsTab.setContent(load("/fxml/connection-settings.fxml", ConnectionSettingsController.class));
+        environmentTab.setContent(load("/fxml/environment-settings.fxml", EnvironmentSettingsController.class));
         dataTab.setContent(load("/fxml/data-maintenance.fxml", DataMaintenanceController.class));
         generalSoftwareTab.setContent(load("/fxml/general-software.fxml", GeneralSoftwareController.class));
     }
@@ -111,6 +121,9 @@ public final class SettingsController {
                     applicationExceptionMapper,
                     databaseCredentialSession
                 );
+            }
+            if (type == EnvironmentSettingsController.class && controllerType == type) {
+                return new EnvironmentSettingsController(localCodeRunner, managedComponentService);
             }
             if (type == DataMaintenanceController.class && controllerType == type) {
                 return new DataMaintenanceController(

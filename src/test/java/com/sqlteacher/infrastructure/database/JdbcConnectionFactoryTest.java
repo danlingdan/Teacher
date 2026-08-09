@@ -3,6 +3,8 @@ package com.sqlteacher.infrastructure.database;
 import com.sqlteacher.application.config.DatabaseConfiguration;
 import com.sqlteacher.application.connection.DatabaseConnectionProfile;
 import com.sqlteacher.application.connection.DatabaseDialect;
+import com.sqlteacher.application.connection.FileDatabaseConnectionTarget;
+import com.sqlteacher.application.connection.GenericJdbcConnectionTarget;
 import com.sqlteacher.application.connection.ServerConnectionTarget;
 import com.sqlteacher.application.connection.SqliteConnectionTarget;
 import com.mysql.cj.jdbc.MysqlDataSource;
@@ -88,6 +90,44 @@ class JdbcConnectionFactoryTest {
         }
 
         assertTrue(Files.exists(databasePath));
+    }
+
+    @Test
+    void shouldOpenDuckDbAndH2FilesWithoutAnExternalServer() throws Exception {
+        Path tempDirectory = Files.createTempDirectory("sqlteacher-embedded-test");
+        JdbcConnectionFactory factory = new JdbcConnectionFactory(new DatabaseConfiguration(
+            tempDirectory.resolve("app.db"), tempDirectory.resolve("demo.db")
+        ));
+
+        for (DatabaseDialect dialect : new DatabaseDialect[] {DatabaseDialect.DUCKDB, DatabaseDialect.H2}) {
+            DatabaseConnectionProfile profile = new DatabaseConnectionProfile(
+                "embedded." + dialect.name().toLowerCase(), dialect.toString(),
+                new FileDatabaseConnectionTarget(dialect, tempDirectory.resolve(dialect.name().toLowerCase())),
+                false, true, false
+            );
+            try (Connection connection = factory.open(profile, new char[0], Duration.ofSeconds(3))) {
+                assertNotNull(connection.getMetaData().getDatabaseProductName());
+                connection.createStatement().execute("create table sample(id integer)");
+            }
+        }
+    }
+
+    @Test
+    void shouldLoadAUserSelectedJdbcDriverJar() throws Exception {
+        Path tempDirectory = Files.createTempDirectory("sqlteacher-generic-jdbc-test");
+        Path h2Jar = Path.of(org.h2.Driver.class.getProtectionDomain().getCodeSource().getLocation().toURI());
+        JdbcConnectionFactory factory = new JdbcConnectionFactory(new DatabaseConfiguration(
+            tempDirectory.resolve("app.db"), tempDirectory.resolve("demo.db")
+        ));
+        DatabaseConnectionProfile profile = new DatabaseConnectionProfile(
+            "generic.h2", "Generic H2",
+            new GenericJdbcConnectionTarget("jdbc:h2:mem:generic;DB_CLOSE_DELAY=-1",
+                "org.h2.Driver", h2Jar, "sa"), false, true, false
+        );
+
+        try (Connection connection = factory.open(profile, new char[0], Duration.ofSeconds(3))) {
+            assertEquals("H2", connection.getMetaData().getDatabaseProductName());
+        }
     }
 
     @Test

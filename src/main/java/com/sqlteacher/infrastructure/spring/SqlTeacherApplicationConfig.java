@@ -29,6 +29,7 @@ import com.sqlteacher.application.runner.LocalCodeRunner;
 import com.sqlteacher.application.support.DiagnosticBundleService;
 import com.sqlteacher.application.support.ProblemReportService;
 import com.sqlteacher.application.system.GeneralSoftwareService;
+import com.sqlteacher.application.component.ManagedComponentService;
 import com.sqlteacher.application.update.UpdateService;
 import com.sqlteacher.infrastructure.ai.*;
 import com.sqlteacher.infrastructure.config.PropertiesAppConfigurationService;
@@ -47,6 +48,7 @@ import com.sqlteacher.infrastructure.database.JdbcGroundedTutorService;
 import com.sqlteacher.infrastructure.support.FileDiagnosticBundleService;
 import com.sqlteacher.infrastructure.support.HttpProblemReportService;
 import com.sqlteacher.infrastructure.system.FileGeneralSoftwareService;
+import com.sqlteacher.infrastructure.component.WindowsManagedComponentService;
 import com.sqlteacher.infrastructure.update.SecureUpdateService;
 import com.sqlteacher.application.event.LearningEventOwnerProvider;
 import com.sqlteacher.application.planning.GroundedTutorService;
@@ -196,6 +198,11 @@ public class SqlTeacherApplicationConfig {
     @Bean
     public LocalCodeRunner localCodeRunner(SqlTeacherConfiguration configuration) {
         return new WindowsLocalIdeCodeRunner(configuration.dataDirectory().resolve("local-code-runs"));
+    }
+
+    @Bean
+    public ManagedComponentService managedComponentService() {
+        return new WindowsManagedComponentService();
     }
 
     @Bean

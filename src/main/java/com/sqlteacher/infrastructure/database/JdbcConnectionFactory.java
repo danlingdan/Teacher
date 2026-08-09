@@ -3,17 +3,21 @@ package com.sqlteacher.infrastructure.database;
 import com.sqlteacher.application.config.DatabaseConfiguration;
 import com.sqlteacher.application.connection.DatabaseConnectionProfile;
 import com.sqlteacher.application.connection.DatabaseDialect;
+import com.sqlteacher.application.connection.FileDatabaseConnectionTarget;
+import com.sqlteacher.application.connection.GenericJdbcConnectionTarget;
 import com.sqlteacher.application.connection.ServerConnectionTarget;
 import com.sqlteacher.application.connection.SqliteConnectionTarget;
 import com.mysql.cj.jdbc.MysqlDataSource;
 import org.mariadb.jdbc.Configuration;
 import org.sqlite.SQLiteConfig;
 
+import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.time.Duration;
 import java.util.Objects;
+import java.util.Properties;
 
 public final class JdbcConnectionFactory {
     private final DatabaseConfiguration configuration;
@@ -73,16 +77,21 @@ public final class JdbcConnectionFactory {
                 "jdbc:sqlite:" + target.databasePath(),
                 sqliteConfig.toProperties()
             );
+        } else if (profile.target() instanceof FileDatabaseConnectionTarget target) {
+            connection = openFileDatabase(target, profile.readOnly());
         } else if (profile.target() instanceof ServerConnectionTarget target) {
             connection = switch (target.dialect()) {
-                case MYSQL -> mysqlDataSource(target, password, timeout).getConnection();
+                case MYSQL, TIDB, OCEANBASE -> mysqlDataSource(target, password, timeout).getConnection();
                 case MARIADB -> org.mariadb.jdbc.Driver.connect(
                     mariaDbConfiguration(target, password, timeout)
                 );
-                case SQLITE -> throw new IllegalArgumentException(
-                    "Server connection target cannot use SQLite dialect"
-                );
+                case POSTGRESQL, GAUSSDB, SQL_SERVER, ORACLE, DB2, DAMENG ->
+                    openServerDatabase(target, password, timeout);
+                default -> throw new IllegalArgumentException("Unsupported server database dialect: " + target.dialect());
             };
+            connection.setReadOnly(profile.readOnly());
+        } else if (profile.target() instanceof GenericJdbcConnectionTarget target) {
+            connection = DynamicJdbcConnection.open(target, password);
             connection.setReadOnly(profile.readOnly());
         } else {
             throw new IllegalArgumentException("Unsupported database connection target");
@@ -95,7 +104,10 @@ public final class JdbcConnectionFactory {
             char[] password,
             Duration timeout
     ) throws SQLException {
-        requireDialect(target, DatabaseDialect.MYSQL);
+        if (target.dialect().family() != DatabaseDialect.Family.MYSQL
+                || target.dialect() == DatabaseDialect.MARIADB) {
+            throw new IllegalArgumentException("Expected a MySQL-protocol server target");
+        }
         int timeoutMillis = toTimeoutMillis(timeout);
         MysqlDataSource dataSource = new MysqlDataSource();
         dataSource.setServerName(target.host());
@@ -143,5 +155,72 @@ public final class JdbcConnectionFactory {
             throw new IllegalArgumentException("timeout must be between 1 ms and " + Integer.MAX_VALUE + " ms");
         }
         return (int) millis;
+    }
+
+    private static Connection openFileDatabase(
+            FileDatabaseConnectionTarget target,
+            boolean readOnly) throws SQLException {
+        Path absolutePath = target.databasePath().toAbsolutePath().normalize();
+        Properties properties = new Properties();
+        return switch (target.dialect()) {
+            case DUCKDB -> {
+                properties.setProperty("duckdb.read_only", Boolean.toString(readOnly));
+                yield DriverManager.getConnection("jdbc:duckdb:" + absolutePath, properties);
+            }
+            case H2 -> {
+                String suffix = readOnly ? ";ACCESS_MODE_DATA=r" : "";
+                yield DriverManager.getConnection("jdbc:h2:file:" + absolutePath + suffix, properties);
+            }
+            default -> throw new IllegalArgumentException("Unsupported file database dialect: " + target.dialect());
+        };
+    }
+
+    private static Connection openServerDatabase(
+            ServerConnectionTarget target,
+            char[] password,
+            Duration timeout) throws SQLException {
+        int timeoutMillis = toTimeoutMillis(timeout);
+        int timeoutSeconds = Math.max(1, (int) Math.ceil(timeoutMillis / 1000.0));
+        Properties properties = new Properties();
+        properties.setProperty("user", target.username());
+        properties.setProperty("password", new String(password));
+        String url = switch (target.dialect()) {
+            case POSTGRESQL, GAUSSDB -> {
+                properties.setProperty("connectTimeout", Integer.toString(timeoutSeconds));
+                properties.setProperty("socketTimeout", Integer.toString(timeoutSeconds));
+                yield "jdbc:postgresql://" + hostForUrl(target.host()) + ":" + target.port()
+                    + "/" + target.databaseName();
+            }
+            case SQL_SERVER -> {
+                properties.setProperty("loginTimeout", Integer.toString(timeoutSeconds));
+                properties.setProperty("socketTimeout", Integer.toString(timeoutMillis));
+                properties.setProperty("encrypt", "true");
+                properties.setProperty("trustServerCertificate", "false");
+                yield "jdbc:sqlserver://" + hostForUrl(target.host()) + ":" + target.port()
+                    + ";databaseName=" + target.databaseName();
+            }
+            case ORACLE -> {
+                properties.setProperty("oracle.net.CONNECT_TIMEOUT", Integer.toString(timeoutMillis));
+                properties.setProperty("oracle.jdbc.ReadTimeout", Integer.toString(timeoutMillis));
+                yield "jdbc:oracle:thin:@//" + hostForUrl(target.host()) + ":" + target.port()
+                    + "/" + target.databaseName();
+            }
+            case DB2 -> {
+                properties.setProperty("loginTimeout", Integer.toString(timeoutSeconds));
+                yield "jdbc:db2://" + hostForUrl(target.host()) + ":" + target.port()
+                    + "/" + target.databaseName();
+            }
+            case DAMENG -> {
+                properties.setProperty("connectTimeout", Integer.toString(timeoutMillis));
+                yield "jdbc:dm://" + hostForUrl(target.host()) + ":" + target.port()
+                    + "/" + target.databaseName();
+            }
+            default -> throw new IllegalArgumentException("Unsupported server database dialect: " + target.dialect());
+        };
+        return DriverManager.getConnection(url, properties);
+    }
+
+    private static String hostForUrl(String host) {
+        return host.indexOf(':') >= 0 && !host.startsWith("[") ? "[" + host + "]" : host;
     }
 }

@@ -4,6 +4,7 @@ import com.sqlteacher.application.connection.ConnectionManagementService;
 import com.sqlteacher.application.connection.DatabaseConnectionProfile;
 import com.sqlteacher.application.connection.DatabaseCredentialSession;
 import com.sqlteacher.application.connection.DatabaseDialect;
+import com.sqlteacher.application.connection.GenericJdbcConnectionTarget;
 import com.sqlteacher.application.connection.ServerConnectionTarget;
 import com.sqlteacher.domain.SqlTeacherException;
 
@@ -41,13 +42,8 @@ public final class ProfileAwareJdbcConnectionProvider implements JdbcConnectionP
                 "所选数据库连接已禁用，请在设置页启用或切换连接。"
             );
         }
-        if (profile.target() instanceof ServerConnectionTarget) {
-            if (!profile.readOnly()) {
-                throw new SqlTeacherException(
-                    "EXTERNAL_CONNECTION_READ_ONLY_REQUIRED",
-                    "外部数据库连接必须启用只读模式。"
-                );
-            }
+        if (profile.target() instanceof ServerConnectionTarget
+                || profile.target() instanceof GenericJdbcConnectionTarget) {
             char[] password = credentialSession.passwordFor(profile.id()).orElseThrow(() -> new SqlTeacherException(
                 "DATABASE_CREDENTIALS_REQUIRED",
                 "服务器连接缺少临时凭据，请先在设置页测试连接。"

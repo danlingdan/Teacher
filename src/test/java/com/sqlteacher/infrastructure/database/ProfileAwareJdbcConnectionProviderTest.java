@@ -75,16 +75,15 @@ class ProfileAwareJdbcConnectionProviderTest {
     }
 
     @Test
-    void shouldRejectWritableServerProfileBeforeUsingCredentials() {
+    void shouldRequireCredentialsForWritableServerProfile() {
         managementService.saveProfile(serverProfile(false));
-        credentialSession.remember("course.mysql", "unused".toCharArray());
 
         SqlTeacherException error = assertThrows(
             SqlTeacherException.class,
             () -> provider.open("course.mysql", Duration.ofSeconds(2))
         );
 
-        assertEquals("EXTERNAL_CONNECTION_READ_ONLY_REQUIRED", error.errorCode());
+        assertEquals("DATABASE_CREDENTIALS_REQUIRED", error.errorCode());
     }
 
     private static DatabaseConnectionProfile serverProfile(boolean readOnly) {

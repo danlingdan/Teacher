@@ -71,7 +71,14 @@ $iconPath = Join-Path $projectRoot "packaging\sqlteacher.ico"
 $wixVersion = "3.14.1"
 $wixArchiveHash = "6AC824E1642D6F7277D0ED7EA09411A508F6116BA6FAE0AA5F2C7DAA2FF43D31"
 $wixUrl = "https://github.com/wixtoolset/wix3/releases/download/wix3141rtm/wix314-binaries.zip"
-$wixRoot = Join-Path $targetRoot "tools\wix-$wixVersion"
+$packagingCacheRoot = if (-not [string]::IsNullOrWhiteSpace($env:SQLTEACHER_PACKAGING_CACHE)) {
+    [System.IO.Path]::GetFullPath($env:SQLTEACHER_PACKAGING_CACHE)
+} else {
+    Join-Path ([Environment]::GetFolderPath([Environment+SpecialFolder]::LocalApplicationData)) `
+        "SQLTeacher\packaging-cache"
+}
+$wixRoot = Join-Path $packagingCacheRoot "wix-$wixVersion"
+$legacyWixArchive = Join-Path $targetRoot "tools\wix314-binaries.zip"
 
 function Assert-ChildPath {
     param(
@@ -116,6 +123,15 @@ function Ensure-WixToolset {
         return Split-Path -Parent $candle.Source
     }
 
+    if (-not [string]::IsNullOrWhiteSpace($env:WIX)) {
+        foreach ($candidateRoot in @($env:WIX, (Join-Path $env:WIX "bin"))) {
+            if ((Test-Path -LiteralPath (Join-Path $candidateRoot "candle.exe")) -and
+                (Test-Path -LiteralPath (Join-Path $candidateRoot "light.exe"))) {
+                return [System.IO.Path]::GetFullPath($candidateRoot)
+            }
+        }
+    }
+
     $portableCandle = Join-Path $wixRoot "candle.exe"
     $portableLight = Join-Path $wixRoot "light.exe"
     if ((Test-Path -LiteralPath $portableCandle) -and (Test-Path -LiteralPath $portableLight)) {
@@ -124,6 +140,7 @@ function Ensure-WixToolset {
 
     $toolDirectory = Split-Path -Parent $wixRoot
     $archive = Join-Path $toolDirectory "wix314-binaries.zip"
+    $partialArchive = "$archive.part"
     New-Item -ItemType Directory -Force -Path $toolDirectory | Out-Null
     if (Test-Path -LiteralPath $archive) {
         $actualHash = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash
@@ -132,11 +149,21 @@ function Ensure-WixToolset {
         }
     }
     if (-not (Test-Path -LiteralPath $archive)) {
-        Write-Host "Downloading WiX Toolset $wixVersion..."
-        curl.exe -L --fail --retry 3 --output $archive $wixUrl
+        if ((Test-Path -LiteralPath $legacyWixArchive) -and
+            -not (Test-Path -LiteralPath $partialArchive)) {
+            Move-Item -LiteralPath $legacyWixArchive -Destination $partialArchive
+        }
+        Write-Host "Downloading WiX Toolset $wixVersion into persistent cache..."
+        curl.exe -L --fail --retry 5 --retry-all-errors --continue-at - `
+            --output $partialArchive $wixUrl
         if ($LASTEXITCODE -ne 0) {
             throw "WiX Toolset download failed with exit code $LASTEXITCODE."
         }
+        $downloadHash = (Get-FileHash -LiteralPath $partialArchive -Algorithm SHA256).Hash
+        if ($downloadHash -ne $wixArchiveHash) {
+            throw "WiX archive checksum mismatch. Expected $wixArchiveHash but found $downloadHash."
+        }
+        Move-Item -LiteralPath $partialArchive -Destination $archive -Force
     }
     $actualHash = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash
     if ($actualHash -ne $wixArchiveHash) {

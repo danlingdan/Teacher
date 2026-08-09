@@ -149,6 +149,7 @@ public final class SqlTeacherFxApp extends Application {
     private ProblemReportService problemReportService;
     private DiagnosticBundleService diagnosticBundleService;
     private GeneralSoftwareService generalSoftwareService;
+    private com.sqlteacher.application.component.ManagedComponentService managedComponentService;
     private ApplicationInstanceCoordinator instanceCoordinator;
     private WindowStateService windowStateService;
     private Stage primaryStage;
@@ -222,6 +223,7 @@ public final class SqlTeacherFxApp extends Application {
             problemReportService = context.getBean(ProblemReportService.class);
             diagnosticBundleService = context.getBean(DiagnosticBundleService.class);
             generalSoftwareService = context.getBean(GeneralSoftwareService.class);
+            managedComponentService = context.getBean(com.sqlteacher.application.component.ManagedComponentService.class);
             Thread.setDefaultUncaughtExceptionHandler((thread, error) -> {
                 diagnosticBundleService.recordFailure(error, thread.getName());
                 LOG.error("Unhandled application failure, thread={}, exceptionType={}", thread.getName(), error.getClass().getSimpleName());
@@ -258,7 +260,7 @@ public final class SqlTeacherFxApp extends Application {
             || aiProviderProbeService == null || aiTaskHistoryService == null || learningEventOwnerContext == null
             || learningDiagnosisService == null || interventionService == null || studentLearningQueueService == null
             || uiPreferencesService == null || updateService == null || problemReportService == null
-            || diagnosticBundleService == null || generalSoftwareService == null) {
+            || diagnosticBundleService == null || generalSoftwareService == null || managedComponentService == null) {
             throw new IllegalStateException("Services are unavailable because application initialization did not complete");
         }
 
@@ -368,6 +370,7 @@ public final class SqlTeacherFxApp extends Application {
                     problemReportService,
                     diagnosticBundleService,
                     generalSoftwareService,
+                    managedComponentService,
                     accessProfile,
                     () -> switchToLogin(stage)
                 );

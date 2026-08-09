@@ -8,6 +8,8 @@ import com.sqlteacher.application.connection.DatabaseConnectionTestResult;
 import com.sqlteacher.application.connection.DatabaseConnectionTestService;
 import com.sqlteacher.application.connection.DatabaseDialect;
 import com.sqlteacher.application.connection.DatabaseCredentialSession;
+import com.sqlteacher.application.connection.FileDatabaseConnectionTarget;
+import com.sqlteacher.application.connection.GenericJdbcConnectionTarget;
 import com.sqlteacher.application.connection.ServerConnectionTarget;
 import com.sqlteacher.application.connection.SqliteConnectionTarget;
 import com.sqlteacher.application.error.ApplicationExceptionMapper;
@@ -51,6 +53,9 @@ public final class ConnectionSettingsController {
     @FXML private TextField portField;
     @FXML private TextField databaseField;
     @FXML private TextField usernameField;
+    @FXML private TextField jdbcUrlField;
+    @FXML private TextField driverClassField;
+    @FXML private TextField driverJarField;
     @FXML private PasswordField passwordField;
     @FXML private CheckBox readOnlyCheck;
     @FXML private CheckBox enabledCheck;
@@ -131,7 +136,8 @@ public final class ConnectionSettingsController {
             try {
                 DatabaseConnectionTestResult result = testService.testConnection(profile, password);
                 boolean savedServerProfile = result.successful()
-                    && profile.target() instanceof ServerConnectionTarget
+                    && (profile.target() instanceof ServerConnectionTarget
+                        || profile.target() instanceof GenericJdbcConnectionTarget)
                     && managementService.findProfile(profile.id()).filter(profile::equals).isPresent();
                 if (savedServerProfile) {
                     credentialSession.remember(profile.id(), password);
@@ -216,12 +222,25 @@ public final class ConnectionSettingsController {
         if (profile.target() instanceof SqliteConnectionTarget sqlite) {
             pathField.setText(sqlite.databasePath().toString());
             clearServerFields();
+            clearGenericFields();
+        } else if (profile.target() instanceof FileDatabaseConnectionTarget file) {
+            pathField.setText(file.databasePath().toString());
+            clearServerFields();
+            clearGenericFields();
         } else if (profile.target() instanceof ServerConnectionTarget server) {
             pathField.clear();
             hostField.setText(server.host());
             portField.setText(Integer.toString(server.port()));
             databaseField.setText(server.databaseName());
             usernameField.setText(server.username());
+            clearGenericFields();
+        } else if (profile.target() instanceof GenericJdbcConnectionTarget generic) {
+            pathField.clear();
+            clearServerFields();
+            usernameField.setText(generic.username());
+            jdbcUrlField.setText(generic.jdbcUrl());
+            driverClassField.setText(generic.driverClass());
+            driverJarField.setText(generic.driverJar().toString());
         }
         updateTargetFields();
         updateActions(profile);
@@ -237,7 +256,7 @@ public final class ConnectionSettingsController {
     }
 
     private void clearForm() {
-        idField.clear(); nameField.clear(); pathField.clear(); clearServerFields(); passwordField.clear();
+        idField.clear(); nameField.clear(); pathField.clear(); clearServerFields(); clearGenericFields(); passwordField.clear();
         dialectBox.setValue(DatabaseDialect.SQLITE);
         readOnlyCheck.setSelected(false); enabledCheck.setSelected(true);
         updateActions(null); updateTargetFields(); showStatus(AppI18n.get("ConnectionSettingsController.16"), false);
@@ -247,17 +266,30 @@ public final class ConnectionSettingsController {
         hostField.clear(); portField.clear(); databaseField.clear(); usernameField.clear();
     }
 
+    private void clearGenericFields() {
+        jdbcUrlField.clear(); driverClassField.clear(); driverJarField.clear();
+    }
+
     private void updateTargetFields() {
-        boolean sqlite = dialectBox.getValue() == DatabaseDialect.SQLITE;
-        pathField.setDisable(!sqlite);
-        hostField.setDisable(sqlite); portField.setDisable(sqlite);
-        databaseField.setDisable(sqlite); usernameField.setDisable(sqlite); passwordField.setDisable(sqlite);
+        DatabaseDialect dialect = dialectBox.getValue();
+        boolean file = dialect != null && dialect.fileBased();
+        boolean generic = dialect != null && dialect.generic();
+        boolean server = dialect != null && dialect.serverBased();
+        pathField.setDisable(!file);
+        hostField.setDisable(!server); portField.setDisable(!server);
+        databaseField.setDisable(!server); usernameField.setDisable(file);
+        jdbcUrlField.setDisable(!generic); driverClassField.setDisable(!generic); driverJarField.setDisable(!generic);
+        passwordField.setDisable(file);
+        if (server && portField.getText().isBlank() && dialect.defaultPort() > 0) {
+            portField.setText(Integer.toString(dialect.defaultPort()));
+        }
     }
 
     private DatabaseConnectionProfile buildProfileFromForm() {
         return buildProfile(
             idField.getText(), nameField.getText(), dialectBox.getValue(), pathField.getText(),
             hostField.getText(), portField.getText(), databaseField.getText(), usernameField.getText(),
+            jdbcUrlField.getText(), driverClassField.getText(), driverJarField.getText(),
             readOnlyCheck.isSelected(), enabledCheck.isSelected()
         );
     }
@@ -266,11 +298,25 @@ public final class ConnectionSettingsController {
         String id, String name, DatabaseDialect dialect, String path, String host, String port,
         String database, String username, boolean readOnly, boolean enabled
     ) {
+        return buildProfile(id, name, dialect, path, host, port, database, username,
+            null, null, null, readOnly, enabled);
+    }
+
+    static DatabaseConnectionProfile buildProfile(
+        String id, String name, DatabaseDialect dialect, String path, String host, String port,
+        String database, String username, String jdbcUrl, String driverClass, String driverJar,
+        boolean readOnly, boolean enabled
+    ) {
         Objects.requireNonNull(dialect, AppI18n.get("ConnectionSettingsController.17"));
         DatabaseConnectionTarget target;
         if (dialect == DatabaseDialect.SQLITE) {
             if (path == null || path.isBlank()) throw new IllegalArgumentException(AppI18n.get("ConnectionSettingsController.18"));
             target = new SqliteConnectionTarget(Path.of(path.trim()));
+        } else if (dialect.fileBased()) {
+            if (path == null || path.isBlank()) throw new IllegalArgumentException(AppI18n.get("ConnectionSettingsController.18"));
+            target = new FileDatabaseConnectionTarget(dialect, Path.of(path.trim()));
+        } else if (dialect.generic()) {
+            target = new GenericJdbcConnectionTarget(jdbcUrl, driverClass, Path.of(driverJar == null ? "" : driverJar.trim()), username);
         } else {
             int parsedPort;
             try { parsedPort = Integer.parseInt(port == null ? "" : port.trim()); }

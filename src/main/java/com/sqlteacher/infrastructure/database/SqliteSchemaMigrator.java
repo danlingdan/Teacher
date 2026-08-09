@@ -1135,6 +1135,57 @@ final class SqliteSchemaMigrator {
                 "insert into cross_course_knowledge_relation values ('se-ci-quality-gate','capstone-evidence','PREREQUISITE','综合项目必须建立自动质量门禁')",
                 "insert into cross_course_knowledge_relation values ('security-input-validation','capstone-evidence','RELATED','项目证据应包含输入与授权边界')"
             )
+        ),
+        new Migration(
+            18,
+            "Expand database connection profiles for SQLTeacher 2.2 providers",
+            List.of(
+                """
+                    create table connection_profiles_v2 (
+                        id text primary key,
+                        display_name text not null,
+                        dialect text not null,
+                        sqlite_path text,
+                        host text,
+                        port integer,
+                        database_name text,
+                        username text,
+                        jdbc_url text,
+                        driver_class text,
+                        driver_jar text,
+                        read_only integer not null check (read_only in (0, 1)),
+                        enabled integer not null check (enabled in (0, 1)),
+                        built_in integer not null check (built_in in (0, 1)),
+                        created_at text not null default current_timestamp,
+                        updated_at text not null default current_timestamp,
+                        check (
+                            (dialect in ('SQLITE','DUCKDB','H2') and sqlite_path is not null
+                                and host is null and port is null and database_name is null
+                                and jdbc_url is null and driver_class is null and driver_jar is null)
+                            or
+                            (dialect in ('MYSQL','MARIADB','POSTGRESQL','SQL_SERVER','ORACLE','DB2','DAMENG',
+                                'TIDB','OCEANBASE','GAUSSDB') and sqlite_path is null
+                                and host is not null and port between 1 and 65535 and database_name is not null
+                                and username is not null and jdbc_url is null and driver_class is null and driver_jar is null)
+                            or
+                            (dialect = 'GENERIC' and sqlite_path is null and host is null and port is null
+                                and database_name is null and jdbc_url is not null
+                                and driver_class is not null and driver_jar is not null)
+                        )
+                    )
+                    """,
+                """
+                    insert into connection_profiles_v2(
+                        id,display_name,dialect,sqlite_path,host,port,database_name,username,
+                        jdbc_url,driver_class,driver_jar,read_only,enabled,built_in,created_at,updated_at
+                    )
+                    select id,display_name,dialect,sqlite_path,host,port,database_name,username,
+                        null,null,null,read_only,enabled,built_in,created_at,updated_at
+                    from connection_profiles
+                    """,
+                "drop table connection_profiles",
+                "alter table connection_profiles_v2 rename to connection_profiles"
+            )
         )
     );
 

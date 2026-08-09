@@ -11,8 +11,8 @@ public record ServerConnectionTarget(
 ) implements DatabaseConnectionTarget {
     public ServerConnectionTarget {
         Objects.requireNonNull(dialect, "dialect must not be null");
-        if (dialect == DatabaseDialect.SQLITE) {
-            throw new IllegalArgumentException("Server connection target requires MySQL or MariaDB dialect");
+        if (!dialect.serverBased()) {
+            throw new IllegalArgumentException("Server connection target requires a server database dialect");
         }
         host = requireText(host, "host");
         if (port < 1 || port > 65_535) {

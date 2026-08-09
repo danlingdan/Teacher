@@ -7,6 +7,7 @@ import com.sqlteacher.application.connection.DatabaseConnectionProfile;
 import com.sqlteacher.application.connection.DatabaseDialect;
 import com.sqlteacher.application.connection.ServerConnectionTarget;
 import com.sqlteacher.application.connection.SqliteConnectionTarget;
+import com.sqlteacher.application.connection.GenericJdbcConnectionTarget;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -74,6 +75,21 @@ class JdbcConnectionManagementServiceTest {
         assertEquals(profile, saved);
         assertEquals(profile, reloaded.findProfile(profile.id()).orElseThrow());
         assertEquals(3, reloaded.listProfiles().size());
+    }
+
+    @Test
+    void shouldPersistAndReloadAGenericJdbcProfileWithoutAPassword() {
+        DatabaseConnectionProfile profile = new DatabaseConnectionProfile(
+            "course.vendor", "Vendor JDBC",
+            new GenericJdbcConnectionTarget("jdbc:vendor:course", "com.vendor.Driver",
+                tempDir.resolve("vendor-driver.jar"), "teacher"),
+            false, true, false
+        );
+
+        service.saveProfile(profile);
+
+        assertEquals(profile, new JdbcConnectionManagementService(connectionFactory, databaseConfiguration)
+            .findProfile(profile.id()).orElseThrow());
     }
 
     @Test

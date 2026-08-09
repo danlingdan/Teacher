@@ -31,25 +31,33 @@ import java.util.concurrent.atomic.AtomicLong;
 /** Direct IDE runner. Student programs inherit the user's environment, filesystem and network access. */
 public final class WindowsLocalIdeCodeRunner implements LocalCodeRunner {
     private final Path workspaceRoot;
-    private final Toolchains toolchains;
+    private volatile Toolchains toolchains;
+    private final boolean autoDetect;
 
     public WindowsLocalIdeCodeRunner(Path workspaceRoot) {
-        this(workspaceRoot, Toolchains.detect());
+        this(workspaceRoot, Toolchains.detect(), true);
     }
 
     WindowsLocalIdeCodeRunner(Path workspaceRoot, Toolchains toolchains) {
+        this(workspaceRoot, toolchains, false);
+    }
+
+    private WindowsLocalIdeCodeRunner(Path workspaceRoot, Toolchains toolchains, boolean autoDetect) {
         this.workspaceRoot = Objects.requireNonNull(workspaceRoot, "workspaceRoot must not be null")
             .toAbsolutePath().normalize();
         this.toolchains = Objects.requireNonNull(toolchains, "toolchains must not be null");
+        this.autoDetect = autoDetect;
     }
 
     @Override
     public List<RunnerCapability> capabilities() {
+        if (autoDetect) toolchains = Toolchains.detect();
         return Arrays.stream(CodeLanguage.values()).map(language -> {
             boolean available = switch (language) {
                 case JAVA -> toolchains.java() != null && toolchains.javac() != null;
-                case PYTHON -> toolchains.wsl() != null;
-                case C, CPP -> toolchains.msvcDeveloperShell() != null;
+                case PYTHON -> toolchains.python() != null || toolchains.wsl() != null;
+                case C -> toolchains.cCompiler() != null || toolchains.msvcDeveloperShell() != null;
+                case CPP -> toolchains.cppCompiler() != null || toolchains.msvcDeveloperShell() != null;
             };
             return new RunnerCapability(language, available, available ? "" : "LOCAL_TOOLCHAIN_UNAVAILABLE");
         }).toList();
@@ -110,6 +118,12 @@ public final class WindowsLocalIdeCodeRunner implements LocalCodeRunner {
                 workspace.toString(), source.toString());
             case PYTHON -> List.of();
             case C, CPP -> {
+                Path directCompiler = language == CodeLanguage.C ? toolchains.cCompiler() : toolchains.cppCompiler();
+                if (directCompiler != null) {
+                    String standard = language == CodeLanguage.C ? "-std=c17" : "-std=c++20";
+                    yield List.of(directCompiler.toString(), standard, "-o",
+                        workspace.resolve("program.exe").toString(), source.toString());
+                }
                 Path script = workspace.resolve("compile.cmd");
                 String standard = language == CodeLanguage.C ? "/std:c17" : "/std:c++20 /EHsc";
                 Files.writeString(script, "@echo off\r\ncall \"" + toolchains.msvcDeveloperShell()
@@ -124,15 +138,41 @@ public final class WindowsLocalIdeCodeRunner implements LocalCodeRunner {
     private List<String> runCommand(CodeLanguage language, Path workspace) throws IOException {
         return switch (language) {
             case JAVA -> List.of(toolchains.java().toString(), "-cp", workspace.toString(), "Main");
-            case PYTHON -> List.of(toolchains.wsl().toString(), "-d", "Ubuntu", "--cd", toWslPath(workspace),
-                "--", "python3", "main.py");
-            case C, CPP -> List.of(workspace.resolve("program.exe").toString());
+            case PYTHON -> toolchains.python() != null
+                ? List.of(toolchains.python().toString(), "main.py")
+                : List.of(toolchains.wsl().toString(), "-d", "Ubuntu", "--cd", toWslPath(workspace),
+                    "--", "python3", "main.py");
+            case C, CPP -> {
+                Path compiler = language == CodeLanguage.C ? toolchains.cCompiler() : toolchains.cppCompiler();
+                if (compiler != null) {
+                    Path cygwinRuntime = compiler.getParent().resolve("cygwin1.dll");
+                    if (Files.isRegularFile(cygwinRuntime)) {
+                        Files.writeString(workspace.resolve(".runtime-path"), compiler.getParent().toString(),
+                            StandardCharsets.UTF_8);
+                    }
+                }
+                yield List.of(workspace.resolve("program.exe").toString());
+            }
         };
     }
 
     private static Execution execute(List<String> command, Path directory, Path input, CodeRunRequest request,
                                      RunnerCancellation cancellation, Duration timeout) throws IOException {
         ProcessBuilder builder = new ProcessBuilder(command).directory(directory.toFile());
+        if (!command.isEmpty()) {
+            Path executable = Path.of(command.getFirst()).toAbsolutePath().normalize();
+            if (executable.toString().toLowerCase(java.util.Locale.ROOT).contains("\\cygwin\\bin\\")) {
+                builder.environment().merge("PATH", executable.getParent().toString(),
+                    (existing, bin) -> bin + ";" + existing);
+            }
+        }
+        Path runtimePath = directory.resolve(".runtime-path");
+        if (Files.isRegularFile(runtimePath)) {
+            String bin = Files.readString(runtimePath, StandardCharsets.UTF_8).trim();
+            if (!bin.isEmpty()) {
+                builder.environment().merge("PATH", bin, (existing, value) -> value + ";" + existing);
+            }
+        }
         if (input != null) builder.redirectInput(input.toFile());
         Process process = builder.start();
         AtomicBoolean exceeded = new AtomicBoolean();
@@ -232,14 +272,30 @@ public final class WindowsLocalIdeCodeRunner implements LocalCodeRunner {
         } catch (IOException ignored) { }
     }
 
-    record Toolchains(Path java, Path javac, Path wsl, Path msvcDeveloperShell) {
+    record Toolchains(Path java, Path javac, Path python, Path wsl, Path cCompiler, Path cppCompiler,
+                      Path msvcDeveloperShell) {
+        Toolchains(Path java, Path javac, Path wsl, Path msvcDeveloperShell) {
+            this(java, javac, null, wsl, null, null, msvcDeveloperShell);
+        }
+
         static Toolchains detect() {
             Path javaHome = Path.of(System.getProperty("java.home"));
-            Path java = executable(javaHome.resolve("bin/java.exe"));
-            Path javac = executable(javaHome.resolve("bin/javac.exe"));
+            Path adoptiumRoot = Path.of(System.getenv().getOrDefault("ProgramFiles", "C:\\Program Files"),
+                "Eclipse Adoptium");
+            Path localPrograms = Path.of(System.getenv().getOrDefault("LOCALAPPDATA", ""), "Programs");
+            Path managedJava = findExecutable(adoptiumRoot, "javac.exe");
+            Path java = firstExecutable(javaHome.resolve("bin/java.exe"), onPath("java.exe"),
+                managedJava == null ? null : managedJava.getParent().resolve("java.exe"));
+            Path javac = firstExecutable(javaHome.resolve("bin/javac.exe"), onPath("javac.exe"), managedJava);
+            Path python = firstExecutable(onPath("python.exe"), onPath("python3.exe"),
+                findExecutable(localPrograms.resolve("Python"), "python.exe"));
             Path wslCandidate = executable(systemExecutable("wsl.exe"));
-            Path wsl = usableUbuntuPython(wslCandidate) ? wslCandidate : null;
-            return new Toolchains(java, javac, wsl, WindowsLocalCodeWorkspaceLauncher.visualStudioDeveloperShell());
+            Path wsl = python == null && usableUbuntuPython(wslCandidate) ? wslCandidate : null;
+            Path cygwinBin = Path.of("D:\\DevelopmentEnvironment\\cygwin\\bin");
+            Path gcc = firstExecutable(onPath("gcc.exe"), cygwinBin.resolve("gcc.exe"), onPath("clang.exe"));
+            Path gpp = firstExecutable(onPath("g++.exe"), cygwinBin.resolve("g++.exe"), onPath("clang++.exe"));
+            return new Toolchains(java, javac, python, wsl, gcc, gpp,
+                WindowsLocalCodeWorkspaceLauncher.visualStudioDeveloperShell());
         }
 
         private static boolean usableUbuntuPython(Path wsl) {
@@ -265,7 +321,42 @@ public final class WindowsLocalIdeCodeRunner implements LocalCodeRunner {
         }
 
         private static Path executable(Path path) {
-            return Files.isRegularFile(path) ? path : null;
+            return path != null && Files.isRegularFile(path) ? path : null;
+        }
+
+        private static Path firstExecutable(Path... candidates) {
+            for (Path candidate : candidates) {
+                Path found = executable(candidate);
+                if (found != null) return found;
+            }
+            return null;
+        }
+
+        private static Path onPath(String name) {
+            Process process = null;
+            try {
+                process = new ProcessBuilder(systemExecutable("where.exe").toString(), name)
+                    .redirectError(ProcessBuilder.Redirect.DISCARD).start();
+                String first = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8)
+                    .lines().findFirst().orElse("").trim();
+                if (!process.waitFor(3, TimeUnit.SECONDS) || process.exitValue() != 0 || first.isBlank()) return null;
+                return Path.of(first);
+            } catch (IOException | InterruptedException error) {
+                if (error instanceof InterruptedException) Thread.currentThread().interrupt();
+                if (process != null) terminateTree(process);
+                return null;
+            }
+        }
+
+        private static Path findExecutable(Path root, String name) {
+            if (!Files.isDirectory(root)) return null;
+            try (var paths = Files.find(root, 6,
+                (path, attributes) -> attributes.isRegularFile()
+                    && path.getFileName().toString().equalsIgnoreCase(name))) {
+                return paths.findFirst().orElse(null);
+            } catch (IOException | SecurityException error) {
+                return null;
+            }
         }
     }
 
