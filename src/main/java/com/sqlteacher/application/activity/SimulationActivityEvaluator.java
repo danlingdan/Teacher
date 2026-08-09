@@ -69,7 +69,7 @@ public final class SimulationActivityEvaluator
         boolean passed = reached == specification.checkpoints().size() && goalReached;
         String reason = passed ? "SIMULATION_PASSED"
             : firstFailure.isEmpty() ? "SIMULATION_GOAL_NOT_REACHED" : firstFailure;
-        String summary = passed ? "模拟实验的全部确定性检查点已通过。"
+        String summary = passed ? "模拟实验的全部步骤已完成。"
             : "已达到 " + reached + "/" + specification.checkpoints().size() + " 个检查点。";
         return new ActivityEvaluationResult(
             passed ? ActivityEvaluationStatus.PASSED : ActivityEvaluationStatus.FAILED,

@@ -598,11 +598,11 @@ final class V14CloudStore {
         try (Connection connection = open()) {
             SubmissionIdentity submission = submissionIdentity(connection, classroomId, assignmentId, submissionId);
             AssignmentContentSnapshot snapshot = findSnapshot(connection, assignmentId);
-            String outcome = submission.passed() ? "本次提交已通过确定性评测。" : "本次提交尚未通过确定性评测。";
+            String outcome = submission.passed() ? "本次提交已通过检查。" : "本次提交还有未完成的要求。";
             String error = submission.errorCode() == null || submission.errorCode().isBlank()
                 ? "请结合评测项逐步核对查询结果。" : "优先检查错误类型：" + submission.errorCode() + "。";
             List<String> evidence = new ArrayList<>();
-            evidence.add("确定性结果：" + (submission.passed() ? "PASSED" : "FAILED"));
+            evidence.add("检查结果：" + (submission.passed() ? "已通过" : "未通过"));
             if (submission.errorCode() != null && !submission.errorCode().isBlank()) {
                 evidence.add("错误码：" + submission.errorCode());
             }

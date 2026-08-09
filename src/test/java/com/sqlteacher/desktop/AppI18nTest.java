@@ -10,6 +10,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashSet;
 import java.util.Locale;
+import java.util.Map;
 import java.util.MissingResourceException;
 import java.util.Properties;
 import java.util.Set;
@@ -67,6 +68,31 @@ class AppI18nTest {
             }
         }
         assertTrue(missing.isEmpty(), "FXML %key references without bundle entries: " + missing);
+    }
+
+    @Test void primaryLearningFlowCopyAvoidsInternalImplementationVocabulary() throws Exception {
+        Properties zh = load("messages_zh_CN.properties");
+        Properties en = load("messages_en.properties");
+        Set<String> learningFlowKeys = Set.of(
+            "HomeController.2", "HomeController.8", "alpha2.context.workspace",
+            "alpha2.context.ai", "alpha2.context.student", "alpha2.context.progress",
+            "alpha2.workspace.summary", "alpha3.evaluating", "alpha3.loading.message",
+            "alpha3.unsupported.message", "alpha3.review.loading", "alpha3.review.required",
+            "simulation.offline", "simulation.checkpoints"
+        );
+        Map<Properties, Set<String>> forbiddenByBundle = Map.of(
+            zh, Set.of("确定性", "评价器", "评测器", "活动定义", "安全边界", "证据状态"),
+            en, Set.of("deterministic", "evaluator", "activity definition", "safety boundary", "evidence state")
+        );
+        Set<String> offenders = new HashSet<>();
+        forbiddenByBundle.forEach((bundle, forbiddenTerms) -> learningFlowKeys.forEach(key -> {
+            String value = bundle.getProperty(key, "").toLowerCase(Locale.ROOT);
+            forbiddenTerms.stream()
+                .filter(term -> value.contains(term.toLowerCase(Locale.ROOT)))
+                .forEach(term -> offenders.add(key + " contains " + term));
+        }));
+        assertTrue(offenders.isEmpty(),
+            "Primary learning flow copy should describe the learner's task, feedback, or next action: " + offenders);
     }
 
     @Test void localeSwitchActuallyChangesResolvedText() {
