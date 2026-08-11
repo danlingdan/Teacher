@@ -6,6 +6,7 @@
 
 | 版本/主题 | 计划 | 对应实施记录 |
 | --- | --- | --- |
+| v3.0 | [UI 迁移与性能重构计划](2026-08-11-v3-ui-migration-and-performance-plan.md) | 规划中 |
 | v2.2 | [组件傻瓜化与数据库扩展计划](2026-08-09-v2.2-managed-components-and-database-expansion-plan.md) | [本地完成说明](../releases/v2.2.0.md) |
 | v2.1 | [目标驱动数据库学习计划](2026-08-09-v2.1-goal-driven-database-learning-plan.md) | [发布说明](../releases/v2.1.0.md) |
 | v2.0.1 | [教学文案整顿计划](2026-08-09-v2.0.1-teaching-copy-plan.md) | [验收记录](../acceptance/2026-08-09-v2.0.1-stage-gate.md) |
@@ -17,6 +18,10 @@
 | v1.8 | [课程知识体系](2026-07-31-v1.8-course-knowledge-plan.md) | [Stage 5](../history/stages/stage5/2026-08-01-v18-course-knowledge-implementation.md) |
 | v1.7 | [学习诊断与个性化练习](2026-07-30-v1.7-learning-diagnosis-loop-plan.md) | [Stage 5](../history/stages/stage5/2026-07-30-v17-learning-diagnosis-implementation.md) |
 | v1.6 | [可控 AI 教学工作区](2026-07-30-v1.6-controlled-ai-workspace-plan.md) | [Stage 5](../history/stages/stage5/2026-07-30-v16-controlled-ai-workspace-implementation.md) |
+
+## 全项目审查
+
+- [2026-08-09 全项目代码审查报告](2026-08-09-全项目代码审查报告.md)：基于 `main` @ `c02b074`（v2.2.0）的代码审查结论，问题编号（S1-S5、M1-M20）供后续修复任务引用。
 
 ## 早期计划
 

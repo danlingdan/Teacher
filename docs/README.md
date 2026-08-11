@@ -7,7 +7,7 @@
 - 当前代码版本：`2.3.0`
 - 当前正式版本：[v2.3.0](releases/v2.3.0.md)
 - 上一稳定版本：[v2.2.0](releases/v2.2.0.md)
-- 当前迭代计划：[v2.2 兼容层交付记录](plans/2026-08-09-v2.2-managed-components-and-database-expansion-plan.md)
+- 当前迭代计划：[v3.0 UI 迁移与性能重构计划](plans/2026-08-11-v3-ui-migration-and-performance-plan.md)
 - 最新公开预发布说明：[v2.0.0-alpha.7](releases/v2.0.0-alpha.7.md)
 - 最新稳定版说明：[v2.3.0](releases/v2.3.0.md)
 - 最近一轮功能计划：[v2.2 组件傻瓜化与数据库扩展计划](plans/2026-08-09-v2.2-managed-components-and-database-expansion-plan.md)
