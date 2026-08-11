@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { LocalAppError, localAppRequest } from "./ipc";
+import manifest from "../../../contracts/ipc/v1/manifest.json";
+import { CONTRACT_VERSION, LocalAppError, localAppRequest } from "./ipc";
 
 describe("localAppRequest", () => {
   it("refuses to invent browser fallback data", async () => {
@@ -12,5 +13,18 @@ describe("localAppRequest", () => {
   it("normalizes structured bridge failures", () => {
     const error = LocalAppError.from({ code: "BUSY", message: "busy", retryable: true });
     expect(error).toMatchObject({ code: "BUSY", message: "busy", retryable: true });
+  });
+
+  it("stays synchronized with the frozen machine-readable contract", () => {
+    expect(CONTRACT_VERSION).toBe(manifest.contractVersion);
+    expect(manifest.methods).toContain("session.current");
+    expect(manifest.methods).toEqual(expect.arrayContaining([
+      "knowledge.import.preview", "runner.run", "sql.analyze", "sql.execute", "ai.knowledge.ask",
+      "account.login", "account.logout", "teaching.workspace", "teaching.exercise.toggle",
+      "cloud.workspace", "cloud.sync", "cloud.class.create", "settings.workspace", "settings.update",
+      "migration.status",
+    ]));
+    expect(manifest.events).toEqual(expect.arrayContaining(["import.progress", "runner.progress", "ai.delta"]));
+    expect(manifest.compatibility.policy).toBe("additive-within-v1");
   });
 });

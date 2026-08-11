@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sqlteacher.tech/contracts/ipc/v1/event.schema.json",
+  "title": "SQLTeacher LocalApp IPC v1 event",
+  "type": "object",
+  "required": ["type", "requestId", "contractVersion", "event", "payload"],
+  "additionalProperties": false,
+  "properties": {
+    "type": { "const": "event" },
+    "requestId": { "type": "string" },
+    "contractVersion": { "const": "3.0-v1" },
+    "event": { "enum": ["ai.delta", "import.progress", "progress", "runner.progress"] },
+    "payload": { "type": "object" }
+  }
+}

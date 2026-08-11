@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sqlteacher.tech/contracts/ipc/v1/request.schema.json",
+  "title": "SQLTeacher LocalApp IPC v1 request",
+  "type": "object",
+  "required": ["requestId", "method", "params", "contractVersion"],
+  "additionalProperties": false,
+  "properties": {
+    "requestId": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "method": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "params": { "type": "object" },
+    "contractVersion": { "const": "3.0-v1" }
+  }
+}

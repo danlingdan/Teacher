@@ -1,6 +1,6 @@
 param(
     [string]$SidecarRoot = "..\src-tauri\sidecar",
-    [string]$OutputPath = "..\..\target\v3-alpha1-performance.json"
+    [string]$OutputPath = "..\..\target\v3-alpha7-performance.json"
 )
 
 $ErrorActionPreference = "Stop"
@@ -9,7 +9,7 @@ $sidecarPath = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot $SidecarRo
 $outputFile = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot $OutputPath))
 $java = Join-Path $sidecarPath "runtime\bin\java.exe"
 if (-not (Test-Path -LiteralPath $java)) {
-    throw "Alpha.1 sidecar runtime was not found. Run packaging/build-v3-sidecar.ps1 first."
+    throw "SQLTeacher 3 sidecar runtime was not found. Run packaging/build-v3-sidecar.ps1 first."
 }
 
 function Invoke-LocalRequest {
@@ -23,7 +23,7 @@ function Invoke-LocalRequest {
         requestId = $RequestId
         method = $Method
         params = $Params
-        contractVersion = "3.0-alpha.1"
+        contractVersion = "3.0-v1"
     } | ConvertTo-Json -Compress
     $watch = [System.Diagnostics.Stopwatch]::StartNew()
     $Process.StandardInput.WriteLine($request)
@@ -62,7 +62,7 @@ $psi.ArgumentList.Add("com.sqlteacher.desktop.bridge.LocalAppHost")
 $process = [System.Diagnostics.Process]::new()
 $process.StartInfo = $psi
 $startupWatch = [System.Diagnostics.Stopwatch]::StartNew()
-if (-not $process.Start()) { throw "Unable to start the Alpha.1 Java Sidecar." }
+if (-not $process.Start()) { throw "Unable to start the SQLTeacher 3 Java Sidecar." }
 try {
     $health = Invoke-LocalRequest -Process $process -RequestId "health" -Method "system.health"
     $startupWatch.Stop()
@@ -88,7 +88,7 @@ try {
 
     $report = [ordered]@{
         schemaVersion = 1
-        contractVersion = "3.0-alpha.1"
+        contractVersion = "3.0-v1"
         measuredAt = [DateTimeOffset]::UtcNow.ToString("o")
         environment = [ordered]@{
             os = [System.Environment]::OSVersion.VersionString

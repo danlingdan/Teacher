@@ -24,6 +24,21 @@ function Assert-ChildPath {
     }
 }
 
+function Get-JavaVersionLine {
+    param([string]$Executable)
+    $previousPreference = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = "Continue"
+        $lines = & $Executable -version 2>&1
+        if ($LASTEXITCODE -ne 0) {
+            throw "Unable to read the configured Java version."
+        }
+        return $lines | Select-Object -First 1 | ForEach-Object { $_.ToString() }
+    } finally {
+        $ErrorActionPreference = $previousPreference
+    }
+}
+
 if ([string]::IsNullOrWhiteSpace($JavaHome)) {
     $javaCommand = Get-Command java -ErrorAction Stop
     $JavaHome = Split-Path -Parent (Split-Path -Parent $javaCommand.Source)
@@ -33,9 +48,9 @@ $jlinkExecutable = Join-Path $JavaHome "bin\jlink.exe"
 if (-not (Test-Path -LiteralPath $javaExecutable) -or -not (Test-Path -LiteralPath $jlinkExecutable)) {
     throw "JavaHome must point to a JDK 25 installation containing java.exe and jlink.exe."
 }
-$javaVersion = & $javaExecutable -version 2>&1 | Select-Object -First 1
+$javaVersion = Get-JavaVersionLine -Executable $javaExecutable
 if ($javaVersion -notmatch 'version "25(?:\.|\")') {
-    throw "SQLTeacher 3 Alpha.1 sidecar requires JDK 25, found: $javaVersion"
+    throw "SQLTeacher 3 Alpha.7 sidecar requires JDK 25, found: $javaVersion"
 }
 
 Assert-ChildPath -Candidate $sidecarRoot -Parent (Join-Path $projectRoot "ui-web\src-tauri")
@@ -76,9 +91,9 @@ try {
     if ($LASTEXITCODE -ne 0) { throw "Unable to create the Java 25 sidecar runtime image." }
 
     $metadata = [ordered]@{
-        contractVersion = "3.0-alpha.1"
+        contractVersion = "3.0-v1"
         applicationVersion = $projectVersion
-        javaVersion = (& $javaExecutable -version 2>&1 | Select-Object -First 1).ToString()
+        javaVersion = $javaVersion
         mainClass = "com.sqlteacher.desktop.bridge.LocalAppHost"
         generatedAt = [DateTimeOffset]::UtcNow.ToString("o")
     }

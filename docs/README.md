@@ -4,15 +4,15 @@
 
 ## 当前基线
 
-- 当前代码版本：`3.0.0-alpha.1`（开发中）
+- 当前代码版本：`3.0.0-alpha.7`（最后一个 Alpha 预发布）
 - 当前正式版本：[v2.3.0](releases/v2.3.0.md)
 - 上一稳定版本：[v2.2.0](releases/v2.2.0.md)
 - 当前迭代计划：[v3.0 UI 迁移与性能重构计划](plans/2026-08-11-v3-ui-migration-and-performance-plan.md)
-- 最新公开预发布说明：[v2.0.0-alpha.7](releases/v2.0.0-alpha.7.md)
+- 最新公开预发布说明：[v3.0.0-alpha.7](releases/v3.0.0-alpha.7.md)
 - 最新稳定版说明：[v2.3.0](releases/v2.3.0.md)
 - 最近一轮功能计划：[v2.2 组件傻瓜化与数据库扩展计划](plans/2026-08-09-v2.2-managed-components-and-database-expansion-plan.md)
 - 对应实施记录：[v2.0 GA 发布记录](history/stages/stage18/2026-08-09-v2-ga-release.md)
-- 当前实施记录：[v3.0 Alpha.1 架构与性能验证](history/stages/stage19/2026-08-11-v3-alpha1-architecture-spike.md)
+- 当前实施记录：[v3.0 Alpha.7 功能对齐与收口](history/stages/stage25/2026-08-11-v3-alpha7-parity-closeout.md)
 - 当前生产部署记录：[v2.3.0 云端部署记录](operations/2026-08-11-v2.3.0-cloud-deployment.md)
 
 > “当前”以 `pom.xml`、Git 标签和实际代码为准。计划文档记录制定时的基线，不应被当作实时状态页。
@@ -47,7 +47,7 @@ plans（计划与范围）
 
 ## 历史资料
 
-Stage 0 至 Stage 18 和早期五人协作方案已集中到 [history/](history/README.md)。这些资料用于追溯实现和决策；当前开发和交付规则以仓库根目录的 [AGENTS.md](../AGENTS.md) 与当前代码为准。
+Stage 0 至 Stage 23 和早期五人协作方案已集中到 [history/](history/README.md)。这些资料用于追溯实现和决策；当前开发和交付规则以仓库根目录的 [AGENTS.md](../AGENTS.md) 与当前代码为准。
 
 ## 维护规则
 

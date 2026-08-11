@@ -1,6 +1,6 @@
 # 阶段实施记录
 
-Stage 0 至 Stage 19 的记录统一归档在此。目录名保留原阶段编号，便于历史链接、提交记录和发布证据相互对应。
+Stage 0 至 Stage 25 的记录统一归档在此。目录名保留原阶段编号，便于历史链接、提交记录和发布证据相互对应。
 
 | 阶段 | 主题 | 入口 |
 | --- | --- | --- |
@@ -24,5 +24,11 @@ Stage 0 至 Stage 19 的记录统一归档在此。目录名保留原阶段编�
 | Stage 17 | v2.0 RC.1 发布冻结与本地候选验证 | [stage17/](stage17/) |
 | Stage 18 | v2.0 GA 正式发布与云端同步 | [stage18/](stage18/) |
 | Stage 19 | v3.0 Alpha.1 架构与性能验证 | [stage19/](stage19/) |
+| Stage 20 | v3.0 Alpha.2 IPC、界面与测试基础 | [stage20/](stage20/) |
+| Stage 21 | v3.0 Alpha.3 课程、知识与 Obsidian 导入 | [stage21/](stage21/) |
+| Stage 22 | v3.0 Alpha.4 练习、实验与编辑器 | [stage22/](stage22/) |
+| Stage 23 | v3.0 Alpha.5 数据、SQL 与 AI | [stage23/](stage23/) |
+| Stage 24 | v3.0 Alpha.6 教学、班级、云端与设置 | [stage24/](stage24/) |
+| Stage 25 | v3.0 Alpha.7 功能对齐与收口 | [stage25/](stage25/) |
 
 返回 [历史资料](../README.md) 或 [文档中心](../../README.md)。

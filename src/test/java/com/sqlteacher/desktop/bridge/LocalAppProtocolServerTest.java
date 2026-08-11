@@ -55,6 +55,23 @@ class LocalAppProtocolServerTest {
     }
 
     @Test
+    void shouldRejectUnknownEnvelopeFields() throws Exception {
+        String input = request("strict-1", "system.health", "{}")
+            .replace(",\"contractVersion\"", ",\"unexpected\":true,\"contractVersion\"") + "\n"
+            + request("shutdown-1", "system.shutdown", "{}") + "\n";
+        StringWriter output = new StringWriter();
+        LocalAppApi api = (method, params, cancellation, events) -> mapper.nullNode();
+
+        try (var server = new LocalAppProtocolServer(mapper, api, new StringReader(input), output)) {
+            server.run();
+        }
+
+        JsonNode error = output.toString().lines().map(this::read)
+            .filter(item -> item.path("requestId").asText().equals("strict-1")).findFirst().orElseThrow();
+        assertEquals("INVALID_REQUEST", error.path("error").path("code").asText());
+    }
+
+    @Test
     void shouldEmitProgressAndSupportCancellationProtocol() throws Exception {
         LocalAppApi api = new LocalAppApi() {
             @Override

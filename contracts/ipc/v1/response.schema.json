@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sqlteacher.tech/contracts/ipc/v1/response.schema.json",
+  "title": "SQLTeacher LocalApp IPC v1 response",
+  "type": "object",
+  "required": ["type", "requestId", "contractVersion"],
+  "properties": {
+    "type": { "const": "response" },
+    "requestId": { "type": "string" },
+    "contractVersion": { "const": "3.0-v1" },
+    "result": {},
+    "error": {
+      "type": "object",
+      "required": ["code", "message", "retryable"],
+      "additionalProperties": false,
+      "properties": {
+        "code": { "type": "string" },
+        "message": { "type": "string" },
+        "retryable": { "type": "boolean" }
+      }
+    }
+  },
+  "oneOf": [
+    { "required": ["result"], "not": { "required": ["error"] } },
+    { "required": ["error"], "not": { "required": ["result"] } }
+  ]
+}

@@ -10,6 +10,7 @@ import java.io.BufferedWriter;
 import java.io.IOException;
 import java.io.Reader;
 import java.io.Writer;
+import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -20,9 +21,9 @@ import java.util.concurrent.Semaphore;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public final class LocalAppProtocolServer implements AutoCloseable {
-    static final int MAX_MESSAGE_CHARS = 1_048_576;
-    static final int MAX_CONCURRENT_REQUESTS = 8;
-    private static final Set<String> RESERVED_METHODS = Set.of("system.cancel", "system.shutdown");
+    static final int MAX_MESSAGE_BYTES = LocalAppContract.MAX_MESSAGE_BYTES;
+    static final int MAX_CONCURRENT_REQUESTS = LocalAppContract.MAX_CONCURRENT_REQUESTS;
+    private static final Set<String> REQUEST_FIELDS = Set.of("requestId", "method", "params", "contractVersion");
 
     private final ObjectMapper mapper;
     private final LocalAppApi api;
@@ -43,8 +44,9 @@ public final class LocalAppProtocolServer implements AutoCloseable {
     public void run() throws IOException {
         String line;
         while (running.get() && (line = input.readLine()) != null) {
-            if (line.length() > MAX_MESSAGE_CHARS) {
-                writeError("", "PAYLOAD_TOO_LARGE", "IPC request exceeds the one MiB character limit", false);
+            if (line.getBytes(StandardCharsets.UTF_8).length > MAX_MESSAGE_BYTES) {
+                writeError("", LocalAppErrorCode.PAYLOAD_TOO_LARGE,
+                    "IPC request exceeds the one MiB UTF-8 limit", false);
                 continue;
             }
             accept(line);
@@ -57,30 +59,32 @@ public final class LocalAppProtocolServer implements AutoCloseable {
         try {
             request = mapper.readTree(line);
         } catch (JsonProcessingException error) {
-            writeError("", "INVALID_JSON", "IPC request is not valid JSON", false);
+            writeError("", LocalAppErrorCode.INVALID_JSON, "IPC request is not valid JSON", false);
             return;
         }
         String requestId = text(request, "requestId");
         String method = text(request, "method");
         String contractVersion = text(request, "contractVersion");
-        if (requestId.isBlank() || method.isBlank() || contractVersion.isBlank()) {
-            writeError(requestId, "INVALID_REQUEST", "requestId, method, and contractVersion are required", false);
+        if (!validEnvelope(request, requestId, method, contractVersion)) {
+            writeError(requestId, LocalAppErrorCode.INVALID_REQUEST,
+                "Request must match the frozen v1 envelope", false);
             return;
         }
-        if (!DefaultLocalAppApi.CONTRACT_VERSION.equals(contractVersion)) {
-            writeError(requestId, "CONTRACT_VERSION_UNSUPPORTED", "Unsupported IPC contract version", false);
+        if (!LocalAppContract.VERSION.equals(contractVersion)) {
+            writeError(requestId, LocalAppErrorCode.CONTRACT_VERSION_UNSUPPORTED,
+                "Unsupported IPC contract version", false);
             return;
         }
-        if (RESERVED_METHODS.contains(method)) {
+        if (LocalAppContract.RESERVED_METHODS.contains(method)) {
             handleReserved(requestId, method, request.path("params"));
             return;
         }
         if (active.containsKey(requestId)) {
-            writeError(requestId, "DUPLICATE_REQUEST", "requestId is already active", false);
+            writeError(requestId, LocalAppErrorCode.DUPLICATE_REQUEST, "requestId is already active", false);
             return;
         }
         if (!concurrency.tryAcquire()) {
-            writeError(requestId, "BUSY", "Local application request limit reached", true);
+            writeError(requestId, LocalAppErrorCode.BUSY, "Local application request limit reached", true);
             return;
         }
         AtomicBoolean cancelled = new AtomicBoolean(false);
@@ -91,18 +95,21 @@ public final class LocalAppProtocolServer implements AutoCloseable {
     }
 
     private void execute(String requestId, String method, JsonNode params, RequestControl control) {
+        control.worker = Thread.currentThread();
         try {
             JsonNode result = api.invoke(method, params, control.cancelled::get,
                 event -> writeEvent(requestId, event));
             writeResult(requestId, result);
         } catch (LocalAppCancelledException | InterruptedException error) {
             Thread.currentThread().interrupt();
-            writeError(requestId, "CANCELLED", "Local application request was cancelled", false);
+            writeError(requestId, LocalAppErrorCode.CANCELLED, "Local application request was cancelled", false);
         } catch (IllegalArgumentException error) {
-            writeError(requestId, "INVALID_METHOD_OR_PARAMS", safeMessage(error), false);
+            writeError(requestId, LocalAppErrorCode.INVALID_METHOD_OR_PARAMS, safeMessage(error), false);
         } catch (Exception error) {
-            writeError(requestId, "LOCAL_APP_FAILURE", "Local application operation failed", true);
+            writeError(requestId, LocalAppErrorCode.LOCAL_APP_FAILURE,
+                "Local application operation failed", true);
         } finally {
+            control.worker = null;
             active.remove(requestId);
             concurrency.release();
         }
@@ -115,6 +122,8 @@ public final class LocalAppProtocolServer implements AutoCloseable {
             boolean cancelled = target != null;
             if (target != null) {
                 target.cancelled.set(true);
+                Thread worker = target.worker;
+                if (worker != null) worker.interrupt();
             }
             writeResult(requestId, mapper.createObjectNode().put("cancelled", cancelled)
                 .put("targetRequestId", targetRequestId));
@@ -131,16 +140,19 @@ public final class LocalAppProtocolServer implements AutoCloseable {
     }
 
     private void writeEvent(String requestId, LocalAppEvent event) {
+        if (!LocalAppContract.EVENT_TYPES.contains(event.type())) {
+            throw new IllegalArgumentException("Unknown local application event type: " + event.type());
+        }
         ObjectNode response = baseMessage(requestId, "event");
         response.put("event", event.type());
         response.set("payload", event.payload());
         write(response);
     }
 
-    private void writeError(String requestId, String code, String message, boolean retryable) {
+    private void writeError(String requestId, LocalAppErrorCode code, String message, boolean retryable) {
         ObjectNode response = baseMessage(requestId, "response");
         ObjectNode error = response.putObject("error");
-        error.put("code", code);
+        error.put("code", code.name());
         error.put("message", message);
         error.put("retryable", retryable);
         write(response);
@@ -150,7 +162,7 @@ public final class LocalAppProtocolServer implements AutoCloseable {
         ObjectNode response = mapper.createObjectNode();
         response.put("type", type);
         response.put("requestId", requestId);
-        response.put("contractVersion", DefaultLocalAppApi.CONTRACT_VERSION);
+        response.put("contractVersion", LocalAppContract.VERSION);
         return response;
     }
 
@@ -182,6 +194,19 @@ public final class LocalAppProtocolServer implements AutoCloseable {
         return node.path(field).asText("").trim();
     }
 
+    private static boolean validEnvelope(JsonNode request, String requestId, String method, String contractVersion) {
+        if (!request.isObject() || requestId.isBlank() || requestId.length() > 128
+            || method.isBlank() || method.length() > 128 || contractVersion.isBlank()
+            || !request.path("params").isObject()) {
+            return false;
+        }
+        var fields = request.fieldNames();
+        while (fields.hasNext()) {
+            if (!REQUEST_FIELDS.contains(fields.next())) return false;
+        }
+        return true;
+    }
+
     private static String safeMessage(Exception error) {
         String message = error.getMessage();
         return message == null || message.isBlank() ? "Invalid local application request" : message;
@@ -201,6 +226,7 @@ public final class LocalAppProtocolServer implements AutoCloseable {
     private static final class RequestControl {
         private final AtomicBoolean cancelled;
         private volatile Future<?> future;
+        private volatile Thread worker;
 
         private RequestControl(AtomicBoolean cancelled) {
             this.cancelled = cancelled;

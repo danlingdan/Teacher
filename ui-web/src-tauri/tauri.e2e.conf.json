@@ -1,0 +1,13 @@
+{
+  "build": {
+    "beforeBuildCommand": "set VITE_WDIO=true&& npm run build"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "security": {
+      "capabilities": ["default", "e2e"],
+      "csp": "default-src 'self'; img-src 'self' data: asset: http://asset.localhost; style-src 'self' 'unsafe-inline'; font-src 'self' data:; connect-src ipc: http://ipc.localhost http://127.0.0.1:*; script-src 'self' 'unsafe-eval' 'wasm-unsafe-eval'; object-src 'none'; frame-src 'none'"
+    }
+  },
+  "bundle": { "active": false }
+}

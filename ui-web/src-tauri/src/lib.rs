@@ -10,13 +10,42 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager, State};
 
-const CONTRACT_VERSION: &str = "3.0-alpha.1";
+const CONTRACT_VERSION: &str = "3.0-v1";
 const MAX_REQUEST_BYTES: usize = 1_048_576;
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
 const ALLOWED_METHODS: &[&str] = &[
+    "account.login",
+    "account.logout",
     "system.health",
+    "session.current",
     "home.summary",
     "knowledge.sample",
+    "course.workspace",
+    "knowledge.article",
+    "knowledge.search",
+    "knowledge.import.preview",
+    "knowledge.import.execute",
+    "practice.catalog",
+    "practice.preview",
+    "practice.start",
+    "practice.run",
+    "practice.submit",
+    "runner.capabilities",
+    "runner.run",
+    "data.connections",
+    "data.schema",
+    "sql.analyze",
+    "sql.execute",
+    "sql.result.page",
+    "ai.knowledge.ask",
+    "teaching.workspace",
+    "teaching.exercise.toggle",
+    "cloud.workspace",
+    "cloud.sync",
+    "cloud.class.create",
+    "settings.workspace",
+    "settings.update",
+    "migration.status",
     "editor.languages",
     "benchmark.echo",
     "task.demo",
@@ -26,6 +55,7 @@ const ALLOWED_METHODS: &[&str] = &[
 
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[serde(deny_unknown_fields)]
 struct IpcRequest {
     request_id: String,
     method: String,
@@ -73,11 +103,8 @@ impl SidecarManager {
         }
     }
 
-    fn request(&self, mut request: IpcRequest) -> Result<Value, BridgeError> {
+    fn request(&self, request: IpcRequest) -> Result<Value, BridgeError> {
         self.validate(&request)?;
-        if request.request_id.is_empty() {
-            request.request_id = format!("rust-{}", self.sequence.fetch_add(1, Ordering::Relaxed));
-        }
         let payload = serde_json::to_string(&request).map_err(|_| {
             BridgeError::new(
                 "SERIALIZATION_FAILED",
@@ -174,6 +201,24 @@ impl SidecarManager {
                 false,
             ));
         }
+        if request.request_id.is_empty()
+            || request.request_id.len() > 128
+            || request.method.is_empty()
+            || request.method.len() > 128
+        {
+            return Err(BridgeError::new(
+                "INVALID_REQUEST",
+                "Request must match the frozen v1 envelope",
+                false,
+            ));
+        }
+        if !request.params.is_object() {
+            return Err(BridgeError::new(
+                "INVALID_REQUEST",
+                "Local application parameters must be an object",
+                false,
+            ));
+        }
         Ok(())
     }
 
@@ -187,7 +232,7 @@ impl SidecarManager {
         if !java.is_file() {
             return Err(BridgeError::new(
                 "SIDECAR_RUNTIME_MISSING",
-                "Bundled Java runtime is missing; run the Alpha.1 sidecar build first",
+                "Bundled Java runtime is missing; run the v3 sidecar build first",
                 false,
             ));
         }
@@ -281,10 +326,11 @@ impl SidecarManager {
 
     fn sidecar_root(&self) -> Result<PathBuf, BridgeError> {
         let development = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("sidecar");
-        if cfg!(debug_assertions) && development.is_dir() {
+        if (cfg!(debug_assertions) || cfg!(feature = "e2e")) && development.is_dir() {
             return Ok(development);
         }
-        self.app
+        let bundled = self
+            .app
             .path()
             .resource_dir()
             .map(|path| path.join("sidecar"))
@@ -292,6 +338,20 @@ impl SidecarManager {
                 BridgeError::new(
                     "SIDECAR_RUNTIME_MISSING",
                     "Unable to resolve bundled resources",
+                    false,
+                )
+            })?;
+        if bundled.is_dir() {
+            return Ok(bundled);
+        }
+        std::env::current_exe()
+            .ok()
+            .and_then(|path| path.parent().map(|parent| parent.join("sidecar")))
+            .filter(|path| path.is_dir())
+            .ok_or_else(|| {
+                BridgeError::new(
+                    "SIDECAR_RUNTIME_MISSING",
+                    "Bundled Java runtime is missing; run the v3 sidecar build first",
                     false,
                 )
             })
@@ -357,7 +417,12 @@ async fn local_app_request(
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let builder = tauri::Builder::default();
+    #[cfg(feature = "e2e")]
+    let builder = builder
+        .plugin(tauri_plugin_wdio::init())
+        .plugin(tauri_plugin_wdio_webdriver::init());
+    builder
         .setup(|app| {
             app.manage(AppState {
                 sidecar: Arc::new(SidecarManager::new(app.handle().clone())),
@@ -367,4 +432,41 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![local_app_request])
         .run(tauri::generate_context!())
         .expect("error while running SQLTeacher");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashSet;
+
+    #[test]
+    fn frozen_contract_includes_role_and_lifecycle_methods() {
+        assert_eq!(CONTRACT_VERSION, "3.0-v1");
+        assert!(ALLOWED_METHODS.contains(&"session.current"));
+        assert!(ALLOWED_METHODS.contains(&"system.cancel"));
+        assert!(ALLOWED_METHODS.contains(&"system.shutdown"));
+        assert!(ALLOWED_METHODS.contains(&"knowledge.import.preview"));
+        assert!(ALLOWED_METHODS.contains(&"runner.run"));
+        assert!(ALLOWED_METHODS.contains(&"sql.analyze"));
+        assert!(ALLOWED_METHODS.contains(&"ai.knowledge.ask"));
+        assert!(ALLOWED_METHODS.contains(&"teaching.workspace"));
+        assert!(ALLOWED_METHODS.contains(&"settings.workspace"));
+        assert!(ALLOWED_METHODS.contains(&"migration.status"));
+    }
+
+    #[test]
+    fn frozen_request_rejects_unknown_envelope_fields() {
+        let json = r#"{"requestId":"r1","method":"system.health","params":{},"contractVersion":"3.0-v1","extra":true}"#;
+        assert!(serde_json::from_str::<IpcRequest>(json).is_err());
+    }
+
+    #[test]
+    fn rust_method_whitelist_matches_machine_readable_manifest() {
+        let manifest: Value = serde_json::from_str(include_str!("../../../contracts/ipc/v1/manifest.json"))
+            .expect("IPC manifest must be valid JSON");
+        let expected: HashSet<&str> = manifest["methods"].as_array().expect("methods must be an array")
+            .iter().map(|item| item.as_str().expect("method must be text")).collect();
+        let actual: HashSet<&str> = ALLOWED_METHODS.iter().copied().collect();
+        assert_eq!(expected, actual);
+    }
 }

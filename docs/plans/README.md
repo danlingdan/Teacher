@@ -6,7 +6,7 @@
 
 | 版本/主题 | 计划 | 对应实施记录 |
 | --- | --- | --- |
-| v3.0 | [UI 迁移与性能重构计划](2026-08-11-v3-ui-migration-and-performance-plan.md) | [Alpha.1 架构与性能验证](../history/stages/stage19/2026-08-11-v3-alpha1-architecture-spike.md)（门禁收集中） |
+| v3.0 | [UI 迁移与性能重构计划](2026-08-11-v3-ui-migration-and-performance-plan.md) | [Alpha.1 架构与性能验证](../history/stages/stage19/2026-08-11-v3-alpha1-architecture-spike.md) · [Alpha.2 IPC、界面与测试基础](../history/stages/stage20/2026-08-11-v3-alpha2-foundation.md) · [Alpha.3 课程与知识](../history/stages/stage21/2026-08-11-v3-alpha3-course-knowledge-import.md) · [Alpha.4 练习与实验](../history/stages/stage22/2026-08-11-v3-alpha4-practice-runner-editor.md) · [Alpha.5 数据、SQL 与 AI](../history/stages/stage23/2026-08-11-v3-alpha5-data-sql-ai.md) · [Alpha.6 教学、云端与设置](../history/stages/stage24/2026-08-11-v3-alpha6-teaching-cloud-settings.md) · [Alpha.7 功能对齐与收口](../history/stages/stage25/2026-08-11-v3-alpha7-parity-closeout.md) |
 | v2.2 | [组件傻瓜化与数据库扩展计划](2026-08-09-v2.2-managed-components-and-database-expansion-plan.md) | [本地完成说明](../releases/v2.2.0.md) |
 | v2.1 | [目标驱动数据库学习计划](2026-08-09-v2.1-goal-driven-database-learning-plan.md) | [发布说明](../releases/v2.1.0.md) |
 | v2.0.1 | [教学文案整顿计划](2026-08-09-v2.0.1-teaching-copy-plan.md) | [验收记录](../acceptance/2026-08-09-v2.0.1-stage-gate.md) |

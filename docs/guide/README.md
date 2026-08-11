@@ -27,5 +27,8 @@
 18. [项目学习、课程包与 Cloud 2.0](18-project-course-package-cloud2.md)
 19. [Beta 学习活动、证据与兼容契约](19-beta-learning-contracts.md)
 20. [教学界面文案规范](20-teaching-copy-guidelines.md)
+21. [LocalApp IPC v1 合同](local-app-ipc-v1.md)
+22. [v3 Alpha.5 课程、练习与数据工作区](22-v3-alpha5-workspaces.md)
+23. [v3 Alpha.7 教学、云端、设置与迁移状态](23-v3-alpha7-teaching-cloud-settings.md)
 
 返回 [文档中心](../README.md)。

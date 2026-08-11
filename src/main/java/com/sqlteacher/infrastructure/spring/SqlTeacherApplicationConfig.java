@@ -20,6 +20,7 @@ import com.sqlteacher.application.metadata.DatabaseMetadataService;
 import com.sqlteacher.application.knowledge.CourseKnowledgeService;
 import com.sqlteacher.application.knowledge.GroundedKnowledgeExplanationService;
 import com.sqlteacher.application.knowledge.HybridKnowledgeRetrievalService;
+import com.sqlteacher.application.knowledge.ObsidianVaultImportService;
 import com.sqlteacher.application.nl2sql.DefaultNl2SqlSafetyService;
 import com.sqlteacher.application.nl2sql.Nl2SqlService;
 import com.sqlteacher.application.nl2sql.Nl2SqlSafetyService;
@@ -45,6 +46,7 @@ import com.sqlteacher.infrastructure.database.DatabaseServiceConfig;
 import com.sqlteacher.infrastructure.database.SqliteAppDatabaseInitializer;
 import com.sqlteacher.infrastructure.database.JdbcConnectionFactory;
 import com.sqlteacher.infrastructure.database.JdbcGroundedTutorService;
+import com.sqlteacher.infrastructure.knowledge.DefaultObsidianVaultImportService;
 import com.sqlteacher.infrastructure.support.FileDiagnosticBundleService;
 import com.sqlteacher.infrastructure.support.HttpProblemReportService;
 import com.sqlteacher.infrastructure.system.FileGeneralSoftwareService;
@@ -125,6 +127,11 @@ public class SqlTeacherApplicationConfig {
         AiContextPolicy contextPolicy
     ) {
         return new DefaultGroundedKnowledgeExplanationService(knowledgeService, retrievalService, taskService, contextPolicy);
+    }
+
+    @Bean
+    public ObsidianVaultImportService obsidianVaultImportService(CourseKnowledgeService knowledgeService) {
+        return new DefaultObsidianVaultImportService(knowledgeService);
     }
 
     @Bean
