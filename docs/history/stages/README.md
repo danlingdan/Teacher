@@ -1,6 +1,6 @@
 # 阶段实施记录
 
-Stage 0 至 Stage 25 的记录统一归档在此。目录名保留原阶段编号，便于历史链接、提交记录和发布证据相互对应。
+Stage 0 至 Stage 27 的记录统一归档在此。目录名保留原阶段编号，便于历史链接、提交记录和发布证据相互对应。
 
 | 阶段 | 主题 | 入口 |
 | --- | --- | --- |
@@ -30,5 +30,7 @@ Stage 0 至 Stage 25 的记录统一归档在此。目录名保留原阶段编�
 | Stage 23 | v3.0 Alpha.5 数据、SQL 与 AI | [stage23/](stage23/) |
 | Stage 24 | v3.0 Alpha.6 教学、班级、云端与设置 | [stage24/](stage24/) |
 | Stage 25 | v3.0 Alpha.7 功能对齐与收口 | [stage25/](stage25/) |
+| Stage 26 | v3.0 Beta Tauri-only 完全迁移 | [stage26/](stage26/) |
+| Stage 27 | v3.0 正式版与无控制台启动 | [stage27/](stage27/) |
 
 返回 [历史资料](../README.md) 或 [文档中心](../../README.md)。

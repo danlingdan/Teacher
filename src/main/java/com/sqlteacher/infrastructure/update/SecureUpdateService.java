@@ -112,7 +112,7 @@ public final class SecureUpdateService implements UpdateService {
                 && !RolloutDecider.visible(loadInstallId(), manifest.version().toString(), current.platform(), manifest.rollout())) {
                 return new UpdateCheckResult(UpdateCheckResult.Status.UP_TO_DATE, current, null, "更新将分批开放，当前批次暂未包含此版本");
             }
-            system.notify(AppNotification.Category.UPDATE, "发现 SQLTeacher " + manifest.version(), "更新已准备好，可查看说明后下载。", "updates");
+            system.notify(AppNotification.Category.UPDATE, "更新可用", "SQLTeacher " + manifest.version() + " 已准备好，可查看说明后下载。", "updates");
             return new UpdateCheckResult(UpdateCheckResult.Status.AVAILABLE, current, manifest, "发现新版本 " + manifest.version());
         } catch (InterruptedException error) {
             Thread.currentThread().interrupt(); system.failTask(task, "UPDATE_CHECK_CANCELLED", true);
@@ -235,7 +235,8 @@ public final class SecureUpdateService implements UpdateService {
         GeneralSoftwareSettings old = system.settings();
             system.saveSettings(new GeneralSoftwareSettings(1, old.automaticUpdateChecks(), version.toString(), old.proxyMode(),
                 old.proxyHost(), old.proxyPort(), old.reducedMotion(), old.highContrast(), old.supportLogging(),
-                old.supportLoggingExpiresAt(), old.updateMirrorsEnabled(), old.language(), old.nativeNotificationsEnabled(), old.meteredNetwork()));
+                old.supportLoggingExpiresAt(), old.updateMirrorsEnabled(), old.language(), old.nativeNotificationsEnabled(), old.meteredNetwork(),
+                old.theme(), old.font(), old.density()));
     }
     @Override public void clearDownloadedUpdates() { system.clearRebuildableFiles(); }
 

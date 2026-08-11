@@ -1,6 +1,6 @@
 ---
 name: sqlteacher-windows-release
-description: Prepare, verify, or publish a SQLTeacher Windows release, including Maven versioning, release notes, full tests, jpackage/WiX artifacts, checksums, SBOM, update manifest, Git tag, GitHub Actions, and public Release metadata. Use for release candidates, version bumps, installers, portable ZIPs, tags, or release verification; do not trigger for ordinary feature builds.
+description: Prepare, verify, or publish a SQLTeacher Windows release, including Maven/npm/Cargo versioning, release notes, full tests, Tauri/NSIS artifacts, checksums, SBOMs, update manifest, Git tag, GitHub Actions, and public Release metadata. Use for release candidates, version bumps, installers, portable ZIPs, tags, or release verification; do not trigger for ordinary feature builds.
 ---
 
 # Release SQLTeacher for Windows
@@ -20,10 +20,10 @@ When publication is authorized, use the repository's solo workflow on `main`; do
 ## Run local gates
 
 1. Run `mvn test` and record totals, failures, errors, and intentional skips.
-2. Run `./packaging/package-stage1.ps1` from PowerShell.
-3. Verify the current-version EXE, Windows x64 ZIP, `SHA256SUMS.txt`, CycloneDX SBOM, and app-image outputs required by the script.
+2. Run frontend tests/audit, Rust tests, then `./packaging/package-v3.ps1` from PowerShell with JDK 25.
+3. Verify the current-version EXE, Windows x64 ZIP, `SHA256SUMS.txt`, Java CycloneDX SBOM, and UI CycloneDX SBOM required by the script.
 4. Confirm checksum entries match the intended release artifacts and stale versioned EXE/ZIP files are absent from `target/installer`.
-5. Inspect the packaged launcher for `https://api.sqlteacher.tech` and smoke-start the app-image when the environment supports it.
+5. Verify the packaged sidecar contract/runtime and smoke-start the portable Tauri executable when the environment supports it.
 6. Inspect ZIP entries for `.secrets`, `.env`, `app-data`, databases, logs, credentials, private course material, and unexpected `target` content. Do not print secret values.
 
 ## Publish and verify

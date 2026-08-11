@@ -3,19 +3,27 @@ $uiRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $cargoTarget = [System.IO.Path]::GetFullPath((Join-Path $uiRoot "src-tauri\target"))
 $releaseRoot = [System.IO.Path]::GetFullPath((Join-Path $cargoTarget "release"))
 $sidecarTarget = [System.IO.Path]::GetFullPath((Join-Path $releaseRoot "sidecar"))
+$projectTarget = [System.IO.Path]::GetFullPath((Join-Path $uiRoot "..\target"))
+$e2eDataTarget = [System.IO.Path]::GetFullPath((Join-Path $projectTarget "e2e-app-data"))
 if (-not $sidecarTarget.StartsWith($cargoTarget + [System.IO.Path]::DirectorySeparatorChar, [System.StringComparison]::OrdinalIgnoreCase)) {
     throw "Refusing to clean E2E resources outside the Cargo target directory."
 }
 if (Test-Path -LiteralPath $sidecarTarget) {
     Remove-Item -LiteralPath $sidecarTarget -Recurse -Force
 }
+if (-not $e2eDataTarget.StartsWith($projectTarget + [System.IO.Path]::DirectorySeparatorChar, [System.StringComparison]::OrdinalIgnoreCase)) {
+    throw "Refusing to clean E2E data outside the Maven target directory."
+}
+if (Test-Path -LiteralPath $e2eDataTarget) {
+    Remove-Item -LiteralPath $e2eDataTarget -Recurse -Force
+}
 
 Push-Location $uiRoot
 try {
     & (Join-Path $uiRoot "..\packaging\build-v3-sidecar.ps1")
-    if ($LASTEXITCODE -ne 0) { throw "Unable to build the Alpha.7 Java sidecar." }
+    if ($LASTEXITCODE -ne 0) { throw "Unable to build the SQLTeacher 3.0 Java sidecar." }
     npx tauri build --no-bundle --features e2e --config src-tauri/tauri.e2e.conf.json
-    if ($LASTEXITCODE -ne 0) { throw "Unable to build the Alpha.7 E2E desktop binary." }
+    if ($LASTEXITCODE -ne 0) { throw "Unable to build the SQLTeacher 3.0 E2E desktop binary." }
 } finally {
     Pop-Location
 }

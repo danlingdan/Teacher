@@ -6,35 +6,40 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 
 class WindowsPackagingContractTest {
     @Test
-    void shouldDefineInstallerIdentityIconAndUpgradeBehavior() throws Exception {
-        Path script = Path.of("packaging", "package-stage1.ps1");
+    void shouldDefineTauriOnlyInstallerAndPortablePackage() throws Exception {
+        Path script = Path.of("packaging", "package-v3.ps1");
         String content = Files.readString(script);
+        String sidecarBuild = Files.readString(Path.of("packaging", "build-v3-sidecar.ps1"));
+        String rustHost = Files.readString(Path.of("ui-web", "src-tauri", "src", "lib.rs"));
+        String rustMain = Files.readString(Path.of("ui-web", "src-tauri", "src", "main.rs"));
 
-        assertTrue(content.contains("--type exe"));
-        assertTrue(content.contains("ConvertTo-WindowsPackageVersion"));
-        assertTrue(content.contains("$packageVersion"));
-        assertTrue(content.contains("'alpha' { 1000 }"));
-        assertTrue(content.contains("'beta' { 2000 }"));
-        assertTrue(content.contains("'rc' { 3000 }"));
-        assertTrue(content.contains("--win-upgrade-uuid"));
-        assertTrue(content.contains("--win-per-user-install"));
-        assertTrue(content.contains("--install-dir \"SQLTeacher-App\""));
-        assertTrue(content.contains("--win-shortcut"));
-        assertTrue(content.contains("$wixArchiveHash"));
-        assertTrue(content.contains("https://api.sqlteacher.tech"));
-        assertTrue(content.contains("-Dsqlteacher.cloud.base-url="));
-        assertTrue(content.contains("CloudBaseUrl must be an absolute HTTPS URL"));
+        assertTrue(content.contains("npm run tauri build -- --bundles nsis"));
+        assertTrue(content.contains("SQLTeacher.exe"));
+        assertTrue(content.contains("sidecar\\runtime\\bin\\java.exe"));
+        assertTrue(content.contains("sidecar\\sidecar.json"));
+        assertTrue(content.contains("Compress-Archive"));
         assertTrue(content.contains("sqlteacher-sbom.json"));
+        assertTrue(content.contains("sqlteacher-ui-sbom.json"));
         assertTrue(content.contains("LICENSE.txt"));
         assertTrue(content.contains("THIRD-PARTY-LICENSES.txt"));
         assertTrue(content.contains("PRIVACY.md"));
-        assertTrue(content.contains("update-manifest.json"));
+        assertTrue(content.contains("(?:-(?:alpha|beta|rc)"));
+        assertTrue(sidecarBuild.contains("clean package dependency:copy-dependencies"));
+        assertTrue(sidecarBuild.contains("Java sidecar contains removed desktop or test entries"));
+        assertTrue(rustMain.contains("windows_subsystem = \"windows\""));
+        assertTrue(rustHost.contains("CREATE_NO_WINDOW"));
+        assertTrue(rustHost.contains("command.creation_flags(CREATE_NO_WINDOW)"));
+        assertTrue(rustHost.contains(".stderr(Stdio::null())"));
+        assertTrue(rustHost.contains("tauri_plugin_single_instance::init"));
+        assertTrue(rustHost.contains("tauri_plugin_window_state::Builder"));
+        assertTrue(rustHost.contains("SQLTEACHER_E2E_DATA_DIR"));
         assertTrue(Files.exists(Path.of("LICENSE")));
-        assertTrue(Files.size(Path.of("packaging", "sqlteacher.ico")) > 0);
-        assertTrue(Files.size(Path.of("src", "main", "resources", "images", "sqlteacher-icon.png")) > 0);
+        assertTrue(Files.size(Path.of("ui-web", "src-tauri", "icons", "icon.ico")) > 0);
+        assertFalse(Files.exists(Path.of("packaging", "package-stage1.ps1")));
     }
 
     @Test
@@ -44,7 +49,10 @@ class WindowsPackagingContractTest {
         assertTrue(workflow.contains("tags:"));
         assertTrue(workflow.contains("'v*.*.*'"));
         assertTrue(workflow.contains("mvn -B test"));
-        assertTrue(workflow.contains("package-stage1.ps1"));
+        assertTrue(workflow.contains("package-v3.ps1"));
+        assertTrue(workflow.contains("test-v3-no-console.ps1"));
+        assertFalse(workflow.contains("package-stage1.ps1"));
+        assertFalse(workflow.contains("DESKTOP_GENERATION"));
         assertTrue(workflow.contains("gh release create"));
         assertTrue(workflow.contains("gh release upload"));
         assertTrue(workflow.contains("SQLTEACHER_UPDATE_SIGNING_KEY"));

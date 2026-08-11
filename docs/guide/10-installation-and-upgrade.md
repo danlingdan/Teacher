@@ -1,38 +1,52 @@
-# SQLTeacher v1.5 Windows 安装、升级与卸载
+# SQLTeacher 3 Windows 安装、升级与卸载
+
+> 当前代码基线：`3.0.0`；公开稳定版本仍以 GitHub Releases 的 latest 标记为准。
 
 ## 安装
 
-运行 `SQLTeacher-1.5.5.exe`，选择当前用户安装目录并完成安装。默认程序目录为 `%LOCALAPPDATA%\SQLTeacher-App`，与 `%LOCALAPPDATA%\SQLTeacher` 用户数据目录严格分离。安装器包含 Java 21 运行时，可创建开始菜单和桌面快捷方式。安装包尚未代码签名，Windows 可能显示来源提示；请只使用正式发布的文件并核对 SHA-256。
+SQLTeacher 3 只提供 Tauri/React 桌面端。运行对应版本的 `SQLTeacher-X.Y.Z.exe` 完成当前用户安装，或解压
+`SQLTeacher-X.Y.Z-windows-x64.zip` 后运行 `SQLTeacher.exe`。安装包和便携包都包含 Java 25 sidecar runtime，
+不需要系统预装 JDK；Windows WebView2 由 NSIS 引导检查并按配置安装。
+正式构建的 Tauri 主进程和 Java sidecar 均不创建控制台窗口。
 
-## 升级
+只从项目 GitHub Release 下载文件，并使用同一 Release 的 `SHA256SUMS.txt` 核对 EXE 和 ZIP。用户数据保存在
+`%LOCALAPPDATA%\SQLTeacher`，与程序目录分离。
 
-关闭旧版后运行新版安装器。固定的 Upgrade UUID 用于识别同一产品。应用首次启动时会：
+## 升级和数据兼容
 
-1. 将旧工作目录 `app-data` 迁移至 `%LOCALAPPDATA%\SQLTeacher`（仅当新目录没有 `app.db`）。
-2. 检查数据库 schema 版本。
-3. 在需要迁移时先创建自动备份。
-4. 事务执行迁移；失败时尝试恢复升级前备份并停止启动。
+关闭旧版后运行新版安装器。应用启动时继续使用 Java 核心的数据库初始化与追加式 schema 迁移：
 
-升级前仍建议由管理员在“设置 → 版本、备份与恢复”手动备份。v1.5 的主题、字体与密度偏好保存在当前 Windows 用户配置中，不包含令牌或数据库密码。
+1. 检查历史数据目录和当前 schema 版本。
+2. 在需要迁移时先创建升级前备份。
+3. 在事务中执行迁移并校验版本；失败时恢复备份并停止启动。
+4. Tauri/React 只通过版本化 IPC 访问迁移结果，不直接读写 SQLite 文件。
+
+从 2.3 升级不会启动或安装 JavaFX；原有用户数据、账号、安全配置和确定性学习事件由 Java sidecar 兼容读取。
 
 ## 卸载与数据保留
 
-可从 Windows“已安装的应用”卸载 SQLTeacher。卸载程序只移除应用文件、快捷方式和运行时，不删除 `%LOCALAPPDATA%\SQLTeacher`。若用户明确要彻底清除数据，应先备份，再手动删除该目录；此操作不可恢复。
+可从 Windows“已安装的应用”卸载 SQLTeacher。卸载只移除应用、sidecar runtime 和快捷方式，不删除
+`%LOCALAPPDATA%\SQLTeacher`。若用户明确要彻底清除数据，应先备份，再手动删除该目录；该操作不可恢复。
 
-## 构建发布包
+## 从源码运行
 
-在 JDK 21、Maven 3.9+ 环境运行：
-
-```powershell
-.\packaging\package-stage1.ps1
-```
-
-脚本生成 EXE、app-image 和 ZIP。首次构建会下载并校验 WiX 3.14.1；`-SkipInstaller` 仅生成 app-image 和 ZIP。
-
-正式包默认写入 `https://api.sqlteacher.tech`。如需为独立 HTTPS 环境构建，可显式传入：
+需要 JDK 25、Maven 3.9+、Node.js 24 与 Rust stable：
 
 ```powershell
-.\packaging\package-stage1.ps1 -CloudBaseUrl https://api.example.edu
+$env:JAVA_HOME = "C:\Program Files\Java\jdk-25.0.3"
+.\packaging\build-v3-sidecar.ps1 -JavaHome $env:JAVA_HOME
+Set-Location ui-web
+npm ci
+npm run tauri dev
 ```
 
-推送与 `pom.xml` 版本完全一致的标签（例如 `v1.5.5`）后，`.github/workflows/release.yml` 会在 GitHub Windows Runner 上自动测试、打包、保存工作流产物，并在三项发布资产上传完成后公开 GitHub Release。
+## 构建候选包
+
+```powershell
+$env:JAVA_HOME = "C:\Program Files\Java\jdk-25.0.3"
+.\packaging\package-v3.ps1 -JavaHome $env:JAVA_HOME
+```
+
+脚本只生成 Tauri NSIS EXE、包含 Java 25 runtime 的 Windows x64 ZIP、`SHA256SUMS.txt`、Java CycloneDX SBOM
+和 UI CycloneDX SBOM。推送与 `pom.xml` 完全一致的标签后，发布工作流重新执行全量 Java、前端和 Rust 门禁，
+再创建签名更新清单与 GitHub Release。

@@ -4,7 +4,7 @@ import axe from "axe-core";
 import { describe, expect, it, vi } from "vitest";
 import { Button, DataTable, Dialog, FormField, Stepper, TreeView } from ".";
 
-describe("Alpha.2 UI primitives", () => {
+describe("UI primitives", () => {
   it("connects labels, help and validation messages", () => {
     render(<FormField label="课程名称" hint="公开名称" error="必填">{props => <input {...props} />}</FormField>);
     const input = screen.getByLabelText("课程名称");

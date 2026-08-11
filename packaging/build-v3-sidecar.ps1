@@ -5,7 +5,6 @@ param(
 $ErrorActionPreference = "Stop"
 $projectRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $sidecarRoot = Join-Path $projectRoot "ui-web\src-tauri\sidecar"
-$targetRoot = Join-Path $projectRoot "target\v3-sidecar"
 $appRoot = Join-Path $sidecarRoot "app"
 $libraryRoot = Join-Path $appRoot "lib"
 
@@ -50,11 +49,10 @@ if (-not (Test-Path -LiteralPath $javaExecutable) -or -not (Test-Path -LiteralPa
 }
 $javaVersion = Get-JavaVersionLine -Executable $javaExecutable
 if ($javaVersion -notmatch 'version "25(?:\.|\")') {
-    throw "SQLTeacher 3 Alpha.7 sidecar requires JDK 25, found: $javaVersion"
+    throw "SQLTeacher 3 sidecar requires JDK 25, found: $javaVersion"
 }
 
 Assert-ChildPath -Candidate $sidecarRoot -Parent (Join-Path $projectRoot "ui-web\src-tauri")
-Assert-ChildPath -Candidate $targetRoot -Parent (Join-Path $projectRoot "target")
 
 [xml]$pom = Get-Content -LiteralPath (Join-Path $projectRoot "pom.xml") -Raw
 $projectVersion = [string]$pom.project.version
@@ -65,21 +63,31 @@ try {
     if (Test-Path -LiteralPath $sidecarRoot) {
         Remove-Item -LiteralPath $sidecarRoot -Recurse -Force
     }
-    if (Test-Path -LiteralPath $targetRoot) {
-        Remove-Item -LiteralPath $targetRoot -Recurse -Force
-    }
-    New-Item -ItemType Directory -Force -Path $libraryRoot, $targetRoot | Out-Null
+    New-Item -ItemType Directory -Force -Path $libraryRoot | Out-Null
 
     $env:JAVA_HOME = [System.IO.Path]::GetFullPath($JavaHome)
     $env:Path = "$env:JAVA_HOME\bin;$env:Path"
-    mvn -q -DskipTests package dependency:copy-dependencies `
+    mvn -q -DskipTests clean package dependency:copy-dependencies `
         "-DincludeScope=runtime" `
-        "-DoutputDirectory=$libraryRoot" `
-        "-DexcludeArtifactIds=javafx-controls,javafx-fxml,javafx-base,javafx-graphics,atlantafx-base,controlsfx,richtextfx,flowless,reactfx,undofx,wellbehavedfx,ikonli-javafx,ikonli-core,ikonli-materialdesign2-pack"
+        "-DoutputDirectory=$libraryRoot"
     if ($LASTEXITCODE -ne 0) { throw "Unable to build the Java 25 sidecar application." }
 
     Copy-Item -LiteralPath (Join-Path $projectRoot "target\$jarName") `
         -Destination (Join-Path $appRoot $jarName) -Force
+
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $jarPath = Join-Path $appRoot $jarName
+    $jarArchive = [System.IO.Compression.ZipFile]::OpenRead($jarPath)
+    try {
+        $forbiddenEntries = @($jarArchive.Entries.FullName | Where-Object {
+            $_ -match '(?i)(^|/)(javafx|fxml)(/|$)|application/mock|MockApplicationServiceConfig|DesignSystemPage|MigrationPage|TestPage'
+        })
+        if ($forbiddenEntries.Count -gt 0) {
+            throw "Java sidecar contains removed desktop or test entries: $($forbiddenEntries -join ', ')"
+        }
+    } finally {
+        $jarArchive.Dispose()
+    }
 
     & $jlinkExecutable `
         --add-modules java.se,jdk.crypto.ec,jdk.unsupported `

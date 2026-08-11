@@ -1,5 +1,10 @@
 # SQLTeacher 3.0 UI 迁移与性能重构计划
 
+> 状态更新（2026-08-11）：Alpha.7 公开预发布后，维护者决定在 Beta 直接完成单轨迁移，不再保留 JavaFX
+> 紧急回退。Beta.1 与 Beta.2 合并收口为 `3.0.0-beta.2`；旧启动器、FXML/CSS、JavaFX 依赖及 jpackage/WiX
+> 打包路径已移除。原计划中“RC 再决定是否删除”的保守门禁由此明确决策替代；实施证据见
+> [Stage 26](../history/stages/stage26/2026-08-12-v3-beta-complete-migration.md)。
+
 ## 文档状态
 
 - 制定日期：2026-08-11

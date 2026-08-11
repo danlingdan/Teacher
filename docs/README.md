@@ -4,15 +4,15 @@
 
 ## 当前基线
 
-- 当前代码版本：`3.0.0-alpha.7`（最后一个 Alpha 预发布）
-- 当前正式版本：[v2.3.0](releases/v2.3.0.md)
+- 当前代码版本：`3.0.0`（Tauri-only 正式版本地候选）
+- 当前公开正式版本：[v2.3.0](releases/v2.3.0.md)
 - 上一稳定版本：[v2.2.0](releases/v2.2.0.md)
 - 当前迭代计划：[v3.0 UI 迁移与性能重构计划](plans/2026-08-11-v3-ui-migration-and-performance-plan.md)
 - 最新公开预发布说明：[v3.0.0-alpha.7](releases/v3.0.0-alpha.7.md)
 - 最新稳定版说明：[v2.3.0](releases/v2.3.0.md)
 - 最近一轮功能计划：[v2.2 组件傻瓜化与数据库扩展计划](plans/2026-08-09-v2.2-managed-components-and-database-expansion-plan.md)
 - 对应实施记录：[v2.0 GA 发布记录](history/stages/stage18/2026-08-09-v2-ga-release.md)
-- 当前实施记录：[v3.0 Alpha.7 功能对齐与收口](history/stages/stage25/2026-08-11-v3-alpha7-parity-closeout.md)
+- 当前实施记录：[v3.0 正式版与无控制台启动](history/stages/stage27/2026-08-12-v3-ga-no-console-release-candidate.md)
 - 当前生产部署记录：[v2.3.0 云端部署记录](operations/2026-08-11-v2.3.0-cloud-deployment.md)
 
 > “当前”以 `pom.xml`、Git 标签和实际代码为准。计划文档记录制定时的基线，不应被当作实时状态页。
@@ -28,7 +28,7 @@
 | 查看用户可见变化 | [发布说明索引](releases/README.md) | 面向版本的变更、兼容性与升级说明 |
 | 部署或排查云服务 | [运维记录索引](operations/README.md) | 生产部署、证书、备份与恢复门禁 |
 | 查归档实施资料 | [历史资料](history/README.md) | 已完成阶段与早期团队规划 |
-| 查桌面端设计 | [desktop/](desktop/) | JavaFX 页面契约与历史整改记录 |
+| 查旧桌面端设计 | [desktop/](desktop/) | 只读的 JavaFX 历史页面契约与整改记录 |
 | 准备软件著作权材料 | [copyright/README.md](copyright/README.md) | 冻结版本的申请材料与生成脚本 |
 
 ## 文档生命周期
@@ -37,7 +37,7 @@
 
 ```text
 plans（计划与范围）
-  -> history/stages / desktop（实施记录）
+  -> history/stages（实施记录）
   -> acceptance（验收门禁）
   -> releases（发布说明）
   -> operations（需要生产部署时）
@@ -47,7 +47,8 @@ plans（计划与范围）
 
 ## 历史资料
 
-Stage 0 至 Stage 23 和早期五人协作方案已集中到 [history/](history/README.md)。这些资料用于追溯实现和决策；当前开发和交付规则以仓库根目录的 [AGENTS.md](../AGENTS.md) 与当前代码为准。
+Stage 0 至 Stage 27 和早期五人协作方案已集中到 [history/](history/README.md)。`desktop/` 仅保留旧 JavaFX 设计证据，
+不再描述当前架构。这些资料用于追溯实现和决策；当前开发和交付规则以仓库根目录的 [AGENTS.md](../AGENTS.md) 与当前代码为准。
 
 ## 维护规则
 

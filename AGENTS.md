@@ -41,7 +41,7 @@ skill's complete `SKILL.md` before acting. Use the smallest set that covers the 
 
 | Task | Skill |
 | --- | --- |
-| Java/JavaFX/Maven feature, fix, refactor, migration, or integration | `sqlteacher-deliver-change` |
+| Java/Tauri/React/Maven feature, fix, refactor, migration, or integration | `sqlteacher-deliver-change` |
 | SQL execution, risk analysis, NL2SQL, AI provider, prompt, RAG, or safety review | `sqlteacher-sql-ai-safety` |
 | Version bump, installer, ZIP, checksum, tag, or GitHub Release | `sqlteacher-windows-release` |
 | Production deploy, incident, certificate, backup, restore, Qdrant, or systemd | `sqlteacher-cloud-operations` |
@@ -75,20 +75,21 @@ Keep responsibilities explicit:
 - `com.sqlteacher.application`: use-case contracts, orchestration, and DTOs.
 - `com.sqlteacher.infrastructure`: JDBC, SQLite, Ollama, HTTP, persistence, retrieval, files,
   configuration, and Spring wiring.
-- `com.sqlteacher.desktop`: JavaFX launchers, FXML, CSS, controllers, and view state.
+- `com.sqlteacher.desktop.bridge`: versioned Java sidecar host, IPC contracts, and DTO mapping.
+- `ui-web`: Tauri/React desktop shell, workspaces, design system, and view state.
 - `com.sqlteacher.server`: Cloud API, server persistence, authentication, and operational entry
   points.
 
 Preferred dependency direction:
 
 ```text
-desktop -> application -> domain
+ui-web -> desktop.bridge -> application -> domain
 infrastructure -> application/domain
 server -> application/domain/infrastructure as currently wired
 ```
 
-- Keep business rules out of JavaFX controllers.
-- Do not expose JavaFX, JDBC, Ollama, HTTP, or filesystem types through domain contracts.
+- Keep business rules out of React components and Rust commands.
+- Do not expose WebView, Tauri, JDBC, Ollama, HTTP, or filesystem types through domain contracts.
 - Do not make `application` depend on `desktop` or concrete infrastructure adapters.
 - Use records for simple immutable DTOs when appropriate.
 - Return empty collections instead of `null`.
@@ -122,15 +123,15 @@ server -> application/domain/infrastructure as currently wired
 - Production API traffic goes through Nginx at `https://api.sqlteacher.tech`; the Java API remains
   loopback-bound at `127.0.0.1:18080` unless an explicit architecture change is approved.
 
-## JavaFX
+## Tauri And React
 
-- Prefer the existing FXML/CSS separation.
-- Never block the JavaFX application thread with database, file, network, or AI work.
-- Long-running work must represent loading, success/empty, and understandable failure states.
-- Risky SQL needs a clear confirmation dialog.
-- Keep pages usable at lower resolutions and do not present placeholders or mock data as real
-  functionality.
-- Prefer service/controller tests that do not require fragile UI automation.
+- Tauri/React is the only desktop UI. Do not restore JavaFX, FXML, JavaFX CSS, or a second desktop launcher.
+- Rust owns process lifecycle and narrow capabilities only; Java sidecar services own business and safety rules.
+- Never block the WebView with database, file, network, AI, or Runner work. Long-running work must be cancellable
+  where supported and represent loading, success/empty, and understandable failure states.
+- Risky SQL needs a clear confirmation dialog, but Java remains the enforcement boundary.
+- Keep pages usable at lower resolutions and do not present placeholders or mock data as real functionality.
+- Prefer service/component tests and a small packaged-desktop E2E suite over fragile broad UI automation.
 
 ## Verification Ladder
 
@@ -143,15 +144,16 @@ mvn -q test -Pfast
 mvn test
 mvn -q exec:java "-Dexec.mainClass=com.sqlteacher.TechnologyVerificationApp"
 mvn -q exec:java "-Dexec.mainClass=com.sqlteacher.StageOneVerificationApp"
-mvn javafx:run
-./packaging/package-stage1.ps1
+npm --prefix ui-web test
+npm --prefix ui-web run build
+./packaging/package-v3.ps1
 ```
 
 - Quote comma-separated Maven `-Dtest` selectors in PowerShell.
 - Run focused tests first.
 - Use `-Pfast` for broad local feedback without `integration`, `runner`, or `live` tagged tests; it is not a release gate.
 - Run full `mvn test` for cross-module, schema, security, accumulated, or release-bound changes.
-- Use CLI verification apps in headless environments; run `mvn javafx:run` only with graphics.
+- Use CLI verification apps in headless environments and packaged Tauri E2E when desktop graphics are available.
 - Packaging or release changes require the current packaging script and release workflow gates.
 - Documentation-only changes need link and diff checks, not Maven, unless they affect executable
   examples, generated artifacts, runtime configuration, or packaging inputs.

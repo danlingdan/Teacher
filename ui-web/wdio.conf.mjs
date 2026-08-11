@@ -2,6 +2,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
+process.env.SQLTEACHER_E2E_DATA_DIR = path.resolve(here, "..", "target", "e2e-app-data");
 export const config = {
   runner: "local",
   specs: ["./e2e/**/*.e2e.js"],

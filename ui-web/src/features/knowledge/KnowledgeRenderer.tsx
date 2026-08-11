@@ -87,14 +87,16 @@ const sanitizeSchema = {
 
 export default function KnowledgeRenderer({ markdown }: { markdown: string }) {
   return (
-    <ReactMarkdown
-      remarkPlugins={[remarkFrontmatter, remarkGfm, remarkMath, remarkSqlTeacherSyntax]}
-      rehypePlugins={[[rehypeSanitize, sanitizeSchema], [rehypeKatex, { trust: false, maxSize: 10, maxExpand: 1000 }]]}
-      components={{ code: MarkdownCode }}
-      skipHtml
-    >
-      {markdown}
-    </ReactMarkdown>
+    <div data-no-translate>
+      <ReactMarkdown
+        remarkPlugins={[remarkFrontmatter, remarkGfm, remarkMath, remarkSqlTeacherSyntax]}
+        rehypePlugins={[[rehypeSanitize, sanitizeSchema], [rehypeKatex, { trust: false, maxSize: 10, maxExpand: 1000 }]]}
+        components={{ code: MarkdownCode }}
+        skipHtml
+      >
+        {markdown}
+      </ReactMarkdown>
+    </div>
   );
 }
 

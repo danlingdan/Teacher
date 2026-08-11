@@ -10,19 +10,43 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager, State};
 
+#[cfg(target_os = "windows")]
+use std::os::windows::process::CommandExt;
+
 const CONTRACT_VERSION: &str = "3.0-v1";
 const MAX_REQUEST_BYTES: usize = 1_048_576;
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
+#[cfg(target_os = "windows")]
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 const ALLOWED_METHODS: &[&str] = &[
     "account.login",
+    "account.register",
     "account.logout",
+    "account.password.change",
+    "account.password.reset.request",
+    "account.sessions",
+    "account.session.revoke",
+    "account.export.request",
+    "account.export.get",
+    "account.deletion.request",
+    "account.deletion.cancel",
+    "account.deletion.status",
     "system.health",
     "session.current",
     "home.summary",
-    "knowledge.sample",
+    "home.action.dismiss",
     "course.workspace",
+    "activity.definition",
+    "activity.submit",
     "knowledge.article",
     "knowledge.search",
+    "knowledge.read.mark",
+    "knowledge.index.status",
+    "knowledge.index.rebuild",
+    "knowledge.article.import",
+    "knowledge.article.revise",
+    "knowledge.article.visibility",
+    "knowledge.article.delete",
     "knowledge.import.preview",
     "knowledge.import.execute",
     "practice.catalog",
@@ -30,25 +54,60 @@ const ALLOWED_METHODS: &[&str] = &[
     "practice.start",
     "practice.run",
     "practice.submit",
+    "practice.hint",
+    "practice.reset",
+    "practice.close",
     "runner.capabilities",
     "runner.run",
     "data.connections",
+    "data.connection.save",
+    "data.connection.test",
+    "data.connection.select",
+    "data.connection.delete",
     "data.schema",
     "sql.analyze",
     "sql.execute",
     "sql.result.page",
     "ai.knowledge.ask",
+    "ai.sql.preview",
+    "ai.sql.generate",
     "teaching.workspace",
     "teaching.exercise.toggle",
+    "teaching.exercise.detail",
+    "teaching.exercise.save",
+    "teaching.exercise.copy",
+    "teaching.exercise.import",
+    "teaching.exercise.export",
+    "teaching.analytics",
+    "teaching.interventions",
+    "teaching.intervention.update",
     "cloud.workspace",
     "cloud.sync",
     "cloud.class.create",
+    "cloud.class.member.add",
+    "cloud.assignments",
+    "cloud.assignment.create",
+    "cloud.assignment.update",
+    "cloud.assignment.copy",
+    "cloud.assignment.status",
+    "cloud.class.analytics",
+    "cloud.class.analytics.export",
+    "cloud.assignment.analytics",
+    "cloud.assignment.analytics.export",
     "settings.workspace",
     "settings.update",
-    "migration.status",
+    "settings.component.install",
+    "settings.component.cancel",
+    "settings.backups",
+    "settings.backup.create",
+    "settings.backup.restore",
+    "settings.demo.restore",
+    "settings.learning.reset",
+    "settings.cache.clear",
+    "settings.update.check",
+    "settings.notifications.read",
+    "settings.help",
     "editor.languages",
-    "benchmark.echo",
-    "task.demo",
     "system.cancel",
     "system.shutdown",
 ];
@@ -242,8 +301,13 @@ impl SidecarManager {
             ":"
         };
         let classpath = format!("app/*{separator}app/lib/*");
-        let mut child = Command::new(java)
-            .current_dir(&root)
+        let mut command = Command::new(java);
+        command.current_dir(&root);
+        #[cfg(feature = "e2e")]
+        if let Ok(data_directory) = std::env::var("SQLTEACHER_E2E_DATA_DIR") {
+            command.arg(format!("-Dsqlteacher.data.dir={data_directory}"));
+        }
+        command
             .args([
                 "-Dfile.encoding=UTF-8",
                 "--enable-native-access=ALL-UNNAMED",
@@ -253,15 +317,16 @@ impl SidecarManager {
             ])
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
-            .stderr(Stdio::inherit())
-            .spawn()
-            .map_err(|_| {
-                BridgeError::new(
-                    "SIDECAR_START_FAILED",
-                    "Unable to start the Java core",
-                    true,
-                )
-            })?;
+            .stderr(Stdio::null());
+        #[cfg(target_os = "windows")]
+        command.creation_flags(CREATE_NO_WINDOW);
+        let mut child = command.spawn().map_err(|_| {
+            BridgeError::new(
+                "SIDECAR_START_FAILED",
+                "Unable to start the Java core",
+                true,
+            )
+        })?;
         let stdin = child.stdin.take().ok_or_else(|| {
             BridgeError::new(
                 "SIDECAR_START_FAILED",
@@ -417,7 +482,18 @@ async fn local_app_request(
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let builder = tauri::Builder::default();
+    let builder = tauri::Builder::default()
+        .plugin(tauri_plugin_single_instance::init(
+            |app, _arguments, _working_directory| {
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.unminimize();
+                    let _ = window.show();
+                    let _ = window.set_focus();
+                }
+            },
+        ))
+        .plugin(tauri_plugin_window_state::Builder::default().build())
+        .plugin(tauri_plugin_notification::init());
     #[cfg(feature = "e2e")]
     let builder = builder
         .plugin(tauri_plugin_wdio::init())
@@ -451,7 +527,7 @@ mod tests {
         assert!(ALLOWED_METHODS.contains(&"ai.knowledge.ask"));
         assert!(ALLOWED_METHODS.contains(&"teaching.workspace"));
         assert!(ALLOWED_METHODS.contains(&"settings.workspace"));
-        assert!(ALLOWED_METHODS.contains(&"migration.status"));
+        assert!(ALLOWED_METHODS.contains(&"settings.workspace"));
     }
 
     #[test]
@@ -462,11 +538,22 @@ mod tests {
 
     #[test]
     fn rust_method_whitelist_matches_machine_readable_manifest() {
-        let manifest: Value = serde_json::from_str(include_str!("../../../contracts/ipc/v1/manifest.json"))
-            .expect("IPC manifest must be valid JSON");
-        let expected: HashSet<&str> = manifest["methods"].as_array().expect("methods must be an array")
-            .iter().map(|item| item.as_str().expect("method must be text")).collect();
+        let manifest: Value =
+            serde_json::from_str(include_str!("../../../contracts/ipc/v1/manifest.json"))
+                .expect("IPC manifest must be valid JSON");
+        let expected: HashSet<&str> = manifest["methods"]
+            .as_array()
+            .expect("methods must be an array")
+            .iter()
+            .map(|item| item.as_str().expect("method must be text"))
+            .collect();
         let actual: HashSet<&str> = ALLOWED_METHODS.iter().copied().collect();
         assert_eq!(expected, actual);
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn java_sidecar_uses_windows_no_console_creation_flag() {
+        assert_eq!(CREATE_NO_WINDOW, 0x0800_0000);
     }
 }

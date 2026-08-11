@@ -5,12 +5,12 @@
 ## 项目与工程
 
 1. [项目范围与里程碑](01-project-scope-and-roadmap.md)（历史首版路线图）
-2. [团队分工与协作机制](02-team-collaboration.md)（历史五人协作方案）
+2. [单人主线协作机制](02-team-collaboration.md)
 3. [架构与模块设计](03-architecture-and-modules.md)
 4. [开发规范](04-development-standards.md)
 5. [SQL 与 AI 安全规范](05-sql-and-ai-safety.md)
-6. [测试、打包与验收](06-testing-packaging-acceptance.md)
-7. [交付物与风险管理](07-delivery-and-risk-management.md)
+6. [测试、打包与验收](06-testing-packaging-acceptance.md)（历史首版门禁）
+7. [交付物与风险管理](07-delivery-and-risk-management.md)（历史五人交付方案）
 
 ## 用户、教师与部署
 
@@ -30,5 +30,6 @@
 21. [LocalApp IPC v1 合同](local-app-ipc-v1.md)
 22. [v3 Alpha.5 课程、练习与数据工作区](22-v3-alpha5-workspaces.md)
 23. [v3 Alpha.7 教学、云端、设置与迁移状态](23-v3-alpha7-teaching-cloud-settings.md)
+24. [v3 Tauri-only 架构与开发](24-v3-tauri-only.md)
 
 返回 [文档中心](../README.md)。

@@ -22,7 +22,6 @@ describe("localAppRequest", () => {
       "knowledge.import.preview", "runner.run", "sql.analyze", "sql.execute", "ai.knowledge.ask",
       "account.login", "account.logout", "teaching.workspace", "teaching.exercise.toggle",
       "cloud.workspace", "cloud.sync", "cloud.class.create", "settings.workspace", "settings.update",
-      "migration.status",
     ]));
     expect(manifest.events).toEqual(expect.arrayContaining(["import.progress", "runner.progress", "ai.delta"]));
     expect(manifest.compatibility.policy).toBe("additive-within-v1");

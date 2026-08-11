@@ -4,6 +4,8 @@
 
 ## 正式版本门禁
 
+- [v3.0.0](2026-08-12-v3.0.0-stage-gate.md)（正式版本地候选，未发布）
+- [v3.0.0-beta.2](2026-08-12-v3-beta2-stage-gate.md)（Tauri-only 本地候选，未发布）
 - [v3.0.0-alpha.3 至 alpha.5](2026-08-11-v3-alpha3-alpha5-stage-gate.md)（本地开发批次，未发布）
 - [v3.0.0-alpha.6 至 alpha.7](2026-08-11-v3-alpha6-alpha7-stage-gate.md)（Alpha 功能收口，未发布）
 - [v2.0.1](2026-08-09-v2.0.1-stage-gate.md)（正式发布门禁）

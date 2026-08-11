@@ -83,7 +83,7 @@ class LocalAppProtocolServerTest {
                 return mapper.nullNode();
             }
         };
-        String input = request("task-1", "task.demo", "{}") + "\n"
+        String input = request("task-1", "runner.run", "{}") + "\n"
             + request("cancel-1", "system.cancel", "{\"targetRequestId\":\"task-1\"}") + "\n"
             + request("shutdown-1", "system.shutdown", "{}") + "\n";
         StringWriter output = new StringWriter();

@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="src/main/resources/images/sqlteacher-icon.png" width="112" alt="SQLTeacher logo">
+  <img src="ui-web/src-tauri/icons/128x128.png" width="112" alt="SQLTeacher logo">
 
   # SQLTeacher
 
@@ -9,11 +9,11 @@
 
   [![Release](https://img.shields.io/github/v/release/danlingdan/Teacher?display_name=tag&sort=semver)](https://github.com/danlingdan/Teacher/releases/latest)
   [![Build](https://github.com/danlingdan/Teacher/actions/workflows/release.yml/badge.svg)](https://github.com/danlingdan/Teacher/actions/workflows/release.yml)
-  [![Java](https://img.shields.io/badge/Java-21-ED8B00?logo=openjdk&logoColor=white)](https://openjdk.org/projects/jdk/21/)
+  [![Java](https://img.shields.io/badge/Java-25-ED8B00?logo=openjdk&logoColor=white)](https://openjdk.org/projects/jdk/25/)
   [![Platform](https://img.shields.io/badge/Windows-10%20%7C%2011-0078D4?logo=windows11&logoColor=white)](https://github.com/danlingdan/Teacher/releases/latest)
   [![License](https://img.shields.io/badge/License-Apache%202.0-4D7A97.svg)](LICENSE)
 
-  [下载最新版](https://github.com/danlingdan/Teacher/releases/latest) · [文档中心](docs/README.md) · [使用指南](docs/guide/README.md) · [v2.2 更新日志](docs/releases/v2.2.0.md) · [问题反馈](https://github.com/danlingdan/Teacher/issues)
+  [下载稳定版](https://github.com/danlingdan/Teacher/releases/latest) · [文档中心](docs/README.md) · [使用指南](docs/guide/README.md) · [v3 迁移计划](docs/plans/2026-08-11-v3-ui-migration-and-performance-plan.md) · [问题反馈](https://github.com/danlingdan/Teacher/issues)
 </div>
 
 ---
@@ -34,23 +34,14 @@ SQLTeacher 面向计算机专业课程教学与自主实践。它把本地代码
 | 🛡️ 通用软件能力 | 可信更新、问题反馈、诊断包、备份恢复、代理、无障碍和隐私说明 |
 | 🌐 多语言与账号治理 | 完整英文界面、命令面板、可信密码重置、活跃会话、数据导出与账号注销 |
 
-## v2.2 亮点
+## v3 正式版架构
 
-- **更多数据库**：内置 SQLite、DuckDB、H2 与主流服务器数据库预设，并提供通用 JDBC 入口。
-- **开发环境管理**：集中检测 Java、Python、C/C++、Ollama 与 WSL，缺失组件可在确认后自动安装。
-- **真实学习 IDE**：本地工具链和联网运行由学生主动控制，正式评价保留独立受控 Runner。
-- **兼容旧数据**：schema 18 无损迁移既有连接配置，SQLite 继续作为确定性练习评测基线。
-- **可审计安装**：安装前展示来源、许可证、提权与重启影响，不静默提权或重启系统。
-
-## v1.11 亮点
-
-- **更顺滑的更新**：断点续传（HTTP Range）、受控镜像回退、分阶段发布与紧急暂停工具。
-- **更完整的反馈**：截图附件（提交前清理 EXIF/GPS）、反馈撤回与本人反馈数据导出。
-- **完整的账号生命周期**：邮箱绑定与可信密码重置（一次性限时 Token、防枚举、重置撤销全部会话）、活跃会话查看与按设备撤销、云端数据导出与带冷静期的账号注销。
-- **更好的桌面体验**：`Ctrl+K` 命令面板、完整英文界面（键完整性测试门禁）、可选的 Windows 原生通知（白名单正文）、按流量计费/低电量任务暂停、安装文件完整性检测与修复引导。
-- **Cloud API 1.11**：新能力位与端点（反馈撤回/导出、截图附件、会话、账号导出/注销、密码重置、分阶段发布），最低兼容客户端保持 1.9.0。
-
-完整变更见 [v1.11.5 发布说明](docs/releases/v1.11.5.md)、[v1.11 实施记录](docs/history/stages/stage8/2026-08-02-v111-closeout-implementation.md)和 [v1.11 实施计划](docs/plans/2026-08-02-v1.11-general-capabilities-closeout-plan.md)。
+- **唯一桌面端**：Tauri 2 + React 19 + TypeScript，不再包含 JavaFX、FXML 或第二套桌面启动器。
+- **本地核心**：Java 25 sidecar 保留 Spring、SQLite/JDBC、确定性学习、SQL 安全、Runner 和云端契约。
+- **七个工作区**：今天、课程与知识、练习与实验、数据/SQL/AI、教学空间、班级与云端、设置与环境。
+- **受限 IPC**：Rust 只管理进程与窄权限，版本化白名单合同不暴露 Spring Bean、JDBC 连接或任意文件访问。
+- **单一发布链**：NSIS 安装包、便携 ZIP、内置 Java 25 runtime、Java/UI 双 SBOM 和签名更新清单。
+- **安静启动**：Tauri 使用 Windows GUI 子系统，Java sidecar 以无窗口标志启动，不显示额外控制台。
 
 ## 安全设计
 
@@ -76,22 +67,25 @@ flowchart LR
 
 前往 [GitHub Releases](https://github.com/danlingdan/Teacher/releases/latest) 下载：
 
-- `SQLTeacher-2.2.0.exe`：推荐，标准 Windows 安装器；
-- `SQLTeacher-2.2.0-windows-x64.zip`：免安装便携版；
+- `SQLTeacher-3.0.0.exe`：3.0 正式版 Windows 安装器；
+- `SQLTeacher-3.0.0-windows-x64.zip`：3.0 正式版便携包；
 - `SHA256SUMS.txt`：发布文件完整性校验值。
 
 正式包自带 Java 运行时，无需另装 JDK。用户数据默认保存在 `%LOCALAPPDATA%\SQLTeacher`，升级应用不会覆盖该目录。
 
 ### 从源码运行
 
-源码构建要求 JDK 21 与 Maven 3.9+。发行版可在“设置 → 开发环境”中通过确认式自动安装
+源码构建要求 JDK 25、Maven 3.9+、Node.js 24 和 Rust stable。发行版可在“设置 → 开发环境”中通过确认式自动安装
 Temurin JDK、Python、Ollama、MSVC Build Tools 和 WSL Ubuntu。
 
 ```powershell
 git clone https://github.com/danlingdan/Teacher.git
 cd Teacher
 mvn test
-mvn javafx:run
+.\packaging\build-v3-sidecar.ps1 -JavaHome $env:JAVA_HOME
+Set-Location ui-web
+npm ci
+npm run tauri dev
 ```
 
 无图形环境可运行命令行验证：
@@ -103,24 +97,24 @@ mvn -q compile exec:java "-Dexec.mainClass=com.sqlteacher.StageOneVerificationAp
 构建 Windows 安装包：
 
 ```powershell
-.\packaging\package-stage1.ps1
+.\packaging\package-v3.ps1 -JavaHome $env:JAVA_HOME
 ```
 
 ## 技术栈
 
 ```text
-Java 25 + Tauri 2 / React（3.0 Alpha）+ JavaFX 回退 + Spring Context
+Java 25 sidecar + Tauri 2 / React 19 + Spring Context
 SQLite / MySQL / MariaDB
 Jackson + SLF4J + Logback
 Lucene + SQLite FTS5
 Ollama / OpenAI-compatible providers
-Maven + jpackage + WiX Toolset
+Maven + npm/Vite + Cargo + NSIS
 ```
 
 项目保持清晰的依赖方向：
 
 ```text
-desktop -> application -> domain
+ui-web -> desktop.bridge -> application -> domain
 infrastructure -> application / domain
 ```
 
@@ -130,8 +124,9 @@ infrastructure -> application / domain
 src/main/java/com/sqlteacher/application     应用服务与稳定契约
 src/main/java/com/sqlteacher/domain          领域模型、异常与规则
 src/main/java/com/sqlteacher/infrastructure  数据库、AI、云端与持久化适配器
-src/main/java/com/sqlteacher/desktop         JavaFX 界面与控制器
-src/main/resources                           FXML、CSS、配置与法律声明
+src/main/java/com/sqlteacher/desktop/bridge  Java sidecar 与版本化 IPC 边界
+ui-web                                      Tauri/React 桌面端与前端测试
+src/main/resources                          Java 核心配置与法律声明
 src/test                                     单元、集成与回归测试
 packaging                                    Windows 打包脚本
 docs                                         指南、计划、验收与发布说明
@@ -145,8 +140,8 @@ SQLTeacher 项目自身采用 **[Apache License 2.0](LICENSE)**。这只适用�
 
 | 软件 | 当前版本 | 用途 | 许可证 |
 | --- | ---: | --- | --- |
-| [OpenJFX / JavaFX](https://github.com/openjdk/jfx) | 21.0.11 | 桌面界面 | GPL-2.0 with Classpath Exception |
-| [AtlantaFX](https://github.com/mkpaz/atlantafx) | 2.1.0 | JavaFX 主题与样式 | MIT |
+| [Tauri](https://tauri.app/) | 2.x | Windows 桌面容器与受限进程桥接 | Apache-2.0 / MIT |
+| [React](https://react.dev/) | 19.1.0 | 桌面工作区界面 | MIT |
 | [Xerial SQLite JDBC](https://github.com/xerial/sqlite-jdbc) | 3.50.3.0 | 本地 SQLite 访问 | Apache-2.0；其随附原生代码另含 BSD-2-Clause / SQLite 相关许可 |
 | [MySQL Connector/J](https://github.com/mysql/mysql-connector-j) | 9.4.0 | MySQL 连接 | GPL-2.0 with Universal FOSS Exception 1.0 |
 | [MariaDB Connector/J](https://github.com/mariadb-corporation/mariadb-connector-j) | 3.5.9 | MariaDB 连接 | LGPL-2.1-or-later |

@@ -51,20 +51,6 @@ class DefaultLocalAppApiTest {
     }
 
     @Test
-    void shouldReturnBundledUntrustedKnowledgeSample() throws Exception {
-        try (var api = new DefaultLocalAppApi(mapper)) {
-            var result = api.invoke("knowledge.sample", mapper.createObjectNode(), () -> false, ignored -> { });
-
-            String markdown = result.path("markdown").asText();
-            assertTrue(markdown.contains("[!important]"));
-            assertTrue(markdown.contains("```mermaid"));
-            assertTrue(markdown.contains("[[SQL 安全#确认门|SQL 安全边界]]"));
-            assertFalse(result.path("trustedHtml").asBoolean());
-            assertFalse(result.path("externalResourcesAllowed").asBoolean());
-        }
-    }
-
-    @Test
     @ResourceLock("sqlteacher.data.dir")
     void shouldExposeAlphaThreeToFiveWorkspacesThroughRealJavaServices() throws Exception {
         Path data = tempDirectory.resolve("data");
@@ -81,6 +67,25 @@ class DefaultLocalAppApiTest {
         try (var api = new DefaultLocalAppApi(mapper)) {
             var courses = api.invoke("course.workspace", mapper.createObjectNode(), () -> false, ignored -> { });
             assertTrue(courses.path("courses").isArray());
+            var quiz = java.util.stream.StreamSupport.stream(courses.path("courses").spliterator(), false)
+                .flatMap(course -> java.util.stream.StreamSupport.stream(course.path("sections").spliterator(), false))
+                .flatMap(section -> java.util.stream.StreamSupport.stream(section.path("activities").spliterator(), false))
+                .filter(activity -> activity.path("enabled").asBoolean() && "QUIZ".equals(activity.path("type").asText()))
+                .findFirst().orElseThrow();
+            var definition = api.invoke("activity.definition",
+                mapper.createObjectNode().put("activityId", quiz.path("id").asText()), () -> false, ignored -> { });
+            assertEquals("QUIZ", definition.path("type").asText());
+            var selections = mapper.createObjectNode();
+            definition.path("specification").path("questions").forEach(question -> {
+                assertFalse(question.has("correctOptionId"));
+                assertFalse(question.has("explanation"));
+                selections.put(question.path("id").asText(), question.path("options").get(0).path("id").asText());
+            });
+            var activityParams = mapper.createObjectNode().put("activityId", quiz.path("id").asText()).put("type", "QUIZ");
+            activityParams.putObject("artifact").set("selectedOptionIds", selections);
+            var activitySubmission = api.invoke("activity.submit", activityParams, () -> false, ignored -> { });
+            assertTrue(activitySubmission.path("evaluation").path("criteria").isArray());
+            assertFalse(activitySubmission.path("evaluationId").asText().isBlank());
 
             var previewParams = mapper.createObjectNode();
             previewParams.put("root", vault.toString());
@@ -108,6 +113,15 @@ class DefaultLocalAppApiTest {
 
             var catalog = api.invoke("practice.catalog", mapper.createObjectNode(), () -> false, ignored -> { });
             assertTrue(catalog.path("items").isArray());
+            if (!catalog.path("items").isEmpty()) {
+                var startParams = mapper.createObjectNode().put("exerciseId", catalog.path("items").get(0).path("id").asText());
+                var practiceSession = api.invoke("practice.start", startParams, () -> false, ignored -> { });
+                var sessionParams = mapper.createObjectNode().put("sessionId", practiceSession.path("id").asText());
+                assertEquals(1, api.invoke("practice.hint", sessionParams, () -> false, ignored -> { }).path("level").asInt());
+                assertEquals(practiceSession.path("id").asText(),
+                    api.invoke("practice.reset", sessionParams, () -> false, ignored -> { }).path("id").asText());
+                assertTrue(api.invoke("practice.close", sessionParams, () -> false, ignored -> { }).path("closed").asBoolean());
+            }
             var connections = api.invoke("data.connections", mapper.createObjectNode(), () -> false, ignored -> { });
             String connectionId = java.util.stream.StreamSupport.stream(connections.path("items").spliterator(), false)
                 .filter(item -> !item.path("readOnly").asBoolean()).findFirst().orElse(connections.path("items").get(0))
@@ -143,17 +157,18 @@ class DefaultLocalAppApiTest {
             assertFalse(settings.path("secretsExposed").asBoolean());
             assertTrue(settings.path("runnerCapabilities").isArray());
             var update = mapper.createObjectNode().put("developerMode", true).put("language", "zh")
-                .put("reducedMotion", true);
+                .put("reducedMotion", true).put("supportLogging", true)
+                .put("theme", "dark").put("font", "classic").put("density", "compact");
             var saved = api.invoke("settings.update", update, () -> false, ignored -> { });
             assertTrue(saved.path("saved").asBoolean());
             assertTrue(saved.path("developerMode").asBoolean());
+            assertEquals("dark", saved.path("general").path("theme").asText());
+            assertEquals("classic", saved.path("general").path("font").asText());
+            assertEquals("compact", saved.path("general").path("density").asText());
+            assertTrue(saved.path("general").path("supportLoggingExpiresAt").asLong() > System.currentTimeMillis());
             api.invoke("settings.update", mapper.createObjectNode().put("developerMode", false),
                 () -> false, ignored -> { });
 
-            var migration = api.invoke("migration.status", mapper.createObjectNode(), () -> false, ignored -> { });
-            assertEquals("ALPHA_COMPLETE", migration.path("stage").asText());
-            assertEquals(7, migration.path("features").size());
-            assertTrue(migration.path("javaFxFallback").asBoolean());
             assertThrows(SecurityException.class,
                 () -> api.invoke("teaching.workspace", mapper.createObjectNode(), () -> false, ignored -> { }));
         } finally {

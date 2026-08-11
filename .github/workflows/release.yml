@@ -45,20 +45,10 @@ jobs:
               "RELEASE_CHANNEL=stable" >> $env:GITHUB_ENV
               "RELEASE_PRERELEASE=false" >> $env:GITHUB_ENV
           }
-          $major = [int]($version -split '\.')[0]
-          "DESKTOP_GENERATION=$(if ($major -ge 3) { 'tauri' } else { 'javafx' })" >> $env:GITHUB_ENV
-
-      - name: Run focused v3 pre-release tests
-        if: env.DESKTOP_GENERATION == 'tauri'
-        shell: pwsh
-        run: mvn -B test "-Dtest=LocalAppProtocolServerTest,DefaultLocalAppApiTest"
-
-      - name: Run full legacy release test suite
-        if: env.DESKTOP_GENERATION == 'javafx'
+      - name: Run Java core and sidecar tests
         run: mvn -B test
 
       - name: Set up Node.js for Tauri release
-        if: env.DESKTOP_GENERATION == 'tauri'
         uses: actions/setup-node@v6
         with:
           node-version: '24'
@@ -66,7 +56,6 @@ jobs:
           cache-dependency-path: ui-web/package-lock.json
 
       - name: Set up Rust for Tauri release
-        if: env.DESKTOP_GENERATION == 'tauri'
         shell: pwsh
         run: |
           rustup default stable
@@ -74,7 +63,6 @@ jobs:
           cargo --version
 
       - name: Install and audit Tauri frontend dependencies
-        if: env.DESKTOP_GENERATION == 'tauri'
         working-directory: ui-web
         run: |
           npm ci
@@ -82,14 +70,12 @@ jobs:
           npm test
 
       - name: Build Tauri installer and portable archive
-        if: env.DESKTOP_GENERATION == 'tauri'
         shell: pwsh
         run: .\packaging\package-v3.ps1
 
-      - name: Build JavaFX installer and portable archive
-        if: env.DESKTOP_GENERATION == 'javafx'
+      - name: Verify packaged desktop has no console window
         shell: pwsh
-        run: .\packaging\package-stage1.ps1
+        run: .\packaging\test-v3-no-console.ps1
 
       - name: Verify release artifacts and cloud endpoint
         shell: pwsh
@@ -98,23 +84,13 @@ jobs:
           $archive = "target/installer/SQLTeacher-$env:PROJECT_VERSION-windows-x64.zip"
           $checksums = "target/installer/SHA256SUMS.txt"
           $sbom = "target/installer/sqlteacher-sbom.json"
-          $required = @($installer, $archive, $checksums, $sbom)
-          if ($env:DESKTOP_GENERATION -eq 'tauri') {
-              $required += "target/installer/sqlteacher-ui-sbom.json"
-          } else {
-              $required += "target/installer/SQLTeacher/app/SQLTeacher.cfg"
-          }
+          $uiSbom = "target/installer/sqlteacher-ui-sbom.json"
+          $required = @($installer, $archive, $checksums, $sbom, $uiSbom)
           foreach ($file in $required) {
               if (-not (Test-Path -LiteralPath $file)) { throw "Missing release artifact: $file" }
           }
-          if ($env:DESKTOP_GENERATION -eq 'javafx' -and
-              -not (Select-String -LiteralPath "target/installer/SQLTeacher/app/SQLTeacher.cfg" -SimpleMatch '-Dsqlteacher.cloud.base-url=https://api.sqlteacher.tech' -Quiet)) {
-              throw 'Packaged launcher does not contain the production cloud API URL.'
-          }
           Get-Content -LiteralPath $sbom -Raw | ConvertFrom-Json | Out-Null
-          if ($env:DESKTOP_GENERATION -eq 'tauri') {
-              Get-Content -LiteralPath "target/installer/sqlteacher-ui-sbom.json" -Raw | ConvertFrom-Json | Out-Null
-          }
+          Get-Content -LiteralPath $uiSbom -Raw | ConvertFrom-Json | Out-Null
 
       - name: Create signed channel-specific update manifest
         shell: pwsh

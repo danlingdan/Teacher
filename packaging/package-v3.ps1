@@ -36,8 +36,8 @@ Assert-ChildPath -Candidate $portableStage -Parent $targetRoot
 
 [xml]$pom = Get-Content -LiteralPath (Join-Path $projectRoot "pom.xml") -Raw
 $projectVersion = [string]$pom.project.version
-if ($projectVersion -notmatch '^3\.[0-9]+\.[0-9]+-(?:alpha|beta|rc)\.[1-9][0-9]*$') {
-    throw "Tauri pre-release packaging requires a v3 pre-release version, found: $projectVersion"
+if ($projectVersion -notmatch '^3\.[0-9]+\.[0-9]+(?:-(?:alpha|beta|rc)\.[1-9][0-9]*)?$') {
+    throw "Tauri packaging requires a valid v3 release version, found: $projectVersion"
 }
 
 $installerPath = Join-Path $outputPath "SQLTeacher-$projectVersion.exe"
