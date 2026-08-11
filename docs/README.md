@@ -12,7 +12,7 @@
 - 最新稳定版说明：[v2.3.0](releases/v2.3.0.md)
 - 最近一轮功能计划：[v2.2 组件傻瓜化与数据库扩展计划](plans/2026-08-09-v2.2-managed-components-and-database-expansion-plan.md)
 - 对应实施记录：[v2.0 GA 发布记录](history/stages/stage18/2026-08-09-v2-ga-release.md)
-- 当前生产部署记录：[v2.2.0 云端部署记录](operations/2026-08-09-v2.2.0-cloud-deployment.md)
+- 当前生产部署记录：[v2.3.0 云端部署记录](operations/2026-08-11-v2.3.0-cloud-deployment.md)
 
 > “当前”以 `pom.xml`、Git 标签和实际代码为准。计划文档记录制定时的基线，不应被当作实时状态页。
 
