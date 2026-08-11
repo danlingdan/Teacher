@@ -6,7 +6,7 @@ param(
 $root = (Resolve-Path -LiteralPath $RepositoryRoot).Path
 $files = @(
     Get-ChildItem -LiteralPath $root -Recurse -Filter '*.md' -File |
-        Where-Object { $_.FullName -notmatch '[\\/](target|app-data|\.git)[\\/]' }
+        Where-Object { $_.FullName -notmatch '[\\/](target|app-data|node_modules|dist|\.git)[\\/]' }
 )
 $broken = [System.Collections.Generic.List[string]]::new()
 

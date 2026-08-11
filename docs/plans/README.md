@@ -6,7 +6,7 @@
 
 | 版本/主题 | 计划 | 对应实施记录 |
 | --- | --- | --- |
-| v3.0 | [UI 迁移与性能重构计划](2026-08-11-v3-ui-migration-and-performance-plan.md) | 规划中 |
+| v3.0 | [UI 迁移与性能重构计划](2026-08-11-v3-ui-migration-and-performance-plan.md) | [Alpha.1 架构与性能验证](../history/stages/stage19/2026-08-11-v3-alpha1-architecture-spike.md)（门禁收集中） |
 | v2.2 | [组件傻瓜化与数据库扩展计划](2026-08-09-v2.2-managed-components-and-database-expansion-plan.md) | [本地完成说明](../releases/v2.2.0.md) |
 | v2.1 | [目标驱动数据库学习计划](2026-08-09-v2.1-goal-driven-database-learning-plan.md) | [发布说明](../releases/v2.1.0.md) |
 | v2.0.1 | [教学文案整顿计划](2026-08-09-v2.0.1-teaching-copy-plan.md) | [验收记录](../acceptance/2026-08-09-v2.0.1-stage-gate.md) |

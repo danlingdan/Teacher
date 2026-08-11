@@ -21,11 +21,11 @@ jobs:
       - name: Check out tagged source
         uses: actions/checkout@v7
 
-      - name: Set up JDK 21
+      - name: Set up JDK 25
         uses: actions/setup-java@v5
         with:
           distribution: temurin
-          java-version: '21'
+          java-version: '25'
           cache: maven
 
       - name: Verify tag matches Maven version
@@ -45,11 +45,49 @@ jobs:
               "RELEASE_CHANNEL=stable" >> $env:GITHUB_ENV
               "RELEASE_PRERELEASE=false" >> $env:GITHUB_ENV
           }
+          $major = [int]($version -split '\.')[0]
+          "DESKTOP_GENERATION=$(if ($major -ge 3) { 'tauri' } else { 'javafx' })" >> $env:GITHUB_ENV
 
-      - name: Run full test suite
+      - name: Run focused v3 pre-release tests
+        if: env.DESKTOP_GENERATION == 'tauri'
+        shell: pwsh
+        run: mvn -B test "-Dtest=LocalAppProtocolServerTest,DefaultLocalAppApiTest"
+
+      - name: Run full legacy release test suite
+        if: env.DESKTOP_GENERATION == 'javafx'
         run: mvn -B test
 
-      - name: Build Windows installer and portable archive
+      - name: Set up Node.js for Tauri release
+        if: env.DESKTOP_GENERATION == 'tauri'
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: ui-web/package-lock.json
+
+      - name: Set up Rust for Tauri release
+        if: env.DESKTOP_GENERATION == 'tauri'
+        shell: pwsh
+        run: |
+          rustup default stable
+          rustc --version
+          cargo --version
+
+      - name: Install and audit Tauri frontend dependencies
+        if: env.DESKTOP_GENERATION == 'tauri'
+        working-directory: ui-web
+        run: |
+          npm ci
+          npm audit --audit-level=moderate
+          npm test
+
+      - name: Build Tauri installer and portable archive
+        if: env.DESKTOP_GENERATION == 'tauri'
+        shell: pwsh
+        run: .\packaging\package-v3.ps1
+
+      - name: Build JavaFX installer and portable archive
+        if: env.DESKTOP_GENERATION == 'javafx'
         shell: pwsh
         run: .\packaging\package-stage1.ps1
 
@@ -60,12 +98,22 @@ jobs:
           $archive = "target/installer/SQLTeacher-$env:PROJECT_VERSION-windows-x64.zip"
           $checksums = "target/installer/SHA256SUMS.txt"
           $sbom = "target/installer/sqlteacher-sbom.json"
-          $config = "target/installer/SQLTeacher/app/SQLTeacher.cfg"
-          foreach ($file in @($installer, $archive, $checksums, $sbom, $config)) {
+          $required = @($installer, $archive, $checksums, $sbom)
+          if ($env:DESKTOP_GENERATION -eq 'tauri') {
+              $required += "target/installer/sqlteacher-ui-sbom.json"
+          } else {
+              $required += "target/installer/SQLTeacher/app/SQLTeacher.cfg"
+          }
+          foreach ($file in $required) {
               if (-not (Test-Path -LiteralPath $file)) { throw "Missing release artifact: $file" }
           }
-          if (-not (Select-String -LiteralPath $config -SimpleMatch '-Dsqlteacher.cloud.base-url=https://api.sqlteacher.tech' -Quiet)) {
+          if ($env:DESKTOP_GENERATION -eq 'javafx' -and
+              -not (Select-String -LiteralPath "target/installer/SQLTeacher/app/SQLTeacher.cfg" -SimpleMatch '-Dsqlteacher.cloud.base-url=https://api.sqlteacher.tech' -Quiet)) {
               throw 'Packaged launcher does not contain the production cloud API URL.'
+          }
+          Get-Content -LiteralPath $sbom -Raw | ConvertFrom-Json | Out-Null
+          if ($env:DESKTOP_GENERATION -eq 'tauri') {
+              Get-Content -LiteralPath "target/installer/sqlteacher-ui-sbom.json" -Raw | ConvertFrom-Json | Out-Null
           }
 
       - name: Create signed channel-specific update manifest
@@ -100,6 +148,7 @@ jobs:
             target/installer/SQLTeacher-${{ env.PROJECT_VERSION }}-windows-x64.zip
             target/installer/SHA256SUMS.txt
             target/installer/sqlteacher-sbom.json
+            target/installer/sqlteacher-ui-sbom.json
             target/installer/update-manifest.json
           if-no-files-found: error
           retention-days: 30
@@ -113,10 +162,10 @@ jobs:
           if ($LASTEXITCODE -ne 0) {
               if ($env:RELEASE_PRERELEASE -eq 'true') {
                   gh release create $env:GITHUB_REF_NAME --verify-tag --draft --prerelease `
-                      --title "SQLTeacher $env:GITHUB_REF_NAME" --generate-notes
+                      --title "SQLTeacher $env:GITHUB_REF_NAME" --notes-file "docs/releases/v$env:PROJECT_VERSION.md"
               } else {
                   gh release create $env:GITHUB_REF_NAME --verify-tag --draft `
-                      --title "SQLTeacher $env:GITHUB_REF_NAME" --generate-notes
+                      --title "SQLTeacher $env:GITHUB_REF_NAME" --notes-file "docs/releases/v$env:PROJECT_VERSION.md"
               }
               if ($LASTEXITCODE -ne 0) { throw 'Unable to create the GitHub Release draft.' }
           }
@@ -126,12 +175,16 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release upload $env:GITHUB_REF_NAME `
-              "target/installer/SQLTeacher-$env:PROJECT_VERSION.exe" `
-              "target/installer/SQLTeacher-$env:PROJECT_VERSION-windows-x64.zip" `
-              "target/installer/SHA256SUMS.txt" `
-              "target/installer/sqlteacher-sbom.json" `
-              "target/installer/update-manifest.json" --clobber
+          $assets = @(
+              "target/installer/SQLTeacher-$env:PROJECT_VERSION.exe",
+              "target/installer/SQLTeacher-$env:PROJECT_VERSION-windows-x64.zip",
+              "target/installer/SHA256SUMS.txt",
+              "target/installer/sqlteacher-sbom.json",
+              "target/installer/update-manifest.json"
+          )
+          $uiSbom = "target/installer/sqlteacher-ui-sbom.json"
+          if (Test-Path -LiteralPath $uiSbom) { $assets += $uiSbom }
+          gh release upload $env:GITHUB_REF_NAME @assets --clobber
           if ($LASTEXITCODE -ne 0) { throw 'Unable to upload GitHub Release assets.' }
 
       - name: Publish complete release

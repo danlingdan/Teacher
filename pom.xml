@@ -6,12 +6,12 @@
 
     <groupId>org.hjh.JavaWork</groupId>
     <artifactId>Teacher</artifactId>
-    <version>2.3.0</version>
+    <version>3.0.0-alpha.1</version>
     <name>SQLTeacher</name>
 
     <properties>
-        <maven.compiler.source>21</maven.compiler.source>
-        <maven.compiler.target>21</maven.compiler.target>
+        <maven.compiler.source>25</maven.compiler.source>
+        <maven.compiler.target>25</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <junit.version>5.13.4</junit.version>
         <test.excludedGroups></test.excludedGroups>
@@ -185,7 +185,7 @@
                 <artifactId>maven-compiler-plugin</artifactId>
                 <version>3.14.0</version>
                 <configuration>
-                    <release>21</release>
+                    <release>25</release>
                 </configuration>
             </plugin>
             <plugin>

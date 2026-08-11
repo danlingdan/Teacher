@@ -109,7 +109,7 @@ mvn -q compile exec:java "-Dexec.mainClass=com.sqlteacher.StageOneVerificationAp
 ## 技术栈
 
 ```text
-Java 21 + JavaFX + Spring Context
+Java 25 + Tauri 2 / React（3.0 Alpha）+ JavaFX 回退 + Spring Context
 SQLite / MySQL / MariaDB
 Jackson + SLF4J + Logback
 Lucene + SQLite FTS5

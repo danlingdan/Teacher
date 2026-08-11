@@ -110,7 +110,7 @@ Assert-ChildPath -Candidate $updatePayloadPath -Parent $outputPath
 Assert-ChildPath -Candidate $updateManifestPath -Parent $outputPath
 
 if (-not (Get-Command jpackage -ErrorAction SilentlyContinue)) {
-    throw "jpackage was not found. Use JDK 21 or newer with jpackage available on PATH."
+    throw "jpackage was not found. Use JDK 25 with jpackage available on PATH."
 }
 if (-not (Test-Path -LiteralPath $iconPath)) {
     throw "Application icon was not found: $iconPath"

@@ -4,7 +4,7 @@
 
 ## 当前基线
 
-- 当前代码版本：`2.3.0`
+- 当前代码版本：`3.0.0-alpha.1`（开发中）
 - 当前正式版本：[v2.3.0](releases/v2.3.0.md)
 - 上一稳定版本：[v2.2.0](releases/v2.2.0.md)
 - 当前迭代计划：[v3.0 UI 迁移与性能重构计划](plans/2026-08-11-v3-ui-migration-and-performance-plan.md)
@@ -12,6 +12,7 @@
 - 最新稳定版说明：[v2.3.0](releases/v2.3.0.md)
 - 最近一轮功能计划：[v2.2 组件傻瓜化与数据库扩展计划](plans/2026-08-09-v2.2-managed-components-and-database-expansion-plan.md)
 - 对应实施记录：[v2.0 GA 发布记录](history/stages/stage18/2026-08-09-v2-ga-release.md)
+- 当前实施记录：[v3.0 Alpha.1 架构与性能验证](history/stages/stage19/2026-08-11-v3-alpha1-architecture-spike.md)
 - 当前生产部署记录：[v2.3.0 云端部署记录](operations/2026-08-11-v2.3.0-cloud-deployment.md)
 
 > “当前”以 `pom.xml`、Git 标签和实际代码为准。计划文档记录制定时的基线，不应被当作实时状态页。
