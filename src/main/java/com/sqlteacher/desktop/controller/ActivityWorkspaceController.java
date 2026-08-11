@@ -5,6 +5,7 @@ import com.sqlteacher.application.activity.ActivityReviewItem;
 import com.sqlteacher.application.activity.ActivityReviewService;
 import com.sqlteacher.application.collaboration.DesktopAccessProfile;
 import com.sqlteacher.application.course.CourseMapActivity;
+import com.sqlteacher.application.course.CourseMapCourse;
 import com.sqlteacher.application.course.CourseMapService;
 import com.sqlteacher.application.course.CourseMapSnapshot;
 import com.sqlteacher.application.runner.LocalCodeWorkspaceLauncher;
@@ -13,6 +14,7 @@ import com.sqlteacher.desktop.DesktopExecutors;
 import com.sqlteacher.desktop.AppI18n;
 import com.sqlteacher.desktop.component.ActivityInteractionPane;
 import com.sqlteacher.desktop.component.StatePanel;
+import com.sqlteacher.desktop.component.WorkflowSteps;
 import com.sqlteacher.desktop.navigation.PendingActivitySelection;
 import com.sqlteacher.domain.activity.ActivityType;
 import javafx.application.Platform;
@@ -21,6 +23,8 @@ import javafx.scene.Node;
 import javafx.scene.control.Label;
 import javafx.scene.control.ListView;
 import javafx.scene.control.TextArea;
+import javafx.scene.control.Button;
+import javafx.scene.control.ComboBox;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.VBox;
@@ -40,8 +44,10 @@ public final class ActivityWorkspaceController {
     private String requestedActivityId = "";
     private final PendingActivitySelection pendingSelection = new PendingActivitySelection();
     private ActivityReviewItem currentReview;
+    private CourseMapActivity selectedActivity;
 
     @FXML private ListView<CourseMapActivity> activityList;
+    @FXML private ComboBox<CourseMapCourse> courseSelector;
     @FXML private BorderPane workspaceRoot;
     @FXML private VBox activityRail;
     @FXML private VBox activityInspector;
@@ -53,6 +59,8 @@ public final class ActivityWorkspaceController {
     @FXML private VBox teacherReviewPane;
     @FXML private Label teacherReviewEvidence;
     @FXML private TextArea teacherFeedbackInput;
+    @FXML private Button startActivityButton;
+    @FXML private WorkflowSteps workflowSteps;
 
     public ActivityWorkspaceController(CourseMapService courseMapService,
                                        ActivityLearningService activityLearningService,
@@ -68,15 +76,23 @@ public final class ActivityWorkspaceController {
         this.runner = Objects.requireNonNull(runner);
         this.interactionPane = new ActivityInteractionPane(activityLearningService, localCodeRunner,
             localWorkspaceLauncher,
-            submission -> workspaceStatus.setText(submission.evaluation().summary()));
+            submission -> {
+                workspaceStatus.setText(submission.evaluation().summary());
+                workflowSteps.setActiveStep(3);
+            });
     }
 
     @FXML
     private void initialize() {
-        runnerHost.getChildren().setAll(runner);
+        showActivityPrompt();
+        courseSelector.setConverter(new javafx.util.StringConverter<>() {
+            @Override public String toString(CourseMapCourse course) { return course == null ? "" : course.title(); }
+            @Override public CourseMapCourse fromString(String value) { return null; }
+        });
+        courseSelector.valueProperty().addListener((ignored, oldCourse, course) -> showCourse(course));
         workspaceRoot.widthProperty().addListener((ignored, oldWidth, width) -> applyResponsiveLayout(width.doubleValue()));
         activityList.getSelectionModel().selectedItemProperty().addListener((ignored, oldValue, activity) -> {
-            if (activity != null) showActivity(activity);
+            if (activity != null) previewActivity(activity);
         });
         loadActivities();
         boolean reviewer = accessProfile.kind() == DesktopAccessProfile.Kind.TEACHER
@@ -101,8 +117,18 @@ public final class ActivityWorkspaceController {
         if (index >= 0) {
             activityList.getSelectionModel().select(index);
             pendingSelection.clear();
+            return;
         }
-        else showActivity(activity);
+        for (CourseMapCourse course : courseSelector.getItems()) {
+            int courseIndex = find(activity.id(), enabledActivities(course));
+            if (courseIndex >= 0) {
+                courseSelector.setValue(course);
+                activityList.getSelectionModel().select(courseIndex);
+                pendingSelection.clear();
+                return;
+            }
+        }
+        previewActivity(activity);
     }
 
     private void loadActivities() {
@@ -110,18 +136,21 @@ public final class ActivityWorkspaceController {
         DesktopExecutors.background().execute(() -> {
             try {
                 CourseMapSnapshot snapshot = courseMapService.load();
-                List<CourseMapActivity> activities = new ArrayList<>();
-                snapshot.courses().forEach(course -> course.sections().forEach(section ->
-                    section.activities().stream().filter(CourseMapActivity::enabled).forEach(activities::add)));
+                List<CourseMapCourse> courses = coursesWithEnabledActivities(snapshot);
+                int totalActivities = courses.stream().mapToInt(course -> enabledActivities(course).size()).sum();
                 Platform.runLater(() -> {
-                    activityList.getItems().setAll(activities);
-                    workspaceStatus.setText(AppI18n.format("alpha2.workspace.summary", activities.size()));
-                    int requestedIndex = pendingSelection.resolve(activities);
-                    if (requestedIndex >= 0) {
-                        activityList.getSelectionModel().select(requestedIndex);
-                    } else if (!activities.isEmpty() && activityList.getSelectionModel().isEmpty()) {
-                        activityList.getSelectionModel().selectFirst();
+                    courseSelector.getItems().setAll(courses);
+                    workspaceStatus.setText(AppI18n.format("alpha2.workspace.summary", courses.size(), totalActivities));
+                    for (CourseMapCourse course : courses) {
+                        List<CourseMapActivity> activities = enabledActivities(course);
+                        int requestedIndex = pendingSelection.resolve(activities);
+                        if (requestedIndex >= 0) {
+                            courseSelector.setValue(course);
+                            activityList.getSelectionModel().select(requestedIndex);
+                            return;
+                        }
                     }
+                    if (!courses.isEmpty()) courseSelector.setValue(courses.getFirst());
                 });
             } catch (RuntimeException error) {
                 Platform.runLater(() -> workspaceStatus.setText(AppI18n.format("alpha2.workspace.failed", safeMessage(error))));
@@ -130,23 +159,74 @@ public final class ActivityWorkspaceController {
     }
 
     private int find(String activityId) {
-        for (int index = 0; index < activityList.getItems().size(); index++) {
-            if (activityList.getItems().get(index).id().equals(activityId)) return index;
+        return find(activityId, activityList.getItems());
+    }
+
+    private static int find(String activityId, List<CourseMapActivity> activities) {
+        for (int index = 0; index < activities.size(); index++) {
+            if (activities.get(index).id().equals(activityId)) return index;
         }
         return -1;
     }
 
-    private void showActivity(CourseMapActivity activity) {
+    static List<CourseMapCourse> coursesWithEnabledActivities(CourseMapSnapshot snapshot) {
+        return snapshot.courses().stream().filter(course -> !enabledActivities(course).isEmpty()).toList();
+    }
+
+    static List<CourseMapActivity> enabledActivities(CourseMapCourse course) {
+        List<CourseMapActivity> activities = new ArrayList<>();
+        course.sections().forEach(section -> section.activities().stream()
+            .filter(CourseMapActivity::enabled).forEach(activities::add));
+        return List.copyOf(activities);
+    }
+
+    private void showCourse(CourseMapCourse course) {
+        activityList.getSelectionModel().clearSelection();
+        selectedActivity = null;
+        startActivityButton.setDisable(true);
+        workflowSteps.setActiveStep(1);
+        activityTitle.setText(AppI18n.get("alpha2.workspace.select"));
+        activityMetadata.setText("—");
+        knowledgePoints.setText("—");
+        showActivityPrompt();
+        if (course == null) {
+            activityList.getItems().clear();
+            return;
+        }
+        List<CourseMapActivity> activities = enabledActivities(course);
+        activityList.getItems().setAll(activities);
+        workspaceStatus.setText(AppI18n.format("alpha2.workspace.courseSummary", course.title(), activities.size()));
+    }
+
+    private void previewActivity(CourseMapActivity activity) {
+        selectedActivity = activity;
         requestedActivityId = activity.id();
         activityTitle.setText(activity.title());
         activityMetadata.setText(AppI18n.format("alpha2.workspace.metadata", activity.type(),
             difficultyLabel(activity), activity.estimatedMinutes()));
         knowledgePoints.setText(activity.knowledgePoints().isEmpty()
             ? AppI18n.get("alpha2.workspace.noKnowledge") : String.join("\n", activity.knowledgePoints()));
+        startActivityButton.setDisable(false);
+        workflowSteps.setActiveStep(1);
+        showActivityPrompt();
+    }
+
+    @FXML
+    private void onStartActivity() {
+        CourseMapActivity activity = selectedActivity;
+        if (activity == null) return;
+        startActivityButton.setDisable(true);
+        workflowSteps.setActiveStep(2);
+        openActivity(activity);
+    }
+
+    private void openActivity(CourseMapActivity activity) {
+        requestedActivityId = activity.id();
         if (activity.type() == ActivityType.SQL) {
             runnerHost.getChildren().setAll(runner);
             currentReview = null;
             teacherReviewEvidence.setText(AppI18n.get("alpha3.review.sql"));
+            startActivityButton.setDisable(false);
             return;
         }
         loadTeacherReview(activity);
@@ -161,6 +241,7 @@ public final class ActivityWorkspaceController {
                     if (!requestedActivityId.equals(activity.id())) return;
                     interactionPane.show(definition);
                     runnerHost.getChildren().setAll(interactionPane);
+                    startActivityButton.setDisable(false);
                 });
             } catch (RuntimeException error) {
                 Platform.runLater(() -> {
@@ -169,9 +250,17 @@ public final class ActivityWorkspaceController {
                     failed.setTitle(AppI18n.get("alpha3.loadFailed.title"));
                     failed.setMessage(safeMessage(error));
                     runnerHost.getChildren().setAll(failed);
+                    startActivityButton.setDisable(false);
                 });
             }
         });
+    }
+
+    private void showActivityPrompt() {
+        StatePanel prompt = new StatePanel();
+        prompt.setTitle(AppI18n.get("alpha2.workspace.select"));
+        prompt.setMessage(AppI18n.get("alpha2.workspace.preview"));
+        runnerHost.getChildren().setAll(prompt);
     }
 
     private void loadTeacherReview(CourseMapActivity activity) {

@@ -4,6 +4,7 @@
 <?import javafx.scene.control.*?>
 <?import javafx.scene.layout.*?>
 <?import com.sqlteacher.desktop.component.PageHeader?>
+<?import com.sqlteacher.desktop.component.WorkflowSteps?>
 
 <BorderPane xmlns="http://javafx.com/javafx" xmlns:fx="http://javafx.com/fxml"
             fx:controller="com.sqlteacher.desktop.controller.ConnectionSettingsController"
@@ -12,6 +13,7 @@
         <VBox spacing="6.0" styleClass="title-area">
             <padding><Insets top="20" right="24" bottom="14" left="24"/></padding>
             <PageHeader title="%connection-settings.1" description="%connection-settings.2"/>
+            <WorkflowSteps fx:id="connectionWorkflow" steps="%connection-settings.steps" activeStep="1"/>
         </VBox>
     </top>
     <center>
@@ -26,7 +28,8 @@
                 <ListView fx:id="profileList" VBox.vgrow="ALWAYS" styleClass="connection-list"/>
                 <Label fx:id="currentLabel" text="%connection-settings.6" styleClass="model-status"/>
             </VBox>
-            <ScrollPane fitToWidth="true" styleClass="connection-form-scroll">
+            <ScrollPane fx:id="connectionFormPane" fitToWidth="true" styleClass="connection-form-scroll"
+                        visible="false" managed="false">
                 <VBox spacing="12" styleClass="panel-card, connection-form">
                     <Label text="%connection-settings.7" styleClass="card-title"/>
                     <GridPane hgap="12" vgap="10">

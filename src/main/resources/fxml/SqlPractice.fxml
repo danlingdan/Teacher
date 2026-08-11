@@ -12,6 +12,7 @@
 <?import javafx.scene.layout.VBox?>
 <?import com.sqlteacher.desktop.component.PageHeader?>
 <?import com.sqlteacher.desktop.component.StatePanel?>
+<?import com.sqlteacher.desktop.component.WorkflowSteps?>
 <?import org.fxmisc.richtext.CodeArea?>
 
 <!--
@@ -27,6 +28,7 @@
         <VBox styleClass="sql-practice-header" spacing="14">
             <PageHeader eyebrow="SAFE SQL WORKBENCH" title="%SqlPractice.1"
                         description="%SqlPractice.2"/>
+            <WorkflowSteps fx:id="sqlWorkflow" steps="%SqlPractice.steps" activeStep="1"/>
             <VBox styleClass="panel-card examples-card" spacing="10">
                 <HBox styleClass="card-title-row" alignment="CENTER_LEFT" spacing="10">
                     <Region styleClass="card-accent"/>

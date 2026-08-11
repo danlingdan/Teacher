@@ -69,6 +69,7 @@ public final class CloudCenterController {
     @FXML private FlowPane assignmentCreationPane;
     @FXML private HBox assignmentLifecyclePane;
     @FXML private HBox studentAssignmentPane;
+    @FXML private HBox assignmentAnalyticsPane;
     @FXML private Label submissionQueueLabel;
     @FXML private ProgressIndicator busyIndicator;
     @FXML private Button logoutButton;
@@ -167,12 +168,15 @@ public final class CloudCenterController {
         assignmentLifecyclePane.setManaged(canManageClass);
         studentAssignmentPane.setVisible(!canManageClass);
         studentAssignmentPane.setManaged(!canManageClass);
+        assignmentAnalyticsPane.setVisible(canManageClass);
+        assignmentAnalyticsPane.setManaged(canManageClass);
         exportClassRecordsButton.setVisible(canManageClass);
         exportClassRecordsButton.setManaged(canManageClass);
         boolean administrator = accessProfile.kind() == DesktopAccessProfile.Kind.ADMIN;
         adminOperationsPane.setVisible(administrator);
         adminOperationsPane.setManaged(administrator);
         updateSessionState();
+        showInitialSessionStatus();
     }
 
     @FXML
@@ -734,6 +738,14 @@ public final class CloudCenterController {
         authenticatedContent.setManaged(signedIn);
         authenticatedContent.setDisable(signedIn && activeOperations.get() > 0);
         logoutButton.setDisable(!signedIn || activeOperations.get() > 0);
+    }
+
+    private void showInitialSessionStatus() {
+        boolean signedIn = session.current().isPresent();
+        showStatus(
+            AppI18n.get(signedIn ? "cloud-center.status.signed-in" : "cloud-center.status.signed-out"),
+            signedIn ? Status.SUCCESS : Status.INFO
+        );
     }
 
     private String roleName(UserRole role) {

@@ -8,6 +8,7 @@ import com.sqlteacher.application.runner.LocalCodeWorkspaceLauncher;
 import com.sqlteacher.desktop.AppI18n;
 import com.sqlteacher.desktop.DesktopExecutors;
 import com.sqlteacher.desktop.appearance.UiPreferencesService;
+import com.sqlteacher.desktop.editor.CodeEditorSupport;
 import com.sqlteacher.domain.activity.CodeActivityArtifact;
 import com.sqlteacher.domain.activity.CodeActivitySpecification;
 import com.sqlteacher.domain.activity.LearningActivityDefinition;
@@ -48,6 +49,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.fxmisc.richtext.CodeArea;
 import org.fxmisc.richtext.LineNumberFactory;
+import org.reactfx.Subscription;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -72,6 +74,7 @@ public final class ActivityInteractionPane extends VBox {
     private final VBox content = new VBox(16);
     private LearningActivityDefinition definition;
     private AtomicBoolean currentRunCancellation;
+    private Subscription codeEditorSupport;
 
     public ActivityInteractionPane(ActivityLearningService learningService,
                                    LocalCodeRunner localCodeRunner,
@@ -100,6 +103,10 @@ public final class ActivityInteractionPane extends VBox {
     public void show(LearningActivityDefinition definition) {
         if (currentRunCancellation != null) currentRunCancellation.set(true);
         currentRunCancellation = null;
+        if (codeEditorSupport != null) {
+            codeEditorSupport.unsubscribe();
+            codeEditorSupport = null;
+        }
         this.definition = Objects.requireNonNull(definition);
         feedback.setText("");
         teacherFeedback.setVisible(false);
@@ -127,6 +134,9 @@ public final class ActivityInteractionPane extends VBox {
         editor.setParagraphGraphicFactory(LineNumberFactory.get(editor));
         editor.setPrefHeight(420);
         editor.getStyleClass().add("code-activity-editor");
+        codeEditorSupport = CodeEditorSupport.install(editor, specification.language());
+        Label editorAssist = new Label(AppI18n.get("alpha4.editorAssist"));
+        editorAssist.getStyleClass().add("code-editor-assist");
         TextArea input = new TextArea();
         input.setPromptText(AppI18n.get("alpha4.stdinPrompt"));
         input.setPrefRowCount(3);
@@ -156,7 +166,7 @@ public final class ActivityInteractionPane extends VBox {
         terminal.setOnAction(ignored -> openLocalWorkspace(terminal, specification, editor.getText()));
         actions.getChildren().addAll(terminal, cancel, safeTests, localRun);
         actions.setAlignment(Pos.CENTER_RIGHT);
-        content.getChildren().addAll(heading(specification.prompt()), boundary, editor,
+        content.getChildren().addAll(heading(specification.prompt()), boundary, editorAssist, editor,
             new Label(AppI18n.get("alpha4.stdin")), input,
             new Label(AppI18n.get("alpha4.console")), console, actions);
     }

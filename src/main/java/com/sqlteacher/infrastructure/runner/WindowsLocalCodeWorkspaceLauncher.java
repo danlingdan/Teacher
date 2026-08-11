@@ -4,6 +4,7 @@ import com.sqlteacher.application.runner.LocalCodeWorkspace;
 import com.sqlteacher.application.runner.LocalCodeWorkspaceLauncher;
 import com.sqlteacher.domain.SqlTeacherException;
 import com.sqlteacher.domain.activity.CodeLanguage;
+import com.sqlteacher.infrastructure.environment.WindowsToolchainDiscovery;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -87,21 +88,7 @@ public final class WindowsLocalCodeWorkspaceLauncher implements LocalCodeWorkspa
     }
 
     static Path visualStudioDeveloperShell() {
-        String programFilesX86 = System.getenv("ProgramFiles(x86)");
-        if (programFilesX86 == null) return null;
-        Path vswhere = Path.of(programFilesX86, "Microsoft Visual Studio", "Installer", "vswhere.exe");
-        if (!Files.isRegularFile(vswhere)) return null;
-        try {
-            Process process = new ProcessBuilder(vswhere.toString(), "-latest", "-products", "*", "-requires",
-                "Microsoft.VisualStudio.Component.VC.Tools.x86.x64", "-property", "installationPath").start();
-            if (!process.waitFor(5, java.util.concurrent.TimeUnit.SECONDS) || process.exitValue() != 0) return null;
-            String installation = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8).trim();
-            Path shell = Path.of(installation, "Common7", "Tools", "VsDevCmd.bat");
-            return Files.isRegularFile(shell) ? shell : null;
-        } catch (IOException | InterruptedException error) {
-            if (error instanceof InterruptedException) Thread.currentThread().interrupt();
-            return null;
-        }
+        return WindowsToolchainDiscovery.visualStudioDeveloperShell();
     }
 
     private static Path wslExecutable() {

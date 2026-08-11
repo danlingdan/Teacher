@@ -27,6 +27,8 @@ class DesktopVisualResourceTest {
         assertTrue(tokens.contains("-st-bg-canvas"));
         assertTrue(tokens.contains("-st-info-surface"));
         assertTrue(tokens.contains("-st-accent-fg"));
+        assertTrue(tokens.contains("-st-accent-strong"));
+        assertTrue(tokens.contains("-st-text-on-accent"));
         assertTrue(tokens.contains("-st-bg-subtle"));
         assertTrue(tokens.contains("-st-border-muted"));
         assertTrue(tokens.contains("-st-info:"));
@@ -63,6 +65,21 @@ class DesktopVisualResourceTest {
     }
 
     @Test
+    void activeWorkflowStepShouldMeetNormalTextContrastInBothThemes() throws IOException {
+        String tokens = resource("/css/foundation/tokens.css");
+        int lightThemeStart = tokens.indexOf(".theme-light");
+        String dark = tokens.substring(0, lightThemeStart);
+        String light = tokens.substring(lightThemeStart);
+        String pages = resource("/css/components/pages.css");
+
+        assertTrue(pages.contains(".workflow-step.active"));
+        assertTrue(pages.contains("-fx-background-color: -st-accent-strong"));
+        assertTrue(pages.contains("-fx-text-fill: -st-text-on-accent"));
+        assertTrue(contrast(token(dark, "-st-text-on-accent"), token(dark, "-st-accent-strong")) >= 4.5);
+        assertTrue(contrast(token(light, "-st-text-on-accent"), token(light, "-st-accent-strong")) >= 4.5);
+    }
+
+    @Test
     void shellAndSqlWorkbenchShouldUseAdaptiveStructures() throws IOException {
         String shell = resource("/fxml/MainWindow.fxml");
         String home = resource("/fxml/home.fxml");
@@ -74,7 +91,9 @@ class DesktopVisualResourceTest {
 
         assertTrue(shell.contains("fx:id=\"mainWindowRoot\""));
         assertTrue(shell.contains("fx:id=\"appSidebar\""));
-        assertTrue(home.contains("TilePane"));
+        assertTrue(home.contains("GridPane"));
+        assertTrue(home.contains("GridPane.columnIndex=\"1\""));
+        assertTrue(home.contains("GridPane.rowIndex=\"1\""));
         assertTrue(home.contains("PageHeader"));
         assertTrue(home.contains("compact-action-grid"));
         assertTrue(sql.contains("fx:id=\"workbenchSplit\""));
@@ -93,11 +112,25 @@ class DesktopVisualResourceTest {
         assertTrue(assistant.contains("fx:id=\"networkApiKeyField\""));
         assertTrue(exercise.contains("fx:id=\"schemaLabel\""));
         assertTrue(exercise.contains("prefRowCount=\"9\""));
+        assertTrue(exercise.contains("fx:id=\"selectionStepPane\""));
+        assertTrue(exercise.contains("fx:id=\"answerStepPane\" visible=\"false\" managed=\"false\""));
+        assertFalse(exercise.contains("styleClass=\"workflow-hint\""));
         assertTrue(teaching.contains("fx:id=\"assignmentClassroomCombo\""));
         assertTrue(teaching.contains("fx:id=\"learningClassroomCombo\""));
         assertTrue(teaching.contains("fx:id=\"learningAssignmentCombo\""));
         assertTrue(teaching.contains("fx:id=\"learningStudentCombo\""));
         assertFalse(teaching.contains("assignmentDueAtField"));
+        for (String stagedPage : new String[] {
+            sql, exercise, assistant,
+            resource("/fxml/activity-workspace.fxml"),
+            resource("/fxml/connection-settings.fxml"),
+            resource("/fxml/exercise-management.fxml"),
+            resource("/fxml/database-learning.fxml")
+        }) {
+            assertTrue(stagedPage.contains("WorkflowSteps"), "Linear workflow page must use the shared step component");
+        }
+        assertTrue(resource("/fxml/activity-workspace.fxml").contains("fx:id=\"courseSelector\""),
+            "Activity workspace must separate the catalog by course");
     }
 
     @Test

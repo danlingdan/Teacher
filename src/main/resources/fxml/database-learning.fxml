@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <?import com.sqlteacher.desktop.component.PageHeader?>
+<?import com.sqlteacher.desktop.component.WorkflowSteps?>
 <?import javafx.scene.control.*?>
 <?import javafx.scene.layout.*?>
 
@@ -13,6 +14,7 @@
                 <VBox spacing="16">
                     <VBox spacing="10" styleClass="panel-card">
                         <Label text="%v21.goal.title" styleClass="card-title"/>
+                        <WorkflowSteps fx:id="goalWorkflow" steps="%v21.goal.steps" activeStep="1"/>
                         <ComboBox fx:id="goalSelector" maxWidth="Infinity"/>
                         <Label fx:id="goalOutcomeLabel" wrapText="true" styleClass="model-status"/>
                         <ListView fx:id="activityList" prefHeight="180"/>
@@ -23,6 +25,7 @@
                     </VBox>
                     <VBox spacing="10" styleClass="panel-card">
                         <Label text="%v21.model.title" styleClass="card-title"/>
+                        <WorkflowSteps fx:id="modelWorkflow" steps="%v21.model.steps" activeStep="1"/>
                         <FlowPane hgap="8" vgap="8">
                             <Button text="%v21.model.enrollment" onAction="#onUseEnrollmentExample" styleClass="secondary-button"/>
                             <Button text="%v21.model.order" onAction="#onUseOrderExample" styleClass="secondary-button"/>
@@ -30,23 +33,28 @@
                         </FlowPane>
                         <TextArea fx:id="requirementInput" promptText="%v21.model.prompt" prefRowCount="4" wrapText="true"/>
                         <Button text="%v21.model.create" onAction="#onCreateModel" styleClass="sql-execute-button"/>
-                        <TextArea fx:id="modelOutput" editable="false" wrapText="true" prefRowCount="10"/>
-                        <Button fx:id="copyDdlButton" text="%v21.model.copy" onAction="#onCopyDdl" styleClass="secondary-button"/>
+                        <VBox fx:id="modelReviewPane" visible="false" managed="false" spacing="8">
+                            <TextArea fx:id="modelOutput" editable="false" wrapText="true" prefRowCount="10"/>
+                            <Button fx:id="copyDdlButton" text="%v21.model.copy" onAction="#onCopyDdl" styleClass="secondary-button"/>
+                        </VBox>
                     </VBox>
                 </VBox>
                 <VBox spacing="10" styleClass="panel-card">
                     <Label text="%v21.data.title" styleClass="card-title"/>
+                    <WorkflowSteps fx:id="dataWorkflow" steps="%v21.data.steps" activeStep="1"/>
                     <Label text="%v21.data.description" wrapText="true" styleClass="model-status"/>
                     <HBox spacing="10">
                         <TextField fx:id="sourceUrlField" promptText="%v21.data.url" HBox.hgrow="ALWAYS"/>
                         <Button fx:id="fetchButton" text="%v21.data.preview" onAction="#onFetchPreview" styleClass="sql-execute-button"/>
                     </HBox>
-                    <TextArea fx:id="dataPreviewArea" editable="false" wrapText="false" prefRowCount="8"/>
                     <Label fx:id="dataStatusLabel" text="%v21.data.idle" wrapText="true" styleClass="model-status"/>
-                    <HBox spacing="10" alignment="CENTER_RIGHT">
-                        <TextField fx:id="targetTableField" promptText="%v21.data.table" prefWidth="260"/>
-                        <Button fx:id="buildInsertButton" text="%v21.data.build" onAction="#onBuildInsert" disable="true" styleClass="secondary-button"/>
-                    </HBox>
+                    <VBox fx:id="dataReviewPane" visible="false" managed="false" spacing="8">
+                        <TextArea fx:id="dataPreviewArea" editable="false" wrapText="false" prefRowCount="8"/>
+                        <HBox spacing="10" alignment="CENTER_RIGHT">
+                            <TextField fx:id="targetTableField" promptText="%v21.data.table" prefWidth="260"/>
+                            <Button fx:id="buildInsertButton" text="%v21.data.build" onAction="#onBuildInsert" disable="true" styleClass="secondary-button"/>
+                        </HBox>
+                    </VBox>
                 </VBox>
             </VBox>
         </VBox>

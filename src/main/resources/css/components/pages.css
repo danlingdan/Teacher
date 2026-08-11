@@ -487,6 +487,57 @@
     -fx-text-fill: -st-text-secondary;
 }
 
+.workflow-steps {
+    -fx-padding: 2 0 0 0;
+}
+
+.workflow-step {
+    -fx-padding: 8 16;
+    -fx-background-color: -st-bg-surface-raised;
+    -fx-background-radius: 999;
+    -fx-border-color: -st-border-subtle;
+    -fx-border-radius: 999;
+    -fx-text-fill: -st-text-muted;
+    -fx-font-weight: 700;
+}
+
+.workflow-step.active {
+    -fx-background-color: -st-accent-strong;
+    -fx-border-color: -st-accent-strong;
+    -fx-text-fill: -st-text-on-accent;
+}
+
+.workflow-step.completed {
+    -fx-background-color: -st-success-surface;
+    -fx-border-color: -st-success-border;
+    -fx-text-fill: -st-success;
+}
+
+.workflow-step-connector {
+    -fx-min-height: 2;
+    -fx-pref-height: 2;
+    -fx-max-height: 2;
+    -fx-background-color: -st-border-strong;
+}
+
+.exercise-selection-card,
+.exercise-preview-card {
+    -fx-min-height: 430;
+}
+
+.exercise-preview-description {
+    -fx-font-size: 15px;
+    -fx-line-spacing: 3px;
+}
+
+.exercise-answer-step {
+    -fx-padding: 0;
+}
+
+.exercise-question-card {
+    -fx-padding: 14 18;
+}
+
 .offline-card {
     -fx-background-color: -st-warning-surface;
     -fx-border-color: -st-warning-border;
@@ -649,8 +700,9 @@
     -fx-padding: 16;
     -fx-min-width: 0;
     -fx-pref-width: 260;
-    -fx-min-height: 152;
-    -fx-pref-height: 152;
+    -fx-min-height: 212;
+    -fx-pref-height: 212;
+    -fx-max-height: 212;
     -fx-background-radius: 12;
     -fx-border-radius: 12;
 }
@@ -812,9 +864,85 @@
     -fx-background-color: -color-bg-default;
 }
 
+.code-activity-editor .paragraph-box:has-caret {
+    -fx-background-color: -st-bg-subtle;
+}
+
+.code-activity-editor .lineno {
+    -fx-background-color: -st-bg-subtle;
+    -fx-text-fill: -st-text-muted;
+}
+
+.code-keyword { -fx-fill: -st-accent-fg; -fx-font-weight: 700; }
+.code-string { -fx-fill: -st-success; }
+.code-comment { -fx-fill: -st-text-muted; -fx-font-style: italic; }
+.code-number { -fx-fill: -st-warning; }
+.code-directive { -fx-fill: -st-info; -fx-font-weight: 700; }
+.code-editor-assist { -fx-text-fill: -st-text-muted; -fx-font-size: 12px; }
+.code-completion-menu { -fx-font-family: "Cascadia Code", "JetBrains Mono", Consolas, monospace; }
+
 .code-console {
     -fx-font-family: "Cascadia Code", "JetBrains Mono", Consolas, monospace;
     -fx-font-size: 12px;
+}
+
+/* Beginner-first course knowledge workflow with optional advanced controls. */
+.knowledge-center-page,
+.knowledge-center-header,
+.knowledge-main-split {
+    -fx-background-color: -st-bg-canvas;
+}
+
+.knowledge-search-card {
+    -fx-padding: 14 16;
+    -fx-background-color: -st-bg-surface-raised;
+    -fx-border-color: -st-accent-soft;
+    -fx-border-radius: 12;
+    -fx-background-radius: 12;
+}
+
+.knowledge-advanced-pane {
+    -fx-text-fill: -st-text-secondary;
+}
+
+.knowledge-advanced-pane > .title {
+    -fx-background-color: -st-bg-surface-raised;
+    -fx-border-color: -st-border-subtle;
+    -fx-background-radius: 9;
+    -fx-border-radius: 9;
+}
+
+.knowledge-advanced-pane > *.content {
+    -fx-background-color: -st-bg-surface;
+    -fx-border-color: -st-border-subtle;
+}
+
+.knowledge-advanced-content {
+    -fx-padding: 14;
+}
+
+.knowledge-authoring-pane {
+    -fx-padding: 4 0 0 0;
+}
+
+.knowledge-main-split {
+    -fx-padding: 0;
+}
+
+.knowledge-main-split > .split-pane-divider {
+    -fx-padding: 0 1 0 1;
+    -fx-background-color: -st-border-subtle;
+}
+
+.knowledge-library-pane,
+.knowledge-detail-pane {
+    -fx-padding: 16;
+    -fx-min-height: 360;
+}
+
+.knowledge-library-pane .table-view,
+.knowledge-detail-pane .tab-pane {
+    -fx-background-color: -st-bg-surface-raised;
 }
 .reading-content {
     -fx-padding: 16px;

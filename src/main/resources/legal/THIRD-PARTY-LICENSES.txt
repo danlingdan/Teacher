@@ -1,5 +1,5 @@
 SQLTeacher third-party software notices
-Reviewed for SQLTeacher 2.2.0. The CycloneDX component SBOM is distributed
+Reviewed for SQLTeacher 2.3.0. The CycloneDX component SBOM is distributed
 separately as sqlteacher-sbom.json and is the machine-readable component list.
 
 DIRECT RUNTIME COMPONENTS

@@ -102,6 +102,10 @@ class SqlTeacherCloudServerTest {
             JSON.writeValueAsString(java.util.Map.of(
                 "email", "draft-student@example.edu", "role", "STUDENT")));
 
+        assertEquals(403, postStatus("classes/" + classroomId + "/assignments", studentToken,
+            JSON.writeValueAsString(java.util.Map.of(
+                "exerciseId", "student-created", "title", "Must be rejected"))));
+
         JsonNode draft = post("classes/" + classroomId + "/assignments", teacherToken,
             JSON.writeValueAsString(java.util.Map.of(
                 "exerciseId", "select-versioned", "title", "Draft task", "description", "Initial notes",
@@ -114,6 +118,8 @@ class SqlTeacherCloudServerTest {
             .get("assignments").size());
 
         String assignmentPath = "classes/" + classroomId + "/assignments/" + draft.get("id").asText();
+        assertEquals(403, postStatus(assignmentPath + "/status", studentToken,
+            "{\"status\":\"PUBLISHED\",\"expectedVersion\":1}"));
         JsonNode updated = post(assignmentPath + "/details", teacherToken,
             JSON.writeValueAsString(java.util.Map.of(
                 "title", "Updated draft", "description", "Updated notes",

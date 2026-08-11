@@ -23,6 +23,7 @@ import com.sqlteacher.application.knowledge.SafeWebContentFetcher;
 import com.sqlteacher.application.knowledge.WebSearchProvider;
 import com.sqlteacher.desktop.DesktopExecutors;
 import com.sqlteacher.desktop.GlobalLoading;
+import com.sqlteacher.desktop.component.WorkflowSteps;
 import javafx.application.Platform;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.fxml.FXML;
@@ -33,8 +34,12 @@ import javafx.scene.control.CheckBox;
 import javafx.scene.control.Label;
 import javafx.scene.control.TableColumn;
 import javafx.scene.control.TableView;
+import javafx.scene.control.Tab;
+import javafx.scene.control.TabPane;
 import javafx.scene.control.TextArea;
 import javafx.scene.control.TextField;
+import javafx.scene.control.TitledPane;
+import javafx.scene.layout.VBox;
 import javafx.stage.FileChooser;
 
 import java.io.File;
@@ -69,14 +74,22 @@ public final class KnowledgeCenterController {
     @FXML private Button privateButton;
     @FXML private Button inactivateButton;
     @FXML private Button deleteButton;
+    @FXML private VBox authoringPane;
+    @FXML private TitledPane advancedPane;
+    @FXML private WorkflowSteps workflowSteps;
     @FXML private Label statusLabel;
     @FXML private Label indexStatusLabel;
+    @FXML private Label detailTitleLabel;
+    @FXML private Label detailMetaLabel;
     @FXML private TableView<CourseKnowledgeArticle> articleTable;
     @FXML private TableColumn<CourseKnowledgeArticle, String> articleTitleColumn;
     @FXML private TableColumn<CourseKnowledgeArticle, String> courseColumn;
     @FXML private TableColumn<CourseKnowledgeArticle, String> sectionColumn;
-    @FXML private TableColumn<CourseKnowledgeArticle, String> visibilityColumn;
-    @FXML private TableColumn<CourseKnowledgeArticle, String> revisionColumn;
+    @FXML private TabPane detailTabs;
+    @FXML private Tab contentTab;
+    @FXML private Tab resultTab;
+    @FXML private Tab exerciseTab;
+    @FXML private Tab answerTab;
     @FXML private TableView<KnowledgeSearchResult> resultTable;
     @FXML private TableColumn<KnowledgeSearchResult, String> resultTitleColumn;
     @FXML private TableColumn<KnowledgeSearchResult, String> resultSourceColumn;
@@ -123,19 +136,33 @@ public final class KnowledgeCenterController {
         articleTitleColumn.setCellValueFactory(cell -> text(cell.getValue().title()));
         courseColumn.setCellValueFactory(cell -> text(cell.getValue().courseTitle()));
         sectionColumn.setCellValueFactory(cell -> text(cell.getValue().sectionTitle()));
-        visibilityColumn.setCellValueFactory(cell -> text(visibilityLabel(cell.getValue().visibility())));
-        revisionColumn.setCellValueFactory(cell -> text("v" + cell.getValue().currentRevision()));
         resultTitleColumn.setCellValueFactory(cell -> text(cell.getValue().title()));
         resultSourceColumn.setCellValueFactory(cell -> text(cell.getValue().sourceName()));
         resultSnippetColumn.setCellValueFactory(cell -> text(cell.getValue().snippet()));
         exerciseTitleColumn.setCellValueFactory(cell -> text(cell.getValue().title()));
         exercisePointColumn.setCellValueFactory(cell -> text(cell.getValue().knowledgePoint()));
-        articleTable.getSelectionModel().selectedItemProperty().addListener((ignored, oldValue, selected) -> loadDetail(selected));
+        articleTable.getSelectionModel().selectedItemProperty().addListener((ignored, oldValue, selected) -> {
+            if (selected != null) workflowSteps.setActiveStep(3);
+            loadDetail(selected);
+        });
+        resultTable.getSelectionModel().selectedItemProperty().addListener((ignored, oldValue, selected) -> {
+            if (selected == null || selected.documentId().startsWith("web:")) return;
+            articleTable.getItems().stream()
+                .filter(article -> article.documentId().equals(selected.documentId()))
+                .findFirst()
+                .ifPresent(article -> {
+                    articleTable.getSelectionModel().select(article);
+                    articleTable.scrollTo(article);
+                });
+        });
         queryField.setOnAction(event -> onSearch());
-        List.of(importButton, reviseButton, publishButton, privateButton, inactivateButton, deleteButton)
-            .forEach(button -> button.setDisable(!authoringAllowed));
+        authoringPane.setVisible(authoringAllowed);
+        authoringPane.setManaged(authoringAllowed);
         includePrivateCheck.setSelected(authoringAllowed);
-        includePrivateCheck.setDisable(!authoringAllowed);
+        includePrivateCheck.setVisible(authoringAllowed);
+        includePrivateCheck.setManaged(authoringAllowed);
+        advancedPane.setExpanded(false);
+        detailTabs.getSelectionModel().select(contentTab);
         refreshIndexStatus();
         refreshArticles(AppI18n.get("KnowledgeCenterController.1"));
     }
@@ -232,6 +259,8 @@ public final class KnowledgeCenterController {
                 Platform.runLater(() -> {
                     GlobalLoading.hide();
                     resultTable.getItems().setAll(results);
+                    detailTabs.getSelectionModel().select(resultTab);
+                    workflowSteps.setActiveStep(2);
                     showStatus(results.isEmpty() ? AppI18n.get("KnowledgeCenterController.20") : AppI18n.get("KnowledgeCenterController.21") + results.size()
                         + AppI18n.get("KnowledgeCenterController.22") + response.mode() + AppI18n.get("KnowledgeCenterController.23") + (response.degraded() ? response.message() : ""), false);
                 });
@@ -270,7 +299,10 @@ public final class KnowledgeCenterController {
                         item.uri().toString(), index, snippet, Math.max(0, searchResults.size() - index)));
                 }
                 Platform.runLater(() -> {
-                    GlobalLoading.hide(); resultTable.getItems().setAll(results);
+                    GlobalLoading.hide();
+                    resultTable.getItems().setAll(results);
+                    detailTabs.getSelectionModel().select(resultTab);
+                    workflowSteps.setActiveStep(2);
                     showStatus(results.isEmpty() ? AppI18n.get("KnowledgeCenterController.31") : AppI18n.get("KnowledgeCenterController.32") + results.size() + AppI18n.get("KnowledgeCenterController.33"), false);
                 });
             } catch (Throwable error) { Platform.runLater(() -> fail(error)); }
@@ -303,12 +335,9 @@ public final class KnowledgeCenterController {
             showStatus(AppI18n.get("KnowledgeCenterController.37"), true);
             return;
         }
+        String courseScope = tutorCourseScope(field(courseField), articleTable.getSelectionModel().getSelectedItem());
+        String objective = tutorObjective(field(objectiveField), articleTable.getSelectionModel().getSelectedItem(), firstKnowledgePoint());
         try {
-            String objective = field(objectiveField);
-            if (objective.isBlank()) {
-                showStatus(AppI18n.get("KnowledgeCenterController.38"), true);
-                return;
-            }
             AiContextPreview preview = tutorService.preview(question, currentFilter());
             Alert confirm = new Alert(Alert.AlertType.CONFIRMATION,
                 AppI18n.get("KnowledgeCenterController.39") + preview.characterCount() + AppI18n.get("KnowledgeCenterController.40") + String.join("\n", preview.sources()),
@@ -323,12 +352,14 @@ public final class KnowledgeCenterController {
         GlobalLoading.show(AppI18n.get("KnowledgeCenterController.43"));
         DesktopExecutors.background().execute(() -> {
             try {
-                var result = tutorService.ask(field(courseField), field(objectiveField), question, currentFilter());
+                var result = tutorService.ask(courseScope, objective, question, currentFilter());
                 GroundedKnowledgeAnswer answer = result.answer();
                 Platform.runLater(() -> {
                     GlobalLoading.hide();
                     lastTutorSessionId = result.sessionId();
                     answerArea.setText(formatAnswer(answer));
+                    detailTabs.getSelectionModel().select(answerTab);
+                    workflowSteps.setActiveStep(3);
                     showStatus(answer.message(), !answer.aiGenerated());
                 });
             } catch (Throwable error) {
@@ -391,9 +422,14 @@ public final class KnowledgeCenterController {
                     courseField.setText(selected.courseTitle());
                     sectionField.setText(selected.sectionTitle());
                     knowledgePointsField.setText(String.join(", ", selected.knowledgePoints()));
+                    detailTitleLabel.setText(selected.title());
+                    detailMetaLabel.setText(selected.courseTitle() + " · " + selected.sectionTitle() + " · "
+                        + visibilityLabel(selected.visibility()) + " · v" + selected.currentRevision());
                     contentArea.setText(AppI18n.get("KnowledgeCenterController.49") + selected.currentRevision() + AppI18n.get("KnowledgeCenterController.50") + detail.history().size()
                         + "\n\n" + detail.revision().content());
                     exerciseTable.getItems().setAll(exercises);
+                    detailTabs.getSelectionModel().select(contentTab);
+                    workflowSteps.setActiveStep(3);
                 });
             } catch (Throwable error) {
                 Platform.runLater(() -> fail(error));
@@ -490,10 +526,27 @@ public final class KnowledgeCenterController {
     }
 
     private void clearDetail() {
+        detailTitleLabel.setText(AppI18n.get("knowledge-center.detailEmptyTitle"));
+        detailMetaLabel.setText(AppI18n.get("knowledge-center.detailEmptyHint"));
         contentArea.clear();
         answerArea.clear();
         exerciseTable.getItems().clear();
         resultTable.getItems().clear();
+    }
+
+    static String tutorCourseScope(String configuredCourse, CourseKnowledgeArticle selected) {
+        String configured = configuredCourse == null ? "" : configuredCourse.trim();
+        if (!configured.isBlank()) return configured;
+        if (selected != null) return selected.courseTitle();
+        return "all-courses";
+    }
+
+    static String tutorObjective(String configuredObjective, CourseKnowledgeArticle selected, String knowledgePoint) {
+        String configured = configuredObjective == null ? "" : configuredObjective.trim();
+        if (!configured.isBlank()) return configured;
+        if (selected != null) return selected.id();
+        String point = knowledgePoint == null ? "" : knowledgePoint.trim();
+        return point.isBlank() ? "general-course-knowledge" : point;
     }
 
     private void fail(Throwable error) {

@@ -39,6 +39,7 @@
 <?import javafx.scene.layout.StackPane?>
 <?import javafx.scene.layout.VBox?>
 <?import com.sqlteacher.desktop.component.PageHeader?>
+<?import com.sqlteacher.desktop.component.WorkflowSteps?>
 
 <ScrollPane xmlns="http://javafx.com/javafx"
             xmlns:fx="http://javafx.com/fxml"
@@ -56,6 +57,7 @@
 
                     <!-- 标题区：小图标徽标 + 主标题 + 弱化副标题，整体居中。 -->
                     <PageHeader title="%ai-assistant.1" description="%ai-assistant.2"/>
+                    <WorkflowSteps fx:id="aiWorkflow" steps="%ai-assistant.steps" activeStep="1"/>
 
                     <!-- 统一 AI 来源：本地 Ollama 与 OpenAI-compatible 网络模型在同一入口切换。 -->
                     <VBox styleClass="panel-card" spacing="10.0">
@@ -182,6 +184,7 @@
                         </children>
                     </VBox>
 
+                    <VBox fx:id="resultStepPane" visible="false" managed="false" spacing="16">
                     <!-- 第二层卡片：SQL 预览。StackPane 叠放文本域与空态占位；右上角复制按钮。 -->
                     <VBox styleClass="panel-card" spacing="12.0">
                         <children>
@@ -253,6 +256,7 @@
                                 </children>
                             </StackPane>
                         </children>
+                    </VBox>
                     </VBox>
 
                 </children>

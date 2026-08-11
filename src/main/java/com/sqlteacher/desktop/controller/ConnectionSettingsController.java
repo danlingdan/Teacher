@@ -15,6 +15,7 @@ import com.sqlteacher.application.connection.SqliteConnectionTarget;
 import com.sqlteacher.application.error.ApplicationExceptionMapper;
 import com.sqlteacher.desktop.DesktopExecutors;
 import com.sqlteacher.desktop.GlobalLoading;
+import com.sqlteacher.desktop.component.WorkflowSteps;
 import javafx.application.Platform;
 import javafx.fxml.FXML;
 import javafx.scene.control.Alert;
@@ -27,6 +28,7 @@ import javafx.scene.control.ListCell;
 import javafx.scene.control.ListView;
 import javafx.scene.control.PasswordField;
 import javafx.scene.control.TextField;
+import javafx.scene.Node;
 
 import java.nio.file.Path;
 import java.util.Arrays;
@@ -63,6 +65,8 @@ public final class ConnectionSettingsController {
     @FXML private Button deleteButton;
     @FXML private Button selectButton;
     @FXML private Button testButton;
+    @FXML private WorkflowSteps connectionWorkflow;
+    @FXML private Node connectionFormPane;
 
     public ConnectionSettingsController(
         ConnectionManagementService managementService,
@@ -100,6 +104,8 @@ public final class ConnectionSettingsController {
 
     @FXML
     private void onNew() {
+        connectionWorkflow.setActiveStep(2);
+        showForm();
         profileList.getSelectionModel().clearSelection();
         clearForm();
         idField.requestFocus();
@@ -114,6 +120,7 @@ public final class ConnectionSettingsController {
             showStatus(error.getMessage(), true);
             return;
         }
+        connectionWorkflow.setActiveStep(3);
         credentialSession.forget(profile.id());
         runAsync(AppI18n.get("ConnectionSettingsController.2"), () -> managementService.saveProfile(profile), saved -> {
             showStatus(AppI18n.get("ConnectionSettingsController.3"), false);
@@ -130,6 +137,7 @@ public final class ConnectionSettingsController {
             showStatus(error.getMessage(), true);
             return;
         }
+        connectionWorkflow.setActiveStep(3);
         char[] password = passwordField.getText().toCharArray();
         passwordField.clear();
         runAsync(AppI18n.get("ConnectionSettingsController.4"), () -> {
@@ -158,6 +166,7 @@ public final class ConnectionSettingsController {
             showStatus(AppI18n.get("ConnectionSettingsController.5"), true);
             return;
         }
+        connectionWorkflow.setActiveStep(3);
         runAsync(AppI18n.get("ConnectionSettingsController.6"), () -> managementService.selectProfile(selected.id()), profile -> {
             showStatus(AppI18n.get("ConnectionSettingsController.7") + profile.displayName(), false);
             refreshProfiles(profile.id());
@@ -213,6 +222,8 @@ public final class ConnectionSettingsController {
             updateActions(null);
             return;
         }
+        connectionWorkflow.setActiveStep(2);
+        showForm();
         idField.setText(profile.id());
         nameField.setText(profile.displayName());
         dialectBox.setValue(profile.dialect());
@@ -358,6 +369,11 @@ public final class ConnectionSettingsController {
         String product = result.databaseProduct().isBlank() ? AppI18n.get("ConnectionSettingsController.21") : result.databaseProduct();
         String version = result.databaseVersion().isBlank() ? "" : " " + result.databaseVersion();
         return result.message() + " " + product + version;
+    }
+
+    private void showForm() {
+        connectionFormPane.setVisible(true);
+        connectionFormPane.setManaged(true);
     }
 
     private record ProfilesSnapshot(

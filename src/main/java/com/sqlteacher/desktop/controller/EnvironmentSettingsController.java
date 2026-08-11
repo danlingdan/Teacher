@@ -83,7 +83,7 @@ public final class EnvironmentSettingsController {
     }
 
     private HBox componentRow(ManagedComponentStatus component) {
-        Label title = new Label(componentName(component.id()));
+        Label title = new Label(component.displayName());
         title.getStyleClass().add("card-title");
         Label state = new Label(stateText(component));
         state.getStyleClass().add(component.ready() ? "model-status" : "sql-result-hint");
@@ -108,7 +108,7 @@ public final class EnvironmentSettingsController {
             + (component.restartMayBeRequired() ? "\n" + AppI18n.get("environment-settings.13") : "");
         Alert confirmation = new Alert(Alert.AlertType.CONFIRMATION, impact, ButtonType.CANCEL, ButtonType.OK);
         confirmation.setTitle(AppI18n.get("environment-settings.14"));
-        confirmation.setHeaderText(AppI18n.get("environment-settings.15") + " " + componentName(component.id()));
+        confirmation.setHeaderText(AppI18n.get("environment-settings.15") + " " + component.displayName());
         if (confirmation.showAndWait().orElse(ButtonType.CANCEL) != ButtonType.OK) return;
         startInstall(component.id());
     }

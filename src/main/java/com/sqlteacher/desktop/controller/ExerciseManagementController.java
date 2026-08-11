@@ -7,6 +7,7 @@ import com.sqlteacher.application.exercise.ExerciseManagementService;
 import com.sqlteacher.application.exercise.ExerciseSummary;
 import com.sqlteacher.desktop.DesktopExecutors;
 import com.sqlteacher.desktop.GlobalLoading;
+import com.sqlteacher.desktop.component.WorkflowSteps;
 import com.sqlteacher.domain.exercise.ExerciseDefinition;
 import com.sqlteacher.domain.exercise.ExerciseDifficulty;
 import com.sqlteacher.domain.exercise.ExerciseEvaluationRule;
@@ -21,6 +22,7 @@ import javafx.scene.control.ListView;
 import javafx.scene.control.TextArea;
 import javafx.scene.control.TextField;
 import javafx.scene.control.TextInputDialog;
+import javafx.scene.Node;
 import javafx.stage.FileChooser;
 
 import java.io.File;
@@ -55,6 +57,8 @@ public final class ExerciseManagementController {
     @FXML private Label versionLabel;
     @FXML private Label statusLabel;
     @FXML private Button toggleButton;
+    @FXML private WorkflowSteps exerciseWorkflow;
+    @FXML private Node exerciseFormPane;
 
     private Integer currentVersion;
 
@@ -89,6 +93,8 @@ public final class ExerciseManagementController {
 
     @FXML
     private void onNew() {
+        exerciseWorkflow.setActiveStep(2);
+        showForm();
         exerciseList.getSelectionModel().clearSelection();
         clearForm();
         idField.requestFocus();
@@ -103,6 +109,7 @@ public final class ExerciseManagementController {
             showStatus(error.getMessage(), true);
             return;
         }
+        exerciseWorkflow.setActiveStep(3);
         runAsync(AppI18n.get("ExerciseManagementController.2"), () -> managementService.save(draft), saved -> {
             showStatus(AppI18n.get("ExerciseManagementController.3") + saved.version() + AppI18n.get("ExerciseManagementController.4"), false);
             refresh(saved.id());
@@ -137,6 +144,7 @@ public final class ExerciseManagementController {
             showStatus(AppI18n.get("ExerciseManagementController.12"), true);
             return;
         }
+        exerciseWorkflow.setActiveStep(3);
         runAsync(
             selected.enabled() ? AppI18n.get("ExerciseManagementController.13") : AppI18n.get("ExerciseManagementController.14"),
             () -> managementService.setEnabled(selected.id(), !selected.enabled(), selected.version()),
@@ -217,6 +225,8 @@ public final class ExerciseManagementController {
     }
 
     private void showDefinition(ExerciseDefinition exercise) {
+        exerciseWorkflow.setActiveStep(2);
+        showForm();
         idField.setText(exercise.id());
         idField.setDisable(true);
         titleField.setText(exercise.title());
@@ -322,6 +332,11 @@ public final class ExerciseManagementController {
         statusLabel.getStyleClass().add(error ? "sql-error-hint" : "sql-result-hint");
         statusLabel.setVisible(true);
         statusLabel.setManaged(true);
+    }
+
+    private void showForm() {
+        exerciseFormPane.setVisible(true);
+        exerciseFormPane.setManaged(true);
     }
 
     private record CatalogSnapshot(List<ExerciseSummary> exercises, List<String> datasetIds) {

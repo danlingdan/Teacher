@@ -36,7 +36,7 @@ class WindowsManagedComponentServiceTest {
         assertTrue(jdk.contains("EclipseAdoptium.Temurin.21.JDK"));
         assertTrue(python.contains("Python.Python.3.13"));
         assertTrue(ollama.contains("Ollama.Ollama"));
-        assertTrue(msvc.contains("Microsoft.VisualStudio.2022.BuildTools"));
+        assertTrue(msvc.contains("Microsoft.VisualStudio.BuildTools"));
         assertTrue(msvc.contains("--override"));
         for (var arguments : java.util.List.of(jdk, python, ollama, msvc)) {
             assertTrue(arguments.contains("--accept-package-agreements"));

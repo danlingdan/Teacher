@@ -8,6 +8,7 @@ import java.util.List;
 import java.util.Objects;
 
 public final class DefaultLearningGoalCatalogService implements LearningGoalCatalogService {
+    static final String DATABASE_COURSE_ID = "builtin-data-management";
     private final CourseMapService courseMapService;
 
     public DefaultLearningGoalCatalogService(CourseMapService courseMapService) {
@@ -17,6 +18,7 @@ public final class DefaultLearningGoalCatalogService implements LearningGoalCata
     @Override
     public List<LearningGoal> load() {
         List<CourseMapActivity> activities = courseMapService.load().courses().stream()
+            .filter(course -> DATABASE_COURSE_ID.equals(course.id()))
             .flatMap(course -> course.sections().stream())
             .flatMap(section -> section.activities().stream())
             .filter(CourseMapActivity::enabled)

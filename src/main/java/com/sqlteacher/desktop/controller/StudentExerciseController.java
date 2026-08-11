@@ -14,9 +14,12 @@ import com.sqlteacher.application.collaboration.AssignmentDeliveryService;
 import com.sqlteacher.application.collaboration.AssignmentTaskContext;
 import com.sqlteacher.desktop.DesktopExecutors;
 import com.sqlteacher.desktop.GlobalLoading;
+import com.sqlteacher.desktop.component.PageHeader;
+import com.sqlteacher.desktop.component.WorkflowSteps;
 import javafx.application.Platform;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.fxml.FXML;
+import javafx.scene.Node;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.ListCell;
@@ -26,6 +29,7 @@ import javafx.scene.control.TableView;
 import javafx.scene.control.TextArea;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyEvent;
+import javafx.scene.layout.Pane;
 
 import java.util.List;
 import java.util.Map;
@@ -41,10 +45,18 @@ public final class StudentExerciseController {
     private final AssignmentDeliveryService assignmentDeliveryService;
 
     @FXML private ListView<ExerciseSummary> exerciseList;
+    @FXML private PageHeader workflowHeader;
+    @FXML private WorkflowSteps workflowSteps;
+    @FXML private Pane selectionStepPane;
+    @FXML private Pane answerStepPane;
     @FXML private Label titleLabel;
     @FXML private Label metaLabel;
     @FXML private Label descriptionLabel;
     @FXML private Label schemaLabel;
+    @FXML private Label answerTitleLabel;
+    @FXML private Label answerMetaLabel;
+    @FXML private Label answerDescriptionLabel;
+    @FXML private Label answerSchemaLabel;
     @FXML private TextArea sqlArea;
     @FXML private TableView<Map<String, Object>> resultTable;
     @FXML private TextArea feedbackArea;
@@ -74,6 +86,7 @@ public final class StudentExerciseController {
 
     public void openAssignment(AssignmentTaskContext task) {
         assignmentTask = Objects.requireNonNull(task);
+        showSelectionStep();
         if (!exerciseList.getItems().isEmpty()) activateAssignment();
     }
 
@@ -81,6 +94,7 @@ public final class StudentExerciseController {
         if (exerciseId == null || exerciseId.isBlank()) throw new IllegalArgumentException("exerciseId must not be blank");
         assignmentTask = null;
         requestedExerciseId = exerciseId.trim();
+        showSelectionStep();
         activateRequestedExercise();
     }
 
@@ -97,6 +111,7 @@ public final class StudentExerciseController {
         exerciseList.getSelectionModel().selectedItemProperty().addListener(
             (ignored, oldValue, selected) -> showSelection(selected)
         );
+        showSelectionStep();
         setSessionActions(false);
         sqlArea.addEventFilter(KeyEvent.KEY_PRESSED, this::handleEditorShortcut);
         refreshCatalog();
@@ -126,12 +141,36 @@ public final class StudentExerciseController {
             metaLabel.setText(started.exercise().knowledgePoint() + " · " + started.exercise().difficulty());
             descriptionLabel.setText(started.exercise().description());
             schemaLabel.setText(AppI18n.get("StudentExerciseController.3") + started.exercise().schemaSummary());
+            answerTitleLabel.setText(started.exercise().title());
+            answerMetaLabel.setText(started.exercise().knowledgePoint() + " · " + started.exercise().difficulty());
+            answerDescriptionLabel.setText(started.exercise().description());
+            answerSchemaLabel.setText(AppI18n.get("StudentExerciseController.3") + started.exercise().schemaSummary());
             sqlArea.clear();
             feedbackArea.clear();
             resultTable.getColumns().clear();
             resultTable.getItems().clear();
             setSessionActions(true);
+            showAnswerStep();
             showStatus(AppI18n.get("StudentExerciseController.4"), false);
+        });
+    }
+
+    @FXML
+    private void onChooseAnother() {
+        ExerciseSession active = session;
+        if (active == null) {
+            showSelectionStep();
+            return;
+        }
+        runAsync(AppI18n.get("StudentExerciseController.34"), () -> {
+            practiceService.close(active.id());
+            return active.id();
+        }, ignored -> {
+            session = null;
+            setSessionActions(false);
+            showSelectionStep();
+            showSelection(exerciseList.getSelectionModel().getSelectedItem());
+            showStatus(AppI18n.get("StudentExerciseController.35"), false);
         });
     }
 
@@ -225,7 +264,7 @@ public final class StudentExerciseController {
 
     private void showSelection(ExerciseSummary selected) {
         startButton.setDisable(selected == null);
-        if (selected == null || session != null && !session.completed()) {
+        if (selected == null || !selectionStepPane.isVisible()) {
             return;
         }
         runAsync(AppI18n.get("StudentExerciseController.18"), () -> catalogService.findAvailableExercise(selected.id()).orElseThrow(), view -> {
@@ -274,7 +313,26 @@ public final class StudentExerciseController {
         }
         exerciseList.getSelectionModel().select(exercise);
         showStatus(AppI18n.get("StudentExerciseController.25") + assignmentTask.assignment().title() + AppI18n.get("StudentExerciseController.26"), false);
-        onStart();
+    }
+
+    private void showSelectionStep() {
+        setVisibleManaged(selectionStepPane, true);
+        setVisibleManaged(answerStepPane, false);
+        workflowHeader.setTitle(AppI18n.get("student-exercise.chooseTitle"));
+        workflowSteps.setActiveStep(1);
+    }
+
+    private void showAnswerStep() {
+        setVisibleManaged(selectionStepPane, false);
+        setVisibleManaged(answerStepPane, true);
+        workflowHeader.setTitle(AppI18n.get("student-exercise.answerTitle"));
+        workflowSteps.setActiveStep(2);
+        Platform.runLater(sqlArea::requestFocus);
+    }
+
+    private static void setVisibleManaged(Node node, boolean visible) {
+        node.setVisible(visible);
+        node.setManaged(visible);
     }
 
     private void showDeliveryResult(AssignmentDeliveryResult result) {

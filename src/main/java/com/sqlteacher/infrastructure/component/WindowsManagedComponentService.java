@@ -4,17 +4,16 @@ import com.sqlteacher.application.component.ComponentInstallProgress;
 import com.sqlteacher.application.component.ManagedComponentId;
 import com.sqlteacher.application.component.ManagedComponentService;
 import com.sqlteacher.application.component.ManagedComponentStatus;
+import com.sqlteacher.infrastructure.environment.WindowsToolchainDiscovery;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
@@ -178,16 +177,12 @@ public final class WindowsManagedComponentService implements ManagedComponentSer
 
     private static boolean probe(ManagedComponentId id) {
         return switch (id) {
-            case JDK -> executableOnPath("javac.exe") || containsExecutable(
-                Path.of(System.getenv().getOrDefault("ProgramFiles", "C:\\Program Files"), "Eclipse Adoptium"),
-                "javac.exe");
-            case PYTHON -> usableOnPath("python.exe", "--version") || containsExecutable(
-                Path.of(System.getenv().getOrDefault("LOCALAPPDATA", ""), "Programs", "Python"), "python.exe");
+            case JDK -> WindowsToolchainDiscovery.javaCompiler() != null;
+            case PYTHON -> WindowsToolchainDiscovery.python() != null;
             case OLLAMA -> executableOnPath("ollama.exe") || Files.isRegularFile(Path.of(
                 System.getenv().getOrDefault("LOCALAPPDATA", ""), "Programs", "Ollama", "ollama.exe"));
-            case MSVC -> containsExecutable(Path.of(
-                System.getenv().getOrDefault("ProgramFiles(x86)", "C:\\Program Files (x86)"),
-                "Microsoft Visual Studio"), "VsDevCmd.bat");
+            case MSVC -> WindowsToolchainDiscovery.visualStudioDeveloperShell() != null
+                || executableOnPath("cl.exe");
             case WSL_UBUNTU -> ubuntuAvailable();
         };
     }
@@ -228,21 +223,6 @@ public final class WindowsManagedComponentService implements ManagedComponentSer
         return findOnPath(name) != null;
     }
 
-    private static boolean usableOnPath(String name, String argument) {
-        Path executable = findOnPath(name);
-        if (executable == null) return false;
-        try {
-            Process process = new ProcessBuilder(executable.toString(), argument)
-                .redirectOutput(ProcessBuilder.Redirect.DISCARD).redirectError(ProcessBuilder.Redirect.DISCARD).start();
-            return process.waitFor(5, TimeUnit.SECONDS) && process.exitValue() == 0;
-        } catch (IOException error) {
-            return false;
-        } catch (InterruptedException error) {
-            Thread.currentThread().interrupt();
-            return false;
-        }
-    }
-
     private static Path findOnPath(String name) {
         String path = System.getenv().getOrDefault("PATH", "");
         for (String entry : path.split(java.io.File.pathSeparator)) {
@@ -253,17 +233,6 @@ public final class WindowsManagedComponentService implements ManagedComponentSer
             } catch (RuntimeException ignored) { }
         }
         return null;
-    }
-
-    private static boolean containsExecutable(Path root, String name) {
-        if (root == null || !Files.isDirectory(root)) return false;
-        try (var paths = Files.find(root, 6,
-            (path, attributes) -> attributes.isRegularFile()
-                && path.getFileName().toString().equalsIgnoreCase(name))) {
-            return paths.findFirst().isPresent();
-        } catch (IOException | SecurityException error) {
-            return false;
-        }
     }
 
     private static void drain(InputStream input) {
@@ -296,14 +265,15 @@ public final class WindowsManagedComponentService implements ManagedComponentSer
 
     private static Map<ManagedComponentId, Descriptor> descriptors() {
         Map<ManagedComponentId, Descriptor> values = new EnumMap<>(ManagedComponentId.class);
-        values.put(ManagedComponentId.JDK, new Descriptor(ManagedComponentId.JDK, "Temurin JDK 21",
+        values.put(ManagedComponentId.JDK, new Descriptor(ManagedComponentId.JDK, "Java Development Kit (JDK 21+)",
             "EclipseAdoptium.Temurin.21.JDK", "WinGet / Eclipse Adoptium", "GPL-2.0 with Classpath Exception", true, false));
-        values.put(ManagedComponentId.PYTHON, new Descriptor(ManagedComponentId.PYTHON, "Python 3.13",
+        values.put(ManagedComponentId.PYTHON, new Descriptor(ManagedComponentId.PYTHON, "Python 3",
             "Python.Python.3.13", "WinGet / Python Software Foundation", "PSF License", false, false));
         values.put(ManagedComponentId.OLLAMA, new Descriptor(ManagedComponentId.OLLAMA, "Ollama",
             "Ollama.Ollama", "WinGet / Ollama", "MIT", false, false));
-        values.put(ManagedComponentId.MSVC, new Descriptor(ManagedComponentId.MSVC, "MSVC Build Tools 2022",
-            "Microsoft.VisualStudio.2022.BuildTools", "WinGet / Microsoft", "Microsoft Visual Studio terms", true, true));
+        values.put(ManagedComponentId.MSVC, new Descriptor(ManagedComponentId.MSVC,
+            "MSVC Build Tools (Visual Studio 2026)", "Microsoft.VisualStudio.BuildTools",
+            "WinGet / Microsoft", "Microsoft Visual Studio terms", true, true));
         values.put(ManagedComponentId.WSL_UBUNTU, new Descriptor(ManagedComponentId.WSL_UBUNTU, "WSL 2 + Ubuntu",
             "", "Windows optional features / Ubuntu", "Microsoft and Canonical terms", true, true));
         return Map.copyOf(values);

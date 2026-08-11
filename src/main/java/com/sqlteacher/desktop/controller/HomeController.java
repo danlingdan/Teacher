@@ -1,6 +1,8 @@
 package com.sqlteacher.desktop.controller;
 import com.sqlteacher.desktop.AppI18n;
 
+import com.sqlteacher.application.collaboration.DesktopAccessProfile;
+import com.sqlteacher.application.config.ApplicationVersion;
 import com.sqlteacher.application.error.ApplicationExceptionMapper;
 import com.sqlteacher.application.collaboration.AssignmentTaskContext;
 import com.sqlteacher.application.learning.StudentLearningQueueItem;
@@ -9,6 +11,7 @@ import com.sqlteacher.desktop.DesktopExecutors;
 import com.sqlteacher.desktop.GlobalLoading;
 import com.sqlteacher.desktop.appearance.UiIcon;
 import com.sqlteacher.desktop.appearance.UiIcons;
+import com.sqlteacher.desktop.component.PageHeader;
 import javafx.application.Platform;
 import javafx.fxml.FXML;
 import javafx.scene.control.Button;
@@ -16,14 +19,19 @@ import javafx.scene.control.Label;
 import javafx.scene.control.ListCell;
 import javafx.scene.control.ListView;
 
+import java.time.LocalTime;
+import java.time.format.DateTimeFormatter;
 import java.util.Objects;
 import java.util.function.Consumer;
 
 public final class HomeController {
+    private static final DateTimeFormatter REFRESH_TIME = DateTimeFormatter.ofPattern("HH:mm:ss");
 
     private final StudentLearningQueueService queueService;
     private final ApplicationExceptionMapper exceptionMapper;
+    private final DesktopAccessProfile accessProfile;
 
+    @FXML private PageHeader pageHeader;
     @FXML private Label sqlIcon;
     @FXML private Label courseIcon;
     @FXML private Label aiIcon;
@@ -31,6 +39,8 @@ public final class HomeController {
     @FXML private ListView<StudentLearningQueueItem> learningQueue;
     @FXML private Label diagnosisSummaryLabel;
     @FXML private Label queueStatusLabel;
+    @FXML private Label queueEmptyLabel;
+    @FXML private Button refreshDiagnosisButton;
     @FXML private Button continueLearningButton;
     @FXML private Button dismissActionButton;
 
@@ -44,13 +54,16 @@ public final class HomeController {
     private Consumer<AssignmentTaskContext> onOpenAssignment;
     private Runnable onReviewFeedback;
 
-    public HomeController(StudentLearningQueueService queueService, ApplicationExceptionMapper exceptionMapper) {
+    public HomeController(StudentLearningQueueService queueService, ApplicationExceptionMapper exceptionMapper,
+                          DesktopAccessProfile accessProfile) {
         this.queueService = Objects.requireNonNull(queueService);
         this.exceptionMapper = Objects.requireNonNull(exceptionMapper);
+        this.accessProfile = Objects.requireNonNull(accessProfile);
     }
 
     @FXML
     private void initialize() {
+        pageHeader.setEyebrow("SQLTeacher " + ApplicationVersion.current());
         sqlIcon.setGraphic(UiIcons.create(UiIcon.CODE, 30));
         courseIcon.setGraphic(UiIcons.create(UiIcon.BOOK, 30));
         aiIcon.setGraphic(UiIcons.create(UiIcon.SPARK, 30));
@@ -68,7 +81,27 @@ public final class HomeController {
                 && newItem.assignmentTask() == null && newItem.notificationId().isBlank()));
             dismissActionButton.setDisable(unavailable);
         });
+        if (!supportsPersonalDiagnosis(accessProfile.kind())) {
+            showAdministratorState();
+            return;
+        }
         refreshDiagnosis();
+    }
+
+    static boolean supportsPersonalDiagnosis(DesktopAccessProfile.Kind kind) {
+        return kind != DesktopAccessProfile.Kind.ADMIN;
+    }
+
+    private void showAdministratorState() {
+        learningQueue.getItems().clear();
+        learningQueue.setDisable(true);
+        diagnosisSummaryLabel.setText(AppI18n.get("HomeController.9"));
+        queueStatusLabel.setText(AppI18n.get("HomeController.10"));
+        queueEmptyLabel.setText(AppI18n.get("HomeController.10"));
+        refreshDiagnosisButton.setText(AppI18n.get("HomeController.11"));
+        refreshDiagnosisButton.setDisable(true);
+        continueLearningButton.setDisable(true);
+        dismissActionButton.setDisable(true);
     }
 
     public void setOnNavigateAiAssistant(Runnable onNavigateAiAssistant) {
@@ -109,6 +142,10 @@ public final class HomeController {
 
     @FXML
     private void onRefreshDiagnosis() {
+        if (!supportsPersonalDiagnosis(accessProfile.kind())) {
+            showAdministratorState();
+            return;
+        }
         refreshDiagnosis();
     }
 
@@ -116,6 +153,8 @@ public final class HomeController {
     private void onContinueLearning() {
         StudentLearningQueueItem selected = learningQueue.getSelectionModel().getSelectedItem();
         if (selected == null) return;
+        queueStatusLabel.getStyleClass().remove("status-error");
+        queueStatusLabel.setText(AppI18n.format("HomeController.18", selected.action().title()));
         if (selected.studyPlanAction() != null) {
             DesktopExecutors.background().execute(() -> queueService.start(selected));
         }
@@ -152,6 +191,7 @@ public final class HomeController {
     }
 
     private void refreshDiagnosis() {
+        setRefreshing(true);
         GlobalLoading.show(AppI18n.get("HomeController.2"));
         DesktopExecutors.background().execute(() -> {
             try {
@@ -159,24 +199,47 @@ public final class HomeController {
                 var dashboard = queue.dashboard();
                 Platform.runLater(() -> {
                     GlobalLoading.hide();
+                    setRefreshing(false);
                     learningQueue.getItems().setAll(queue.items());
                     long weak = dashboard.mastery().stream().filter(item ->
                         item.level() == com.sqlteacher.application.learning.MasteryLevel.NEEDS_PRACTICE).count();
                     diagnosisSummaryLabel.setText(AppI18n.get("HomeController.3") + dashboard.mastery().size() + AppI18n.get("HomeController.4")
                         + weak + AppI18n.get("HomeController.5") + dashboard.policyVersion());
-                    queueStatusLabel.setText(queue.items().isEmpty()
+                    String result = queue.items().isEmpty()
                         ? AppI18n.get("HomeController.6")
                         : queue.cloudAvailable() ? AppI18n.get("HomeController.7")
-                        : AppI18n.get("HomeController.8"));
+                        : AppI18n.get("HomeController.8");
+                    queueStatusLabel.getStyleClass().remove("status-error");
+                    queueStatusLabel.setText(AppI18n.format("HomeController.16",
+                        LocalTime.now().format(REFRESH_TIME), result));
+                    queueEmptyLabel.setText(AppI18n.get("HomeController.15"));
                     if (!queue.items().isEmpty()) learningQueue.getSelectionModel().selectFirst();
                 });
             } catch (Throwable error) {
                 Platform.runLater(() -> {
                     GlobalLoading.hide();
-                    queueStatusLabel.setText(exceptionMapper.map(error).userMessage());
+                    setRefreshing(false);
+                    diagnosisSummaryLabel.setText(AppI18n.get("HomeController.14"));
+                    queueEmptyLabel.setText(AppI18n.get("HomeController.14"));
+                    if (!queueStatusLabel.getStyleClass().contains("status-error")) {
+                        queueStatusLabel.getStyleClass().add("status-error");
+                    }
+                    queueStatusLabel.setText(AppI18n.format("HomeController.17",
+                        exceptionMapper.map(error).userMessage()));
                 });
             }
         });
+    }
+
+    private void setRefreshing(boolean refreshing) {
+        refreshDiagnosisButton.setDisable(refreshing);
+        refreshDiagnosisButton.setText(AppI18n.get(refreshing ? "HomeController.12" : "home.4"));
+        if (refreshing) {
+            diagnosisSummaryLabel.setText(AppI18n.get("HomeController.13"));
+            queueEmptyLabel.setText(AppI18n.get("HomeController.13"));
+            queueStatusLabel.getStyleClass().remove("status-error");
+            queueStatusLabel.setText("");
+        }
     }
 
     @FXML

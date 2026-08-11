@@ -5,9 +5,10 @@
 <?import javafx.scene.control.Label?>
 <?import javafx.scene.control.ListView?>
 <?import javafx.scene.control.ScrollPane?>
+<?import javafx.scene.layout.ColumnConstraints?>
+<?import javafx.scene.layout.GridPane?>
 <?import javafx.scene.layout.HBox?>
 <?import javafx.scene.layout.Region?>
-<?import javafx.scene.layout.TilePane?>
 <?import javafx.scene.layout.VBox?>
 <?import com.sqlteacher.desktop.component.PageHeader?>
 
@@ -18,7 +19,7 @@
 <VBox styleClass="home-page home-dashboard" alignment="TOP_LEFT" spacing="20"
       maxWidth="Infinity" maxHeight="Infinity">
     <padding><Insets top="24" right="28" bottom="28" left="28"/></padding>
-    <PageHeader eyebrow="SQLTeacher 2.0 · Alpha.6" title="%home.22" description="%home.1"/>
+    <PageHeader fx:id="pageHeader" title="%home.22" description="%home.1"/>
 
     <VBox styleClass="learning-queue-panel" spacing="10" maxWidth="Infinity" fillWidth="true">
         <HBox alignment="CENTER_LEFT" spacing="10">
@@ -26,9 +27,14 @@
                 <Label styleClass="section-title" text="%home.2"/>
                 <Label fx:id="diagnosisSummaryLabel" styleClass="model-status" text="%home.3"/>
             </VBox>
-            <Button text="%home.4" onAction="#onRefreshDiagnosis" styleClass="secondary-button"/>
+            <Button fx:id="refreshDiagnosisButton" text="%home.4" onAction="#onRefreshDiagnosis"
+                    styleClass="secondary-button"/>
         </HBox>
-        <ListView fx:id="learningQueue" prefHeight="150" minHeight="120" styleClass="learning-queue-list"/>
+        <ListView fx:id="learningQueue" prefHeight="150" minHeight="120" styleClass="learning-queue-list">
+            <placeholder>
+                <Label fx:id="queueEmptyLabel" text="%home.3" wrapText="true" styleClass="model-status"/>
+            </placeholder>
+        </ListView>
         <HBox alignment="CENTER_LEFT" spacing="10">
             <Label fx:id="queueStatusLabel" wrapText="true" styleClass="model-status" HBox.hgrow="ALWAYS"/>
             <Button fx:id="dismissActionButton" text="%home.5" onAction="#onDismissAction"
@@ -43,13 +49,16 @@
         <Label styleClass="model-status" text="%home.quickActionsDescription"/>
     </VBox>
 
-    <TilePane styleClass="cards-container compact-action-grid" alignment="TOP_LEFT" hgap="14" vgap="14"
-              prefColumns="2" prefTileWidth="260" prefTileHeight="152"
+    <GridPane styleClass="cards-container compact-action-grid" alignment="TOP_LEFT" hgap="14" vgap="14"
               prefWidth="534" maxWidth="534" VBox.vgrow="ALWAYS">
+        <columnConstraints>
+            <ColumnConstraints minWidth="260" prefWidth="260" maxWidth="260"/>
+            <ColumnConstraints minWidth="260" prefWidth="260" maxWidth="260"/>
+        </columnConstraints>
 
         <Button onAction="#onSqlPracticeCardClick" contentDisplay="GRAPHIC_ONLY"
                 mnemonicParsing="false" minWidth="260" prefWidth="260" maxWidth="260"
-                accessibleText="%home.7" styleClass="home-card">
+                accessibleText="%home.7" styleClass="home-card" GridPane.columnIndex="0" GridPane.rowIndex="0">
             <graphic>
                 <VBox alignment="TOP_LEFT" spacing="8" prefWidth="228" maxWidth="228">
                     <Label fx:id="sqlIcon" styleClass="card-icon" accessibleText="%home.8"/>
@@ -64,7 +73,7 @@
 
         <Button onAction="#onCourseMapCardClick" contentDisplay="GRAPHIC_ONLY"
                 mnemonicParsing="false" minWidth="260" prefWidth="260" maxWidth="260"
-                accessibleText="%home.23" styleClass="home-card">
+                accessibleText="%home.23" styleClass="home-card" GridPane.columnIndex="1" GridPane.rowIndex="0">
             <graphic>
                 <VBox alignment="TOP_LEFT" spacing="8" prefWidth="228" maxWidth="228">
                     <Label fx:id="courseIcon" styleClass="card-icon" accessibleText="%home.23"/>
@@ -78,7 +87,7 @@
 
         <Button onAction="#onAiAssistantCardClick" contentDisplay="GRAPHIC_ONLY"
                 mnemonicParsing="false" minWidth="260" prefWidth="260" maxWidth="260"
-                accessibleText="%home.12" styleClass="home-card">
+                accessibleText="%home.12" styleClass="home-card" GridPane.columnIndex="0" GridPane.rowIndex="1">
             <graphic>
                 <VBox alignment="TOP_LEFT" spacing="8" prefWidth="228" maxWidth="228">
                     <Label fx:id="aiIcon" styleClass="card-icon" accessibleText="%home.13"/>
@@ -93,7 +102,7 @@
 
         <Button onAction="#onTableSchemaCardClick" contentDisplay="GRAPHIC_ONLY"
                 mnemonicParsing="false" minWidth="260" prefWidth="260" maxWidth="260"
-                accessibleText="%home.17" styleClass="home-card">
+                accessibleText="%home.17" styleClass="home-card" GridPane.columnIndex="1" GridPane.rowIndex="1">
             <graphic>
                 <VBox alignment="TOP_LEFT" spacing="8" prefWidth="228" maxWidth="228">
                     <Label fx:id="schemaIcon" styleClass="card-icon" accessibleText="%home.18"/>
@@ -105,7 +114,7 @@
                 </VBox>
             </graphic>
         </Button>
-    </TilePane>
+    </GridPane>
 </VBox>
     </content>
 </ScrollPane>

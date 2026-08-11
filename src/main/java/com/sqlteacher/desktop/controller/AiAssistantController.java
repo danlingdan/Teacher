@@ -15,6 +15,7 @@ import com.sqlteacher.application.risk.SqlRiskAnalysisService;
 import com.sqlteacher.application.risk.SqlRiskLevel;
 import com.sqlteacher.desktop.DesktopExecutors;
 import com.sqlteacher.desktop.GlobalLoading;
+import com.sqlteacher.desktop.component.WorkflowSteps;
 import com.sqlteacher.desktop.viewmodel.DesktopConnections;
 import javafx.application.Platform;
 import javafx.concurrent.Task;
@@ -103,6 +104,8 @@ public final class AiAssistantController {
     @FXML private Button reviseButton;
     @FXML private Button favoriteDraftButton;
     @FXML private Button cancelAiButton;
+    @FXML private WorkflowSteps aiWorkflow;
+    @FXML private VBox resultStepPane;
 
     @FXML
     private Button refreshModelsButton;
@@ -176,6 +179,7 @@ public final class AiAssistantController {
     @FXML
     private void initialize() {
         log.info("AiAssistantController initialize() called");
+        aiWorkflow.setActiveStep(1);
         if (copyToPracticeButton == null) {
             log.error("copyToPracticeButton is null, FXML binding failed");
         } else {
@@ -386,6 +390,7 @@ public final class AiAssistantController {
             return;
         }
         generationInProgress = true;
+        aiWorkflow.setActiveStep(2);
         updateControlAvailability();
         GlobalLoading.show(AppI18n.get("AiAssistantController.28"));
         Task<PreparedGeneration> previewTask = new Task<>() {
@@ -520,6 +525,9 @@ public final class AiAssistantController {
     }
 
     private void displayResult(Nl2SqlSafetyResult result) {
+        resultStepPane.setVisible(true);
+        resultStepPane.setManaged(true);
+        aiWorkflow.setActiveStep(3);
         currentResult = result;
         Nl2SqlPlan plan = result == null ? null : result.plan();
 

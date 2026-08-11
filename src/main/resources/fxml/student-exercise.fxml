@@ -1,58 +1,103 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
+<?import com.sqlteacher.desktop.component.PageHeader?>
+<?import com.sqlteacher.desktop.component.WorkflowSteps?>
 <?import javafx.geometry.Insets?>
 <?import javafx.scene.control.*?>
 <?import javafx.scene.layout.*?>
-<?import com.sqlteacher.desktop.component.PageHeader?>
 
 <BorderPane xmlns="http://javafx.com/javafx" xmlns:fx="http://javafx.com/fxml"
             fx:controller="com.sqlteacher.desktop.controller.StudentExerciseController"
             styleClass="exercise-page">
     <top>
-        <VBox spacing="8" styleClass="student-workflow-header">
+        <VBox spacing="12" styleClass="student-workflow-header">
             <padding><Insets top="20" right="24" bottom="14" left="24"/></padding>
-            <PageHeader title="%student-exercise.1" description="%student-exercise.2"/>
-            <Label text="%student-exercise.3"
-                   wrapText="true" styleClass="workflow-hint"/>
+            <PageHeader fx:id="workflowHeader" title="%student-exercise.chooseTitle"/>
+            <WorkflowSteps fx:id="workflowSteps" steps="%student-exercise.steps" activeStep="1"/>
         </VBox>
     </top>
+
     <center>
-        <SplitPane dividerPositions="0.27" styleClass="exercise-split">
-            <VBox spacing="10" styleClass="panel-card">
-                <HBox alignment="CENTER_LEFT">
-                    <Label text="%student-exercise.4" styleClass="card-title"/>
-                    <Region HBox.hgrow="ALWAYS"/>
-                    <Button text="%student-exercise.5" onAction="#onRefresh" styleClass="refresh-button"/>
-                </HBox>
-                <ListView fx:id="exerciseList" VBox.vgrow="ALWAYS" styleClass="exercise-list"/>
-                <Button fx:id="startButton" text="%student-exercise.6" disable="true" onAction="#onStart"
-                        maxWidth="Infinity" styleClass="sql-execute-button"/>
-            </VBox>
-            <VBox spacing="10" styleClass="exercise-workspace">
-                <VBox spacing="5" styleClass="panel-card">
-                    <Label fx:id="titleLabel" text="%student-exercise.7" styleClass="card-title"/>
-                    <Label fx:id="metaLabel" text="-" styleClass="model-status"/>
-                    <Label fx:id="descriptionLabel" text="%student-exercise.8" wrapText="true" styleClass="card-description"/>
-                    <Label fx:id="schemaLabel" text="%student-exercise.9" wrapText="true" styleClass="exercise-schema-summary"/>
+        <StackPane>
+            <padding><Insets top="0" right="24" bottom="16" left="24"/></padding>
+
+            <HBox fx:id="selectionStepPane" spacing="16" alignment="TOP_LEFT">
+                <VBox spacing="10" prefWidth="390" minWidth="320" maxWidth="460"
+                      styleClass="panel-card exercise-selection-card" HBox.hgrow="SOMETIMES">
+                    <HBox alignment="CENTER_LEFT">
+                        <Label text="%student-exercise.4" styleClass="card-title"/>
+                        <Region HBox.hgrow="ALWAYS"/>
+                        <Button text="%student-exercise.5" onAction="#onRefresh" styleClass="refresh-button"/>
+                    </HBox>
+                    <ListView fx:id="exerciseList" VBox.vgrow="ALWAYS" styleClass="exercise-list">
+                        <placeholder>
+                            <Label text="%student-exercise.catalogEmpty" wrapText="true" styleClass="model-status"/>
+                        </placeholder>
+                    </ListView>
                 </VBox>
-                <VBox spacing="8" styleClass="panel-card" VBox.vgrow="ALWAYS">
+
+                <VBox spacing="12" styleClass="panel-card exercise-preview-card" HBox.hgrow="ALWAYS">
+                    <Label text="%student-exercise.previewTitle" styleClass="page-eyebrow"/>
+                    <Label fx:id="titleLabel" text="%student-exercise.7" wrapText="true" styleClass="page-title"/>
+                    <Label fx:id="metaLabel" text="-" styleClass="model-status"/>
+                    <Label fx:id="descriptionLabel" text="%student-exercise.8" wrapText="true"
+                           styleClass="card-description exercise-preview-description"/>
+                    <Label fx:id="schemaLabel" text="%student-exercise.9" wrapText="true"
+                           styleClass="exercise-schema-summary"/>
+                    <Region VBox.vgrow="ALWAYS"/>
+                    <Button fx:id="startButton" text="%student-exercise.6" disable="true" onAction="#onStart"
+                            maxWidth="Infinity" styleClass="sql-execute-button"/>
+                </VBox>
+            </HBox>
+
+            <VBox fx:id="answerStepPane" visible="false" managed="false" spacing="12"
+                  styleClass="exercise-answer-step">
+                <VBox spacing="8" styleClass="panel-card exercise-question-card">
+                    <HBox alignment="CENTER_LEFT" spacing="12">
+                        <VBox spacing="3" HBox.hgrow="ALWAYS">
+                            <Label fx:id="answerTitleLabel" wrapText="true" styleClass="card-title"/>
+                            <Label fx:id="answerMetaLabel" styleClass="model-status"/>
+                        </VBox>
+                        <Button text="%student-exercise.changeExercise" onAction="#onChooseAnother"
+                                styleClass="secondary-button"/>
+                    </HBox>
+                    <Label fx:id="answerDescriptionLabel" wrapText="true" styleClass="card-description"/>
+                    <Label fx:id="answerSchemaLabel" wrapText="true" styleClass="exercise-schema-summary"/>
+                </VBox>
+
+                <VBox spacing="8" styleClass="panel-card exercise-workspace" VBox.vgrow="ALWAYS">
                     <HBox alignment="CENTER_LEFT">
                         <Label text="%student-exercise.10" styleClass="card-title"/>
                         <Region HBox.hgrow="ALWAYS"/>
-                        <Button fx:id="resetButton" text="%student-exercise.11" onAction="#onReset" styleClass="refresh-button"/>
-                        <Button fx:id="hintButton" text="%student-exercise.12" onAction="#onHint" styleClass="refresh-button"/>
-                        <Button fx:id="runButton" text="%student-exercise.13" onAction="#onRun" styleClass="secondary-button"/>
-                        <Button fx:id="submitButton" text="%student-exercise.14" onAction="#onSubmit" defaultButton="true" styleClass="sql-execute-button"/>
+                        <Button fx:id="resetButton" text="%student-exercise.11" onAction="#onReset"
+                                styleClass="refresh-button"/>
+                        <Button fx:id="hintButton" text="%student-exercise.12" onAction="#onHint"
+                                styleClass="refresh-button"/>
+                        <Button fx:id="runButton" text="%student-exercise.13" onAction="#onRun"
+                                styleClass="secondary-button"/>
+                        <Button fx:id="submitButton" text="%student-exercise.14" onAction="#onSubmit"
+                                defaultButton="true" styleClass="sql-execute-button"/>
                     </HBox>
                     <TextArea fx:id="sqlArea" prefRowCount="9" minHeight="180" prefHeight="220"
                               styleClass="sql-editor, exercise-sql-editor" VBox.vgrow="SOMETIMES"/>
-                    <SplitPane orientation="VERTICAL" dividerPositions="0.62" VBox.vgrow="ALWAYS" styleClass="exercise-result-split">
-                        <TableView fx:id="resultTable" styleClass="result-table"/>
-                        <TextArea fx:id="feedbackArea" editable="false" wrapText="true" promptText="%student-exercise.15"/>
+                    <SplitPane orientation="VERTICAL" dividerPositions="0.62" VBox.vgrow="ALWAYS"
+                               styleClass="exercise-result-split">
+                        <TableView fx:id="resultTable" styleClass="result-table">
+                            <placeholder>
+                                <Label text="%student-exercise.resultEmpty" styleClass="model-status"/>
+                            </placeholder>
+                        </TableView>
+                        <TextArea fx:id="feedbackArea" editable="false" wrapText="true"
+                                  promptText="%student-exercise.15"/>
                     </SplitPane>
-                    <Label fx:id="statusLabel" visible="false" managed="false" wrapText="true"/>
                 </VBox>
             </VBox>
-        </SplitPane>
+        </StackPane>
     </center>
+
+    <bottom>
+        <Label fx:id="statusLabel" visible="false" managed="false" wrapText="true">
+            <BorderPane.margin><Insets top="12" right="24" bottom="18" left="24"/></BorderPane.margin>
+        </Label>
+    </bottom>
 </BorderPane>

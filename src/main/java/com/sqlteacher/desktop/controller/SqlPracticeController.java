@@ -17,6 +17,7 @@ import com.sqlteacher.desktop.viewmodel.SqlExecutionViewModel;
 import com.sqlteacher.desktop.viewmodel.SqlResultRowViewModel;
 import com.sqlteacher.desktop.editor.SqlCodeHighlighter;
 import com.sqlteacher.desktop.component.StatePanel;
+import com.sqlteacher.desktop.component.WorkflowSteps;
 import javafx.application.Platform;
 import javafx.beans.property.ReadOnlyStringWrapper;
 import javafx.collections.FXCollections;
@@ -126,6 +127,9 @@ public final class SqlPracticeController {
     @FXML
     private Label resultStatusLabel;
 
+    @FXML
+    private WorkflowSteps sqlWorkflow;
+
     /** DDL执行成功后回调，用于刷新表结构。 */
     private Runnable onDdlSuccessCallback;
 
@@ -227,6 +231,7 @@ public final class SqlPracticeController {
      * 内部执行SQL方法：进入执行中状态、创建后台任务、处理成功/失败回调。
      */
     private void executeSqlInternal(String sql, boolean riskConfirmed) {
+        sqlWorkflow.setActiveStep(2);
         // ① 立即进入执行中：禁用按钮、展示 loading 占位，并唤起全局 Loading 遮罩。
         setExecuting(true);
         showLoadingState();
@@ -250,6 +255,7 @@ public final class SqlPracticeController {
         // ③ 成功 / 失败回调均通过 Platform.runLater 显式切回 FX 线程刷新 UI 并恢复按钮。
         executionTask.setOnSucceeded(event -> Platform.runLater(() -> {
             try {
+                sqlWorkflow.setActiveStep(3);
                 renderExecution(executionTask.getValue());
                 if (isDdlStatement(sql) && onDdlSuccessCallback != null) {
                     onDdlSuccessCallback.run();
@@ -261,6 +267,7 @@ public final class SqlPracticeController {
         }));
         executionTask.setOnFailed(event -> Platform.runLater(() -> {
             try {
+                sqlWorkflow.setActiveStep(3);
                 // 后端类异常（含 MockBackendException，RuntimeException 子类）经 Task 传播到此。
                 showErrorState(readableThrowable(executionTask.getException()));
             } finally {

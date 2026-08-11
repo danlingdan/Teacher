@@ -110,7 +110,7 @@
                                         <VBox fx:id="memberManagementPane" spacing="8" styleClass="cloud-subsection">
                                             <children>
                                                 <Label text="%cloud-center.20" styleClass="cloud-subsection-title"/>
-                                                <FlowPane fx:id="assignmentCreationPane" hgap="8" vgap="8" prefWrapLength="560">
+                                                <FlowPane hgap="8" vgap="8" prefWrapLength="560">
                                                     <children>
                                                         <TextField fx:id="memberEmailField" promptText="%cloud-center.21" prefWidth="240"/>
                                                         <ComboBox fx:id="memberRoleCombo" prefWidth="125"/>
@@ -125,7 +125,7 @@
                                         <VBox spacing="8" VBox.vgrow="ALWAYS" styleClass="cloud-subsection">
                                             <children>
                                                 <Label text="%cloud-center.23" styleClass="cloud-subsection-title"/>
-                                                <FlowPane hgap="8" vgap="8" prefWrapLength="560">
+                                                <FlowPane fx:id="assignmentCreationPane" hgap="8" vgap="8" prefWrapLength="560">
                                                     <children>
                                                         <TextField fx:id="assignmentExerciseField" promptText="%cloud-center.24" prefWidth="180"/>
                                                         <TextField fx:id="assignmentTitleField" promptText="%cloud-center.25" prefWidth="230"/>
@@ -152,7 +152,7 @@
                                                     </children>
                                                 </HBox>
                                                 <ListView fx:id="assignmentList" VBox.vgrow="ALWAYS" minHeight="170" styleClass="cloud-list"/>
-                                                <HBox spacing="8" alignment="CENTER_LEFT">
+                                                <HBox fx:id="assignmentAnalyticsPane" spacing="8" alignment="CENTER_LEFT">
                                                     <children>
                                                         <Label fx:id="assignmentAnalyticsLabel" text="%cloud-center.38" wrapText="true" HBox.hgrow="ALWAYS" styleClass="cloud-helper-text"/>
                                                         <Button text="%cloud-center.39" onAction="#onRefreshAssignmentAnalytics" styleClass="compact-button, secondary-button"/>

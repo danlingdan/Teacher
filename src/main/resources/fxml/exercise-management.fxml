@@ -4,6 +4,7 @@
 <?import javafx.scene.control.*?>
 <?import javafx.scene.layout.*?>
 <?import com.sqlteacher.desktop.component.PageHeader?>
+<?import com.sqlteacher.desktop.component.WorkflowSteps?>
 
 <BorderPane xmlns="http://javafx.com/javafx" xmlns:fx="http://javafx.com/fxml"
             fx:controller="com.sqlteacher.desktop.controller.ExerciseManagementController"
@@ -12,6 +13,7 @@
         <VBox spacing="6" styleClass="title-area">
             <padding><Insets top="20" right="24" bottom="14" left="24"/></padding>
             <PageHeader title="%exercise-management.1" description="%exercise-management.2"/>
+            <WorkflowSteps fx:id="exerciseWorkflow" steps="%exercise-management.steps" activeStep="1"/>
         </VBox>
     </top>
     <center>
@@ -29,7 +31,8 @@
                     <Button text="%exercise-management.7" onAction="#onExport" styleClass="refresh-button"/>
                 </HBox>
             </VBox>
-            <ScrollPane fitToWidth="true" styleClass="exercise-scroll">
+            <ScrollPane fx:id="exerciseFormPane" fitToWidth="true" styleClass="exercise-scroll"
+                        visible="false" managed="false">
                 <VBox spacing="12" styleClass="panel-card, exercise-form">
                     <HBox alignment="CENTER_LEFT">
                         <Label text="%exercise-management.8" styleClass="card-title"/>

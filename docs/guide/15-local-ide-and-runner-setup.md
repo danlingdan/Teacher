@@ -13,19 +13,21 @@ SQL 与 AI 仍遵守项目现有安全规范。本指南不放宽 SQL 确认、�
 
 | 语言 | 本地运行工具链 | 最低准备 |
 | --- | --- | --- |
-| Java | Windows JDK | JDK 21；可由“设置 → 开发环境”自动安装 Temurin 21 |
-| Python | Windows Python 或 WSL Ubuntu | 优先使用原生 Python 3；缺失时可自动安装 Python 3.13 |
-| C/C++ | MSVC、GCC/Cygwin/MinGW 或 Clang | 自动复用已安装工具链，也可安装 MSVC Build Tools |
+| Java | Windows JDK | JDK 21；支持 `java.home`、`JAVA_HOME`、`JDK_HOME`、PATH 和常见厂商/IDE 安装目录，缺失时可安装 Temurin 21 |
+| Python | Windows Python 或 WSL Ubuntu | 支持 PATH、Python Launcher、用户/系统安装目录和 pyenv-win，缺失时可自动安装 Python 3.13 |
+| C/C++ | MSVC、GCC/MinGW/MSYS2/Cygwin 或 Clang | 支持 PATH、Visual Studio Installer/`vswhere`、VS 开发者环境及常见工具链目录，也可安装 Visual Studio 2026 Build Tools |
 
 “打开终端”会把当前源码导出到 `local-code-workspaces/` 后打开对应工具链。程序在该终端中的文件、网络、依赖安装和命令行为由学生负责。
 
+内置代码活动编辑器为 Java、Python、C 和 C++ 提供语言对应的关键字、字符串、注释、数字和预处理指令高亮。按 `Ctrl+Space` 可补全该语言的基础关键字、常用标准标识符，以及当前源码中已经声明或使用的标识符；补全完全在本地确定性运行，不会把源码发送给 AI 或网络服务。
+
 ## 自动下载安装
 
-打开“设置 → 开发环境”后，SQLTeacher 会在后台探测 Temurin JDK、Python、Ollama、
-MSVC Build Tools 和 WSL Ubuntu。缺少组件时可点击“自动安装”：
+打开“设置 → 开发环境”后，SQLTeacher 会在后台探测兼容 JDK、Python、Ollama、
+MSVC/GCC/Clang 工具链和 WSL Ubuntu。检测与实际代码 Runner 共用同一套发现逻辑，不要求工具必须由 SQLTeacher 安装，也不限定单一厂商或固定年份。缺少组件时可点击“自动安装”：
 
 1. 页面先展示固定的软件来源、许可证、管理员权限和重启影响；
-2. 用户确认后，JDK、Python、Ollama 与 MSVC 通过 Windows Package Manager 的固定包 ID 安装；
+2. 用户确认后，JDK、Python、Ollama 与 Visual Studio 2026 Build Tools 通过 Windows Package Manager 的固定包 ID 安装；
 3. WSL 通过 Windows 自带的 `wsl --install -d Ubuntu --no-launch` 安装；
 4. 安装可取消，完成后自动复检；若 Windows 功能或 PATH 尚未刷新，会显示需要重启或初始化；
 5. SQLTeacher 不静默提权、不自动重启，也不卸载用户已有的软件。

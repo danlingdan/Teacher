@@ -1211,7 +1211,9 @@ public final class MainWindowController {
         FXMLLoader loader = new FXMLLoader(fxml, AppI18n.bundle());
         loader.setControllerFactory(type -> {
             if (type == HomeController.class) {
-                HomeController controller = new HomeController(studentLearningQueueService, applicationExceptionMapper);
+                HomeController controller = new HomeController(
+                    studentLearningQueueService, applicationExceptionMapper, accessProfile
+                );
                 controller.setOnNavigateAiAssistant(this::onNavigateAiAssistant);
                 controller.setOnNavigateSqlPractice(this::onNavigateSqlPractice);
                 controller.setOnNavigateCourseMap(this::onNavigateCourseMap);

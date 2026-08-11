@@ -8,6 +8,7 @@ import com.sqlteacher.application.runner.RunnerCancellation;
 import com.sqlteacher.application.runner.RunnerCapability;
 import com.sqlteacher.application.runner.RunnerFailureReason;
 import com.sqlteacher.domain.activity.CodeLanguage;
+import com.sqlteacher.infrastructure.environment.WindowsToolchainDiscovery;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -279,21 +280,13 @@ public final class WindowsLocalIdeCodeRunner implements LocalCodeRunner {
         }
 
         static Toolchains detect() {
-            Path javaHome = Path.of(System.getProperty("java.home"));
-            Path adoptiumRoot = Path.of(System.getenv().getOrDefault("ProgramFiles", "C:\\Program Files"),
-                "Eclipse Adoptium");
-            Path localPrograms = Path.of(System.getenv().getOrDefault("LOCALAPPDATA", ""), "Programs");
-            Path managedJava = findExecutable(adoptiumRoot, "javac.exe");
-            Path java = firstExecutable(javaHome.resolve("bin/java.exe"), onPath("java.exe"),
-                managedJava == null ? null : managedJava.getParent().resolve("java.exe"));
-            Path javac = firstExecutable(javaHome.resolve("bin/javac.exe"), onPath("javac.exe"), managedJava);
-            Path python = firstExecutable(onPath("python.exe"), onPath("python3.exe"),
-                findExecutable(localPrograms.resolve("Python"), "python.exe"));
+            Path java = WindowsToolchainDiscovery.javaRuntime();
+            Path javac = WindowsToolchainDiscovery.javaCompiler();
+            Path python = WindowsToolchainDiscovery.python();
             Path wslCandidate = executable(systemExecutable("wsl.exe"));
             Path wsl = python == null && usableUbuntuPython(wslCandidate) ? wslCandidate : null;
-            Path cygwinBin = Path.of("D:\\DevelopmentEnvironment\\cygwin\\bin");
-            Path gcc = firstExecutable(onPath("gcc.exe"), cygwinBin.resolve("gcc.exe"), onPath("clang.exe"));
-            Path gpp = firstExecutable(onPath("g++.exe"), cygwinBin.resolve("g++.exe"), onPath("clang++.exe"));
+            Path gcc = WindowsToolchainDiscovery.cCompiler();
+            Path gpp = WindowsToolchainDiscovery.cppCompiler();
             return new Toolchains(java, javac, python, wsl, gcc, gpp,
                 WindowsLocalCodeWorkspaceLauncher.visualStudioDeveloperShell());
         }
@@ -324,40 +317,6 @@ public final class WindowsLocalIdeCodeRunner implements LocalCodeRunner {
             return path != null && Files.isRegularFile(path) ? path : null;
         }
 
-        private static Path firstExecutable(Path... candidates) {
-            for (Path candidate : candidates) {
-                Path found = executable(candidate);
-                if (found != null) return found;
-            }
-            return null;
-        }
-
-        private static Path onPath(String name) {
-            Process process = null;
-            try {
-                process = new ProcessBuilder(systemExecutable("where.exe").toString(), name)
-                    .redirectError(ProcessBuilder.Redirect.DISCARD).start();
-                String first = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8)
-                    .lines().findFirst().orElse("").trim();
-                if (!process.waitFor(3, TimeUnit.SECONDS) || process.exitValue() != 0 || first.isBlank()) return null;
-                return Path.of(first);
-            } catch (IOException | InterruptedException error) {
-                if (error instanceof InterruptedException) Thread.currentThread().interrupt();
-                if (process != null) terminateTree(process);
-                return null;
-            }
-        }
-
-        private static Path findExecutable(Path root, String name) {
-            if (!Files.isDirectory(root)) return null;
-            try (var paths = Files.find(root, 6,
-                (path, attributes) -> attributes.isRegularFile()
-                    && path.getFileName().toString().equalsIgnoreCase(name))) {
-                return paths.findFirst().orElse(null);
-            } catch (IOException | SecurityException error) {
-                return null;
-            }
-        }
     }
 
     private record Execution(int exitCode, String stdout, String stderr, boolean timedOut,
