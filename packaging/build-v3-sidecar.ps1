@@ -68,7 +68,6 @@ try {
 
     & $jlinkExecutable `
         --add-modules java.se,jdk.crypto.ec,jdk.unsupported `
-        --bind-services `
         --strip-debug `
         --no-header-files `
         --no-man-pages `
