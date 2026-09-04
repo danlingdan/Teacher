@@ -18,6 +18,7 @@ import {
   localAppRequestWithId,
   subscribeLocalAppEvents,
 } from "../../shared/ipc";
+import { clearDraft, loadDraft, saveDraft } from "../../shared/practiceDraft";
 import type {
   ActivityDefinition,
   ActivitySubmission,
@@ -32,10 +33,12 @@ import type {
   RunnerCapability,
   RunnerResult,
 } from "../../shared/types";
-import { Button, EmptyState, Feedback, Stepper } from "../../shared/ui";
+import { Button, Dialog, EmptyState, Feedback, Stepper, useToast } from "../../shared/ui";
 
 self.MonacoEnvironment = { getWorker: () => new EditorWorker() };
 loader.config({ monaco });
+
+const defaultSqlAnswer = "SELECT *\nFROM ";
 
 const templates: Record<string, string> = {
   JAVA: 'public class Main {\n    public static void main(String[] args) {\n        System.out.println("Hello, SQLTeacher");\n    }\n}\n',
@@ -52,10 +55,17 @@ const monacoLanguage: Record<string, string> = {
 };
 
 export default function EditorPage() {
-  const [searchParams] = useSearchParams();
-  const [mode, setMode] = useState<"exercise" | "activity" | "runner">(() =>
-    searchParams.has("activity") ? "activity" : "exercise",
-  );
+  const [searchParams, setSearchParams] = useSearchParams();
+  const modeParam = searchParams.get("tab");
+  const mode: "exercise" | "activity" | "runner" =
+    modeParam === "activity" || modeParam === "runner" ? modeParam : "exercise";
+  const setMode = (next: "exercise" | "activity" | "runner") => {
+    const params = new URLSearchParams(searchParams);
+    if (next === "exercise") params.delete("tab");
+    else params.set("tab", next);
+    setSearchParams(params, { replace: true });
+  };
+
   return (
     <section className="practice-workspace">
       <div className="segmented-control workspace-tabs" aria-label="练习类型">
@@ -93,7 +103,7 @@ export default function EditorPage() {
 }
 
 function ActivityFlow() {
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const workspace = useQuery({
     queryKey: ["course", "workspace"],
     queryFn: () => localAppRequest<CourseWorkspace>("course.workspace"),
@@ -150,6 +160,13 @@ function ActivityFlow() {
     )
       setSelectedId(activities[0]?.id);
   }, [activities, selectedCourseId, selectedId]);
+  // 选中活动写回 URL，刷新后可恢复。
+  useEffect(() => {
+    if (!selectedId || searchParams.get("activity") === selectedId) return;
+    const params = new URLSearchParams(searchParams);
+    params.set("activity", selectedId);
+    setSearchParams(params, { replace: true });
+  }, [selectedId, searchParams, setSearchParams]);
   return (
     <div className="flow-layout">
       <aside className="content-card selection-panel">
@@ -261,6 +278,7 @@ function ActivityInteraction({
 }: {
   definition: ActivityDefinition;
 }) {
+  const [searchParams, setSearchParams] = useSearchParams();
   const spec = definition.specification as Record<string, unknown>;
   const [selections, setSelections] = useState<Record<string, string>>({});
   const [sequence, setSequence] = useState<string[]>([]);
@@ -570,7 +588,22 @@ function ActivityInteraction({
     );
   else
     body = (
-      <EmptyState title="请使用 SQL 练习">
+      <EmptyState
+        title="请使用 SQL 练习"
+        action={
+          <Button
+            variant="secondary"
+            onClick={() => {
+              const params = new URLSearchParams(searchParams);
+              params.delete("activity");
+              params.set("tab", "exercise");
+              setSearchParams(params);
+            }}
+          >
+            切换到 SQL 练习
+          </Button>
+        }
+      >
         SQL 类型活动由专用安全练习流程执行。
       </EmptyState>
     );
@@ -615,7 +648,7 @@ function ActivityInteraction({
 }
 
 function ExerciseFlow() {
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const classroomId = searchParams.get("classroom") ?? "";
   const assignmentId = searchParams.get("assignment") ?? "";
   const assignmentTitle = searchParams.get("assignmentTitle") ?? "";
@@ -638,13 +671,17 @@ function ExerciseFlow() {
   const [selectedId, setSelectedId] = useState<string | undefined>(
     () => searchParams.get("exercise") ?? undefined,
   );
-  const [answer, setAnswer] = useState("SELECT *\nFROM ");
+  const [answer, setAnswer] = useState(
+    () => (selectedId ? loadDraft(selectedId) : undefined) ?? defaultSqlAnswer,
+  );
   const [session, setSession] = useState<ExerciseSession>();
   const [feedback, setFeedback] = useState<ExerciseAttempt>();
   const [hint, setHint] = useState<ExerciseHint>();
   const [delivery, setDelivery] = useState<AssignmentDelivery>();
+  const [resetOpen, setResetOpen] = useState(false);
   const [catalogQuery, setCatalogQuery] = useState("");
   const [catalogPage, setCatalogPage] = useState(0);
+  const toast = useToast();
   const preview = useQuery({
     queryKey: ["practice", "preview", selectedId],
     queryFn: () =>
@@ -663,6 +700,11 @@ function ExerciseFlow() {
       setFeedback(undefined);
     },
   });
+  // 每次作答都写入按题持久化的草稿；刷新、切换工作区后可恢复。
+  const updateAnswer = (value: string) => {
+    setAnswer(value);
+    if (selectedId) saveDraft(selectedId, value);
+  };
   const deliverAssignment = useMutation({
     mutationFn: (result: ExerciseAttempt) =>
       localAppRequest<AssignmentDelivery>("cloud.assignment.submit", {
@@ -674,6 +716,11 @@ function ExerciseFlow() {
       }),
     onSuccess: setDelivery,
   });
+  const syncQueued = useMutation({
+    mutationFn: () => localAppRequest("cloud.sync"),
+    onSuccess: () => toast("success", "待同步记录已同步到云端"),
+    onError: (error: Error) => toast("error", `同步失败：${error.message}`),
+  });
   const attempt = useMutation({
     mutationFn: async (submit: boolean) => ({
       submit,
@@ -684,6 +731,8 @@ function ExerciseFlow() {
     }),
     onSuccess: ({ result, submit }) => {
       setFeedback(result);
+      if (submit && selectedId && result.evaluation?.passed)
+        clearDraft(selectedId);
       if (submit && assignmentContext) deliverAssignment.mutate(result);
     },
   });
@@ -706,11 +755,21 @@ function ExerciseFlow() {
       }),
     onSuccess: (value) => {
       setSession(value);
-      setAnswer("SELECT *\nFROM ");
+      setAnswer(defaultSqlAnswer);
+      if (selectedId) clearDraft(selectedId);
       setFeedback(undefined);
       setHint(undefined);
+      setResetOpen(false);
+      toast("success", "练习已重置");
     },
   });
+  // 选题写回 URL：刷新、复制链接都能回到同一道题。
+  useEffect(() => {
+    if (!selectedId || searchParams.get("exercise") === selectedId) return;
+    const params = new URLSearchParams(searchParams);
+    params.set("exercise", selectedId);
+    setSearchParams(params, { replace: true });
+  }, [selectedId, searchParams, setSearchParams]);
   const close = useMutation({
     mutationFn: (sessionId: string) =>
       localAppRequest("practice.close", { sessionId }),
@@ -736,22 +795,14 @@ function ExerciseFlow() {
   useEffect(() => {
     setCatalogPage(0);
   }, [catalogQuery]);
-  const step = feedback
-    ? 4
-    : session
-      ? 3
-      : preview.data
-        ? 1
-        : selectedId
-          ? 0
-          : 0;
+  const step = feedback ? 3 : session ? 2 : preview.data ? 1 : 0;
   return (
     <div className="flow-layout">
       <aside className="content-card selection-panel">
         <div className="section-heading">
           <div>
             <p className="eyebrow">题目目录</p>
-            <strong>{filteredCatalog.length} 道题</strong>
+            <strong>{catalog.isPending ? "加载中…" : `${filteredCatalog.length} 道题`}</strong>
           </div>
         </div>
         <input
@@ -760,27 +811,36 @@ function ExerciseFlow() {
           onChange={(event) => setCatalogQuery(event.target.value)}
           placeholder="搜索题目或知识点"
         />
-        {visibleCatalog.map((item) => (
-          <button
-            type="button"
-            className={selectedId === item.id ? "selected" : ""}
-            key={item.id}
-            onClick={() => {
-              if (session) close.mutate(session.id);
-              setSelectedId(item.id);
-              setSession(undefined);
-              setFeedback(undefined);
-              setHint(undefined);
-              setDelivery(undefined);
-            }}
-          >
-            {item.title}
-            <small>
-              {knowledgePointLabel(item.knowledgePoint)} ·{" "}
-              {difficultyLabel(item.difficulty)}
-            </small>
-          </button>
-        ))}
+        {catalog.isPending ? (
+          <section className="page-skeleton">
+            <span className="spinner" />
+            正在加载题目目录
+          </section>
+        ) : (
+          visibleCatalog.map((item) => (
+            <button
+              type="button"
+              className={selectedId === item.id ? "selected" : ""}
+              key={item.id}
+              onClick={() => {
+                if (session) close.mutate(session.id);
+                setSelectedId(item.id);
+                setSession(undefined);
+                setFeedback(undefined);
+                setHint(undefined);
+                setDelivery(undefined);
+                // 载入该题自己的草稿；不同题的代码互不覆盖。
+                setAnswer(loadDraft(item.id) ?? defaultSqlAnswer);
+              }}
+            >
+              {item.title}
+              <small>
+                {knowledgePointLabel(item.knowledgePoint)} ·{" "}
+                {difficultyLabel(item.difficulty)}
+              </small>
+            </button>
+          ))
+        )}
         {filteredCatalog.length === 0 && (
           <p className="muted">没有匹配的题目。</p>
         )}
@@ -813,7 +873,7 @@ function ExerciseFlow() {
           </Feedback>
         )}
         <Stepper
-          steps={["选题", "预览", "确认", "作答", "反馈"]}
+          steps={["选题", "预览确认", "作答", "反馈"]}
           current={step}
         />
         {!selectedId && (
@@ -863,7 +923,7 @@ function ExerciseFlow() {
             <CodeEditor
               language="SQL"
               value={answer}
-              onChange={setAnswer}
+              onChange={updateAnswer}
               schema={session.exercise.schemaSummary}
               onRun={() => attempt.mutate(false)}
               onSubmit={() => attempt.mutate(true)}
@@ -892,18 +952,20 @@ function ExerciseFlow() {
               <Button
                 variant="secondary"
                 disabled={reset.isPending}
-                onClick={() => reset.mutate()}
+                onClick={() => setResetOpen(true)}
               >
                 重置练习
               </Button>
               <Button
                 variant="secondary"
+                busy={attempt.isPending}
                 disabled={attempt.isPending}
                 onClick={() => attempt.mutate(false)}
               >
                 运行
               </Button>
               <Button
+                busy={attempt.isPending}
                 disabled={attempt.isPending}
                 onClick={() => attempt.mutate(true)}
               >
@@ -931,6 +993,42 @@ function ExerciseFlow() {
             ))}
           </Feedback>
         )}
+        {feedback?.execution && feedback.execution.columns.length > 0 && (
+          <section className="result-panel">
+            <div className="section-heading">
+              <h3>
+                查询结果 · {feedback.execution.totalRows} 行
+                {feedback.execution.truncated ? "（已截断）" : ""}
+              </h3>
+              <span className="safe-chip">{feedback.execution.durationMillis} ms</span>
+            </div>
+            <div
+              className="virtual-table"
+              role="region"
+              aria-label="练习运行结果"
+              tabIndex={0}
+            >
+              <table>
+                <thead>
+                  <tr>
+                    {feedback.execution.columns.map((column) => (
+                      <th key={column}>{column}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {feedback.execution.rows.map((row, index) => (
+                    <tr key={index}>
+                      {feedback.execution?.columns.map((column) => (
+                        <td key={column}>{String(row[column] ?? "NULL")}</td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        )}
         {delivery && (
           <Feedback
             tone={
@@ -953,6 +1051,18 @@ function ExerciseFlow() {
                 ? `当前还有 ${delivery.pending} 条记录待同步。`
                 : `云端尝试次数：${delivery.attemptNumber}`}
             </p>
+            {delivery.status === "QUEUED" && (
+              <div className="button-row">
+                <Button
+                  variant="secondary"
+                  busy={syncQueued.isPending}
+                  disabled={syncQueued.isPending}
+                  onClick={() => syncQueued.mutate()}
+                >
+                  立即同步
+                </Button>
+              </div>
+            )}
           </Feedback>
         )}
         {(catalog.isError ||
@@ -978,6 +1088,27 @@ function ExerciseFlow() {
             }
           </Feedback>
         )}
+        <Dialog
+          open={resetOpen}
+          title="重置练习"
+          onClose={() => setResetOpen(false)}
+        >
+          <p>
+            会结束当前作答会话，把代码恢复为初始模板，并删除本题已保存的草稿。此操作无法撤销。
+          </p>
+          <div className="button-row">
+            <Button variant="secondary" onClick={() => setResetOpen(false)}>
+              取消
+            </Button>
+            <Button
+              variant="danger"
+              busy={reset.isPending}
+              onClick={() => reset.mutate()}
+            >
+              确认重置
+            </Button>
+          </div>
+        </Dialog>
       </main>
     </div>
   );
@@ -1043,10 +1174,21 @@ function RunnerFlow() {
     },
     onSettled: () => setRequestId(undefined),
   });
-  function selectLanguage(next: typeof language) {
+  const [languageSwitch, setLanguageSwitch] = useState<
+    "JAVA" | "PYTHON" | "C" | "CPP"
+  >();
+  function applyLanguage(next: "JAVA" | "PYTHON" | "C" | "CPP") {
     setLanguage(next);
     setSource(templates[next]);
     setResult(undefined);
+  }
+  function selectLanguage(next: "JAVA" | "PYTHON" | "C" | "CPP") {
+    // 已改动的源码直接覆盖会丢代码；先让用户确认。
+    if (source !== templates[language]) {
+      setLanguageSwitch(next);
+      return;
+    }
+    applyLanguage(next);
   }
   const capability = available.find((item) => item.language === language);
   return (
@@ -1141,6 +1283,30 @@ function RunnerFlow() {
           </Feedback>
         )}
       </section>
+      <Dialog
+        open={Boolean(languageSwitch)}
+        title="切换语言会覆盖当前代码"
+        onClose={() => setLanguageSwitch(undefined)}
+      >
+        <p>
+          当前源码已被修改，不是 {language} 初始模板。切换到 {languageSwitch ?? ""}
+          {" "}会用新语言的初始模板覆盖现有代码，且无法恢复。
+        </p>
+        <div className="button-row">
+          <Button variant="secondary" onClick={() => setLanguageSwitch(undefined)}>
+            取消
+          </Button>
+          <Button
+            variant="danger"
+            onClick={() => {
+              if (languageSwitch) applyLanguage(languageSwitch);
+              setLanguageSwitch(undefined);
+            }}
+          >
+            覆盖并切换
+          </Button>
+        </div>
+      </Dialog>
     </div>
   );
 }

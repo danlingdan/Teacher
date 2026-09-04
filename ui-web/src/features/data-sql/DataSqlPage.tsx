@@ -4,7 +4,7 @@ import * as monaco from "monaco-editor/editor/editor.api";
 import EditorWorker from "monaco-editor/editor/editor.worker?worker";
 import "monaco-editor/languages/definitions/sql/register";
 import { useEffect, useState } from "react";
-import { Button, Dialog, Feedback, FormField } from "../../shared/ui";
+import { Button, Dialog, Feedback, FormField, useToast } from "../../shared/ui";
 import { cancelLocalAppRequest, localAppRequest, localAppRequestWithId } from "../../shared/ipc";
 import type { AiContextPreview, ConnectionSummary, ConnectionTestResult, DatabaseTable, Nl2SqlSafetyResult, SqlPage, SqlRisk } from "../../shared/types";
 
@@ -35,27 +35,35 @@ const dialects = ["SQLITE", "DUCKDB", "H2", "MYSQL", "MARIADB", "POSTGRESQL", "S
 
 function ConnectionManager({ items, selectedId, onSelected }: { items: ConnectionSummary[]; selectedId: string; onSelected: (id: string) => void }) {
   const client = useQueryClient();
+  const toast = useToast();
   const [draft, setDraft] = useState<ConnectionDraft>(emptyConnection);
   const [result, setResult] = useState<ConnectionTestResult>();
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [panelOpen, setPanelOpen] = useState(items.length === 0);
+  // 一个连接都没有时自动展开，避免新用户找不到入口。
+  useEffect(() => { if (items.length === 0) setPanelOpen(true); }, [items.length]);
   const current = items.find(item => item.id === selectedId);
   const payload = { ...draft, port: Number(draft.port || 0) };
   const refresh = () => client.invalidateQueries({ queryKey: ["data", "connections"] });
-  const save = useMutation({ mutationFn: () => localAppRequest<ConnectionSummary>("data.connection.save", payload), onSuccess: value => { setDraft(valueToDraft(value)); onSelected(value.id); void refresh(); } });
-  const test = useMutation({ mutationFn: () => localAppRequest<ConnectionTestResult>("data.connection.test", payload), onSuccess: setResult, onSettled: () => setDraft(value => ({ ...value, password: "" })) });
+  const save = useMutation({ mutationFn: () => localAppRequest<ConnectionSummary>("data.connection.save", payload), onSuccess: value => { setDraft(valueToDraft(value)); onSelected(value.id); void refresh(); toast("success", "连接已保存"); }, onError: (error: Error) => toast("error", `连接保存失败：${error.message}`) });
+  // 测试成功后清空表单密码是刻意的：Java 侧 DatabaseCredentialSession 已记住本次凭据，
+  // 保存时用空密码即可；避免密码长期留在前端表单状态里。
+  const test = useMutation({ mutationFn: () => localAppRequest<ConnectionTestResult>("data.connection.test", payload), onSuccess: setResult, onSettled: () => setDraft(value => ({ ...value, password: "" })), onError: (error: Error) => toast("error", `连接测试失败：${error.message}`) });
   const select = useMutation({ mutationFn: () => localAppRequest<ConnectionSummary>("data.connection.select", { connectionId: selectedId }), onSuccess: value => { onSelected(value.id); void refresh(); } });
   const remove = useMutation({ mutationFn: () => localAppRequest("data.connection.delete", { connectionId: selectedId }), onSuccess: async () => { setDeleteOpen(false); setDraft(emptyConnection()); await refresh(); const remaining = items.find(item => item.id !== selectedId); if (remaining) onSelected(remaining.id); } });
   const fileBased = ["SQLITE", "DUCKDB", "H2"].includes(draft.dialect);
   const generic = draft.dialect === "GENERIC";
   const edit = (item?: ConnectionSummary) => { setDraft(item ? valueToDraft(item) : emptyConnection()); setResult(undefined); };
-  return <details className="connection-manager"><summary><strong>管理连接</strong></summary>
+  return <details className="connection-manager" open={panelOpen} onToggle={event => setPanelOpen((event.target as HTMLDetailsElement).open)}>
+    <summary><strong>管理连接</strong>{items.length === 0 && <small> · 还没有连接，展开后新建并保存</small>}</summary>
+    {items.length === 0 && <p className="muted">第一次使用：点“新建”，填好后先“测试连接”，成功后直接“保存连接”即可。</p>}
     <div className="button-row"><Button variant="secondary" onClick={() => edit()}>新建</Button>{current && <Button variant="secondary" onClick={() => edit(current)}>编辑所选</Button>}<Button variant="secondary" disabled={!current?.enabled || select.isPending} onClick={() => select.mutate()}>设为当前</Button>{current && !current.builtIn && <Button variant="danger" onClick={() => setDeleteOpen(true)}>删除</Button>}</div>
     <div className="settings-grid"><FormField label="连接 ID" hint="小写字母、数字、点、横线或下划线">{ids => <input {...ids} disabled={current?.builtIn} value={draft.id} onChange={event => setDraft({ ...draft, id: event.target.value })} />}</FormField><FormField label="显示名称">{ids => <input {...ids} value={draft.displayName} onChange={event => setDraft({ ...draft, displayName: event.target.value })} />}</FormField><FormField label="数据库类型">{ids => <select {...ids} value={draft.dialect} onChange={event => setDraft({ ...draft, dialect: event.target.value, port: "" })}>{dialects.map(item => <option key={item}>{item}</option>)}</select>}</FormField>
       {fileBased ? <FormField label="数据库文件">{ids => <input {...ids} value={draft.databasePath} onChange={event => setDraft({ ...draft, databasePath: event.target.value })} />}</FormField> : generic ? <><FormField label="JDBC URL">{ids => <input {...ids} value={draft.jdbcUrl} onChange={event => setDraft({ ...draft, jdbcUrl: event.target.value })} />}</FormField><FormField label="驱动类">{ids => <input {...ids} value={draft.driverClass} onChange={event => setDraft({ ...draft, driverClass: event.target.value })} />}</FormField><FormField label="驱动 JAR">{ids => <input {...ids} value={draft.driverJar} onChange={event => setDraft({ ...draft, driverJar: event.target.value })} />}</FormField></> : <><FormField label="主机">{ids => <input {...ids} value={draft.host} onChange={event => setDraft({ ...draft, host: event.target.value })} />}</FormField><FormField label="端口">{ids => <input {...ids} type="number" value={draft.port} onChange={event => setDraft({ ...draft, port: event.target.value })} />}</FormField><FormField label="数据库">{ids => <input {...ids} value={draft.databaseName} onChange={event => setDraft({ ...draft, databaseName: event.target.value })} />}</FormField></>}
       {!fileBased && <><FormField label="用户名">{ids => <input {...ids} autoComplete="username" value={draft.username} onChange={event => setDraft({ ...draft, username: event.target.value })} />}</FormField><FormField label="本次测试密码" hint="只保存在当前 Java 进程内存中">{ids => <input {...ids} type="password" autoComplete="new-password" value={draft.password} onChange={event => setDraft({ ...draft, password: event.target.value })} />}</FormField></>}
       <label className="setting-toggle"><input type="checkbox" checked={draft.readOnly} onChange={event => setDraft({ ...draft, readOnly: event.target.checked })} /><span><strong>只读连接</strong></span></label><label className="setting-toggle"><input type="checkbox" checked={draft.enabled} onChange={event => setDraft({ ...draft, enabled: event.target.checked })} /><span><strong>启用连接</strong></span></label></div>
-    <div className="button-row"><Button variant="secondary" disabled={!draft.id || !draft.displayName || test.isPending} onClick={() => test.mutate()}>测试连接</Button><Button disabled={!draft.id || !draft.displayName || save.isPending} onClick={() => save.mutate()}>保存连接</Button></div>
-    {result && <Feedback tone={result.successful ? "success" : "warning"} title={result.successful ? "连接成功" : "连接失败"}>{result.message}{result.databaseProduct ? ` · ${result.databaseProduct} ${result.databaseVersion}` : ""}</Feedback>}
+    <div className="button-row"><Button variant="secondary" busy={test.isPending} disabled={!draft.id || !draft.displayName || test.isPending} onClick={() => test.mutate()}>测试连接</Button><Button busy={save.isPending} disabled={!draft.id || !draft.displayName || save.isPending} onClick={() => save.mutate()}>保存连接</Button></div>
+    {result && <Feedback tone={result.successful ? "success" : "warning"} title={result.successful ? "连接成功" : "连接失败"}>{result.message}{result.databaseProduct ? ` · ${result.databaseProduct} ${result.databaseVersion}` : ""}{result.successful && !fileBased ? "。本次密码已暂存，直接点“保存连接”即可。" : ""}</Feedback>}
     {(save.isError || test.isError || select.isError || remove.isError) && <Feedback tone="error" title="连接操作失败">{(save.error ?? test.error ?? select.error ?? remove.error)?.message}</Feedback>}
     <Dialog open={deleteOpen} title="删除数据库连接" onClose={() => setDeleteOpen(false)}><p>确认删除“{current?.displayName}”？密码缓存会同时清除。</p><div className="button-row"><Button variant="secondary" onClick={() => setDeleteOpen(false)}>取消</Button><Button variant="danger" onClick={() => remove.mutate()}>确认删除</Button></div></Dialog>
   </details>;

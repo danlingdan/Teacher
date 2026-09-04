@@ -1,9 +1,33 @@
 import type { ButtonHTMLAttributes, ReactNode } from "react";
-import { useEffect, useId, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useId, useRef, useState } from "react";
 import "./ui.css";
 
 export function Button({ variant = "primary", busy = false, children, disabled, ...props }: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: "primary" | "secondary" | "danger"; busy?: boolean }) {
   return <button className={`ui-button ${variant}`} disabled={disabled || busy} aria-busy={busy} {...props}>{busy ? "处理中…" : children}</button>;
+}
+
+type ToastTone = "success" | "error";
+type ToastItem = { id: number; tone: ToastTone; message: string };
+const ToastContext = createContext<(tone: ToastTone, message: string) => void>(() => {});
+
+/** Pushes a transient toast: `const toast = useToast(); toast("success", "已发布");` */
+export function useToast() {
+  return useContext(ToastContext);
+}
+
+export function Toaster({ children }: { children: ReactNode }) {
+  const [items, setItems] = useState<ToastItem[]>([]);
+  const push = useCallback((tone: ToastTone, message: string) => {
+    const id = Date.now() + Math.random();
+    setItems(current => [...current.slice(-3), { id, tone, message }]);
+    window.setTimeout(() => setItems(current => current.filter(item => item.id !== id)), 4200);
+  }, []);
+  return <ToastContext.Provider value={push}>
+    {children}
+    <div className="ui-toaster" role="status" aria-live="polite">
+      {items.map(item => <div key={item.id} className={`ui-toast ${item.tone}`}>{item.message}</div>)}
+    </div>
+  </ToastContext.Provider>;
 }
 
 export function FormField({ label, hint, error, children }: { label: string; hint?: string; error?: string; children: (ids: { id: string; "aria-describedby"?: string }) => ReactNode }) {

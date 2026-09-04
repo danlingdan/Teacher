@@ -135,12 +135,17 @@ export default function KnowledgePage() {
     },
   });
   const ask = useMutation({
-    mutationFn: () =>
-      localAppRequest<AiKnowledgeAnswer>("ai.knowledge.ask", {
-        question,
-        courseTitle,
-        sectionTitle,
-      }),
+    mutationFn: () => {
+      // Java 端只消费 question 文本；把当前打开资料的上下文拼进去，
+      // 检索才会优先命中学生正在阅读的这篇内容。
+      const context = article.data?.article;
+      const groundedQuestion = context
+        ? `（课程：${context.courseTitle} / 章节：${context.sectionTitle} / 资料标题：${context.title}）\n${question}`
+        : question;
+      return localAppRequest<AiKnowledgeAnswer>("ai.knowledge.ask", {
+        question: groundedQuestion,
+      });
+    },
     onSuccess: setAnswer,
   });
   const currentMarkdown = article.data?.markdown;

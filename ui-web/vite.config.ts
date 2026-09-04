@@ -9,6 +9,7 @@ export default defineConfig(async () => ({
   plugins: [react()],
   test: {
     environment: "jsdom",
+    environmentOptions: { jsdom: { url: "http://localhost/" } },
     setupFiles: "./src/test/setup.ts",
   },
 

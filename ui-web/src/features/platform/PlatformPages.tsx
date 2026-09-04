@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { localAppRequest } from "../../shared/ipc";
@@ -29,6 +29,7 @@ import {
   Dialog,
   Feedback,
   FormField,
+  useToast,
 } from "../../shared/ui";
 
 const teachingKey = ["teaching", "workspace"] as const;
@@ -70,8 +71,11 @@ const emptyExercise = (): ExerciseDraftUi => ({
 
 export function TeachingPage() {
   const client = useQueryClient();
+  const toast = useToast();
   const [selectedId, setSelectedId] = useState("");
   const [draft, setDraft] = useState<ExerciseDraftUi>(emptyExercise);
+  const [editorOpen, setEditorOpen] = useState(false);
+  const editorRef = useRef<HTMLDetailsElement | null>(null);
   const [packageJson, setPackageJson] = useState("");
   const [analytics, setAnalytics] = useState<LearningAnalytics>();
   const [interventions, setInterventions] = useState<InterventionCandidate[]>(
@@ -96,6 +100,18 @@ export function TeachingPage() {
   useEffect(() => {
     if (detail.data) setDraft(definitionToDraft(detail.data));
   }, [detail.data]);
+  // 选中题目或点“新建题目”时展开编辑器并滚动到位。
+  useEffect(() => {
+    if (selectedId) setEditorOpen(true);
+  }, [selectedId]);
+  const openEditorForNew = (datasetId?: string) => {
+    setSelectedId("");
+    setDraft({ ...emptyExercise(), datasetId: datasetId ?? "" });
+    setEditorOpen(true);
+    requestAnimationFrame(() =>
+      editorRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }),
+    );
+  };
   const toggle = useMutation({
     mutationFn: (item: { id: string; enabled: boolean; version: number }) =>
       localAppRequest("teaching.exercise.toggle", {
@@ -103,7 +119,11 @@ export function TeachingPage() {
         enabled: !item.enabled,
         expectedVersion: item.version,
       }),
-    onSuccess: () => void client.invalidateQueries({ queryKey: teachingKey }),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: teachingKey });
+      toast("success", "题目状态已更新");
+    },
+    onError: (error: Error) => toast("error", `状态更新失败：${error.message}`),
   });
   const saveExercise = useMutation({
     mutationFn: () =>
@@ -117,7 +137,9 @@ export function TeachingPage() {
     onSuccess: (value) => {
       setSelectedId(value.id);
       void client.invalidateQueries({ queryKey: teachingKey });
+      toast("success", `题目「${value.title || value.id}」已保存`);
     },
+    onError: (error: Error) => toast("error", `题目保存失败：${error.message}`),
   });
   const copyExercise = useMutation({
     mutationFn: () =>
@@ -128,7 +150,9 @@ export function TeachingPage() {
     onSuccess: (value) => {
       setSelectedId(value.id);
       void client.invalidateQueries({ queryKey: teachingKey });
+      toast("success", "已创建副本");
     },
+    onError: (error: Error) => toast("error", `复制失败：${error.message}`),
   });
   const exportExercises = useMutation({
     mutationFn: () =>
@@ -137,7 +161,11 @@ export function TeachingPage() {
           ? [selectedId]
           : (query.data?.exercises.map((item) => item.id) ?? []),
       }),
-    onSuccess: (value) => setPackageJson(value.packageJson),
+    onSuccess: (value) => {
+      setPackageJson(value.packageJson);
+      toast("success", "导出完成，JSON 已填入下方文本框");
+    },
+    onError: (error: Error) => toast("error", `导出失败：${error.message}`),
   });
   const importExercises = useMutation({
     mutationFn: () =>
@@ -145,7 +173,9 @@ export function TeachingPage() {
     onSuccess: () => {
       setPackageJson("");
       void client.invalidateQueries({ queryKey: teachingKey });
+      toast("success", "导入成功，题库已更新");
     },
+    onError: (error: Error) => toast("error", `导入失败：${error.message}`),
   });
   const loadAnalytics = useMutation({
     mutationFn: () => localAppRequest<LearningAnalytics>("teaching.analytics"),
@@ -165,6 +195,11 @@ export function TeachingPage() {
     }) => localAppRequest("teaching.intervention.update", value),
     onSuccess: () => loadInterventions.mutate(),
   });
+  // 挂载即加载干预队列，让折叠区外的“待处理 N”徽章有数据。
+  useEffect(() => {
+    loadInterventions.mutate();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   if (query.isPending) return <Loading label="正在读取本地题库与学情" />;
   if (query.isError)
     return (
@@ -239,15 +274,7 @@ export function TeachingPage() {
             }}
             placeholder="搜索题目或知识点"
           />
-          <Button
-            onClick={() => {
-              setSelectedId("");
-              setDraft({
-                ...emptyExercise(),
-                datasetId: data.datasets[0]?.id ?? "",
-              });
-            }}
-          >
+          <Button onClick={() => openEditorForNew(data.datasets[0]?.id)}>
             新建题目
           </Button>
         </div>
@@ -316,8 +343,12 @@ export function TeachingPage() {
         )}
       </section>
       <details
+        ref={editorRef}
         className="content-card teaching-editor"
-        open={Boolean(selectedId || draft.title || draft.datasetId)}
+        open={editorOpen}
+        onToggle={(event) =>
+          setEditorOpen((event.target as HTMLDetailsElement).open)
+        }
       >
         <summary>
           <strong>
@@ -329,13 +360,7 @@ export function TeachingPage() {
         <div className="button-row">
           <Button
             variant="secondary"
-            onClick={() => {
-              setSelectedId("");
-              setDraft({
-                ...emptyExercise(),
-                datasetId: data.datasets[0]?.id ?? "",
-              });
-            }}
+            onClick={() => openEditorForNew(data.datasets[0]?.id)}
           >
             新建题目
           </Button>
@@ -608,7 +633,12 @@ export function TeachingPage() {
         }}
       >
         <summary>
-          <strong>教师干预队列</strong>
+          <strong>
+            教师干预队列
+            {interventions.length > 0 && (
+              <span className="policy-chip">待处理 {interventions.length}</span>
+            )}
+          </strong>
         </summary>
         {interventions.length === 0 ? (
           <p className="muted">当前没有需要处理的学生干预。</p>
@@ -680,11 +710,16 @@ function definitionToDraft(value: ExerciseDefinition): ExerciseDraftUi {
 export function CloudPage() {
   const client = useQueryClient();
   const navigate = useNavigate();
+  const toast = useToast();
   const [className, setClassName] = useState("");
   const [classroomId, setClassroomId] = useState("");
   const [memberEmail, setMemberEmail] = useState("");
   const [memberRole, setMemberRole] = useState("STUDENT");
   const [assignments, setAssignments] = useState<CloudAssignment[]>([]);
+  const [pendingTransition, setPendingTransition] = useState<{
+    item: CloudAssignment;
+    next: CloudAssignment["status"];
+  }>();
   const [assignmentTitle, setAssignmentTitle] = useState("");
   const [assignmentExerciseId, setAssignmentExerciseId] = useState("");
   const [assignmentDescription, setAssignmentDescription] = useState("");
@@ -697,6 +732,7 @@ export function CloudPage() {
   const [analyticsResult, setAnalyticsResult] =
     useState<Record<string, unknown>>();
   const [feedbackItems, setFeedbackItems] = useState<SubmissionFeedback[]>([]);
+  const [feedbackDirtyIds, setFeedbackDirtyIds] = useState<string[]>([]);
   const [feedbackAssignmentId, setFeedbackAssignmentId] = useState("");
   const [masteryItems, setMasteryItems] = useState<KnowledgeMastery[]>([]);
   const [portfolioItems, setPortfolioItems] = useState<PortfolioEntry[]>([]);
@@ -745,12 +781,14 @@ export function CloudPage() {
       localAppRequest("cloud.class.create", { name: className }),
     onSuccess: async () => {
       setClassName("");
+      toast("success", `班级「${className}」已创建`);
       const refreshed = await localAppRequest<CloudWorkspace>(
         "cloud.workspace",
         { refreshRemote: true },
       );
       client.setQueryData(cloudKey, refreshed);
     },
+    onError: (error: Error) => toast("error", `班级创建失败：${error.message}`),
   });
   const exercises = useQuery({
     queryKey: ["cloud", "exercise-catalog"],
@@ -774,14 +812,16 @@ export function CloudPage() {
       }),
     onSuccess: async () => {
       setMemberEmail("");
+      toast("success", "成员已添加");
       const refreshed = await localAppRequest<CloudWorkspace>(
         "cloud.workspace",
         { refreshRemote: true },
       );
       client.setQueryData(cloudKey, refreshed);
     },
+    onError: (error: Error) => toast("error", `添加成员失败：${error.message}`),
   });
-  const createAssignment = useMutation({
+  const createAssignment = useMutation<CloudAssignment, Error, boolean>({
     mutationFn: () =>
       localAppRequest<CloudAssignment>("cloud.assignment.create", {
         classroomId,
@@ -790,12 +830,19 @@ export function CloudPage() {
         description: assignmentDescription,
         dueAt: assignmentDueAt ? new Date(assignmentDueAt).toISOString() : "",
       }),
-    onSuccess: () => {
+    onSuccess: (created, publish) => {
       setAssignmentTitle("");
       setAssignmentDescription("");
       setAssignmentDueAt("");
       loadAssignments.mutate(classroomId);
+      if (publish) {
+        changeAssignmentStatus.mutate({ ...created, next: "PUBLISHED" });
+        toast("success", `任务「${created.title}」已创建并发布，学生端立即可见`);
+      } else {
+        toast("success", `任务「${created.title}」已保存为草稿`);
+      }
     },
+    onError: (error: Error) => toast("error", `任务创建失败：${error.message}`),
   });
   const changeAssignmentStatus = useMutation({
     mutationFn: (item: CloudAssignment & { next: CloudAssignment["status"] }) =>
@@ -805,7 +852,14 @@ export function CloudPage() {
         status: item.next,
         expectedVersion: item.version,
       }),
-    onSuccess: () => loadAssignments.mutate(classroomId),
+    onSuccess: (_value, item) => {
+      loadAssignments.mutate(classroomId);
+      toast(
+        "success",
+        `任务「${item.title}」状态已更新为「${assignmentStatusLabel(item.next)}」`,
+      );
+    },
+    onError: (error: Error) => toast("error", `状态变更失败：${error.message}`),
   });
   const copyAssignment = useMutation({
     mutationFn: (item: CloudAssignment) =>
@@ -814,7 +868,11 @@ export function CloudPage() {
         assignmentId: item.id,
         title: `${item.title} - 副本`,
       }),
-    onSuccess: () => loadAssignments.mutate(classroomId),
+    onSuccess: () => {
+      loadAssignments.mutate(classroomId);
+      toast("success", "已复制任务草稿");
+    },
+    onError: (error: Error) => toast("error", `复制失败：${error.message}`),
   });
   const classAnalytics = useMutation({
     mutationFn: () =>
@@ -860,12 +918,18 @@ export function CloudPage() {
         knowledgePointIds: item.knowledgePointIds,
         expectedVersion: item.version,
       }),
-    onSuccess: (saved) =>
+    onSuccess: (saved) => {
       setFeedbackItems((items) =>
         items.map((item) =>
           item.submissionId === saved.submissionId ? saved : item,
         ),
-      ),
+      );
+      setFeedbackDirtyIds((ids) =>
+        ids.filter((id) => id !== saved.submissionId),
+      );
+      toast("success", "反馈已保存，学生端可见");
+    },
+    onError: (error: Error) => toast("error", `反馈保存失败：${error.message}`),
   });
   const loadMastery = useMutation({
     mutationFn: () =>
@@ -1054,10 +1118,12 @@ export function CloudPage() {
       setCurrentPassword("");
       setNewPassword("");
       setAccountMessage("密码已修改，其他会话将按服务器策略处理。");
+      toast("success", "密码已修改");
     },
-    onSettled: () => {
-      setCurrentPassword("");
-      setNewPassword("");
+    onError: (error: Error) => {
+      // 失败时保留输入，用户可直接修改后重试。
+      setAccountMessage(`密码修改失败：${error.message}`);
+      toast("error", `密码修改失败：${error.message}`);
     },
   });
   const requestExport = useMutation({
@@ -1312,13 +1378,26 @@ export function CloudPage() {
                   )}
                 </FormField>
               </div>
-              <Button
-                disabled={!assignmentTitle || !assignmentExerciseId}
-                busy={createAssignment.isPending}
-                onClick={() => createAssignment.mutate()}
-              >
-                保存任务草稿
-              </Button>
+              <div className="button-row">
+                <Button
+                  disabled={!assignmentTitle || !assignmentExerciseId}
+                  busy={createAssignment.isPending}
+                  onClick={() => createAssignment.mutate(true)}
+                >
+                  创建并发布
+                </Button>
+                <Button
+                  variant="secondary"
+                  disabled={
+                    !assignmentTitle ||
+                    !assignmentExerciseId ||
+                    createAssignment.isPending
+                  }
+                  onClick={() => createAssignment.mutate(false)}
+                >
+                  存为草稿
+                </Button>
+              </div>
             </details>
           )}
           {(data.role === "TEACHER" || data.role === "ADMINISTRATOR") && (
@@ -1430,20 +1509,20 @@ export function CloudPage() {
                       复制
                     </Button>
                     <select
-                      aria-label={`${item.title} 状态`}
-                      value={item.status}
-                      onChange={(event) =>
-                        changeAssignmentStatus.mutate({
-                          ...item,
-                          next: event.target.value as CloudAssignment["status"],
-                        })
-                      }
+                      aria-label={`${item.title} 状态变更`}
+                      value=""
+                      onChange={(event) => {
+                        const next = event.target
+                          .value as CloudAssignment["status"];
+                        if (next) setPendingTransition({ item, next });
+                      }}
                     >
-                      <option value="DRAFT">草稿</option>
-                      <option value="PUBLISHED">已发布</option>
-                      <option value="CLOSED">已关闭</option>
-                      <option value="WITHDRAWN">已撤回</option>
-                      <option value="ARCHIVED">已归档</option>
+                      <option value="">更改状态…</option>
+                      <option value="DRAFT">转为草稿</option>
+                      <option value="PUBLISHED">发布</option>
+                      <option value="CLOSED">关闭（学生停止提交）</option>
+                      <option value="WITHDRAWN">撤回</option>
+                      <option value="ARCHIVED">归档</option>
                     </select>
                   </>
                 )}
@@ -1458,6 +1537,42 @@ export function CloudPage() {
               </li>
             ))}
           </ul>
+          <Dialog
+            open={Boolean(pendingTransition)}
+            title="确认变更任务状态"
+            onClose={() => setPendingTransition(undefined)}
+          >
+            <p>
+              将任务「{pendingTransition?.item.title}」从「
+              {assignmentStatusLabel(
+                pendingTransition?.item.status ?? "DRAFT",
+              )}
+              」变更为「
+              {assignmentStatusLabel(pendingTransition?.next ?? "DRAFT")}」？
+              发布后学生立即可见并提交；关闭或撤回后学生无法继续提交。
+            </p>
+            <div className="button-row">
+              <Button
+                variant="secondary"
+                onClick={() => setPendingTransition(undefined)}
+              >
+                取消
+              </Button>
+              <Button
+                busy={changeAssignmentStatus.isPending}
+                onClick={() => {
+                  if (pendingTransition)
+                    changeAssignmentStatus.mutate({
+                      ...pendingTransition.item,
+                      next: pendingTransition.next,
+                    });
+                  setPendingTransition(undefined);
+                }}
+              >
+                确认变更
+              </Button>
+            </div>
+          </Dialog>
           {analyticsResult && (
             <pre className="help-content">
               {JSON.stringify(analyticsResult, null, 2)}
@@ -1522,7 +1637,7 @@ export function CloudPage() {
                           <textarea
                             aria-label="反馈内容"
                             value={item.comment}
-                            onChange={(event) =>
+                            onChange={(event) => {
                               setFeedbackItems((items) =>
                                 items.map((candidate) =>
                                   candidate.submissionId === item.submissionId
@@ -1532,14 +1647,21 @@ export function CloudPage() {
                                       }
                                     : candidate,
                                 ),
-                              )
-                            }
+                              );
+                              setFeedbackDirtyIds((ids) =>
+                                ids.includes(item.submissionId)
+                                  ? ids
+                                  : [...ids, item.submissionId],
+                              );
+                            }}
                           />
                           <Button
                             busy={saveFeedback.isPending}
                             onClick={() => saveFeedback.mutate(item)}
                           >
-                            保存反馈
+                            {feedbackDirtyIds.includes(item.submissionId)
+                              ? "保存反馈 ·"
+                              : "保存反馈"}
                           </Button>
                         </>
                       ) : (
@@ -2035,12 +2157,42 @@ export function SettingsPage() {
   const [helpContent, setHelpContent] = useState("");
   const [updateResult, setUpdateResult] = useState<UpdateCheck>();
   useEffect(() => {
-    if (query.data)
-      setDraft({
+    if (!query.data) return;
+    // 上次离开时有未保存的更改会暂存在 sessionStorage，优先恢复，避免静默丢失。
+    let stored: SettingsDraft | null = null;
+    try {
+      stored = JSON.parse(
+        sessionStorage.getItem("sqlteacher.settings.draft") ?? "null",
+      );
+    } catch {
+      stored = null;
+    }
+    setDraft(
+      stored ?? {
         ...query.data.general,
         developerMode: query.data.developerMode,
-      });
+      },
+    );
   }, [query.data]);
+  const savedPreferencesEarly: SettingsDraft | undefined = query.data
+    ? { ...query.data.general, developerMode: query.data.developerMode }
+    : undefined;
+  const dirtyEarly =
+    Boolean(savedPreferencesEarly) &&
+    JSON.stringify(savedPreferencesEarly) !== JSON.stringify(draft);
+  // dirty 时暂存草稿；保存或放弃后清除。必须位于任何条件返回之前（Hooks 规则）。
+  useEffect(() => {
+    try {
+      if (dirtyEarly && draft)
+        sessionStorage.setItem(
+          "sqlteacher.settings.draft",
+          JSON.stringify(draft),
+        );
+      else sessionStorage.removeItem("sqlteacher.settings.draft");
+    } catch {
+      // ignore
+    }
+  }, [dirtyEarly, draft]);
   const save = useMutation({
     mutationFn: (value: SettingsDraft) =>
       localAppRequest("settings.update", value),
@@ -2106,6 +2258,20 @@ export function SettingsPage() {
   const data = query.data;
   const toggle = (key: keyof SettingsDraft) =>
     setDraft((value) => (value ? { ...value, [key]: !value[key] } : value));
+  const savedPreferences: SettingsDraft | undefined = query.data
+    ? { ...query.data.general, developerMode: query.data.developerMode }
+    : undefined;
+  const dirty =
+    Boolean(savedPreferences) &&
+    JSON.stringify(savedPreferences) !== JSON.stringify(draft);
+  const discardChanges = () => {
+    if (savedPreferences) setDraft(savedPreferences);
+    try {
+      sessionStorage.removeItem("sqlteacher.settings.draft");
+    } catch {
+      // ignore
+    }
+  };
   return (
     <div className="platform-workspace settings-workspace">
       <section className="settings-intro">
@@ -2114,9 +2280,19 @@ export function SettingsPage() {
           <h2>按你的方式使用 SQLTeacher</h2>
           <p>常用偏好即时读取；耗时的环境与磁盘检测仅在你主动展开时运行。</p>
         </div>
-        <Button busy={save.isPending} onClick={() => save.mutate(draft)}>
-          保存更改
-        </Button>
+        <div className="button-row">
+          {dirty && (
+            <>
+              <span className="policy-chip">有未保存的更改</span>
+              <Button variant="secondary" onClick={discardChanges}>
+                放弃更改
+              </Button>
+            </>
+          )}
+          <Button busy={save.isPending} onClick={() => save.mutate(draft)}>
+            保存更改
+          </Button>
+        </div>
       </section>
       {save.isSuccess && (
         <Feedback tone="success" title="设置已保存">
