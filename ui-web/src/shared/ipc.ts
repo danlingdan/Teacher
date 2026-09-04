@@ -43,7 +43,31 @@ export type LocalAppMethod =
   | "cloud.class.analytics.export"
   | "cloud.assignment.analytics"
   | "cloud.assignment.analytics.export"
+  | "cloud.assignment.snapshot"
+  | "cloud.assignment.submit"
+  | "cloud.feedback.list"
+  | "cloud.feedback.save"
+  | "cloud.feedback.draft"
+  | "cloud.mastery"
+  | "cloud.notifications"
+  | "cloud.notification.read"
+  | "learning.portfolio"
+  | "learning.portfolio.export"
+  | "cloud.courses"
+  | "cloud.course.create"
+  | "cloud.course.content"
+  | "cloud.course.section.create"
+  | "cloud.course.knowledge.create"
+  | "cloud.course.exercise.publish"
+  | "cloud.assignment.create-versioned"
+  | "cloud.course.export"
+  | "cloud.course.import"
+  | "cloud.course.package.preview"
+  | "cloud.course.package.import"
   | "settings.workspace"
+  | "settings.preferences"
+  | "settings.environment"
+  | "settings.storage"
   | "settings.update"
   | "settings.component.install"
   | "settings.component.cancel"
@@ -132,7 +156,11 @@ export class LocalAppError extends Error {
         value.retryable ?? true,
       );
     }
-    return new LocalAppError("LOCAL_BRIDGE_FAILED", "无法连接本地 Java 核心。", true);
+    return new LocalAppError(
+      "LOCAL_BRIDGE_FAILED",
+      "无法连接本地 Java 核心。",
+      true,
+    );
   }
 }
 
@@ -149,7 +177,11 @@ export async function localAppRequestWithId<T>(
   requestId: string,
 ): Promise<T> {
   if (!("__TAURI_INTERNALS__" in window)) {
-    throw new LocalAppError("DESKTOP_HOST_REQUIRED", "浏览器预览不提供模拟数据，请从 Tauri 桌面壳启动。", false);
+    throw new LocalAppError(
+      "DESKTOP_HOST_REQUIRED",
+      "浏览器预览不提供模拟数据，请从 Tauri 桌面壳启动。",
+      false,
+    );
   }
   const started = performance.now();
   try {
@@ -163,15 +195,24 @@ export async function localAppRequestWithId<T>(
     });
   } catch (cause) {
     const error = LocalAppError.from(cause);
-    log("error", "ipc.request.failed", { method, code: error.code, retryable: error.retryable });
+    log("error", "ipc.request.failed", {
+      method,
+      code: error.code,
+      retryable: error.retryable,
+    });
     throw error;
   } finally {
     measure(`ipc:${method}`, started, { method });
   }
 }
 
-export async function cancelLocalAppRequest(targetRequestId: string): Promise<boolean> {
-  const result = await localAppRequest<{ cancelled: boolean }>("system.cancel", { targetRequestId });
+export async function cancelLocalAppRequest(
+  targetRequestId: string,
+): Promise<boolean> {
+  const result = await localAppRequest<{ cancelled: boolean }>(
+    "system.cancel",
+    { targetRequestId },
+  );
   return result.cancelled;
 }
 
@@ -179,6 +220,10 @@ export async function subscribeLocalAppEvents(
   handler: (event: LocalAppEvent) => void,
 ): Promise<UnlistenFn> {
   return listen<LocalAppEvent>("local-app-event", ({ payload }) => {
-    if (payload.contractVersion === CONTRACT_VERSION && payload.type === "event") handler(payload);
+    if (
+      payload.contractVersion === CONTRACT_VERSION &&
+      payload.type === "event"
+    )
+      handler(payload);
   });
 }

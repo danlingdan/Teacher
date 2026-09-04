@@ -94,7 +94,31 @@ const ALLOWED_METHODS: &[&str] = &[
     "cloud.class.analytics.export",
     "cloud.assignment.analytics",
     "cloud.assignment.analytics.export",
+    "cloud.assignment.snapshot",
+    "cloud.assignment.submit",
+    "cloud.feedback.list",
+    "cloud.feedback.save",
+    "cloud.feedback.draft",
+    "cloud.mastery",
+    "cloud.notifications",
+    "cloud.notification.read",
+    "cloud.courses",
+    "cloud.course.create",
+    "cloud.course.content",
+    "cloud.course.section.create",
+    "cloud.course.knowledge.create",
+    "cloud.course.exercise.publish",
+    "cloud.assignment.create-versioned",
+    "cloud.course.export",
+    "cloud.course.import",
+    "cloud.course.package.preview",
+    "cloud.course.package.import",
+    "learning.portfolio",
+    "learning.portfolio.export",
     "settings.workspace",
+    "settings.preferences",
+    "settings.environment",
+    "settings.storage",
     "settings.update",
     "settings.component.install",
     "settings.component.cancel",
@@ -527,7 +551,9 @@ mod tests {
         assert!(ALLOWED_METHODS.contains(&"ai.knowledge.ask"));
         assert!(ALLOWED_METHODS.contains(&"teaching.workspace"));
         assert!(ALLOWED_METHODS.contains(&"settings.workspace"));
-        assert!(ALLOWED_METHODS.contains(&"settings.workspace"));
+        assert!(ALLOWED_METHODS.contains(&"settings.preferences"));
+        assert!(ALLOWED_METHODS.contains(&"settings.environment"));
+        assert!(ALLOWED_METHODS.contains(&"settings.storage"));
     }
 
     #[test]

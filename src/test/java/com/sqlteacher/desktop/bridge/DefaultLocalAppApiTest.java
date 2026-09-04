@@ -152,10 +152,32 @@ class DefaultLocalAppApiTest {
             var cloud = api.invoke("cloud.workspace", mapper.createObjectNode(), () -> false, ignored -> { });
             assertFalse(cloud.path("signedIn").asBoolean());
             assertEquals("SIGNED_OUT", cloud.path("state").asText());
+            assertThrows(SecurityException.class,
+                () -> api.invoke("cloud.notifications", mapper.createObjectNode(), () -> false, ignored -> { }));
+            assertThrows(SecurityException.class,
+                () -> api.invoke("cloud.assignment.submit", mapper.createObjectNode()
+                    .put("classroomId", "class-1").put("assignmentId", "assignment-1")
+                    .put("passed", true).put("answer", "SELECT private_data"),
+                    () -> false, ignored -> { }));
+
+            var portfolio = api.invoke("learning.portfolio", mapper.createObjectNode(),
+                () -> false, ignored -> { });
+            assertTrue(portfolio.path("items").isArray());
+            assertThrows(SecurityException.class,
+                () -> api.invoke("learning.portfolio.export", mapper.createObjectNode(),
+                    () -> false, ignored -> { }));
 
             var settings = api.invoke("settings.workspace", mapper.createObjectNode(), () -> false, ignored -> { });
             assertFalse(settings.path("secretsExposed").asBoolean());
             assertTrue(settings.path("runnerCapabilities").isArray());
+            var preferences = api.invoke("settings.preferences", mapper.createObjectNode(), () -> false, ignored -> { });
+            assertTrue(preferences.path("general").isObject());
+            assertFalse(preferences.has("connectivity"));
+            assertFalse(preferences.has("runnerCapabilities"));
+            assertFalse(preferences.has("components"));
+            assertFalse(preferences.has("storage"));
+            var storage = api.invoke("settings.storage", mapper.createObjectNode(), () -> false, ignored -> { });
+            assertTrue(storage.path("storage").path("categoryBytes").isObject());
             var update = mapper.createObjectNode().put("developerMode", true).put("language", "zh")
                 .put("reducedMotion", true).put("supportLogging", true)
                 .put("theme", "dark").put("font", "classic").put("density", "compact");
