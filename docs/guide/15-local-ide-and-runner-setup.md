@@ -23,8 +23,9 @@ SQL 与 AI 仍遵守项目现有安全规范。本指南不放宽 SQL 确认、�
 
 ## 自动下载安装
 
-打开“设置 → 开发环境”后，SQLTeacher 会在后台探测兼容 JDK、Python、Ollama、
-MSVC/GCC/Clang 工具链和 WSL Ubuntu。检测与实际代码 Runner 共用同一套发现逻辑，不要求工具必须由 SQLTeacher 安装，也不限定单一厂商或固定年份。缺少组件时可点击“自动安装”：
+打开“设置 → 本机环境与组件”不会立即扫描电脑；点击“开始检测”后，SQLTeacher 才会检查兼容 JDK、
+Python、Ollama、MSVC/GCC/Clang 工具链和 WSL Ubuntu。检测与实际代码 Runner 共用同一套发现逻辑，
+不要求工具必须由 SQLTeacher 安装，也不限定单一厂商或固定年份。缺少组件时可点击“安装或修复”：
 
 1. 页面先展示固定的软件来源、许可证、管理员权限和重启影响；
 2. 用户确认后，JDK、Python、Ollama 与 Visual Studio 2026 Build Tools 通过 Windows Package Manager 的固定包 ID 安装；

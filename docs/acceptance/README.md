@@ -4,6 +4,7 @@
 
 ## 正式版本门禁
 
+- [v3.0.0 2026-08-24 本地安装包复验](2026-08-24-v3.0.0-local-release-candidate.md)（当前工作树候选，未签名、未发布）
 - [v3.0.0](2026-08-12-v3.0.0-stage-gate.md)（正式版本地候选，未发布）
 - [v3.0.0-beta.2](2026-08-12-v3-beta2-stage-gate.md)（Tauri-only 本地候选，未发布）
 - [v3.0.0-alpha.3 至 alpha.5](2026-08-11-v3-alpha3-alpha5-stage-gate.md)（本地开发批次，未发布）
@@ -38,6 +39,7 @@ v1.10 和 v1.11 的验证结果目前记录在 [Stage 7](../history/stages/stage
 
 ## Demo 与专项验收
 
+- [3.0 对照 2.3 及更早版本能力审计](2026-08-13-v3-v23-capability-parity-audit.md)
 - [Demo 基线验收与冻结记录](2026-07-21-demo-baseline-acceptance.md)
 - [v1.0 十分钟演示脚本](v1.0-demo-script.md)
 - [第一轮联调检查清单](2026-07-15-first-integration-checklist.md)
