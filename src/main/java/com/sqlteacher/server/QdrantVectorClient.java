@@ -27,7 +27,8 @@ public final class QdrantVectorClient implements CloudKnowledgeVectorClient {
         this.baseUri = baseUri;
         this.collection = require(collection, "collection");
         this.apiKey = apiKey == null ? "" : apiKey.trim();
-        this.client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
+        this.client = HttpClient.newBuilder().version(HttpClient.Version.HTTP_1_1)
+            .connectTimeout(Duration.ofSeconds(5)).build();
     }
 
     public boolean enabled() { return baseUri != null; }

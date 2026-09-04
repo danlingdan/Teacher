@@ -29,7 +29,8 @@ final class OllamaCloudKnowledgeEmbeddingClient implements CloudKnowledgeEmbeddi
 
     OllamaCloudKnowledgeEmbeddingClient(URI baseUri, String model, int expectedDimension, String provider) {
         this(baseUri, model, expectedDimension, provider,
-            HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build(), new ObjectMapper());
+            HttpClient.newBuilder().version(HttpClient.Version.HTTP_1_1)
+                .connectTimeout(Duration.ofSeconds(5)).build(), new ObjectMapper());
     }
 
     OllamaCloudKnowledgeEmbeddingClient(URI baseUri, String model, int expectedDimension, String provider,

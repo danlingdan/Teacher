@@ -59,6 +59,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -66,8 +67,12 @@ import java.util.Objects;
 
 /** HTTPS cloud client. HTTP is accepted only for loopback integration tests. */
 public final class HttpCloudApiClient implements CloudApiClient {
+    private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(30);
+
     private final URI baseUri;
-    private final HttpClient client = HttpClient.newHttpClient();
+    // HTTP/1.1 pins the protocol: the JDK h2c upgrade path can deadlock POST bodies
+    // against fast loopback responders, and every production call is HTTPS.
+    private final HttpClient client = HttpClient.newBuilder().version(HttpClient.Version.HTTP_1_1).build();
     private final ObjectMapper json = new ObjectMapper().findAndRegisterModules()
         .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
 
@@ -653,6 +658,7 @@ public final class HttpCloudApiClient implements CloudApiClient {
     private String send(String path, String method, Object payload, String token) {
         try {
             HttpRequest.Builder builder = HttpRequest.newBuilder(baseUri.resolve("/api/v1/" + path))
+                .timeout(REQUEST_TIMEOUT)
                 .header("Accept", "application/json");
             if (token != null) builder.header("Authorization", "Bearer " + token);
             if (payload == null) builder.method(method, HttpRequest.BodyPublishers.noBody());

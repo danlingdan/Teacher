@@ -33,6 +33,7 @@ public final class OllamaModelSelectionService implements AiModelSelectionServic
         this.properties = Objects.requireNonNull(properties, "properties must not be null");
         this.preferenceFile = Objects.requireNonNull(preferenceFile, "preferenceFile must not be null");
         this.httpClient = HttpClient.newBuilder()
+            .version(HttpClient.Version.HTTP_1_1)
             .connectTimeout(properties.healthTimeout())
             .build();
         this.objectMapper = new ObjectMapper();

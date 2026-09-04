@@ -26,7 +26,7 @@ class V110CloudApiIntegrationTest {
 
     @Test void advertisesCapabilitiesAndAcceptsBoundedAnonymousReports() throws Exception {
         server = new SqlTeacherCloudServer(directory.resolve("cloud.db"), 0); server.start();
-        HttpClient client = HttpClient.newHttpClient(); URI base = URI.create("http://127.0.0.1:" + server.port());
+        HttpClient client = HttpClient.newBuilder().version(HttpClient.Version.HTTP_1_1).build(); URI base = URI.create("http://127.0.0.1:" + server.port());
         JsonNode capabilities = JSON.readTree(client.send(HttpRequest.newBuilder(base.resolve("/api/v1/app/capabilities")).GET().build(), HttpResponse.BodyHandlers.ofString()).body());
         assertEquals("2.0", capabilities.get("apiVersion").asText());
         assertTrue(capabilities.get("capabilities").toString().contains("SIGNED_UPDATES"));

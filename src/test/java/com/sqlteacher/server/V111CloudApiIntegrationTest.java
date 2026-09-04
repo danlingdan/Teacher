@@ -30,7 +30,7 @@ class V111CloudApiIntegrationTest {
 
     @AfterEach void stop() { if (server != null) server.stop(); }
 
-    private HttpClient client() { return HttpClient.newHttpClient(); }
+    private HttpClient client() { return HttpClient.newBuilder().version(HttpClient.Version.HTTP_1_1).build(); }
 
     @Test void accountLifecycleEndToEnd() throws Exception {
         server = new SqlTeacherCloudServer(directory.resolve("cloud.db"), 0); server.start();

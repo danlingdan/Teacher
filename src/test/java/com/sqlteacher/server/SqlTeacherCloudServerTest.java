@@ -660,6 +660,7 @@ class SqlTeacherCloudServerTest {
         if (body == null) request.method(method, HttpRequest.BodyPublishers.noBody());
         else request.header("Content-Type", "application/json")
             .method(method, HttpRequest.BodyPublishers.ofString(body));
-        return HttpClient.newHttpClient().send(request.build(), HttpResponse.BodyHandlers.ofString());
+        return HttpClient.newBuilder().version(HttpClient.Version.HTTP_1_1).build()
+            .send(request.build(), HttpResponse.BodyHandlers.ofString());
     }
 }
