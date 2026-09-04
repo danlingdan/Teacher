@@ -139,8 +139,10 @@ public final class DeterministicSqlExerciseEvaluationService implements SqlExerc
             ));
         }
         if (!rule.requiredSqlKeywords().isEmpty()) {
+            // 归一化（注释/字面量屏蔽 + 空白折叠）只做一次，避免按关键字数重复扫描整段 SQL。
+            String normalizedSql = normalizeSqlStructure(submittedSql);
             List<String> missing = rule.requiredSqlKeywords().stream()
-                .filter(keyword -> !containsSqlStructure(submittedSql, keyword))
+                .filter(keyword -> !containsSqlStructure(normalizedSql, keyword))
                 .toList();
             criteria.add(new EvaluationCriterionResult(
                 "structure",
@@ -226,11 +228,14 @@ public final class DeterministicSqlExerciseEvaluationService implements SqlExerc
         return value;
     }
 
-    private static boolean containsSqlStructure(String sql, String keyword) {
-        String normalized = maskCommentsAndLiterals(sql).toUpperCase(Locale.ROOT).replaceAll("\\s+", " ").trim();
+    private static String normalizeSqlStructure(String sql) {
+        return maskCommentsAndLiterals(sql).toUpperCase(Locale.ROOT).replaceAll("\\s+", " ").trim();
+    }
+
+    private static boolean containsSqlStructure(String normalizedSql, String keyword) {
         String phrase = keyword.toUpperCase(Locale.ROOT).trim().replaceAll("\\s+", " ");
         return Pattern.compile("(?<![A-Z0-9_])" + Pattern.quote(phrase) + "(?![A-Z0-9_])")
-            .matcher(normalized)
+            .matcher(normalizedSql)
             .find();
     }
 

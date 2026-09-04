@@ -52,7 +52,8 @@ public final class DefaultCloudLearningSyncService implements CloudLearningSyncS
         var session = sessions.refresh().or(() -> sessions.current())
             .orElseThrow(() -> new IllegalStateException("请先登录云端账号"));
         String userId = session.user().id();
-        List<CloudSyncItem> pending = collectPending(userId);
+        PendingBatch batch = collectPending(userId);
+        List<CloudSyncItem> pending = batch.items();
         currentStatus = new SyncStatus(SyncStatus.State.SYNCING, pending.size(), 1, lastSuccess(userId), null, null);
         persistStatus(userId, currentStatus);
 
@@ -60,6 +61,10 @@ public final class DefaultCloudLearningSyncService implements CloudLearningSyncS
         for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
             try {
                 SyncResult result = synchronizeOnce(session.accessToken(), userId, pending);
+                // 全部上传成功后才推进水位，之后这些事件不再被重复收集上传。
+                if (batch.maxEventId() > 0) {
+                    write("cloud-sync-uploaded-cursor-" + safeKey(userId) + "-" + deviceId(), Long.toString(batch.maxEventId()));
+                }
                 currentStatus = new SyncStatus(SyncStatus.State.SUCCEEDED, 0, attempt, Instant.now(), null, null);
                 persistStatus(userId, currentStatus);
                 return result;
@@ -111,27 +116,45 @@ public final class DefaultCloudLearningSyncService implements CloudLearningSyncS
         return new SyncResult(uploaded, downloaded, cursor);
     }
 
-    private List<CloudSyncItem> collectPending(String userId) {
-        String deviceId = readOrCreate("cloud-device-id.txt", UUID.randomUUID().toString());
+    /** 一次查询收集全部待上传事件；已上传水位之后的事件才会被再次上传。 */
+    private PendingBatch collectPending(String userId) {
+        String deviceId = deviceId();
+        long uploadedCursor = uploadedCursor(userId);
         List<CloudSyncItem> pending = new ArrayList<>();
-        for (LearningEventType type : LearningEventType.values()) {
-            for (var event : query.queryEventsByType(type, null, null)) {
-                if (event.attributes().containsKey(CLOUD_ID)) continue;
-                if (!userId.equals(event.attributes().get(LearningEventOwnerProvider.OWNER_ATTRIBUTE))) continue;
-                try {
-                    String payload = json.writeValueAsString(Map.of(
-                        "connectionId", event.connectionId(),
-                        "successful", event.successful(),
-                        "attributes", event.attributes()
-                    ));
-                    pending.add(new CloudSyncItem(deviceId + ":" + event.id(), type.name(), payload,
-                        event.occurredAt(), 0));
-                } catch (IOException error) {
-                    throw new IllegalStateException("无法编码待同步学习记录", error);
-                }
+        long maxEventId = 0;
+        for (var event : query.queryAllEvents()) {
+            if (event.id() <= uploadedCursor) continue;
+            if (event.attributes().containsKey(CLOUD_ID)) continue;
+            if (!userId.equals(event.attributes().get(LearningEventOwnerProvider.OWNER_ATTRIBUTE))) continue;
+            try {
+                String payload = json.writeValueAsString(Map.of(
+                    "connectionId", event.connectionId(),
+                    "successful", event.successful(),
+                    "attributes", event.attributes()
+                ));
+                pending.add(new CloudSyncItem(deviceId + ":" + event.id(), event.type().name(), payload,
+                    event.occurredAt(), 0));
+                maxEventId = Math.max(maxEventId, event.id());
+            } catch (IOException error) {
+                throw new IllegalStateException("无法编码待同步学习记录", error);
             }
         }
-        return List.copyOf(pending);
+        return new PendingBatch(List.copyOf(pending), maxEventId);
+    }
+
+    private record PendingBatch(List<CloudSyncItem> items, long maxEventId) { }
+
+    private String deviceId() {
+        return readOrCreate("cloud-device-id.txt", UUID.randomUUID().toString());
+    }
+
+    private long uploadedCursor(String userId) {
+        try {
+            return Long.parseLong(readOrCreate(
+                "cloud-sync-uploaded-cursor-" + safeKey(userId) + "-" + deviceId(), "0"));
+        } catch (NumberFormatException error) {
+            return 0;
+        }
     }
 
     private void importItem(CloudSyncItem item, String userId) {

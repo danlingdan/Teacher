@@ -98,7 +98,7 @@ public final class DefaultLocalAppApi implements LocalAppApi {
     private final ObjectMapper mapper;
     private final Map<String, SqlConfirmation> sqlConfirmations = new ConcurrentHashMap<>();
     private final Map<String, CachedSqlResult> sqlResults = new ConcurrentHashMap<>();
-    private AnnotationConfigApplicationContext context;
+    private volatile AnnotationConfigApplicationContext context;
 
     public DefaultLocalAppApi(ObjectMapper mapper) {
         this.mapper = mapper;
@@ -1595,8 +1595,19 @@ public final class DefaultLocalAppApi implements LocalAppApi {
             new SqlExecutionRequest(connectionId, sql, maxRows, Duration.ofSeconds(10), confirmed));
         cancellation.throwIfCancelled();
         String resultId = UUID.randomUUID().toString();
-        sqlResults.put(resultId, new CachedSqlResult(execution, Instant.now().plusSeconds(600)));
+        rememberSqlResult(resultId, new CachedSqlResult(execution, Instant.now().plusSeconds(600)));
         return sqlPage(resultId, execution, 0, Math.clamp(params.path("pageSize").asInt(50), 1, 100));
+    }
+
+    /** 结果缓存有上限：过期清理后仍满时移除最早的条目，避免长会话内存无界增长。 */
+    private void rememberSqlResult(String resultId, CachedSqlResult cached) {
+        if (sqlResults.size() >= 64) {
+            expireSqlState();
+            if (sqlResults.size() >= 64) {
+                sqlResults.keySet().stream().findFirst().ifPresent(sqlResults::remove);
+            }
+        }
+        sqlResults.put(resultId, cached);
     }
 
     private JsonNode sqlResultPage(JsonNode params, CancellationToken cancellation) {

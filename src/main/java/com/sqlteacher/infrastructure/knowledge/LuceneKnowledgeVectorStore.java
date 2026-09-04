@@ -11,7 +11,6 @@ import org.apache.lucene.document.Field;
 import org.apache.lucene.document.KnnFloatVectorField;
 import org.apache.lucene.document.StoredField;
 import org.apache.lucene.document.StringField;
-import org.apache.lucene.index.DirectoryReader;
 import org.apache.lucene.index.IndexWriter;
 import org.apache.lucene.index.IndexWriterConfig;
 import org.apache.lucene.index.Term;
@@ -19,7 +18,8 @@ import org.apache.lucene.index.VectorSimilarityFunction;
 import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.search.KnnFloatVectorQuery;
 import org.apache.lucene.search.ScoreDoc;
-import org.apache.lucene.store.Directory;
+import org.apache.lucene.search.SearcherFactory;
+import org.apache.lucene.search.SearcherManager;
 import org.apache.lucene.store.FSDirectory;
 
 import java.io.IOException;
@@ -32,6 +32,8 @@ import java.util.Objects;
 public final class LuceneKnowledgeVectorStore implements KnowledgeVectorStore {
     private static final String VECTOR = "embedding";
     private final Path indexPath;
+    private IndexWriter writer;
+    private SearcherManager searcherManager;
 
     public LuceneKnowledgeVectorStore(Path indexPath) {
         this.indexPath = Objects.requireNonNull(indexPath).toAbsolutePath().normalize();
@@ -43,13 +45,13 @@ public final class LuceneKnowledgeVectorStore implements KnowledgeVectorStore {
             throw new IllegalArgumentException("chunks and vectors must have the same non-zero size");
         }
         try {
-            Files.createDirectories(indexPath);
-            try (Directory directory = FSDirectory.open(indexPath);
-                 IndexWriter writer = new IndexWriter(directory, new IndexWriterConfig(new StandardAnalyzer()))) {
-                writer.deleteDocuments(new Term("revisionId", revisionId));
-                for (int index = 0; index < chunks.size(); index++) writer.addDocument(toDocument(chunks.get(index), vectors.get(index)));
-                writer.commit();
+            IndexWriter indexWriter = writer();
+            indexWriter.deleteDocuments(new Term("revisionId", revisionId));
+            for (int index = 0; index < chunks.size(); index++) {
+                indexWriter.addDocument(toDocument(chunks.get(index), vectors.get(index)));
             }
+            indexWriter.commit();
+            searcherManager.maybeRefresh();
         } catch (IOException error) {
             throw new SqlTeacherException("KNOWLEDGE_VECTOR_WRITE_FAILED", "Failed to update local vector index", error);
         }
@@ -59,10 +61,11 @@ public final class LuceneKnowledgeVectorStore implements KnowledgeVectorStore {
     public synchronized List<VectorSearchHit> search(float[] queryVector, CourseKnowledgeSearchFilter filter, String ownerId, int limit) {
         if (queryVector == null || queryVector.length == 0 || limit < 1) throw new IllegalArgumentException("invalid vector search request");
         if (!Files.isDirectory(indexPath)) return List.of();
-        try (Directory directory = FSDirectory.open(indexPath)) {
-            if (!DirectoryReader.indexExists(directory)) return List.of();
-            try (DirectoryReader reader = DirectoryReader.open(directory)) {
-                IndexSearcher searcher = new IndexSearcher(reader);
+        try {
+            SearcherManager manager = searchManager();
+            manager.maybeRefresh();
+            IndexSearcher searcher = manager.acquire();
+            try {
                 int candidateLimit = Math.min(Math.max(limit * 8, limit), 200);
                 ScoreDoc[] hits = searcher.search(new KnnFloatVectorQuery(VECTOR, queryVector, candidateLimit), candidateLimit).scoreDocs;
                 List<VectorSearchHit> results = new ArrayList<>();
@@ -73,6 +76,8 @@ public final class LuceneKnowledgeVectorStore implements KnowledgeVectorStore {
                     if (results.size() == limit) break;
                 }
                 return List.copyOf(results);
+            } finally {
+                manager.release(searcher);
             }
         } catch (IllegalArgumentException error) {
             throw error;
@@ -91,14 +96,27 @@ public final class LuceneKnowledgeVectorStore implements KnowledgeVectorStore {
         mutate(IndexWriter::deleteAll);
     }
 
+    /** 常驻 writer + 近实时 SearcherManager：检索不再反复开关目录和 reader。 */
+    private IndexWriter writer() throws IOException {
+        if (writer == null) {
+            Files.createDirectories(indexPath);
+            writer = new IndexWriter(FSDirectory.open(indexPath), new IndexWriterConfig(new StandardAnalyzer()));
+            searcherManager = new SearcherManager(writer, new SearcherFactory());
+        }
+        return writer;
+    }
+
+    private SearcherManager searchManager() throws IOException {
+        writer();
+        return searcherManager;
+    }
+
     private void mutate(WriterAction action) {
         try {
-            Files.createDirectories(indexPath);
-            try (Directory directory = FSDirectory.open(indexPath);
-                 IndexWriter writer = new IndexWriter(directory, new IndexWriterConfig(new StandardAnalyzer()))) {
-                action.run(writer);
-                writer.commit();
-            }
+            IndexWriter indexWriter = writer();
+            action.run(indexWriter);
+            indexWriter.commit();
+            searcherManager.maybeRefresh();
         } catch (IOException error) {
             throw new SqlTeacherException("KNOWLEDGE_VECTOR_WRITE_FAILED", "Failed to update local vector index", error);
         }

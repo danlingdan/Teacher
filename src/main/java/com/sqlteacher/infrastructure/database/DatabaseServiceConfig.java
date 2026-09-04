@@ -381,6 +381,8 @@ public class DatabaseServiceConfig {
                                                                ObjectProvider<CloudSessionService> sessionProvider,
                                                                SqlTeacherConfiguration configuration) {
         return new AssignmentDeliveryService() {
+            private volatile AssignmentDeliveryService cachedDelegate;
+
             @Override
             public com.sqlteacher.application.collaboration.AssignmentDeliveryResult deliver(
                     String classroomId, String assignmentId, boolean passed, String errorCode,
@@ -399,13 +401,20 @@ public class DatabaseServiceConfig {
             }
 
             private AssignmentDeliveryService delegate() {
-                CloudApiClient api = apiProvider.getIfAvailable();
-                CloudSessionService sessions = sessionProvider.getIfAvailable();
-                if (api == null || sessions == null) {
-                    throw new IllegalStateException("Cloud assignment delivery is unavailable in this runtime");
+                AssignmentDeliveryService service = cachedDelegate;
+                if (service != null) return service;
+                synchronized (this) {
+                    if (cachedDelegate == null) {
+                        CloudApiClient api = apiProvider.getIfAvailable();
+                        CloudSessionService sessions = sessionProvider.getIfAvailable();
+                        if (api == null || sessions == null) {
+                            throw new IllegalStateException("Cloud assignment delivery is unavailable in this runtime");
+                        }
+                        cachedDelegate = new JdbcAssignmentDeliveryService(
+                            api, sessions, configuration.database().appDatabasePath());
+                    }
+                    return cachedDelegate;
                 }
-                return new JdbcAssignmentDeliveryService(
-                    api, sessions, configuration.database().appDatabasePath());
             }
         };
     }
@@ -420,6 +429,8 @@ public class DatabaseServiceConfig {
                                                    ObjectProvider<CloudSessionService> sessionProvider,
                                                    SqlTeacherConfiguration configuration) {
         return new InterventionService() {
+            private volatile InterventionService cachedDelegate;
+
             @Override
             public java.util.List<com.sqlteacher.application.learning.InterventionCandidate> refreshAuthorized() {
                 return delegate().refreshAuthorized();
@@ -437,13 +448,20 @@ public class DatabaseServiceConfig {
             }
 
             private InterventionService delegate() {
-                CloudApiClient api = apiProvider.getIfAvailable();
-                CloudSessionService sessions = sessionProvider.getIfAvailable();
-                if (api == null || sessions == null) {
-                    throw new IllegalStateException("云端教师干预服务当前不可用");
+                InterventionService service = cachedDelegate;
+                if (service != null) return service;
+                synchronized (this) {
+                    if (cachedDelegate == null) {
+                        CloudApiClient api = apiProvider.getIfAvailable();
+                        CloudSessionService sessions = sessionProvider.getIfAvailable();
+                        if (api == null || sessions == null) {
+                            throw new IllegalStateException("云端教师干预服务当前不可用");
+                        }
+                        cachedDelegate = new DefaultInterventionService(api, sessions,
+                            configuration.database().appDatabasePath());
+                    }
+                    return cachedDelegate;
                 }
-                return new DefaultInterventionService(api, sessions,
-                    configuration.database().appDatabasePath());
             }
         };
     }
