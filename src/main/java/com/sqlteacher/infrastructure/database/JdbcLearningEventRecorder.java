@@ -9,7 +9,6 @@ import org.slf4j.LoggerFactory;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
-import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.Objects;
 import java.util.concurrent.locks.ReentrantLock;
@@ -62,7 +61,8 @@ public final class JdbcLearningEventRecorder implements LearningEventRecorder {
              PreparedStatement statement = connection.prepareStatement(sql)) {
             
             statement.setString(1, event.type().name());
-            statement.setString(2, Timestamp.from(event.occurredAt()).toString());
+            // 统一 ISO-8601：读取端（学习诊断）用 Instant 解析，不能写 Timestamp 本地格式。
+            statement.setString(2, event.occurredAt().toString());
             statement.setString(3, event.connectionId());
             statement.setBoolean(4, event.successful());
             statement.setString(5, LearningEventAttributesCodec.serialize(event.attributes()));

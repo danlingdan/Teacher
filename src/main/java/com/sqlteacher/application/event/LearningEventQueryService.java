@@ -1,6 +1,7 @@
 package com.sqlteacher.application.event;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -19,6 +20,22 @@ public interface LearningEventQueryService {
      * @return list of matching events, never null
      */
     List<QueriedLearningEvent> queryEventsByType(LearningEventType type, Instant start, Instant end);
+
+    /**
+     * Query every learning event in one pass.
+     *
+     * <p>Implementations backed by SQL should override this with a single untyped
+     * query; the default only exists so lightweight fakes keep compiling.</p>
+     *
+     * @return list of all events, never null
+     */
+    default List<QueriedLearningEvent> queryAllEvents() {
+        List<QueriedLearningEvent> all = new ArrayList<>();
+        for (LearningEventType type : LearningEventType.values()) {
+            all.addAll(queryEventsByType(type, null, null));
+        }
+        return List.copyOf(all);
+    }
 
     /**
      * Query events by connection ID within a time range.

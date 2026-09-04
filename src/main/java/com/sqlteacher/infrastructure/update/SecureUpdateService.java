@@ -176,8 +176,10 @@ public final class SecureUpdateService implements UpdateService {
         if (existing > 0) builder.header("Range", "bytes=" + existing + "-");
         HttpResponse<InputStream> response = null; URI current = uri;
         for (int redirects = 0; redirects <= 3; redirects++) {
+            // 每一轮都把目标改写为当前 URI（requireAllowed 校验通过后才请求它），
+            // 否则只会反复请求原始地址，遇到 GitHub Releases 的 302 必然失败。
             requireAllowed(current);
-            response = client.send(builder.build(), HttpResponse.BodyHandlers.ofInputStream());
+            response = client.send(builder.uri(current).build(), HttpResponse.BodyHandlers.ofInputStream());
             if (response.statusCode() / 100 != 3) break;
             String location = response.headers().firstValue("Location").orElseThrow(() -> new IllegalStateException("更新下载重定向无效"));
             current = uri.resolve(location);

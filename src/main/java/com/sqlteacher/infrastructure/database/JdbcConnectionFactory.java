@@ -50,7 +50,12 @@ public final class JdbcConnectionFactory {
                             "Unknown connectionId: " + connectionId);
         };
 
-        return DriverManager.getConnection(url);
+        // app/demo 库会被多个服务线程并发读写：没有 busy_timeout 时 SQLite 默认
+        // 立即抛 database is locked；WAL 让读写不互斥，显著降低并发冲突。
+        SQLiteConfig sqliteConfig = new SQLiteConfig();
+        sqliteConfig.setBusyTimeout(5_000);
+        sqliteConfig.setJournalMode(SQLiteConfig.JournalMode.WAL);
+        return DriverManager.getConnection(url, sqliteConfig.toProperties());
     }
 
     public Connection open(

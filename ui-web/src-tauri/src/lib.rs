@@ -171,7 +171,7 @@ struct SidecarProcess {
 
 struct SidecarManager {
     app: AppHandle,
-    process: Mutex<Option<SidecarProcess>>,
+    process: Arc<Mutex<Option<SidecarProcess>>>,
     pending: Arc<Mutex<HashMap<String, Sender<Value>>>>,
     sequence: AtomicU64,
 }
@@ -180,7 +180,7 @@ impl SidecarManager {
     fn new(app: AppHandle) -> Self {
         Self {
             app,
-            process: Mutex::new(None),
+            process: Arc::new(Mutex::new(None)),
             pending: Arc::new(Mutex::new(HashMap::new())),
             sequence: AtomicU64::new(1),
         }
@@ -227,15 +227,19 @@ impl SidecarManager {
                 *process_guard = Some(self.start()?);
             }
             let process = process_guard.as_mut().expect("sidecar was initialized");
-            writeln!(process.stdin, "{payload}")
-                .and_then(|_| process.stdin.flush())
-                .map_err(|_| {
-                    BridgeError::new(
-                        "SIDECAR_WRITE_FAILED",
-                        "Unable to send request to Java core",
-                        true,
-                    )
-                })
+            if writeln!(process.stdin, "{payload}").and_then(|_| process.stdin.flush()).is_ok() {
+                return Ok(());
+            }
+            // 写失败通常意味着 sidecar 已退出：清空槽位让下一次请求惰性重启，
+            // 而不是在断开的管道上持续失败直到应用重启。
+            if let Some(mut dead) = process_guard.take() {
+                let _ = dead.child.wait();
+            }
+            Err(BridgeError::new(
+                "SIDECAR_WRITE_FAILED",
+                "Unable to send request to Java core",
+                true,
+            ))
         })();
         if let Err(error) = write_result {
             self.remove_pending(&request.request_id);
@@ -366,6 +370,7 @@ impl SidecarManager {
             )
         })?;
         let pending = Arc::clone(&self.pending);
+        let process_slot = Arc::clone(&self.process);
         let app = self.app.clone();
         std::thread::Builder::new()
             .name("sqlteacher-sidecar-output".to_owned())
@@ -400,6 +405,12 @@ impl SidecarManager {
                     });
                     for (_, sender) in items.drain() {
                         let _ = sender.send(failure.clone());
+                    }
+                }
+                // sidecar 已退出：清空槽位（回收子进程），下一次请求会惰性重启它。
+                if let Ok(mut process_guard) = process_slot.lock() {
+                    if let Some(mut dead) = process_guard.take() {
+                        let _ = dead.child.wait();
                     }
                 }
             })

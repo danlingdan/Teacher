@@ -12,7 +12,6 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.*;
 
@@ -35,6 +34,16 @@ public final class JdbcLearningEventQueryService implements LearningEventQuerySe
             statement.setString(1, type.name());
             setTimestampParameters(statement, 2, start, end);
         });
+    }
+
+    @Override
+    public List<QueriedLearningEvent> queryAllEvents() {
+        String sql = """
+            SELECT id, event_type, occurred_at, connection_id, successful, attributes, created_at
+            FROM learning_events
+            ORDER BY id
+            """;
+        return executeQuery(sql, statement -> { });
     }
 
     @Override
@@ -174,27 +183,26 @@ public final class JdbcLearningEventQueryService implements LearningEventQuerySe
             Instant start,
             Instant end) throws SQLException {
 
+        // occurred_at 列统一存 ISO-8601 文本；绑定值也必须是 ISO，字符串比较才正确。
         int index = startIndex;
 
         if (start != null) {
-            statement.setString(index++,
-                    Timestamp.from(start).toString());
+            statement.setString(index++, start.toString());
         }
 
         if (end != null) {
-            statement.setString(index,
-                    Timestamp.from(end).toString());
+            statement.setString(index, end.toString());
         }
     }
 
     private QueriedLearningEvent mapRow(ResultSet resultSet) throws SQLException {
         long id = resultSet.getLong("id");
         LearningEventType type = LearningEventType.valueOf(resultSet.getString("event_type"));
-        Instant occurredAt = resultSet.getTimestamp("occurred_at").toInstant();
+        Instant occurredAt = SqliteInstantFormat.parse(resultSet.getString("occurred_at"));
         String connectionId = resultSet.getString("connection_id");
         boolean successful = resultSet.getBoolean("successful");
         Map<String, String> attributes = LearningEventAttributesCodec.deserialize(resultSet.getString("attributes"));
-        Instant createdAt = resultSet.getTimestamp("created_at").toInstant();
+        Instant createdAt = SqliteInstantFormat.parse(resultSet.getString("created_at"));
 
         return new QueriedLearningEvent(id, type, occurredAt, connectionId, successful, attributes, createdAt);
     }

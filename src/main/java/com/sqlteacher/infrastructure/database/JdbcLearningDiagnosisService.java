@@ -185,11 +185,12 @@ public final class JdbcLearningDiagnosisService implements LearningDiagnosisServ
                                                List<ActivityEvidenceRecord> activityEvidence,
                                                Instant now) throws SQLException {
         List<LearningAction> result = new ArrayList<>();
+        Map<String, String> actionStates = loadActionStates(connection);
         for (ActiveSession session : loadActiveSessions(connection, ownerId)) {
             ExerciseInfo exercise = exercises.get(session.exerciseId());
             if (exercise == null) continue;
             String id = actionId(ownerId, LearningActionType.CONTINUE_EXERCISE, exercise.id(), session.id());
-            result.add(action(connection, id, LearningActionType.CONTINUE_EXERCISE,
+            result.add(action(actionStates, id, LearningActionType.CONTINUE_EXERCISE,
                 "继续练习：" + exercise.title(), "上次练习尚未完成，继续完成当前题目。",
                 exercise.id(), exercise.knowledgePoint(), DiagnosisReasonCode.INTERRUPTED_EXERCISE, 90,
                 session.startedAt()));
@@ -203,7 +204,7 @@ public final class JdbcLearningDiagnosisService implements LearningDiagnosisServ
             String cycle = evidenceHash(snapshot.evidence());
             if (target != null) {
                 String id = actionId(ownerId, LearningActionType.RETRY_EXERCISE, target.id(), cycle);
-                result.add(action(connection, id, LearningActionType.RETRY_EXERCISE,
+                result.add(action(actionStates, id, LearningActionType.RETRY_EXERCISE,
                     "巩固：" + snapshot.knowledgePoint(), reason == DiagnosisReasonCode.REPEATED_FAILURE
                         ? "最近提交出现连续失败，建议重练“" + target.title() + "”。"
                         : "当前知识点正在形成掌握，建议再完成一道相关题目。",
@@ -214,7 +215,7 @@ public final class JdbcLearningDiagnosisService implements LearningDiagnosisServ
             ActivityTarget activityTarget = preferredActivity(connection, activityEvidence, snapshot.knowledgePoint());
             if (activityTarget == null) continue;
             String id = actionId(ownerId, LearningActionType.RETRY_ACTIVITY, activityTarget.id(), cycle);
-            result.add(action(connection, id, LearningActionType.RETRY_ACTIVITY,
+            result.add(action(actionStates, id, LearningActionType.RETRY_ACTIVITY,
                 "巩固：" + snapshot.knowledgePoint(), "跨活动证据尚未稳定，建议重做“" + activityTarget.title() + "”。",
                 activityTarget.id(), snapshot.knowledgePoint(), reason,
                 reason == DiagnosisReasonCode.REPEATED_FAILURE ? 78 : 58, now));
@@ -224,11 +225,11 @@ public final class JdbcLearningDiagnosisService implements LearningDiagnosisServ
             .filter(item -> !item.dismissed()).limit(MAX_ACTIONS).toList();
     }
 
-    private LearningAction action(Connection connection, String id, LearningActionType type, String title,
+    private LearningAction action(Map<String, String> actionStates, String id, LearningActionType type, String title,
                                   String description, String exerciseId, String point,
-                                  DiagnosisReasonCode reason, int priority, Instant updatedAt) throws SQLException {
+                                  DiagnosisReasonCode reason, int priority, Instant updatedAt) {
         return new LearningAction(id, type, title, description, exerciseId, point, reason, priority, updatedAt,
-            "DISMISSED".equals(actionState(connection, id)));
+            "DISMISSED".equals(actionStates.getOrDefault(id, "OPEN")));
     }
 
     private void updateActionState(String actionId, String state) {
@@ -282,7 +283,8 @@ public final class JdbcLearningDiagnosisService implements LearningDiagnosisServ
                     if (exerciseId == null || exerciseId.isBlank()) continue;
                     result.add(new EventRecord(Long.toString(rows.getLong(1)),
                         LearningEventType.valueOf(rows.getString(2)), exerciseId, rows.getBoolean(4),
-                        attributes.getOrDefault("errorCode", ""), Instant.parse(rows.getString(3))));
+                        attributes.getOrDefault("errorCode", ""),
+                        SqliteInstantFormat.parse(rows.getString(3))));
                 }
             }
         }
@@ -332,27 +334,37 @@ public final class JdbcLearningDiagnosisService implements LearningDiagnosisServ
 
     private static void persistSnapshots(Connection connection, String ownerId, List<MasterySnapshot> snapshots)
         throws SQLException {
-        try (PreparedStatement delete = connection.prepareStatement(
-            "delete from mastery_snapshot where owner_id=? and policy_version=?")) {
-            delete.setString(1, ownerId);
-            delete.setString(2, POLICY_VERSION);
-            delete.executeUpdate();
-        }
-        try (PreparedStatement insert = connection.prepareStatement("""
-            insert into mastery_snapshot(owner_id,knowledge_point,level,attempts,passes,failures,hints_used,
-                mastery_percent,reason_codes,evidence_hash,policy_version,updated_at)
-            values (?,?,?,?,?,?,?,?,?,?,?,?)
-            """)) {
-            for (MasterySnapshot item : snapshots) {
-                insert.setString(1, item.ownerId()); insert.setString(2, item.knowledgePoint());
-                insert.setString(3, item.level().name()); insert.setInt(4, item.attempts());
-                insert.setInt(5, item.passes()); insert.setInt(6, item.failures());
-                insert.setInt(7, item.hintsUsed()); insert.setInt(8, item.masteryPercent());
-                insert.setString(9, item.reasons().stream().map(Enum::name).collect(java.util.stream.Collectors.joining(",")));
-                insert.setString(10, evidenceHash(item.evidence())); insert.setString(11, item.policyVersion());
-                insert.setString(12, item.updatedAt().toString()); insert.addBatch();
+        // 删除+批量写入必须原子完成：并发刷新时避免读者看到空/半量快照。
+        connection.setAutoCommit(false);
+        try {
+            try (PreparedStatement delete = connection.prepareStatement(
+                "delete from mastery_snapshot where owner_id=? and policy_version=?")) {
+                delete.setString(1, ownerId);
+                delete.setString(2, POLICY_VERSION);
+                delete.executeUpdate();
             }
-            insert.executeBatch();
+            try (PreparedStatement insert = connection.prepareStatement("""
+                insert into mastery_snapshot(owner_id,knowledge_point,level,attempts,passes,failures,hints_used,
+                    mastery_percent,reason_codes,evidence_hash,policy_version,updated_at)
+                values (?,?,?,?,?,?,?,?,?,?,?,?)
+                """)) {
+                for (MasterySnapshot item : snapshots) {
+                    insert.setString(1, item.ownerId()); insert.setString(2, item.knowledgePoint());
+                    insert.setString(3, item.level().name()); insert.setInt(4, item.attempts());
+                    insert.setInt(5, item.passes()); insert.setInt(6, item.failures());
+                    insert.setInt(7, item.hintsUsed()); insert.setInt(8, item.masteryPercent());
+                    insert.setString(9, item.reasons().stream().map(Enum::name).collect(java.util.stream.Collectors.joining(",")));
+                    insert.setString(10, evidenceHash(item.evidence())); insert.setString(11, item.policyVersion());
+                    insert.setString(12, item.updatedAt().toString()); insert.addBatch();
+                }
+                insert.executeBatch();
+            }
+            connection.commit();
+        } catch (SQLException error) {
+            connection.rollback();
+            throw error;
+        } finally {
+            connection.setAutoCommit(true);
         }
     }
 
@@ -362,6 +374,17 @@ public final class JdbcLearningDiagnosisService implements LearningDiagnosisServ
             statement.setString(1, id);
             try (ResultSet row = statement.executeQuery()) { return row.next() ? row.getString(1) : "OPEN"; }
         }
+    }
+
+    /** action_id 是含 owner 的稳定哈希，全局唯一；一次载入避免逐候选查询。 */
+    private static Map<String, String> loadActionStates(Connection connection) throws SQLException {
+        Map<String, String> result = new HashMap<>();
+        try (PreparedStatement statement = connection.prepareStatement(
+            "select action_id,state from learning_action_state");
+             ResultSet rows = statement.executeQuery()) {
+            while (rows.next()) result.put(rows.getString(1), rows.getString(2));
+        }
+        return result;
     }
 
     private static ExerciseInfo preferredExercise(Map<String, ExerciseInfo> exercises, List<EventRecord> events,

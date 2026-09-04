@@ -4,13 +4,15 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.sqlteacher.domain.SqlTeacherException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.IOException;
 import java.io.Reader;
 import java.io.Writer;
-import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -18,12 +20,16 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.Semaphore;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public final class LocalAppProtocolServer implements AutoCloseable {
     static final int MAX_MESSAGE_BYTES = LocalAppContract.MAX_MESSAGE_BYTES;
     static final int MAX_CONCURRENT_REQUESTS = LocalAppContract.MAX_CONCURRENT_REQUESTS;
+    private static final Logger log = LoggerFactory.getLogger(LocalAppProtocolServer.class);
     private static final Set<String> REQUEST_FIELDS = Set.of("requestId", "method", "params", "contractVersion");
+    private static final long DRAIN_TIMEOUT_MILLIS = LocalAppContract.REQUEST_TIMEOUT_MILLIS + 10_000;
 
     private final ObjectMapper mapper;
     private final LocalAppApi api;
@@ -42,17 +48,40 @@ public final class LocalAppProtocolServer implements AutoCloseable {
     }
 
     public void run() throws IOException {
-        String line;
-        while (running.get() && (line = input.readLine()) != null) {
-            if (line.getBytes(StandardCharsets.UTF_8).length > MAX_MESSAGE_BYTES) {
+        Line line;
+        while (running.get() && (line = readLineBounded()) != null) {
+            if (line.tooLarge()) {
                 writeError("", LocalAppErrorCode.PAYLOAD_TOO_LARGE,
                     "IPC request exceeds the one MiB UTF-8 limit", false);
                 continue;
             }
-            accept(line);
+            if (line.text().isEmpty()) continue;
+            accept(line.text());
         }
         waitForActiveRequests();
     }
+
+    /** 有界读行：超长的行在读取过程中即被拒绝，不会先整行物化成字符串再检查。 */
+    private Line readLineBounded() throws IOException {
+        StringBuilder line = new StringBuilder(512);
+        long bytes = 0;
+        int read;
+        while ((read = input.read()) >= 0) {
+            char current = (char) read;
+            if (current == '\n' || current == '\r') return new Line(line.toString(), false);
+            bytes += current < 0x80 ? 1 : current < 0x800 ? 2 : 3;
+            if (bytes > MAX_MESSAGE_BYTES) {
+                while ((read = input.read()) >= 0 && read != '\n' && read != '\r') {
+                    // 丢弃剩余内容，让下一条消息仍能被解析。
+                }
+                return new Line("", true);
+            }
+            line.append(current);
+        }
+        return line.isEmpty() ? null : new Line(line.toString(), false);
+    }
+
+    private record Line(String text, boolean tooLarge) { }
 
     private void accept(String line) {
         JsonNode request;
@@ -105,7 +134,16 @@ public final class LocalAppProtocolServer implements AutoCloseable {
             writeError(requestId, LocalAppErrorCode.CANCELLED, "Local application request was cancelled", false);
         } catch (IllegalArgumentException error) {
             writeError(requestId, LocalAppErrorCode.INVALID_METHOD_OR_PARAMS, safeMessage(error), false);
+        } catch (SqlTeacherException error) {
+            // 领域异常携带结构化错误码：保留给前端做失败分类，同时记录堆栈供诊断。
+            log.error("IPC request failed: requestId={}, method={}, code={}",
+                requestId, method, error.errorCode(), error);
+            writeError(requestId, error.errorCode(), safeMessage(error), true);
+        } catch (SecurityException error) {
+            log.warn("IPC request rejected: requestId={}, method={}", requestId, method, error);
+            writeError(requestId, "SECURITY_REJECTED", safeMessage(error), false);
         } catch (Exception error) {
+            log.error("IPC request failed: requestId={}, method={}", requestId, method, error);
             writeError(requestId, LocalAppErrorCode.LOCAL_APP_FAILURE,
                 "Local application operation failed", true);
         } finally {
@@ -150,9 +188,13 @@ public final class LocalAppProtocolServer implements AutoCloseable {
     }
 
     private void writeError(String requestId, LocalAppErrorCode code, String message, boolean retryable) {
+        writeError(requestId, code.name(), message, retryable);
+    }
+
+    private void writeError(String requestId, String code, String message, boolean retryable) {
         ObjectNode response = baseMessage(requestId, "response");
         ObjectNode error = response.putObject("error");
-        error.put("code", code.name());
+        error.put("code", code);
         error.put("message", message);
         error.put("retryable", retryable);
         write(response);
@@ -178,15 +220,19 @@ public final class LocalAppProtocolServer implements AutoCloseable {
     }
 
     private void waitForActiveRequests() {
-        active.values().forEach(control -> {
-            Future<?> future = control.future;
-            if (future == null) return;
+        // 排空在途请求，但设置上限：卡死的 JDBC/网络任务不能拖住进程退出。
+        for (Map.Entry<String, RequestControl> entry : active.entrySet()) {
+            Future<?> future = entry.getValue().future;
+            if (future == null) continue;
             try {
-                future.get();
+                future.get(DRAIN_TIMEOUT_MILLIS, TimeUnit.MILLISECONDS);
+            } catch (TimeoutException error) {
+                log.warn("IPC drain timed out for requestId={}, cancelling", entry.getKey());
+                future.cancel(true);
             } catch (Exception ignored) {
                 // The request has already emitted its structured result or cancellation response.
             }
-        });
+        }
     }
 
     private static String text(JsonNode node, String field) {
