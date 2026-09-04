@@ -65,6 +65,40 @@ try {
         Pop-Location
     }
 
+    $generatedNsisScript = Join-Path $tauriRelease "nsis\x64\installer.nsi"
+    if (-not (Test-Path -LiteralPath $generatedNsisScript)) {
+        throw "Tauri did not retain the generated NSIS script for upgrade validation."
+    }
+    $nsisContent = Get-Content -LiteralPath $generatedNsisScript -Raw
+    $requiredNsisContracts = @(
+        '!define MANUFACTURER "SQLTeacher Project"',
+        '!define INSTALLMODE "perMachine"',
+        'installer-hooks.nsh"',
+        'StrCpy $INSTDIR "$PROGRAMFILES64\${PRODUCTNAME}"',
+        'StrCmp "$R0$R1" "${PRODUCTNAME}${MANUFACTURER}" 0 wix_loop',
+        'ExecWait ''$R1'' $0'
+    )
+    foreach ($contract in $requiredNsisContracts) {
+        if (-not $nsisContent.Contains($contract)) {
+            throw "Generated NSIS installer is missing the upgrade contract: $contract"
+        }
+    }
+    $installerHooksPath = Join-Path $projectRoot "ui-web\src-tauri\windows\installer-hooks.nsh"
+    $installerHooksContent = Get-Content -LiteralPath $installerHooksPath -Raw
+    $requiredHookContracts = @(
+        '!insertmacro SQLTEACHER_REMOVE_CURRENT_USER "SQLTeacher 3 Alpha"',
+        '!insertmacro SQLTEACHER_REMOVE_CURRENT_USER "SQLTeacher 3 Beta"',
+        '!insertmacro SQLTEACHER_REMOVE_CURRENT_USER "SQLTeacher"',
+        '$R8 == "sqlteacher"',
+        '$R8 == "SQLTeacher Project"',
+        'ExecWait ''$R9 /S'' $R6',
+        'Abort'
+    )
+    foreach ($contract in $requiredHookContracts) {
+        if (-not $installerHooksContent.Contains($contract)) {
+            throw "NSIS migration hook is missing the upgrade contract: $contract"
+        }
+    }
     if (Test-Path -LiteralPath $portableStage) {
         Assert-ChildPath -Candidate $portableStage -Parent $targetRoot
         Remove-Item -LiteralPath $portableStage -Recurse -Force

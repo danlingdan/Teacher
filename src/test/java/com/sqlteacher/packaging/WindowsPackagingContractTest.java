@@ -13,6 +13,8 @@ class WindowsPackagingContractTest {
     void shouldDefineTauriOnlyInstallerAndPortablePackage() throws Exception {
         Path script = Path.of("packaging", "package-v3.ps1");
         String content = Files.readString(script);
+        String tauriConfig = Files.readString(Path.of("ui-web", "src-tauri", "tauri.conf.json"));
+        String installerHooks = Files.readString(Path.of("ui-web", "src-tauri", "windows", "installer-hooks.nsh"));
         String sidecarBuild = Files.readString(Path.of("packaging", "build-v3-sidecar.ps1"));
         String rustHost = Files.readString(Path.of("ui-web", "src-tauri", "src", "lib.rs"));
         String rustMain = Files.readString(Path.of("ui-web", "src-tauri", "src", "main.rs"));
@@ -28,6 +30,18 @@ class WindowsPackagingContractTest {
         assertTrue(content.contains("THIRD-PARTY-LICENSES.txt"));
         assertTrue(content.contains("PRIVACY.md"));
         assertTrue(content.contains("(?:-(?:alpha|beta|rc)"));
+        assertTrue(content.contains("requiredNsisContracts"));
+        assertTrue(tauriConfig.contains("\"publisher\": \"SQLTeacher Project\""));
+        assertTrue(tauriConfig.contains("\"installMode\": \"perMachine\""));
+        assertTrue(tauriConfig.contains("\"installerHooks\": \"windows/installer-hooks.nsh\""));
+        assertTrue(installerHooks.contains("SQLTEACHER_REMOVE_CURRENT_USER \"SQLTeacher 3 Alpha\""));
+        assertTrue(installerHooks.contains("SQLTEACHER_REMOVE_CURRENT_USER \"SQLTeacher 3 Beta\""));
+        assertTrue(installerHooks.contains("SQLTEACHER_REMOVE_CURRENT_USER \"SQLTeacher\""));
+        assertTrue(installerHooks.contains("ExecWait '$R9 /S'"));
+        assertTrue(installerHooks.contains("$R8 == \"sqlteacher\""));
+        assertTrue(installerHooks.contains("$R8 == \"SQLTeacher Project\""));
+        assertFalse(installerHooks.contains("RmDir"));
+        assertFalse(installerHooks.contains("DeleteRegKey"));
         assertTrue(sidecarBuild.contains("clean package dependency:copy-dependencies"));
         assertTrue(sidecarBuild.contains("Java sidecar contains removed desktop or test entries"));
         assertTrue(rustMain.contains("windows_subsystem = \"windows\""));

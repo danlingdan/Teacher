@@ -27,8 +27,13 @@
   "bundle": {
     "active": true,
     "targets": ["nsis"],
+    "publisher": "SQLTeacher Project",
     "resources": ["sidecar/**/*"],
     "windows": {
+      "nsis": {
+        "installMode": "perMachine",
+        "installerHooks": "windows/installer-hooks.nsh"
+      },
       "webviewInstallMode": {
         "type": "downloadBootstrapper"
       }
