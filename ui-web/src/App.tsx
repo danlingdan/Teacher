@@ -11,6 +11,7 @@ import {
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import "./App.css";
 import { healthQuery, homeQuery, sessionQuery } from "./app/queries";
+import { ErrorBoundary } from "./app/ErrorBoundary";
 import { RoleGuard } from "./app/RoleGuard";
 import { Button, EmptyState, Feedback } from "./shared/ui";
 import { measure } from "./shared/telemetry";
@@ -81,20 +82,22 @@ export default function App() {
         />
         <Route element={<Shell />}>
           <Route index element={<Navigate to="/today" replace />} />
-          <Route path="today" element={<TodayPage />} />
-          <Route path="knowledge" element={<KnowledgePage />} />
-          <Route path="practice" element={<EditorPage />} />
-          <Route path="data" element={<DataSqlPage />} />
+          <Route path="today" element={<ErrorBoundary><TodayPage /></ErrorBoundary>} />
+          <Route path="knowledge" element={<ErrorBoundary><KnowledgePage /></ErrorBoundary>} />
+          <Route path="practice" element={<ErrorBoundary><EditorPage /></ErrorBoundary>} />
+          <Route path="data" element={<ErrorBoundary><DataSqlPage /></ErrorBoundary>} />
           <Route
             path="teaching"
             element={
               <RoleGuard allow={["TEACHER", "ADMINISTRATOR"]}>
-                <TeachingPage />
+                <ErrorBoundary>
+                  <TeachingPage />
+                </ErrorBoundary>
               </RoleGuard>
             }
           />
-          <Route path="cloud" element={<CloudPage />} />
-          <Route path="settings" element={<SettingsPage />} />
+          <Route path="cloud" element={<ErrorBoundary><CloudPage /></ErrorBoundary>} />
+          <Route path="settings" element={<ErrorBoundary><SettingsPage /></ErrorBoundary>} />
           <Route path="*" element={<Navigate to="/today" replace />} />
         </Route>
       </Routes>

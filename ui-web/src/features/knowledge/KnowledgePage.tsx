@@ -30,7 +30,21 @@ export default function KnowledgePage() {
       }>("knowledge.index.status"),
   });
   const [selectedId, setSelectedId] = useState<string>();
-  const [query, setQuery] = useState(() => searchParams.get("query") ?? "");
+  const [queryInput, setQueryInput] = useState(() => searchParams.get("query") ?? "");
+  const [query, setQuery] = useState(queryInput);
+  // 搜索输入防抖 300ms：避免每个按键都触发一次 FTS 检索 IPC。
+  useEffect(() => {
+    const timer = window.setTimeout(() => setQuery(queryInput), 300);
+    return () => window.clearTimeout(timer);
+  }, [queryInput]);
+  // 外部跳转（如今天页“查看知识点”）携带 query 参数时立即同步。
+  useEffect(() => {
+    const fromUrl = searchParams.get("query");
+    if (fromUrl !== null) {
+      setQueryInput(fromUrl);
+      setQuery(fromUrl);
+    }
+  }, [searchParams]);
   const [root, setRoot] = useState("");
   const [preview, setPreview] = useState<ImportPreview>();
   const [report, setReport] = useState<ImportReport>();
@@ -181,8 +195,8 @@ export default function KnowledgePage() {
           {(ids) => (
             <input
               {...ids}
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
+              value={queryInput}
+              onChange={(event) => setQueryInput(event.target.value)}
               placeholder="标题、正文或知识点"
             />
           )}

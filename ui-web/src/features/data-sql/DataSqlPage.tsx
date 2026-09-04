@@ -10,6 +10,30 @@ import type { AiContextPreview, ConnectionSummary, ConnectionTestResult, Databas
 
 self.MonacoEnvironment = { getWorker: () => new EditorWorker() };
 loader.config({ monaco });
+
+// 补全 provider 全局只注册一次，当前连接的表/列符号经模块槽位刷新，
+// 避免每次挂载工作台都向 sql 语言累积一个 provider。
+let sqlWorkbenchSymbols: string[] = [];
+monaco.languages.registerCompletionItemProvider("sql", {
+  triggerCharacters: ["."],
+  provideCompletionItems: (model, position) => {
+    const word = model.getWordUntilPosition(position);
+    const range = new monaco.Range(
+      position.lineNumber,
+      word.startColumn,
+      position.lineNumber,
+      word.endColumn,
+    );
+    return {
+      suggestions: sqlWorkbenchSymbols.slice(0, 500).map((label) => ({
+        label,
+        kind: monaco.languages.CompletionItemKind.Field,
+        insertText: label,
+        range,
+      })),
+    };
+  },
+});
 const initialSql = "SELECT name, type\nFROM sqlite_master\nWHERE type IN ('table', 'view')\nORDER BY name\nLIMIT 100;";
 
 export default function DataSqlPage() {
@@ -79,7 +103,8 @@ function SqlWorkbench({ connectionId, tables, sql, onSqlChange }: { connectionId
   const analyze = useMutation<SqlRisk, Error, void>({ mutationFn: () => localAppRequest<SqlRisk>("sql.analyze", { connectionId, sql }), onSuccess: value => { setRisk(value); if (value.executable && value.confirmationRequired) setConfirmOpen(true); else if (value.executable) execute.mutate(""); } });
   const nextPage = useMutation<SqlPage, Error, number>({ mutationFn: next => localAppRequest<SqlPage>("sql.result.page", { resultId: page?.resultId, page: next, pageSize: 50 }), onSuccess: setPage });
   const names = tables.flatMap(table => [table.name, ...table.columns.map(column => column.name)]);
-  return <section className="content-card sql-workbench"><header className="editor-toolbar"><div><p className="eyebrow">Java 强制安全边界</p><h2>SQL 工作台</h2></div><div className="button-row"><span className="policy-chip">最多 500 行 · 10 秒</span><Button disabled={!connectionId || analyze.isPending || execute.isPending} onClick={() => analyze.mutate()}>分析并运行</Button></div></header><div className="sql-editor"><Editor height="100%" language="sql" path={`sqlteacher://sql/${connectionId || "none"}`} value={sql} onChange={value => onSqlChange(value ?? "")} beforeMount={api => api.languages.registerCompletionItemProvider("sql", { provideCompletionItems: (_model: monaco.editor.ITextModel, position: monaco.Position) => ({ suggestions: names.slice(0, 500).map(label => ({ label, kind: api.languages.CompletionItemKind.Field, insertText: label, range: new api.Range(position.lineNumber, position.column, position.lineNumber, position.column) })) }) })} options={{ automaticLayout: true, minimap: { enabled: false }, fontFamily: "'Cascadia Code', Consolas, monospace", fontSize: 14, padding: { top: 16 }, scrollBeyondLastLine: false }} /></div>
+  sqlWorkbenchSymbols = names;
+  return <section className="content-card sql-workbench"><header className="editor-toolbar"><div><p className="eyebrow">Java 强制安全边界</p><h2>SQL 工作台</h2></div><div className="button-row"><span className="policy-chip">最多 500 行 · 10 秒</span><Button disabled={!connectionId || analyze.isPending || execute.isPending} onClick={() => analyze.mutate()}>分析并运行</Button></div></header><div className="sql-editor"><Editor height="100%" language="sql" path={`sqlteacher://sql/${connectionId || "none"}`} value={sql} onChange={value => onSqlChange(value ?? "")} options={{ automaticLayout: true, minimap: { enabled: false }, fontFamily: "'Cascadia Code', Consolas, monospace", fontSize: 14, padding: { top: 16 }, scrollBeyondLastLine: false }} /></div>
     {risk && <div className={`risk-strip risk-${risk.level.toLowerCase()}`}><strong>{risk.level} · {risk.statementType}</strong><span>{risk.executable ? risk.confirmationRequired ? "需要明确确认" : "允许执行" : "Java 已阻止"}</span>{risk.reasons.map(reason => <small key={reason}>{reason}</small>)}</div>}
     {(analyze.isError || execute.isError) && <Feedback tone="error" title="SQL 未执行">{(analyze.error ?? execute.error)?.message}</Feedback>}
     <SqlResults page={page} pending={execute.isPending || nextPage.isPending} onPage={value => nextPage.mutate(value)} />

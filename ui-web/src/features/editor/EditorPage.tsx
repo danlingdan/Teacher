@@ -1,7 +1,6 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import Editor, {
   loader,
-  type BeforeMount,
   type OnMount,
 } from "@monaco-editor/react";
 import * as monaco from "monaco-editor/editor/editor.api";
@@ -10,7 +9,7 @@ import "monaco-editor/languages/definitions/sql/register";
 import "monaco-editor/languages/definitions/java/register";
 import "monaco-editor/languages/definitions/python/register";
 import "monaco-editor/languages/definitions/cpp/register";
-import { useEffect, useMemo, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
   cancelLocalAppRequest,
@@ -32,11 +31,48 @@ import type {
   ExerciseView,
   RunnerCapability,
   RunnerResult,
+  SqlPage,
 } from "../../shared/types";
 import { Button, Dialog, EmptyState, Feedback, Stepper, useToast } from "../../shared/ui";
 
 self.MonacoEnvironment = { getWorker: () => new EditorWorker() };
 loader.config({ monaco });
+
+// Monaco 补全 provider 注册在全局语言上；模块级只注册一次，当前练习的 schema
+// 符号走模块槽位刷新（组件渲染时更新），避免每次挂载都累积一个 provider。
+let practiceEditorSchema = "";
+monaco.languages.registerCompletionItemProvider("sql", {
+  provideCompletionItems: (model: monaco.editor.ITextModel, position: monaco.Position) => {
+    const word = model.getWordUntilPosition(position);
+    const range = new monaco.Range(
+      position.lineNumber,
+      word.startColumn,
+      position.lineNumber,
+      word.endColumn,
+    );
+    const names = Array.from(
+      new Set(practiceEditorSchema.match(/[A-Za-z_][A-Za-z0-9_]*/g) ?? []),
+    );
+    const suggestions: monaco.languages.CompletionItem[] = names
+      .slice(0, 200)
+      .map((label) => ({
+        label,
+        kind: monaco.languages.CompletionItemKind.Field,
+        insertText: label,
+        detail: "当前练习结构",
+        range,
+      }));
+    suggestions.push({
+      label: "safe select",
+      kind: monaco.languages.CompletionItemKind.Snippet,
+      insertText: "SELECT ${1:*} FROM ${2:table} LIMIT ${3:100};",
+      insertTextRules:
+        monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+      range,
+    });
+    return { suggestions };
+  },
+});
 
 const defaultSqlAnswer = "SELECT *\nFROM ";
 
@@ -107,6 +143,7 @@ function ActivityFlow() {
   const workspace = useQuery({
     queryKey: ["course", "workspace"],
     queryFn: () => localAppRequest<CourseWorkspace>("course.workspace"),
+    staleTime: 30_000,
   });
   const [selectedId, setSelectedId] = useState<string | undefined>(
     () => searchParams.get("activity") ?? undefined,
@@ -667,6 +704,7 @@ function ExerciseFlow() {
     queryKey: ["practice", "catalog"],
     queryFn: () =>
       localAppRequest<{ items: ExerciseSummary[] }>("practice.catalog"),
+    staleTime: 30_000,
   });
   const [selectedId, setSelectedId] = useState<string | undefined>(
     () => searchParams.get("exercise") ?? undefined,
@@ -689,6 +727,7 @@ function ExerciseFlow() {
         exerciseId: selectedId,
       }),
     enabled: Boolean(selectedId),
+    staleTime: 30_000,
   });
   const start = useMutation({
     mutationFn: () =>
@@ -700,10 +739,26 @@ function ExerciseFlow() {
       setFeedback(undefined);
     },
   });
-  // 每次作答都写入按题持久化的草稿；刷新、切换工作区后可恢复。
+  // 作答写入按题持久化的草稿；300ms 防抖避免每个按键都同步写 localStorage。
+  // 定时器捕获选题 id，切题后迟到写入不会污染新题目的草稿。
+  const draftTimer = useRef<number | undefined>(undefined);
+  const pendingDraft = useRef<{ exerciseId: string; value: string } | undefined>(undefined);
+  useEffect(() => {
+    const pending = pendingDraft.current;
+    return () => {
+      if (pending) saveDraft(pending.exerciseId, pending.value);
+    };
+  }, []);
   const updateAnswer = (value: string) => {
     setAnswer(value);
-    if (selectedId) saveDraft(selectedId, value);
+    const exerciseId = selectedId;
+    if (!exerciseId) return;
+    pendingDraft.current = { exerciseId, value };
+    window.clearTimeout(draftTimer.current);
+    draftTimer.current = window.setTimeout(() => {
+      saveDraft(exerciseId, value);
+      if (pendingDraft.current?.exerciseId === exerciseId) pendingDraft.current = undefined;
+    }, 300);
   };
   const deliverAssignment = useMutation({
     mutationFn: (result: ExerciseAttempt) =>
@@ -994,40 +1049,7 @@ function ExerciseFlow() {
           </Feedback>
         )}
         {feedback?.execution && feedback.execution.columns.length > 0 && (
-          <section className="result-panel">
-            <div className="section-heading">
-              <h3>
-                查询结果 · {feedback.execution.totalRows} 行
-                {feedback.execution.truncated ? "（已截断）" : ""}
-              </h3>
-              <span className="safe-chip">{feedback.execution.durationMillis} ms</span>
-            </div>
-            <div
-              className="virtual-table"
-              role="region"
-              aria-label="练习运行结果"
-              tabIndex={0}
-            >
-              <table>
-                <thead>
-                  <tr>
-                    {feedback.execution.columns.map((column) => (
-                      <th key={column}>{column}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {feedback.execution.rows.map((row, index) => (
-                    <tr key={index}>
-                      {feedback.execution?.columns.map((column) => (
-                        <td key={column}>{String(row[column] ?? "NULL")}</td>
-                      ))}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </section>
+          <PracticeResultTable execution={feedback.execution} />
         )}
         {delivery && (
           <Feedback
@@ -1114,6 +1136,45 @@ function ExerciseFlow() {
   );
 }
 
+/** 独立 memo 化：作答每键重渲染时，几百行的结果表不随之重排。 */
+const PracticeResultTable = memo(function PracticeResultTable({
+  execution,
+}: {
+  execution: SqlPage;
+}) {
+  return (
+    <section className="result-panel">
+      <div className="section-heading">
+        <h3>
+          查询结果 · {execution.totalRows} 行
+          {execution.truncated ? "（已截断）" : ""}
+        </h3>
+        <span className="safe-chip">{execution.durationMillis} ms</span>
+      </div>
+      <div className="virtual-table" role="region" aria-label="练习运行结果" tabIndex={0}>
+        <table>
+          <thead>
+            <tr>
+              {execution.columns.map((column) => (
+                <th key={column}>{column}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {execution.rows.map((row, index) => (
+              <tr key={index}>
+                {execution.columns.map((column) => (
+                  <td key={column}>{String(row[column] ?? "NULL")}</td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+});
+
 function difficultyLabel(value: string) {
   return (
     (
@@ -1133,6 +1194,7 @@ function RunnerFlow() {
     queryKey: ["runner", "capabilities"],
     queryFn: () =>
       localAppRequest<{ items: RunnerCapability[] }>("runner.capabilities"),
+    staleTime: 30_000,
   });
   const available = useMemo(
     () => capabilities.data?.items ?? [],
@@ -1147,14 +1209,21 @@ function RunnerFlow() {
   const [requestId, setRequestId] = useState<string>();
   const [phase, setPhase] = useState("");
   useEffect(() => {
+    let disposed = false;
     let unlisten: (() => void) | undefined;
+    // 订阅是异步建立的：若在 resolve 前卸载，resolve 后必须立即退订，
+    // 否则每次运行/取消都会泄漏一个全局监听器。
     void subscribeLocalAppEvents((event) => {
       if (event.requestId === requestId && event.event === "runner.progress")
         setPhase(String(event.payload.phase ?? ""));
     }).then((value) => {
-      unlisten = value;
+      if (disposed) value();
+      else unlisten = value;
     });
-    return () => unlisten?.();
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
   }, [requestId]);
   const run = useMutation({
     mutationFn: async () => {
@@ -1311,6 +1380,8 @@ function RunnerFlow() {
   );
 }
 
+// 旧的组件级 provider 注册已上移到模块顶部（全局只注册一次）。
+
 function CodeEditor({
   language,
   value,
@@ -1328,43 +1399,8 @@ function CodeEditor({
   onSubmit?: () => void;
   onHint?: () => void;
 }) {
-  const configure: BeforeMount = (api) => {
-    api.languages.registerCompletionItemProvider("sql", {
-      provideCompletionItems: (
-        model: monaco.editor.ITextModel,
-        position: monaco.Position,
-      ) => {
-        const word = model.getWordUntilPosition(position);
-        const range = new api.Range(
-          position.lineNumber,
-          word.startColumn,
-          position.lineNumber,
-          word.endColumn,
-        );
-        const names = Array.from(
-          new Set(schema.match(/[A-Za-z_][A-Za-z0-9_]*/g) ?? []),
-        );
-        const suggestions: monaco.languages.CompletionItem[] = names
-          .slice(0, 200)
-          .map((label) => ({
-            label,
-            kind: api.languages.CompletionItemKind.Field,
-            insertText: label,
-            detail: "当前练习结构",
-            range,
-          }));
-        suggestions.push({
-          label: "safe select",
-          kind: api.languages.CompletionItemKind.Snippet,
-          insertText: "SELECT ${1:*} FROM ${2:table} LIMIT ${3:100};",
-          insertTextRules:
-            api.languages.CompletionItemInsertTextRule.InsertAsSnippet,
-          range,
-        });
-        return { suggestions };
-      },
-    });
-  };
+  // 渲染时刷新模块级 schema 槽位，补全始终拿到当前练习的结构。
+  practiceEditorSchema = schema;
   const mount: OnMount = (editor, api) => {
     editor.addCommand(api.KeyMod.CtrlCmd | api.KeyCode.Enter, onRun);
     if (onSubmit)
@@ -1375,25 +1411,29 @@ function CodeEditor({
     if (onHint) editor.addCommand(api.KeyCode.F1, onHint);
     const model = editor.getModel();
     if (!model) return;
-    const markers =
-      value.length > 256 * 1024
-        ? [
-            {
-              severity: api.MarkerSeverity.Warning,
-              message: "内容超过 Runner 的 256 KiB 上限",
-              startLineNumber: 1,
-              startColumn: 1,
-              endLineNumber: 1,
-              endColumn: 2,
-            },
-          ]
-        : [];
-    api.editor.setModelMarkers(model, "sqlteacher", markers);
+    // 256 KiB 超限警告跟随内容变化；只在挂载时算一次会永远过期。
+    const updateMarkers = () => {
+      const markers =
+        model.getValue().length > 256 * 1024
+          ? [
+              {
+                severity: api.MarkerSeverity.Warning,
+                message: "内容超过 Runner 的 256 KiB 上限",
+                startLineNumber: 1,
+                startColumn: 1,
+                endLineNumber: 1,
+                endColumn: 2,
+              },
+            ]
+          : [];
+      api.editor.setModelMarkers(model, "sqlteacher", markers);
+    };
+    updateMarkers();
+    editor.onDidChangeModelContent(updateMarkers);
   };
   return (
     <div className="editor-frame">
       <Editor
-        beforeMount={configure}
         onMount={mount}
         height="100%"
         language={monacoLanguage[language]}

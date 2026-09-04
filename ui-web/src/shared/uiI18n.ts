@@ -347,10 +347,18 @@ const sortedTranslations = [...translations].sort((left, right) => right[0].leng
 const translatedAttributes = ["aria-label", "placeholder", "title"] as const;
 const skippedTags = new Set(["CODE", "PRE", "SCRIPT", "STYLE", "TEXTAREA"]);
 
+// 单遍正则替换：此前对每个文本节点做 ~360 次 split/join 全串扫描，
+// 英文模式下每次 DOM 变更都会阻塞主线程。alternation 按长度降序排列，
+// 保证更长词条优先匹配（与旧的逐条替换顺序一致）。
+const translationBySource = new Map(sortedTranslations);
+const translationPattern = new RegExp(
+  sortedTranslations.map(([source]) => source.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|"),
+  "g",
+);
+
 export function translateUiText(value: string) {
-  let translated = value;
-  for (const [source, target] of sortedTranslations) translated = translated.split(source).join(target);
-  return translated;
+  if (!value) return value;
+  return value.replace(translationPattern, match => translationBySource.get(match) ?? match);
 }
 
 function shouldSkip(node: Node) {
