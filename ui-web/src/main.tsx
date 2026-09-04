@@ -7,7 +7,10 @@ import App from "./App";
 export const queryClient = new QueryClient({ defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false } } });
 
 async function bootstrap() {
-  if (import.meta.env.VITE_WDIO === "true") await import("@wdio/tauri-plugin");
+  if (import.meta.env.VITE_WDIO === "true") {
+    await import("@wdio/tauri-plugin");
+    (globalThis as typeof globalThis & { __SQLTEACHER_E2E_QUERY_CLIENT__?: QueryClient }).__SQLTEACHER_E2E_QUERY_CLIENT__ = queryClient;
+  }
   ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
     <React.StrictMode><QueryClientProvider client={queryClient}><HashRouter><App /></HashRouter></QueryClientProvider></React.StrictMode>,
   );

@@ -22,7 +22,7 @@ export function Feedback({ tone = "info", title, children }: { tone?: "info" | "
 }
 
 export function EmptyState({ title, children, action }: { title: string; children: ReactNode; action?: ReactNode }) {
-  return <section className="ui-empty"><span aria-hidden="true">◇</span><h2>{title}</h2><div>{children}</div>{action}</section>;
+  return <section className="ui-empty"><h2>{title}</h2><div>{children}</div>{action}</section>;
 }
 
 export function Dialog({ open, title, onClose, children }: { open: boolean; title: string; onClose: () => void; children: ReactNode }) {
