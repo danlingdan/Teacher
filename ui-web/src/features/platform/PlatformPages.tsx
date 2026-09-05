@@ -11,7 +11,9 @@ import type {
   CoursePackagePreview,
   CloudWorkspace,
   ExerciseDefinition,
+  ExerciseImportPreview,
   ExerciseSummary,
+  ExerciseTextDraft,
   InterventionCandidate,
   LearningAnalytics,
   KnowledgeMastery,
@@ -76,7 +78,8 @@ export function TeachingPage() {
   const [draft, setDraft] = useState<ExerciseDraftUi>(emptyExercise);
   const [editorOpen, setEditorOpen] = useState(false);
   const editorRef = useRef<HTMLDetailsElement | null>(null);
-  const [packageJson, setPackageJson] = useState("");
+  const [importText, setImportText] = useState("");
+  const [importPreview, setImportPreview] = useState<ExerciseImportPreview>();
   const [analytics, setAnalytics] = useState<LearningAnalytics>();
   const [interventions, setInterventions] = useState<InterventionCandidate[]>(
     [],
@@ -156,22 +159,50 @@ export function TeachingPage() {
   });
   const exportExercises = useMutation({
     mutationFn: () =>
-      localAppRequest<{ packageJson: string }>("teaching.exercise.export", {
+      localAppRequest<{ text: string }>("teaching.exercise.export", {
         exerciseIds: selectedId
           ? [selectedId]
           : (query.data?.exercises.map((item) => item.id) ?? []),
       }),
     onSuccess: (value) => {
-      setPackageJson(value.packageJson);
-      toast("success", "导出完成，JSON 已填入下方文本框");
+      setImportText(value.text);
+      setImportPreview(undefined);
+      toast("success", "导出完成，文字包已填入下方文本框");
     },
     onError: (error: Error) => toast("error", `导出失败：${error.message}`),
   });
+  const parseExercises = useMutation({
+    mutationFn: () =>
+      localAppRequest<ExerciseImportPreview>("teaching.exercise.parse", {
+        text: importText,
+      }),
+    onSuccess: (value) => {
+      setImportPreview(value);
+      toast("success", "解析完成，请核对后导入");
+    },
+    onError: (error: Error) => {
+      setImportPreview(undefined);
+      toast("error", `解析失败：${error.message}`);
+    },
+  });
+  const draftExercises = useMutation({
+    mutationFn: () =>
+      localAppRequest<ExerciseTextDraft>("teaching.exercise.draft", {
+        text: importText,
+      }),
+    onSuccess: (value) => {
+      setImportText(value.text);
+      setImportPreview(undefined);
+      toast("success", "已生成格式草稿，请核对");
+    },
+    onError: (error: Error) => toast("error", `AI 解析失败：${error.message}`),
+  });
   const importExercises = useMutation({
     mutationFn: () =>
-      localAppRequest("teaching.exercise.import", { packageJson }),
+      localAppRequest("teaching.exercise.import", { text: importText }),
     onSuccess: () => {
-      setPackageJson("");
+      setImportText("");
+      setImportPreview(undefined);
       void client.invalidateQueries({ queryKey: teachingKey });
       toast("success", "导入成功，题库已更新");
     },
@@ -522,25 +553,64 @@ export function TeachingPage() {
           </Feedback>
         )}
         <FormField
-          label="题库包 JSON"
-          hint="导出结果可复制保存；导入前由 Java 校验版本与内容。"
+          label="题库导入文字"
+          hint="粘贴自由文本可点 AI 解析；先解析预览，由 Java 校验后再导入。"
         >
           {(ids) => (
             <textarea
               {...ids}
-              value={packageJson}
-              onChange={(event) => setPackageJson(event.target.value)}
+              value={importText}
+              onChange={(event) => {
+                setImportText(event.target.value);
+                setImportPreview(undefined);
+              }}
+              placeholder={EXERCISE_IMPORT_TEMPLATE}
             />
           )}
         </FormField>
-        <Button
-          variant="secondary"
-          disabled={!packageJson.trim()}
-          busy={importExercises.isPending}
-          onClick={() => importExercises.mutate()}
-        >
-          导入题库包
-        </Button>
+        {parseExercises.isError && (
+          <Feedback tone="error" title="解析失败">
+            {parseExercises.error.message}
+          </Feedback>
+        )}
+        {importPreview && (
+          <Feedback tone="info" title="导入预览">
+            <p>
+              将导入 {importPreview.datasets.length} 个数据集、
+              {importPreview.exercises.length} 道题。
+            </p>
+            <ul className="plain-list">
+              {importPreview.exercises.map((item) => (
+                <li key={item.id}>{item.title}</li>
+              ))}
+            </ul>
+          </Feedback>
+        )}
+        <div className="button-row">
+          <Button
+            variant="secondary"
+            disabled={!importText.trim()}
+            busy={draftExercises.isPending}
+            onClick={() => draftExercises.mutate()}
+          >
+            AI 解析
+          </Button>
+          <Button
+            variant="secondary"
+            disabled={!importText.trim()}
+            busy={parseExercises.isPending}
+            onClick={() => parseExercises.mutate()}
+          >
+            解析预览
+          </Button>
+          <Button
+            disabled={!importPreview}
+            busy={importExercises.isPending}
+            onClick={() => importExercises.mutate()}
+          >
+            导入题库包
+          </Button>
+        </div>
       </details>
       <section className="content-card">
         <div className="section-heading">
@@ -680,6 +750,25 @@ function splitLines(value: string) {
     .map((item) => item.trim())
     .filter(Boolean);
 }
+const EXERCISE_IMPORT_TEMPLATE = [
+  "===[DATASET]===",
+  "ID: my-dataset",
+  "NAME: 我的数据集",
+  "SQL:",
+  "create table student(id integer primary key, name text not null);",
+  "insert into student values (1, 'Alice');",
+  "",
+  "===[EXERCISE]===",
+  "TITLE: 查询全部学生",
+  "KNOWLEDGE: 基础查询",
+  "DIFFICULTY: BEGINNER",
+  "DATASET: my-dataset",
+  "DESCRIPTION:",
+  "返回 student 表的全部列。",
+  "SQL:",
+  "select id, name from student order by id",
+  "RULE: EXACT",
+].join("\n");
 function definitionToDraft(value: ExerciseDefinition): ExerciseDraftUi {
   return {
     id: value.id,
