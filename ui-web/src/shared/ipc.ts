@@ -26,8 +26,6 @@ export type LocalAppMethod =
   | "teaching.exercise.save"
   | "teaching.exercise.copy"
   | "teaching.exercise.import"
-  | "teaching.exercise.parse"
-  | "teaching.exercise.draft"
   | "teaching.exercise.export"
   | "teaching.analytics"
   | "teaching.interventions"

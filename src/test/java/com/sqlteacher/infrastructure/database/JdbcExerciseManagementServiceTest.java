@@ -4,7 +4,6 @@ import com.sqlteacher.application.config.AiConfiguration;
 import com.sqlteacher.application.config.DatabaseConfiguration;
 import com.sqlteacher.application.config.SqlTeacherConfiguration;
 import com.sqlteacher.application.exercise.ExerciseDraft;
-import com.sqlteacher.application.exercise.ExerciseImportPreview;
 import com.sqlteacher.application.exercise.ExerciseImportResult;
 import com.sqlteacher.domain.SqlTeacherException;
 import com.sqlteacher.domain.exercise.ExerciseDefinition;
@@ -74,28 +73,6 @@ class JdbcExerciseManagementServiceTest {
         assertEquals(0, imported.datasetsImported());
         assertEquals(List.of("atomic-a-new"), imported.importedExerciseIds());
         assertTrue(target.findDefinition("atomic-a-new").isPresent());
-    }
-
-    @Test
-    void shouldPreviewPackageWithoutPersistingAnything() {
-        JdbcExerciseManagementService service = initialize(tempDir.resolve("preview"));
-        service.save(draft("preview-a", "预览题", null, true));
-        String text = service.exportPackage(List.of("preview-a"));
-
-        ExerciseImportPreview preview = service.parsePackage(text);
-
-        assertEquals(1, preview.exercises().size());
-        assertEquals("预览题", preview.exercises().get(0).title());
-        assertEquals(1, preview.datasets().size());
-        assertEquals(DefaultExerciseCatalogSeeder.DATASET_ID, preview.datasets().get(0).id());
-        assertTrue(service.findDefinition("preview-a").isPresent());
-    }
-
-    @Test
-    void shouldRejectInvalidPackageTextOnPreview() {
-        JdbcExerciseManagementService service = initialize(tempDir.resolve("preview-invalid"));
-
-        assertThrows(SqlTeacherException.class, () -> service.parsePackage("plain text without blocks"));
     }
 
     private JdbcExerciseManagementService initialize(Path directory) {

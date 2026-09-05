@@ -21,7 +21,5 @@ public interface ExerciseManagementService {
 
     String exportPackage(List<String> exerciseIds);
 
-    ExerciseImportResult importPackage(String text);
-
-    ExerciseImportPreview parsePackage(String text);
+    ExerciseImportResult importPackage(String packageJson);
 }

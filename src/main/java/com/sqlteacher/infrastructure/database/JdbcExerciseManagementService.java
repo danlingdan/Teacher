@@ -1,7 +1,6 @@
 package com.sqlteacher.infrastructure.database;
 
 import com.sqlteacher.application.exercise.ExerciseDraft;
-import com.sqlteacher.application.exercise.ExerciseImportPreview;
 import com.sqlteacher.application.exercise.ExerciseImportResult;
 import com.sqlteacher.application.exercise.ExerciseManagementService;
 import com.sqlteacher.application.exercise.ExerciseSummary;
@@ -26,18 +25,14 @@ import java.util.UUID;
 public final class JdbcExerciseManagementService implements ExerciseManagementService {
     private final JdbcConnectionFactory connectionFactory;
     private final ExercisePackageCodec codec;
-    private final ExerciseTextCodec textCodec;
 
     public JdbcExerciseManagementService(JdbcConnectionFactory connectionFactory) {
-        this(connectionFactory, new ExercisePackageCodec(), new ExerciseTextCodec());
+        this(connectionFactory, new ExercisePackageCodec());
     }
 
-    JdbcExerciseManagementService(
-        JdbcConnectionFactory connectionFactory, ExercisePackageCodec codec, ExerciseTextCodec textCodec
-    ) {
+    JdbcExerciseManagementService(JdbcConnectionFactory connectionFactory, ExercisePackageCodec codec) {
         this.connectionFactory = connectionFactory;
         this.codec = codec;
-        this.textCodec = textCodec;
     }
 
     @Override
@@ -196,7 +191,7 @@ public final class JdbcExerciseManagementService implements ExerciseManagementSe
             List<ExerciseDataset> datasets = readAllDatasets(connection).stream()
                 .filter(dataset -> datasetIds.contains(dataset.id()))
                 .toList();
-            return textCodec.encode(datasets, exercises);
+            return codec.encode(datasets, exercises);
         } catch (SqlTeacherException error) {
             throw error;
         } catch (SQLException | IllegalArgumentException error) {
@@ -205,8 +200,8 @@ public final class JdbcExerciseManagementService implements ExerciseManagementSe
     }
 
     @Override
-    public ExerciseImportResult importPackage(String text) {
-        ExerciseTextCodec.DecodedPackage imported = textCodec.decode(text);
+    public ExerciseImportResult importPackage(String packageJson) {
+        ExercisePackageCodec.DecodedPackage imported = codec.decode(packageJson);
         Set<String> datasetIds = imported.datasets().stream().map(ExerciseDataset::id).collect(java.util.stream.Collectors.toSet());
         try (Connection connection = connectionFactory.open("app")) {
             connection.setAutoCommit(false);
@@ -246,21 +241,6 @@ public final class JdbcExerciseManagementService implements ExerciseManagementSe
         } catch (SQLException | IllegalArgumentException error) {
             throw failure("EXERCISE_IMPORT_FAILED", "Failed to import exercise package", error);
         }
-    }
-
-    @Override
-    public ExerciseImportPreview parsePackage(String text) {
-        ExerciseTextCodec.DecodedPackage decoded = textCodec.decode(text);
-        return new ExerciseImportPreview(
-            decoded.datasets().stream()
-                .map(dataset -> new ExerciseImportPreview.DatasetPreview(dataset.id(), dataset.name()))
-                .toList(),
-            decoded.exercises().stream()
-                .map(exercise -> new ExerciseImportPreview.ExercisePreview(
-                    exercise.id(), exercise.title(), exercise.knowledgePoint(), exercise.difficulty()
-                ))
-                .toList()
-        );
     }
 
     private Optional<ExerciseDefinition> findDefinition(Connection connection, String id) throws SQLException {
