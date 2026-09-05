@@ -44,7 +44,13 @@ class SqliteAppDatabaseInitializerTest {
         assertEquals(18, readSchemaVersion(appDb));
         assertEquals(20, countExercises(appDb));
         assertEquals(20, countExercisesWithThreeHints(appDb));
-        assertEquals(2, countDemoStudents(demoDb));
+        assertEquals(7, countDemoRows(demoDb, "Student"));
+        assertEquals(8, countDemoRows(demoDb, "Course"));
+        assertEquals(11, countDemoRows(demoDb, "SC"));
+        assertEquals(5, countDemoRows(demoDb, "S"));
+        assertEquals(6, countDemoRows(demoDb, "P"));
+        assertEquals(7, countDemoRows(demoDb, "J"));
+        assertEquals(19, countDemoRows(demoDb, "SPJ"));
 
         try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + appDb);
              var statement = connection.prepareStatement(
@@ -143,10 +149,10 @@ class SqliteAppDatabaseInitializerTest {
         }
     }
 
-    private static int countDemoStudents(Path demoDb) throws Exception {
+    private static int countDemoRows(Path demoDb, String table) throws Exception {
         try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + demoDb);
              Statement statement = connection.createStatement();
-             ResultSet resultSet = statement.executeQuery("select count(*) from student")) {
+             ResultSet resultSet = statement.executeQuery("SELECT COUNT(*) FROM " + table)) {
             resultSet.next();
             return resultSet.getInt(1);
         }
