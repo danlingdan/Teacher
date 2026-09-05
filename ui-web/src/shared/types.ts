@@ -362,6 +362,19 @@ export interface ExerciseDefinition extends ExerciseSummary {
   createdAt: string;
   updatedAt: string;
 }
+export interface ExerciseImportPreview {
+  datasets: Array<{ id: string; name: string }>;
+  exercises: Array<{
+    id: string;
+    title: string;
+    knowledgePoint: string;
+    difficulty: string;
+  }>;
+}
+export interface ExerciseTextDraft {
+  text: string;
+  model: string;
+}
 export interface InterventionCandidate {
   id: string;
   classroomName: string;

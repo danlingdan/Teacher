@@ -16,6 +16,8 @@ import com.sqlteacher.application.database.DatabaseInitializationService;
 import com.sqlteacher.application.error.ApplicationExceptionMapper;
 import com.sqlteacher.application.error.DefaultApplicationExceptionMapper;
 import com.sqlteacher.application.event.LearningEventService;
+import com.sqlteacher.application.exercise.ExerciseManagementService;
+import com.sqlteacher.application.exercise.ExerciseTextDraftingService;
 import com.sqlteacher.application.metadata.DatabaseMetadataService;
 import com.sqlteacher.application.knowledge.CourseKnowledgeService;
 import com.sqlteacher.application.knowledge.GroundedKnowledgeExplanationService;
@@ -167,6 +169,21 @@ public class SqlTeacherApplicationConfig {
             learningEventService,
             connectionManagementService,
             contextPolicy
+        );
+    }
+
+    @Bean
+    public ExerciseTextDraftingService exerciseTextDraftingService(
+        AiModelProvider provider,
+        SqlTeacherConfiguration properties,
+        AiModelSelectionService modelSelectionService,
+        ExerciseManagementService exerciseManagementService
+    ) {
+        return new ExerciseTextDraftingServiceImpl(
+            provider,
+            properties.ai(),
+            modelSelectionService,
+            exerciseManagementService
         );
     }
 

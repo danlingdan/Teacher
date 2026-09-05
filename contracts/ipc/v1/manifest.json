@@ -122,6 +122,8 @@
     "teaching.exercise.copy",
     "teaching.exercise.detail",
     "teaching.exercise.export",
+    "teaching.exercise.draft",
+    "teaching.exercise.parse",
     "teaching.exercise.import",
     "teaching.exercise.save",
     "teaching.intervention.update",
