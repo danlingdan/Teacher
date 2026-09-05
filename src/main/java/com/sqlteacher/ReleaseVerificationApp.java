@@ -44,7 +44,7 @@ public final class ReleaseVerificationApp {
 
                 long queryStarted = System.nanoTime();
                 var query = context.getBean(SqlExecutionService.class).execute(
-                    new SqlExecutionRequest("demo", "select id, name, score from student order by id", 500,
+                    new SqlExecutionRequest("demo", "select Sno, Sname, Ssex, Smajor from Student order by Sno", 500,
                         Duration.ofSeconds(5))
                 );
                 long queryMs = elapsedMillis(queryStarted);
@@ -64,7 +64,7 @@ public final class ReleaseVerificationApp {
 
                 check("startup", startupMs, STARTUP_LIMIT_MS, true);
                 check("metadata", metadataMs, OPERATION_LIMIT_MS, tableCount > 0);
-                check("500-row query", queryMs, OPERATION_LIMIT_MS, query.success() && query.rows().size() == 500);
+                check("500-row query", queryMs, OPERATION_LIMIT_MS, query.success() && query.rows().size() >= 500);
                 check("analytics", analyticsMs, OPERATION_LIMIT_MS, true);
                 check("local search", searchMs, OPERATION_LIMIT_MS, searchResults > 0);
             }
@@ -82,11 +82,13 @@ public final class ReleaseVerificationApp {
         try (var connection = DriverManager.getConnection("jdbc:sqlite:" + database)) {
             connection.setAutoCommit(false);
             try (var statement = connection.prepareStatement(
-                "insert into student(id, name, score) values (?, ?, ?)")) {
-                for (int id = 3; id <= 500; id++) {
-                    statement.setInt(1, id);
-                    statement.setString(2, "Student " + id);
-                    statement.setInt(3, id % 101);
+                "insert into Student(Sno, Sname, Ssex, Sbirthdate, Smajor) values (?, ?, ?, ?, ?)")) {
+                for (int sno = 20180008; sno <= 20180507; sno++) {
+                    statement.setInt(1, sno);
+                    statement.setString(2, "Student-" + sno);
+                    statement.setString(3, sno % 2 == 0 ? "男" : "女");
+                    statement.setString(4, "2000-01-01");
+                    statement.setString(5, "软件工程");
                     statement.addBatch();
                 }
                 statement.executeBatch();

@@ -47,11 +47,11 @@ class SqliteApplicationBackupServiceTest {
         execute(configuration.database().appDatabasePath(),
             "insert into app_event(event_type, message) values ('KEEP', 'application')");
         execute(configuration.database().demoDatabasePath(),
-            "insert into student(id, name, score) values (3, 'Changed', 1)");
+            "insert into Student(Sno, Sname, Ssex, Sbirthdate, Smajor) values (20189999, 'Changed', '男', '2000-01-01', '软件工程')");
 
         new SqliteApplicationBackupService(configuration).restoreDemoDatabase();
 
-        assertEquals(2, count(configuration.database().demoDatabasePath(), "select count(*) from student"));
+        assertEquals(7, count(configuration.database().demoDatabasePath(), "select count(*) from Student"));
         assertEquals(1, count(configuration.database().appDatabasePath(), "select count(*) from app_event"));
     }
 
