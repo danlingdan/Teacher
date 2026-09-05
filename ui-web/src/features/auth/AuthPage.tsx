@@ -53,7 +53,7 @@ export default function AuthPage() {
   return <main className="auth-shell">
     <section className="auth-story" aria-label="SQLTeacher 介绍">
       <div className="auth-brand"><span className="brand-mark">S</span><div><strong>SQLTeacher</strong><small>Learning Studio</small></div></div>
-      <div className="auth-story-copy"><p className="eyebrow">Learn with clarity</p><h1>把每一次练习<br />变成可见的进步</h1><p>本地优先的计算机科学学习工作台。确定性评价负责结论，AI 只提供可审查的帮助。</p><ul><li><span>01</span>离线学习无需账号</li><li><span>02</span>SQL 与代码执行受 Java 安全边界保护</li><li><span>03</span>登录后同步班级、任务与学习记录</li></ul></div>
+      <div className="auth-story-copy"><p className="eyebrow">Learn with clarity</p><h1>把每一次练习<br />变成可见的进步</h1><p>本地优先的计算机科学学习工作台。</p><ul><li><span>01</span>离线可用，无需账号</li><li><span>02</span>SQL 执行受安全边界保护</li><li><span>03</span>登录后同步班级与进度</li></ul></div>
       <small className="auth-version">SQLTeacher 3.0 · Windows</small>
     </section>
     <section className="auth-panel">
@@ -69,7 +69,7 @@ export default function AuthPage() {
           {message && <Feedback tone="info" title="请检查邮箱"><p>{message}</p></Feedback>}
           <Button type="submit" busy={busy} disabled={disabled}>{mode === "login" ? "登录" : mode === "register" ? "创建账号并登录" : "发送重置邮件"}</Button>
         </form>
-        <p className="auth-privacy">密码只会交给 Java 登录服务，不进入 Web Storage、日志或前端持久化。</p>
+        <p className="auth-privacy">离线学习无需登录。</p>
       </div>
     </section>
   </main>;

@@ -45,8 +45,8 @@ export function Feedback({ tone = "info", title, children }: { tone?: "info" | "
   return <section className={`ui-feedback ${tone}`} role={tone === "error" ? "alert" : "status"}><strong>{title}</strong><div>{children}</div></section>;
 }
 
-export function EmptyState({ title, children, action }: { title: string; children: ReactNode; action?: ReactNode }) {
-  return <section className="ui-empty"><h2>{title}</h2><div>{children}</div>{action}</section>;
+export function EmptyState({ title, children, action }: { title: string; children?: ReactNode; action?: ReactNode }) {
+  return <section className="ui-empty"><h2>{title}</h2>{children && <div>{children}</div>}{action}</section>;
 }
 
 export function Dialog({ open, title, onClose, children }: { open: boolean; title: string; onClose: () => void; children: ReactNode }) {

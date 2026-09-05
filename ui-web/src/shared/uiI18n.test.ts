@@ -3,7 +3,7 @@ import { installEnglishUi, translateUiText } from "./uiI18n";
 
 describe("English UI compatibility layer", () => {
   it("translates complete workflow phrases before generic labels", () => {
-    expect(translateUiText("确认题目并开始作答")).toBe("Confirm and start");
+    expect(translateUiText("确认并开始活动")).toBe("Confirm and start activity");
     expect(translateUiText("正在读取本地学习摘要")).toBe("Loading local learning summary");
   });
 

@@ -326,7 +326,7 @@ function Shell() {
             <small>
               {session.data?.authenticated
                 ? (session.data.roleLabel ?? session.data.role)
-                : "同步班级与学习进度"}
+                : "同步学习进度"}
             </small>
           </span>
         </NavLink>
@@ -336,7 +336,7 @@ function Shell() {
             <strong>
               {health.data ? "本地核心已就绪" : "正在连接本地核心"}
             </strong>
-            <small>离线学习始终可用</small>
+            <small>离线可用</small>
           </div>
         </div>
       </aside>
@@ -395,7 +395,7 @@ function Shell() {
                   </header>
                   {notifications.length === 0 ? (
                     <p className="muted">
-                      暂无通知。班级任务、截止提醒、提交确认和教师反馈会显示在这里。
+                      暂无通知
                     </p>
                   ) : (
                     <ul>
@@ -569,7 +569,7 @@ function TodayPage() {
   if (!summary.data)
     return (
       <EmptyState title="尚未连接">
-        请从 Tauri 桌面壳启动，浏览器预览不会模拟学习数据。
+        请从 SQLTeacher 桌面应用打开。
       </EmptyState>
     );
   const data = summary.data;
@@ -579,10 +579,9 @@ function TodayPage() {
         <div>
           <p className="eyebrow">下一步学习</p>
           <h2>{data.actions[0]?.title ?? "当前没有待办动作"}</h2>
-          <p>
-            {data.actions[0]?.description ??
-              "完成一次活动后，确定性诊断会在这里给出下一步。"}
-          </p>
+          {data.actions[0]?.description && (
+            <p>{data.actions[0].description}</p>
+          )}
         </div>
         <div className="button-row">
           {data.actions[0] && (
@@ -611,15 +610,15 @@ function TodayPage() {
       <section className="content-card action-list">
         <div className="section-heading">
           <div>
-            <p className="eyebrow">确定性队列</p>
-            <h2>真实本地建议</h2>
+            <p className="eyebrow">学习队列</p>
+            <h2>学习建议</h2>
           </div>
           <span className="policy-chip" title={data.policyVersion}>
-            确定性策略 · Java
+            确定性策略
           </span>
         </div>
         {data.actions.length === 0 ? (
-          <p className="muted">没有需要立即处理的学习动作。</p>
+          <p className="muted">暂无待办动作</p>
         ) : (
           <ol>
             {data.actions.map((action) => (

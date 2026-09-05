@@ -300,8 +300,7 @@ export default function KnowledgePage() {
             <div className="knowledge-empty">
               <h2>选择一篇知识文档</h2>
               <p>
-                从左侧的课程树、搜索结果或文档列表中选择内容后，将在这里打开安全阅读视图。
-              </p>
+                  </p>
             </div>
           )}
         </section>
@@ -315,7 +314,7 @@ export default function KnowledgePage() {
           </div>
           <FormField
             label="针对课程资料提问"
-            hint="回答会标明引用；资料不足时会明确降级，不会编造来源。"
+            hint="回答附引用来源"
           >
             {(ids) => (
               <textarea
@@ -369,7 +368,7 @@ export default function KnowledgePage() {
             </div>
             <FormField
               label="知识库根目录"
-              hint="只读取该规范化目录内的 Markdown 与附件引用"
+              hint="仅支持 Markdown 与附件引用"
             >
               {(ids) => (
                 <input

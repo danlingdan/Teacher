@@ -236,12 +236,8 @@ export function TeachingPage() {
     <div className="platform-workspace page-grid">
       <section className="hero-card">
         <div>
-          <p className="eyebrow">Java 权限边界</p>
+          <p className="eyebrow">题库与学情</p>
           <h2>教学工作台</h2>
-          <p>
-            题库、学习进度与发布权限均来自 Java
-            服务；服务器仍会再次验证云端写操作。
-          </p>
         </div>
         <span className="policy-chip">{roleLabel(data.role)}</span>
       </section>
@@ -641,7 +637,7 @@ export function TeachingPage() {
           </strong>
         </summary>
         {interventions.length === 0 ? (
-          <p className="muted">当前没有需要处理的学生干预。</p>
+          <p className="muted">暂无待处理干预。</p>
         ) : (
           <ul className="plain-list">
             {interventions.map((item) => (
@@ -1181,10 +1177,7 @@ export function CloudPage() {
         </span>
         <p className="eyebrow">SQLTeacher Cloud</p>
         <h2>连接你的班级与学习记录</h2>
-        <p>
-          登录后可以同步班级、任务和学习进度。本地课程、练习、知识与 SQL
-          工作区无需登录即可使用。
-        </p>
+        <p>登录后同步班级与学习进度；离线功能无需登录。</p>
         <div className="button-row">
           <Button onClick={() => navigate("/login?returnTo=%2Fcloud")}>
             登录或创建账号
@@ -1604,7 +1597,7 @@ export function CloudPage() {
             <section className="account-section">
               <h3>任务反馈</h3>
               {feedbackItems.length === 0 ? (
-                <p className="muted">该任务暂无可见反馈。</p>
+                <p className="muted">暂无反馈。</p>
               ) : (
                 <ul className="plain-list">
                   {feedbackItems.map((item) => (
@@ -1690,7 +1683,6 @@ export function CloudPage() {
             <strong>共享课程、知识点与版本化任务</strong>
           </summary>
           <p className="muted">
-            课程内容保存于云端；任务发布时冻结练习版本，后续修改不会改变学生已领取的内容。
           </p>
           <div className="settings-grid">
             <FormField label="课程">
@@ -1988,7 +1980,7 @@ export function CloudPage() {
           </div>
         </div>
         {portfolioItems.length === 0 ? (
-          <p className="muted">完成项目活动并提交后，成果会显示在这里。</p>
+          <p className="muted">暂无成果记录。</p>
         ) : (
           <ul className="plain-list">
             {portfolioItems.map((item) => (
@@ -2278,7 +2270,6 @@ export function SettingsPage() {
         <div>
           <p className="eyebrow">个性化设置</p>
           <h2>按你的方式使用 SQLTeacher</h2>
-          <p>常用偏好即时读取；耗时的环境与磁盘检测仅在你主动展开时运行。</p>
         </div>
         <div className="button-row">
           {dirty && (
@@ -2457,7 +2448,7 @@ export function SettingsPage() {
             label="临时支持日志"
             checked={draft.supportLogging}
             onChange={() => toggle("supportLogging")}
-            hint="开启后 24 小时自动关闭；诊断日志仍不会包含密码、令牌、SQL、Prompt 或用户附件。"
+            hint="开启后 24 小时自动关闭"
           />
           <Toggle
             label="允许可信更新镜像"
@@ -2468,7 +2459,7 @@ export function SettingsPage() {
             label="SQL 开发者模式"
             checked={draft.developerMode}
             onChange={() => toggle("developerMode")}
-            hint="只减少常规确认；禁用语句、只读边界、高风险确认和审计仍由 Java 强制。"
+            hint="减少常规确认，安全边界不变"
           />
         </div>
       </section>

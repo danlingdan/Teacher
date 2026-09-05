@@ -251,20 +251,16 @@ function ActivityFlow() {
         (Boolean(selectedId) && definition.isPending) ? (
           <section className="page-skeleton">
             <span className="spinner" />
-            正在加载确定性活动
+            正在加载活动
           </section>
         ) : workspace.isError || definition.isError ? (
           <Feedback tone="error" title="课程活动无法加载">
             {(workspace.error ?? definition.error)?.message}
           </Feedback>
         ) : courses.length === 0 ? (
-          <EmptyState title="暂无可用课程活动">
-            教师启用活动后会显示在这里。
-          </EmptyState>
+          <EmptyState title="暂无课程活动" />
         ) : !definition.data ? (
-          <EmptyState title="选择一项课程活动">
-            测验、跟踪、模拟、代码、项目、实验和阅读活动都在 Java 核心中评价。
-          </EmptyState>
+          <EmptyState title="选择一项课程活动" />
         ) : confirmedId !== definition.data.id ? (
           <section className="content-card preview-card">
             <p className="eyebrow">
@@ -276,10 +272,6 @@ function ActivityFlow() {
               <div>
                 <dt>预计用时</dt>
                 <dd>{definition.data.estimatedMinutes} 分钟</dd>
-              </div>
-              <div>
-                <dt>评价方式</dt>
-                <dd>Java 确定性评价</dd>
               </div>
             </dl>
             <Button onClick={() => setConfirmedId(definition.data?.id)}>
@@ -641,7 +633,6 @@ function ActivityInteraction({
           </Button>
         }
       >
-        SQL 类型活动由专用安全练习流程执行。
       </EmptyState>
     );
   return (
@@ -654,7 +645,7 @@ function ActivityInteraction({
           </p>
           <h2>{definition.title}</h2>
         </div>
-        <span className="policy-chip">Java 确定性评价</span>
+        <span className="policy-chip">Java 评价</span>
       </header>
       <p>{prompt}</p>
       {definition.latestFeedback && (
@@ -924,7 +915,7 @@ function ExerciseFlow() {
       <main className="flow-main">
         {assignmentContext && (
           <Feedback tone="info" title={assignmentTitle || "班级任务"}>
-            <p>本次提交将记录到班级任务；网络不可用时会进入本地待同步队列。</p>
+            <p>提交将计入班级任务。</p>
           </Feedback>
         )}
         <Stepper
@@ -932,9 +923,7 @@ function ExerciseFlow() {
           current={step}
         />
         {!selectedId && (
-          <EmptyState title="先选择练习">
-            编辑器会在预览并确认练习后加载。
-          </EmptyState>
+          <EmptyState title="先选择练习" />
         )}
         {preview.data && !session && (
           <section className="content-card preview-card">
@@ -943,8 +932,7 @@ function ExerciseFlow() {
             <p>{assignmentSnapshot.data?.prompt ?? preview.data.description}</p>
             {assignmentSnapshot.data && (
               <p className="muted">
-                任务内容快照：
-                {assignmentSnapshot.data.snapshotHash.slice(0, 12)} · 数据集{" "}
+                快照 {assignmentSnapshot.data.snapshotHash.slice(0, 12)} · 数据集{" "}
                 {assignmentSnapshot.data.datasetVersion}
               </p>
             )}
@@ -968,7 +956,7 @@ function ExerciseFlow() {
           <section className="content-card coding-card">
             <header className="editor-toolbar">
               <div>
-                <p className="eyebrow">确定性 SQL 练习</p>
+                <p className="eyebrow">SQL 练习</p>
                 <h2>{session.exercise.title}</h2>
               </div>
               <span className="policy-chip">
@@ -1116,7 +1104,7 @@ function ExerciseFlow() {
           onClose={() => setResetOpen(false)}
         >
           <p>
-            会结束当前作答会话，把代码恢复为初始模板，并删除本题已保存的草稿。此操作无法撤销。
+            将恢复初始代码并清除本题草稿，无法撤销。
           </p>
           <div className="button-row">
             <Button variant="secondary" onClick={() => setResetOpen(false)}>
@@ -1265,8 +1253,8 @@ function RunnerFlow() {
       <section className="content-card coding-card">
         <header className="editor-toolbar">
           <div>
-            <p className="eyebrow">本地编程实验</p>
-            <h2>多语言 Runner</h2>
+            <p className="eyebrow">本地运行</p>
+            <h2>代码运行</h2>
           </div>
           <div className="segmented-control">
             {(["JAVA", "PYTHON", "C", "CPP"] as const).map((item) => (
@@ -1327,9 +1315,7 @@ function RunnerFlow() {
           <span className="policy-chip">{phase || "idle"}</span>
         </div>
         {!result && !run.isError ? (
-          <EmptyState title="等待运行">
-            编译、运行、超时和取消状态会显示在这里。
-          </EmptyState>
+          <EmptyState title="等待运行" />
         ) : result ? (
           <>
             <Feedback
@@ -1357,10 +1343,7 @@ function RunnerFlow() {
         title="切换语言会覆盖当前代码"
         onClose={() => setLanguageSwitch(undefined)}
       >
-        <p>
-          当前源码已被修改，不是 {language} 初始模板。切换到 {languageSwitch ?? ""}
-          {" "}会用新语言的初始模板覆盖现有代码，且无法恢复。
-        </p>
+        <p>当前代码尚未保存，切换到 {languageSwitch ?? ""} 初始模板后将覆盖现有代码，无法恢复。</p>
         <div className="button-row">
           <Button variant="secondary" onClick={() => setLanguageSwitch(undefined)}>
             取消
