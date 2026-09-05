@@ -41,8 +41,8 @@ export function Stepper({ steps, current }: { steps: string[]; current: number }
   return <ol className="ui-stepper" aria-label="进度">{steps.map((step, index) => <li key={step} aria-current={index === current ? "step" : undefined} className={index <= current ? "complete" : ""}><span>{index + 1}</span>{step}</li>)}</ol>;
 }
 
-export function Feedback({ tone = "info", title, children }: { tone?: "info" | "success" | "warning" | "error"; title: string; children: ReactNode }) {
-  return <section className={`ui-feedback ${tone}`} role={tone === "error" ? "alert" : "status"}><strong>{title}</strong><div>{children}</div></section>;
+export function Feedback({ tone = "info", title, children }: { tone?: "info" | "success" | "warning" | "error"; title: string; children?: ReactNode }) {
+  return <section className={`ui-feedback ${tone}`} role={tone === "error" ? "alert" : "status"}><strong>{title}</strong>{children && <div>{children}</div>}</section>;
 }
 
 export function EmptyState({ title, children, action }: { title: string; children?: ReactNode; action?: ReactNode }) {

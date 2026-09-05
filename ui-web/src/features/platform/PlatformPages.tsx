@@ -2286,9 +2286,7 @@ export function SettingsPage() {
         </div>
       </section>
       {save.isSuccess && (
-        <Feedback tone="success" title="设置已保存">
-          <p>Java 核心已应用新的本机设置。</p>
-        </Feedback>
+        <Feedback tone="success" title="设置已保存" />
       )}
       <section className="content-card settings-card">
         <div className="settings-section-title">
@@ -2475,11 +2473,8 @@ export function SettingsPage() {
         <div className="settings-panel-body">
           <div className="on-demand-callout">
             <div>
-              <strong>环境检测不会再阻塞设置页</strong>
-              <p>
-                只有点击按钮后才检查 Cloud、Runner、JDK、Python、Ollama、MSVC 与
-                WSL。
-              </p>
+              <strong>手动检测</strong>
+              <p>检测 Cloud、Runner、JDK、Python、Ollama、MSVC 与 WSL。</p>
             </div>
             <Button
               variant="secondary"
@@ -2496,9 +2491,6 @@ export function SettingsPage() {
           )}
           {environment.data && (
             <>
-              <p className="muted">
-                探测顺序：{environment.data.manualPathPolicy}
-              </p>
               <p>连接状态：{environment.data.connectivity}</p>
               <div className="component-grid">
                 {environment.data.components.map((item) => (
@@ -2563,9 +2555,7 @@ export function SettingsPage() {
         </summary>
         <div className="settings-panel-body">
           {!data.canMaintainLocalData ? (
-            <Feedback tone="warning" title="当前身份无维护权限">
-              请切换到允许维护本地数据的身份。
-            </Feedback>
+            <Feedback tone="warning" title="当前身份无维护权限" />
           ) : (
             <>
               {storage.isFetching && !storage.data ? (
@@ -2622,7 +2612,7 @@ export function SettingsPage() {
               </ul>
               <FormField
                 label="清空学习数据确认词"
-                hint="输入 RESET LEARNING DATA 后才可执行；应用会返回实际删除数量。"
+                hint="输入 RESET LEARNING DATA 解锁按钮"
               >
                 {(ids) => (
                   <input
@@ -2644,7 +2634,7 @@ export function SettingsPage() {
               </Button>
               {resetLearning.isSuccess && (
                 <Feedback tone="success" title="学习数据已重置">
-                  权威学习事件和派生进度已按 Java 维护服务处理。
+                  已清除全部学习记录。
                 </Feedback>
               )}
             </>
