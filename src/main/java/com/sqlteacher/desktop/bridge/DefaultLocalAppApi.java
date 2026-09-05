@@ -35,6 +35,7 @@ import com.sqlteacher.application.exercise.ExerciseManagementService;
 import com.sqlteacher.application.exercise.ExercisePracticeService;
 import com.sqlteacher.application.exercise.ExerciseProgressService;
 import com.sqlteacher.application.exercise.ExerciseDraft;
+import com.sqlteacher.application.exercise.ExerciseTextDraftingService;
 import com.sqlteacher.application.analytics.AnalyticsFilter;
 import com.sqlteacher.application.analytics.LearningAnalyticsService;
 import com.sqlteacher.application.activity.ActivityLearningService;
@@ -169,6 +170,8 @@ public final class DefaultLocalAppApi implements LocalAppApi {
             case "teaching.exercise.save" -> teachingExerciseSave(params, cancellation);
             case "teaching.exercise.copy" -> teachingExerciseCopy(params, cancellation);
             case "teaching.exercise.import" -> teachingExerciseImport(params, cancellation);
+            case "teaching.exercise.parse" -> teachingExerciseParse(params, cancellation);
+            case "teaching.exercise.draft" -> teachingExerciseDraft(params, cancellation);
             case "teaching.exercise.export" -> teachingExerciseExport(params, cancellation);
             case "teaching.analytics" -> teachingAnalytics(cancellation);
             case "teaching.interventions" -> teachingInterventions(cancellation);
@@ -437,7 +440,21 @@ public final class DefaultLocalAppApi implements LocalAppApi {
         requireTeacher();
         cancellation.throwIfCancelled();
         return mapper.valueToTree(context().getBean(ExerciseManagementService.class)
-            .importPackage(requiredText(params, "packageJson", 1_000_000)));
+            .importPackage(requiredText(params, "text", 1_000_000)));
+    }
+
+    private JsonNode teachingExerciseParse(JsonNode params, CancellationToken cancellation) {
+        requireTeacher();
+        cancellation.throwIfCancelled();
+        return mapper.valueToTree(context().getBean(ExerciseManagementService.class)
+            .parsePackage(requiredText(params, "text", 1_000_000)));
+    }
+
+    private JsonNode teachingExerciseDraft(JsonNode params, CancellationToken cancellation) {
+        requireTeacher();
+        cancellation.throwIfCancelled();
+        return mapper.valueToTree(context().getBean(ExerciseTextDraftingService.class)
+            .draft(requiredText(params, "text", 200_000)));
     }
 
     private JsonNode teachingExerciseExport(JsonNode params, CancellationToken cancellation) {
@@ -446,7 +463,7 @@ public final class DefaultLocalAppApi implements LocalAppApi {
         List<String> ids = new java.util.ArrayList<>();
         params.path("exerciseIds").forEach(item -> ids.add(item.asText()));
         if (ids.isEmpty()) throw new IllegalArgumentException("At least one exercise must be selected");
-        return mapper.createObjectNode().put("packageJson",
+        return mapper.createObjectNode().put("text",
             context().getBean(ExerciseManagementService.class).exportPackage(ids));
     }
 
