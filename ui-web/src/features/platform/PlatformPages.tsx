@@ -185,6 +185,15 @@ export function TeachingPage() {
       toast("error", `解析失败：${error.message}`);
     },
   });
+  const publishExercises = useMutation({
+    mutationFn: () =>
+      localAppRequest<{ bankVersion: number }>("teaching.exercise.publish", {
+        text: importText,
+      }),
+    onSuccess: (value) =>
+      toast("success", `已发布到服务器，题库版本 ${value.bankVersion}`),
+    onError: (error: Error) => toast("error", `发布失败：${error.message}`),
+  });
   const draftExercises = useMutation({
     mutationFn: () =>
       localAppRequest<ExerciseTextDraft>("teaching.exercise.draft", {
@@ -574,14 +583,37 @@ export function TeachingPage() {
           </Feedback>
         )}
         {importPreview && (
-          <Feedback tone="info" title="导入预览">
+          <Feedback
+            tone={
+              importPreview.exercises.every((item) => item.selfTest.passed) &&
+              importPreview.datasets.every((item) => item.selfTest.passed)
+                ? "info"
+                : "error"
+            }
+            title="导入预览"
+          >
             <p>
               将导入 {importPreview.datasets.length} 个数据集、
-              {importPreview.exercises.length} 道题。
+              {importPreview.exercises.length} 道题。导入前会按数据集试跑每道题的参考答案。
             </p>
+            {importPreview.datasets.some((item) => !item.selfTest.passed) && (
+              <ul className="plain-list">
+                {importPreview.datasets
+                  .filter((item) => !item.selfTest.passed)
+                  .map((item) => (
+                    <li key={item.id}>
+                      数据集 {item.name}：{item.selfTest.message}
+                    </li>
+                  ))}
+              </ul>
+            )}
             <ul className="plain-list">
               {importPreview.exercises.map((item) => (
-                <li key={item.id}>{item.title}</li>
+                <li key={item.id}>
+                  {item.selfTest.passed ? "✓" : "✕"}{" "}
+                  <span>{item.title}</span>
+                  {!item.selfTest.passed && <>—— {item.selfTest.message}</>}
+                </li>
               ))}
             </ul>
           </Feedback>
@@ -604,11 +636,23 @@ export function TeachingPage() {
             解析预览
           </Button>
           <Button
-            disabled={!importPreview}
+            disabled={
+              !importPreview ||
+              !importPreview.exercises.every((item) => item.selfTest.passed) ||
+              !importPreview.datasets.every((item) => item.selfTest.passed)
+            }
             busy={importExercises.isPending}
             onClick={() => importExercises.mutate()}
           >
             导入题库包
+          </Button>
+          <Button
+            variant="secondary"
+            disabled={!importText.trim()}
+            busy={publishExercises.isPending}
+            onClick={() => publishExercises.mutate()}
+          >
+            发布到服务器
           </Button>
         </div>
       </details>

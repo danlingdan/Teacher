@@ -1204,6 +1204,20 @@ final class SqliteSchemaMigrator {
                     """,
                 "create index if not exists idx_sql_history_created on sql_history(created_at desc)"
             )
+        ),
+        new Migration(
+            20,
+            "Track the applied network exercise bank version for streaming bank updates",
+            List.of(
+                """
+                    create table exercise_bank_state (
+                        channel text primary key,
+                        bank_version integer not null,
+                        manifest_sha256 text,
+                        updated_at text not null
+                    )
+                    """
+            )
         )
     );
 

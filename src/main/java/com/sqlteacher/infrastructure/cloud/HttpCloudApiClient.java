@@ -11,6 +11,8 @@ import com.sqlteacher.application.collaboration.AdminHealthSummary;
 import com.sqlteacher.application.collaboration.AdminUserSummary;
 import com.sqlteacher.application.collaboration.RetentionCategory;
 import com.sqlteacher.application.collaboration.RetentionJob;
+import com.sqlteacher.application.collaboration.ExerciseBankBlock;
+import com.sqlteacher.application.collaboration.ExerciseBankManifest;
 import com.sqlteacher.application.collaboration.RetentionPreview;
 import com.sqlteacher.application.collaboration.CloudApiRequestException;
 import com.sqlteacher.application.collaboration.AssignmentStatus;
@@ -640,6 +642,17 @@ public final class HttpCloudApiClient implements CloudApiClient {
     @Override
     public PlanningHealthSummary getPlanningHealth(String token) {
         return request("v19/operations-health", "GET", null, token, PlanningHealthSummary.class);
+    }
+
+    @Override public ExerciseBankManifest fetchExerciseBankManifest() {
+        return request("bank/manifest", "GET", null, null, ExerciseBankManifest.class);
+    }
+    @Override public ExerciseBankBlock fetchExerciseBankBlock(String type, String id) {
+        return request("bank/block/" + encodeSegment(type) + "/" + encodeSegment(id), "GET", null, null, ExerciseBankBlock.class);
+    }
+    @Override public int publishExerciseBankPackage(String token, String packageText) {
+        var tree = request("bank/publish", "POST", Map.of("text", packageText), token, com.fasterxml.jackson.databind.JsonNode.class);
+        return tree.path("bankVersion").asInt(0);
     }
 
     private CloudAuthenticationService.Session authenticate(String path, Map<String, String> payload) {

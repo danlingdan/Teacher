@@ -32,5 +32,6 @@ Stage 0 至 Stage 27 的记录统一归档在此。目录名保留原阶段编�
 | Stage 25 | v3.0 Alpha.7 功能对齐与收口 | [stage25/](stage25/) |
 | Stage 26 | v3.0 Beta Tauri-only 完全迁移 | [stage26/](stage26/) |
 | Stage 27 | v3.0 正式版与无控制台启动 | [stage27/](stage27/) |
+| Stage 28 | v3.1.0 练习题目体系增强 | [stage28/](stage28/) |
 
 返回 [历史资料](../README.md) 或 [文档中心](../../README.md)。

@@ -383,4 +383,16 @@ public interface CloudApiClient {
     default PlanningHealthSummary getPlanningHealth(String accessToken) {
         throw new UnsupportedOperationException("Planning operations health is unavailable");
     }
+
+    default ExerciseBankManifest fetchExerciseBankManifest() {
+        throw new UnsupportedOperationException("Exercise bank distribution is unavailable");
+    }
+
+    default ExerciseBankBlock fetchExerciseBankBlock(String type, String id) {
+        throw new UnsupportedOperationException("Exercise bank distribution is unavailable");
+    }
+
+    default int publishExerciseBankPackage(String accessToken, String packageText) {
+        throw new UnsupportedOperationException("Exercise bank distribution is unavailable");
+    }
 }

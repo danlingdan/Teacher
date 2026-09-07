@@ -1,84 +1,117 @@
 package com.sqlteacher.infrastructure.database;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
+import com.sqlteacher.domain.SqlTeacherException;
 
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
+
+/**
+ * Builds the student-facing schema summary by introspecting a real in-memory database
+ * instead of parsing the setup SQL text, so the preview always matches what practice and
+ * evaluation will actually create. Declared foreign keys are appended as readable
+ * column-to-column relations, which also explains id/student_id-style join keys.
+ */
 final class ExerciseDatasetSchemaSummary {
-    private static final Pattern CREATE_TABLE = Pattern.compile(
-        "(?is)\\bcreate\\s+table\\s+(?:if\\s+not\\s+exists\\s+)?([`\"\\[]?[a-zA-Z_][\\w$]*[`\"\\]]?)\\s*\\((.*?)\\)\\s*;"
-    );
-    private static final Pattern TABLE_CONSTRAINT = Pattern.compile(
-        "(?i)^(constraint|primary|foreign|unique|check)\\b"
-    );
+    private static final String PLACEHOLDER = "暂无数据集字段说明";
 
     private ExerciseDatasetSchemaSummary() {
     }
 
     static String fromSetupSql(String setupSql) {
-        if (setupSql == null || setupSql.isBlank()) return "暂无数据集字段说明";
-        List<String> tables = new ArrayList<>();
-        Matcher matcher = CREATE_TABLE.matcher(setupSql);
-        while (matcher.find()) {
-            String table = unquote(matcher.group(1));
-            List<String> columns = splitColumns(matcher.group(2)).stream()
-                .map(String::trim)
-                .filter(value -> !value.isEmpty() && !TABLE_CONSTRAINT.matcher(value).find())
-                .map(ExerciseDatasetSchemaSummary::firstToken)
-                .filter(value -> !value.isEmpty())
-                .toList();
-            if (!columns.isEmpty()) tables.add(table + "（" + String.join("、", columns) + "）");
+        if (setupSql == null || setupSql.isBlank()) {
+            return PLACEHOLDER;
         }
-        return tables.isEmpty() ? "暂无数据集字段说明" : String.join("；", tables);
+        try {
+            ExerciseDatasetSqlPolicy.validate(setupSql);
+            SqliteDriver.ensureLoaded();
+        } catch (SqlTeacherException | SQLException error) {
+            return PLACEHOLDER;
+        }
+        try (Connection connection = DriverManager.getConnection("jdbc:sqlite::memory:")) {
+            try (Statement statement = connection.createStatement()) {
+                for (String sql : SqlScriptSplitter.split(setupSql)) {
+                    statement.execute(sql);
+                }
+            }
+            List<String> tables = new ArrayList<>();
+            List<String> relations = new ArrayList<>();
+            for (String table : userTableNames(connection)) {
+                List<String> columns = stringColumnValues(connection, "pragma table_info(" + quote(table) + ")", "name");
+                if (!columns.isEmpty()) {
+                    tables.add(table + "（" + String.join("、", columns) + "）");
+                }
+                relations.addAll(foreignKeyRelations(connection, table));
+            }
+            if (tables.isEmpty()) {
+                return PLACEHOLDER;
+            }
+            // 表结构与外键关系分行展示，预览无需横向滚动即可读到完整关系。
+            StringBuilder summary = new StringBuilder(String.join("；", tables));
+            if (!relations.isEmpty()) {
+                summary.append('\n').append(String.join("；", relations));
+            }
+            return summary.toString();
+        } catch (SQLException error) {
+            return PLACEHOLDER;
+        }
     }
 
-    private static List<String> splitColumns(String definition) {
-        List<String> parts = new ArrayList<>();
-        int depth = 0;
-        int start = 0;
-        char quote = '\0';
-        for (int index = 0; index < definition.length(); index++) {
-            char current = definition.charAt(index);
-            if (quote != '\0') {
-                if (current == quote) quote = '\0';
-            } else if (current == '\'' || current == '"' || current == '`') {
-                quote = current;
-            } else if (current == '(') {
-                depth++;
-            } else if (current == ')') {
-                depth--;
-            } else if (current == ',' && depth == 0) {
-                parts.add(definition.substring(start, index));
-                start = index + 1;
+    private static List<String> userTableNames(Connection connection) throws SQLException {
+        List<String> names = new ArrayList<>();
+        try (Statement statement = connection.createStatement();
+             ResultSet rows = statement.executeQuery(
+                 "select name from sqlite_master where type = 'table' and name not like 'sqlite_%' order by rowid"
+             )) {
+            while (rows.next()) {
+                names.add(rows.getString(1));
             }
         }
-        parts.add(definition.substring(start));
-        return parts;
+        return names;
     }
 
-    private static String firstToken(String definition) {
-        String value = definition.stripLeading();
-        if (value.isEmpty()) return "";
-        if (value.charAt(0) == '[') {
-            int end = value.indexOf(']');
-            return end > 0 ? value.substring(1, end) : "";
-        }
-        if (value.charAt(0) == '`' || value.charAt(0) == '"') {
-            int end = value.indexOf(value.charAt(0), 1);
-            return end > 0 ? value.substring(1, end) : "";
-        }
-        int end = 0;
-        while (end < value.length() && !Character.isWhitespace(value.charAt(end))) end++;
-        return unquote(value.substring(0, end));
+    private record ForeignKey(int ordinal, String relation) {
     }
 
-    private static String unquote(String value) {
-        if (value.length() >= 2 && ((value.startsWith("`") && value.endsWith("`"))
-            || (value.startsWith("\"") && value.endsWith("\""))
-            || (value.startsWith("[") && value.endsWith("]")))) {
-            return value.substring(1, value.length() - 1);
+    private static List<String> foreignKeyRelations(Connection connection, String table) throws SQLException {
+        List<ForeignKey> foreignKeys = new ArrayList<>();
+        try (Statement statement = connection.createStatement();
+             ResultSet rows = statement.executeQuery(
+                 "select id, \"from\", \"table\", \"to\" from pragma_foreign_key_list(" + quote(table) + ")"
+             )) {
+            while (rows.next()) {
+                String from = rows.getString("from");
+                String target = rows.getString("table");
+                String to = rows.getString("to");
+                String relation = table + "." + from + " → " + target + (to == null ? "" : "." + to);
+                foreignKeys.add(new ForeignKey(rows.getInt("id"), relation));
+            }
         }
-        return value;
+        // SQLite 按声明逆序编号（最后声明的外键 id 最小），降序排列即恢复声明顺序。
+        return foreignKeys.stream()
+            .sorted(Comparator.comparingInt(ForeignKey::ordinal).reversed())
+            .map(ForeignKey::relation)
+            .toList();
+    }
+
+    private static List<String> stringColumnValues(Connection connection, String query, String columnLabel)
+        throws SQLException {
+        List<String> values = new ArrayList<>();
+        try (Statement statement = connection.createStatement();
+             ResultSet rows = statement.executeQuery(query)) {
+            while (rows.next()) {
+                values.add(rows.getString(columnLabel));
+            }
+        }
+        return values;
+    }
+
+    private static String quote(String identifier) {
+        return "'" + identifier.replace("'", "''") + "'";
     }
 }

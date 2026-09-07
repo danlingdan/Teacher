@@ -10,6 +10,7 @@ import com.sqlteacher.application.exercise.ExerciseEvaluationResult;
 import com.sqlteacher.application.exercise.ExerciseHint;
 import com.sqlteacher.application.exercise.ExerciseSession;
 import com.sqlteacher.application.exercise.SqlExerciseEvaluationService;
+import com.sqlteacher.domain.SqlTeacherException;
 import com.sqlteacher.domain.exercise.ExerciseAttemptStatus;
 import com.sqlteacher.application.risk.SqlSafetyModeService;
 import org.junit.jupiter.api.Test;
@@ -27,6 +28,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class JdbcExercisePracticeServiceTest {
@@ -42,11 +44,11 @@ class JdbcExercisePracticeServiceTest {
         ExerciseAttemptResult mutation = fixture.service().run(session.id(), "delete from student");
 
         assertTrue(query.execution().success());
-        assertEquals(6, query.execution().rows().size());
+        assertEquals(7, query.execution().rows().size());
         assertFalse(mutation.execution().success());
         assertTrue(mutation.execution().message().contains("只接受单条 SELECT"));
         assertEquals(2, count(fixture.appDb(), "exercise_attempts"));
-        assertEquals(6, countStudents(fixture.sessionDatabase(session.id())));
+        assertEquals(7, countStudents(fixture.sessionDatabase(session.id())));
     }
 
     @Test
@@ -59,7 +61,7 @@ class JdbcExercisePracticeServiceTest {
         );
 
         assertFalse(mutation.execution().success());
-        assertEquals(6, countStudents(fixture.sessionDatabase(session.id())));
+        assertEquals(7, countStudents(fixture.sessionDatabase(session.id())));
     }
 
     @Test
@@ -76,7 +78,7 @@ class JdbcExercisePracticeServiceTest {
         ExerciseHint second = fixture.service().requestHint(session.id());
         ExerciseHint third = fixture.service().requestHint(session.id());
 
-        assertEquals(6, countStudents(fixture.sessionDatabase(session.id())));
+        assertEquals(7, countStudents(fixture.sessionDatabase(session.id())));
         assertEquals(0, reset.hintsUsed());
         assertEquals(1, first.level());
         assertEquals(2, second.level());
@@ -138,6 +140,32 @@ class JdbcExercisePracticeServiceTest {
             assertTrue(result.next());
             assertTrue(result.getString(1) != null);
         }
+    }
+
+    @Test
+    void shouldRejectSessionStartWhenStoredDatasetViolatesPolicy() throws Exception {
+        Fixture fixture = fixture();
+        // 模拟白名单上线前已入库的违规数据集：初始化阶段仍要拦截。
+        try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + fixture.appDb());
+             Statement statement = connection.createStatement()) {
+            statement.executeUpdate(
+                "insert into exercise_datasets(id, name, setup_sql, version) values "
+                    + "('bad-ds', '违规数据', 'create table t(id integer); pragma evil;', 1)"
+            );
+            statement.executeUpdate(
+                "insert into exercises(id, title, description, knowledge_point, difficulty, dataset_id, "
+                    + "reference_sql, evaluation_rule_json, hints_json, version, enabled, created_at, updated_at) values ("
+                    + "'bad-ex', '坏题', 'd', 'k', 'BEGINNER', 'bad-ds', 'select id from t', "
+                    + "'{\"compareColumns\":true,\"compareRows\":true,\"rowOrderMatters\":false,\"requiredSqlKeywords\":[]}', "
+                    + "'[]', 1, 1, '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')"
+            );
+        }
+
+        SqlTeacherException error = assertThrows(
+            SqlTeacherException.class, () -> fixture.service().start("bad-ex")
+        );
+
+        assertEquals("EXERCISE_DATASET_POLICY_VIOLATION", error.errorCode());
     }
 
     private Fixture fixture() {

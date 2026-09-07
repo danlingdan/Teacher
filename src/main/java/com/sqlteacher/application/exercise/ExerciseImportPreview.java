@@ -14,10 +14,11 @@ public record ExerciseImportPreview(
         exercises = List.copyOf(Objects.requireNonNull(exercises, "exercises must not be null"));
     }
 
-    public record DatasetPreview(String id, String name) {
+    public record DatasetPreview(String id, String name, SelfTestStatus selfTest) {
         public DatasetPreview {
             id = requireText(id, "id");
             name = requireText(name, "name");
+            selfTest = Objects.requireNonNull(selfTest, "selfTest must not be null");
         }
     }
 
@@ -25,13 +26,21 @@ public record ExerciseImportPreview(
         String id,
         String title,
         String knowledgePoint,
-        ExerciseDifficulty difficulty
+        ExerciseDifficulty difficulty,
+        SelfTestStatus selfTest
     ) {
         public ExercisePreview {
             id = requireText(id, "id");
             title = requireText(title, "title");
             knowledgePoint = requireText(knowledgePoint, "knowledgePoint");
             difficulty = Objects.requireNonNull(difficulty, "difficulty must not be null");
+            selfTest = Objects.requireNonNull(selfTest, "selfTest must not be null");
+        }
+    }
+
+    public record SelfTestStatus(boolean passed, String message) {
+        public SelfTestStatus {
+            Objects.requireNonNull(message, "message must not be null");
         }
     }
 

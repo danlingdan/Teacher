@@ -3,6 +3,7 @@ package com.sqlteacher.infrastructure.database;
 import com.sqlteacher.application.config.AiConfiguration;
 import com.sqlteacher.application.config.DatabaseConfiguration;
 import com.sqlteacher.application.config.SqlTeacherConfiguration;
+import com.sqlteacher.application.exercise.EvaluationCriterionResult;
 import com.sqlteacher.application.exercise.ExerciseEvaluationResult;
 import com.sqlteacher.domain.exercise.ExerciseDataset;
 import com.sqlteacher.domain.exercise.ExerciseDefinition;
@@ -78,6 +79,75 @@ class DeterministicSqlExerciseEvaluationServiceTest {
         assertEquals("structure", missingStructure.criteria().getLast().criterion());
         assertFalse(mutation.passed());
         assertEquals("SQL_SAFETY_REJECTED", mutation.errorCode());
+    }
+
+    @Test
+    void shouldAttributeReferenceFailureToContentNotStudent() {
+        Fixture fixture = fixture();
+        ExerciseDefinition broken = new ExerciseDefinition(
+            "test-exercise",
+            "Test",
+            "Return students scoring at least 80.",
+            "Filtering",
+            ExerciseDifficulty.BEGINNER,
+            "test-data",
+            "select name from missing_table",
+            ExerciseEvaluationRule.exactResult(true),
+            List.of("Use WHERE."),
+            1,
+            true,
+            Instant.EPOCH,
+            Instant.EPOCH
+        );
+
+        ExerciseEvaluationResult result = fixture.evaluator().evaluate(
+            broken, fixture.dataset(), "select name from student order by name"
+        );
+
+        assertFalse(result.passed());
+        assertEquals("REFERENCE_SQL_FAILED", result.errorCode());
+        assertTrue(result.criteria().getFirst().feedback().contains("题目数据"));
+    }
+
+    @Test
+    void shouldTreatPolicyViolatingDatasetAsContentFailure() {
+        SqlTeacherConfiguration configuration = configuration(tempDir.resolve("policy"));
+        DeterministicSqlExerciseEvaluationService evaluator = new DeterministicSqlExerciseEvaluationService(
+            new DefaultSqlRiskAnalysisService(), configuration
+        );
+        ExerciseDataset violating = new ExerciseDataset(
+            "bad-data",
+            "Bad data",
+            "create table student(id integer); pragma evil;",
+            1
+        );
+
+        ExerciseEvaluationResult result = evaluator.evaluate(
+            exercise(ExerciseEvaluationRule.exactResult(false)), violating, "select 1"
+        );
+
+        assertFalse(result.passed());
+        assertEquals("REFERENCE_SQL_FAILED", result.errorCode());
+    }
+
+    @Test
+    void shouldRevealExpectedColumnNamesOnColumnMismatch() {
+        Fixture fixture = fixture();
+
+        ExerciseEvaluationResult result = fixture.evaluator().evaluate(
+            exercise(ExerciseEvaluationRule.exactResult(false)),
+            fixture.dataset(),
+            "select id, name from student where score >= 80 order by name"
+        );
+
+        EvaluationCriterionResult columns = result.criteria().stream()
+            .filter(item -> item.criterion().equals("columns"))
+            .findFirst()
+            .orElseThrow();
+        assertFalse(result.passed());
+        assertFalse(columns.passed());
+        assertTrue(columns.feedback().contains("期望列：name"), columns.feedback());
+        assertTrue(columns.feedback().contains("实际列：id、name"), columns.feedback());
     }
 
     @Test

@@ -1,6 +1,7 @@
 package com.sqlteacher.server;
 
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.sqlteacher.domain.SqlTeacherException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.sqlteacher.application.collaboration.AuthenticatedUser;
@@ -88,6 +89,7 @@ public final class SqlTeacherCloudServer {
     private final V19CloudStore v19Store;
     private final V110SupportStore v110SupportStore;
     private final V111AccountStore v111AccountStore;
+    private final V31ExerciseBankStore v31BankStore;
     private final CloudKnowledgeIndexService knowledgeIndex;
     private final HttpServer server;
 
@@ -101,6 +103,7 @@ public final class SqlTeacherCloudServer {
         this.v19Store = new V19CloudStore(databasePath);
         this.v110SupportStore = new V110SupportStore(databasePath);
         this.v111AccountStore = new V111AccountStore(databasePath, new FileMailSender(mailDirectory));
+        this.v31BankStore = new V31ExerciseBankStore(databasePath);
         this.knowledgeIndex = CloudKnowledgeIndexService.fromEnvironment(v14Store);
         String bootstrapEmail = System.getenv("SQLTEACHER_CLOUD_BOOTSTRAP_ADMIN_EMAIL");
         String bootstrapPassword = System.getenv("SQLTEACHER_CLOUD_BOOTSTRAP_ADMIN_PASSWORD");
@@ -124,6 +127,7 @@ public final class SqlTeacherCloudServer {
         this.server.createContext("/api/v1/classes", this::classes);
         this.server.createContext("/api/v1/sync/events", this::syncEvents);
         this.server.createContext("/api/v1/admin", this::admin);
+        this.server.createContext("/api/v1/bank", this::bank);
         this.server.createContext("/api/v1/v14", this::v14);
         this.server.createContext("/api/v1/v20", this::v20);
         this.server.createContext("/api/v1/v19", this::v19);
@@ -649,8 +653,45 @@ public final class SqlTeacherCloudServer {
         }
     }
 
-    private void admin(HttpExchange exchange) throws IOException {
+    private void bank(HttpExchange exchange) throws IOException {
         try {
+            String[] segments = exchange.getRequestURI().getPath().split("/");
+            String method = exchange.getRequestMethod();
+            if (segments.length == 5 && "manifest".equals(segments[4]) && "GET".equals(method)) {
+                respond(exchange, 200, v31BankStore.manifest());
+                return;
+            }
+            if (segments.length == 5 && "publish".equals(segments[4]) && "POST".equals(method)) {
+                Map<String, Object> body = JSON.readValue(exchange.getRequestBody(), new TypeReference<>() { });
+                String text = String.valueOf(body.getOrDefault("text", ""));
+                AuthenticatedUser actor = store.authenticate(token(exchange));
+                int bankVersion = v31BankStore.publish(actor, text);
+                respond(exchange, 200, Map.of("bankVersion", bankVersion));
+                return;
+            }
+            if (segments.length == 7 && "block".equals(segments[4]) && "GET".equals(method)) {
+                Map<String, Object> block = v31BankStore.block(segments[5], segments[6]);
+                if (block == null) {
+                    respond(exchange, 404, errorResponse("EXERCISE_BANK_BLOCK_NOT_FOUND", "Unknown exercise bank block."));
+                    return;
+                }
+                respond(exchange, 200, block);
+                return;
+            }
+            methodNotAllowed(exchange);
+        } catch (SecurityException error) {
+            respond(exchange, 403, errorResponse("FORBIDDEN", error.getMessage()));
+        } catch (IllegalArgumentException error) {
+            respond(exchange, 400, errorResponse("INVALID_REQUEST", error.getMessage()));
+        } catch (SqlTeacherException error) {
+            respond(exchange, 400, errorResponse(error.errorCode(), error.getMessage()));
+        } catch (RuntimeException error) {
+            logUnexpectedFailure("exercise bank operation", error);
+            respond(exchange, 500, errorResponse("SERVER_ERROR", "Exercise bank operation failed."));
+        }
+    }
+
+    private void admin(HttpExchange exchange) throws IOException {        try {
             AuthenticatedUser actor = store.authenticate(token(exchange));
             String[] segments = exchange.getRequestURI().getPath().split("/");
             if (segments.length == 5 && "health".equals(segments[4])

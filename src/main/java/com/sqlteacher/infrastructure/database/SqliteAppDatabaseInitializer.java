@@ -55,7 +55,7 @@ public final class SqliteAppDatabaseInitializer implements DatabaseInitializatio
         try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + databasePath)) {
             connection.setAutoCommit(false);
             try {
-                new DefaultExerciseCatalogSeeder().seed(connection);
+                new ExerciseBankApplier().apply(connection);
                 ExerciseSessionRuntimeCleaner.closeActiveSessions(connection, java.time.Instant.now());
                 connection.commit();
             } catch (SQLException | RuntimeException error) {

@@ -7,6 +7,7 @@ import com.sqlteacher.application.exercise.ExerciseEvaluationResult;
 import com.sqlteacher.application.exercise.SqlExerciseEvaluationService;
 import com.sqlteacher.application.risk.SqlRiskAnalysis;
 import com.sqlteacher.application.risk.SqlRiskAnalysisService;
+import com.sqlteacher.domain.SqlTeacherException;
 import com.sqlteacher.domain.exercise.ExerciseDataset;
 import com.sqlteacher.domain.exercise.ExerciseDefinition;
 import com.sqlteacher.domain.exercise.ExerciseEvaluationRule;
@@ -31,7 +32,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.regex.Pattern;
 
 public final class DeterministicSqlExerciseEvaluationService implements SqlExerciseEvaluationService {
     private static final Logger log = LoggerFactory.getLogger(DeterministicSqlExerciseEvaluationService.class);
@@ -69,8 +69,22 @@ public final class DeterministicSqlExerciseEvaluationService implements SqlExerc
         try {
             Files.createDirectories(evaluationDirectory);
             databasePath = Files.createTempFile(evaluationDirectory, "evaluation-", ".db");
-            initializeDataset(databasePath, dataset);
-            QueryResult expected = executeQuery(databasePath, exercise.referenceSql());
+            QueryResult expected;
+            try {
+                initializeDataset(databasePath, dataset);
+                expected = executeQuery(databasePath, exercise.referenceSql());
+            } catch (SQLException | SqlTeacherException error) {
+                // Evaluation environment or reference answer failure is a content problem,
+                // never the student's fault.
+                log.warn("Reference SQL failed for exercise {}", exercise.id(), error);
+                return failure(
+                    started,
+                    "REFERENCE_SQL_FAILED",
+                    new EvaluationCriterionResult(
+                        "reference", false, "题目参考答案未能执行，题目数据可能存在异常，请联系教师或管理员。"
+                    )
+                );
+            }
             QueryResult actual = executeQuery(databasePath, submittedSql);
             if (expected.truncated() || actual.truncated()) {
                 return failure(
@@ -116,9 +130,11 @@ public final class DeterministicSqlExerciseEvaluationService implements SqlExerc
         List<EvaluationCriterionResult> criteria = new ArrayList<>();
         if (rule.compareColumns()) {
             boolean passed = normalizeColumns(expected.columns()).equals(normalizeColumns(actual.columns()));
-            criteria.add(new EvaluationCriterionResult(
-                "columns", passed, passed ? "结果列满足要求。" : "结果列的数量、名称或顺序不符合要求。"
-            ));
+            String feedback = passed
+                ? "结果列满足要求。"
+                : "结果列的数量、名称或顺序不符合要求。期望列：" + String.join("、", expected.columns())
+                    + "；实际列：" + String.join("、", actual.columns()) + "。";
+            criteria.add(new EvaluationCriterionResult("columns", passed, feedback));
         }
         if (rule.compareRows()) {
             boolean passed = rowMultiset(expected.rows()).equals(rowMultiset(actual.rows()));
@@ -140,9 +156,9 @@ public final class DeterministicSqlExerciseEvaluationService implements SqlExerc
         }
         if (!rule.requiredSqlKeywords().isEmpty()) {
             // 归一化（注释/字面量屏蔽 + 空白折叠）只做一次，避免按关键字数重复扫描整段 SQL。
-            String normalizedSql = normalizeSqlStructure(submittedSql);
+            String normalizedSql = SqlStructureMatcher.normalize(submittedSql);
             List<String> missing = rule.requiredSqlKeywords().stream()
-                .filter(keyword -> !containsSqlStructure(normalizedSql, keyword))
+                .filter(keyword -> !SqlStructureMatcher.containsKeyword(normalizedSql, keyword))
                 .toList();
             criteria.add(new EvaluationCriterionResult(
                 "structure",
@@ -154,6 +170,7 @@ public final class DeterministicSqlExerciseEvaluationService implements SqlExerc
     }
 
     private static void initializeDataset(Path databasePath, ExerciseDataset dataset) throws SQLException {
+        ExerciseDatasetSqlPolicy.validate(dataset.setupSql());
         SqliteDriver.ensureLoaded();
         try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + databasePath)) {
             connection.setAutoCommit(false);
@@ -226,66 +243,6 @@ public final class DeterministicSqlExerciseEvaluationService implements SqlExerc
             return Base64.getEncoder().encodeToString(bytes);
         }
         return value;
-    }
-
-    private static String normalizeSqlStructure(String sql) {
-        return maskCommentsAndLiterals(sql).toUpperCase(Locale.ROOT).replaceAll("\\s+", " ").trim();
-    }
-
-    private static boolean containsSqlStructure(String normalizedSql, String keyword) {
-        String phrase = keyword.toUpperCase(Locale.ROOT).trim().replaceAll("\\s+", " ");
-        return Pattern.compile("(?<![A-Z0-9_])" + Pattern.quote(phrase) + "(?![A-Z0-9_])")
-            .matcher(normalizedSql)
-            .find();
-    }
-
-    private static String maskCommentsAndLiterals(String sql) {
-        StringBuilder result = new StringBuilder(sql.length());
-        char quote = '\0';
-        boolean lineComment = false;
-        boolean blockComment = false;
-        for (int index = 0; index < sql.length(); index++) {
-            char current = sql.charAt(index);
-            char next = index + 1 < sql.length() ? sql.charAt(index + 1) : '\0';
-            if (lineComment) {
-                if (current == '\n' || current == '\r') {
-                    lineComment = false;
-                    result.append(' ');
-                }
-                continue;
-            }
-            if (blockComment) {
-                if (current == '*' && next == '/') {
-                    index++;
-                    blockComment = false;
-                    result.append(' ');
-                }
-                continue;
-            }
-            if (quote == '\0' && current == '-' && next == '-') {
-                index++;
-                lineComment = true;
-                result.append(' ');
-            } else if (quote == '\0' && current == '/' && next == '*') {
-                index++;
-                blockComment = true;
-                result.append(' ');
-            } else if (quote == '\0' && (current == '\'' || current == '"' || current == '`')) {
-                quote = current;
-                result.append(' ');
-            } else if (quote != '\0') {
-                result.append(' ');
-                if (current == quote && next == quote) {
-                    result.append(' ');
-                    index++;
-                } else if (current == quote) {
-                    quote = '\0';
-                }
-            } else {
-                result.append(current);
-            }
-        }
-        return result.toString();
     }
 
     private static ExerciseEvaluationResult failure(

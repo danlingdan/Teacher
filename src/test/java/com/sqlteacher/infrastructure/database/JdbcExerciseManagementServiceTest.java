@@ -86,8 +86,10 @@ class JdbcExerciseManagementServiceTest {
 
         assertEquals(1, preview.exercises().size());
         assertEquals("预览题", preview.exercises().get(0).title());
+        assertTrue(preview.exercises().get(0).selfTest().passed());
         assertEquals(1, preview.datasets().size());
-        assertEquals(DefaultExerciseCatalogSeeder.DATASET_ID, preview.datasets().get(0).id());
+        assertEquals(ExerciseBankApplier.DATASET_ID, preview.datasets().get(0).id());
+        assertTrue(preview.datasets().get(0).selfTest().passed());
         assertTrue(service.findDefinition("preview-a").isPresent());
     }
 
@@ -96,6 +98,90 @@ class JdbcExerciseManagementServiceTest {
         JdbcExerciseManagementService service = initialize(tempDir.resolve("preview-invalid"));
 
         assertThrows(SqlTeacherException.class, () -> service.parsePackage("plain text without blocks"));
+    }
+
+    @Test
+    void shouldReportSelfTestFailureInPreviewAndRejectImport() {
+        JdbcExerciseManagementService service = initialize(tempDir.resolve("preview-self-test"));
+        String text = """
+            ===[DATASET]===
+            ID: self-test-ds
+            NAME: 自测数据
+            VERSION: 1
+            SQL:
+            create table t(id integer primary key, name text);
+            insert into t values (1, 'a');
+
+            ===[EXERCISE]===
+            TITLE: 引用缺失表
+            KNOWLEDGE: 测试
+            DIFFICULTY: BEGINNER
+            DATASET: self-test-ds
+            DESCRIPTION:
+            描述
+            SQL:
+            select name from missing_table
+            RULE: EXACT
+            VERSION: 1
+            ENABLED: true
+            """;
+
+        ExerciseImportPreview preview = service.parsePackage(text);
+
+        assertTrue(preview.datasets().get(0).selfTest().passed());
+        assertFalse(preview.exercises().get(0).selfTest().passed());
+        assertEquals("参考答案未能在数据集上执行", preview.exercises().get(0).selfTest().message());
+
+        SqlTeacherException error = assertThrows(SqlTeacherException.class, () -> service.importPackage(text));
+        assertEquals("EXERCISE_IMPORT_INVALID", error.errorCode());
+        assertTrue(error.getMessage().contains("未通过导入自测"));
+        assertTrue(service.listDatasets().stream().noneMatch(dataset -> dataset.id().equals("self-test-ds")));
+    }
+
+    @Test
+    void shouldRejectPackageWhoseDatasetViolatesPolicyOnImport() {
+        JdbcExerciseManagementService service = initialize(tempDir.resolve("import-policy"));
+        String text = """
+            ===[DATASET]===
+            ID: policy-ds
+            NAME: 违规数据
+            VERSION: 1
+            SQL:
+            create table t(id integer);
+            pragma foreign_keys = on;
+
+            ===[EXERCISE]===
+            TITLE: 引用违规数据集
+            KNOWLEDGE: 测试
+            DIFFICULTY: BEGINNER
+            DATASET: policy-ds
+            DESCRIPTION:
+            描述
+            SQL:
+            select id from t
+            RULE: EXACT
+            VERSION: 1
+            ENABLED: true
+            """;
+
+        SqlTeacherException error = assertThrows(SqlTeacherException.class, () -> service.importPackage(text));
+
+        assertEquals("EXERCISE_IMPORT_INVALID", error.errorCode());
+        assertTrue(error.getMessage().contains("语句类型不被允许"), error.getMessage());
+    }
+
+    @Test
+    void shouldRejectSaveWithBrokenReferenceSql() {
+        JdbcExerciseManagementService service = initialize(tempDir.resolve("save-broken"));
+        ExerciseDraft broken = new ExerciseDraft(
+            "", "坏题", "描述", "测试", ExerciseDifficulty.BEGINNER,
+            ExerciseBankApplier.DATASET_ID, "select * from missing_table",
+            ExerciseEvaluationRule.exactResult(true), List.of(), null, true
+        );
+
+        SqlTeacherException error = assertThrows(SqlTeacherException.class, () -> service.save(broken));
+
+        assertEquals("EXERCISE_SAVE_INVALID", error.errorCode());
     }
 
     private JdbcExerciseManagementService initialize(Path directory) {
@@ -120,7 +206,7 @@ class JdbcExerciseManagementServiceTest {
             "返回所有学生姓名。",
             "自定义查询",
             ExerciseDifficulty.BEGINNER,
-            DefaultExerciseCatalogSeeder.DATASET_ID,
+            ExerciseBankApplier.DATASET_ID,
             "select name from student order by id",
             ExerciseEvaluationRule.exactResult(true),
             List.of("先选择 name 列。"),

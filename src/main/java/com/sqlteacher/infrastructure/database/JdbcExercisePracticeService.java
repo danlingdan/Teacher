@@ -413,6 +413,7 @@ public final class JdbcExercisePracticeService implements ExercisePracticeServic
     }
 
     private void initializeDataset(Path databasePath, ExerciseDataset dataset) throws SQLException, IOException {
+        ExerciseDatasetSqlPolicy.validate(dataset.setupSql());
         Files.createDirectories(sessionDirectory);
         SqliteDriver.ensureLoaded();
         try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + databasePath)) {

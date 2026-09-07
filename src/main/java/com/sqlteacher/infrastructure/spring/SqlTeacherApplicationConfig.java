@@ -18,6 +18,7 @@ import com.sqlteacher.application.error.DefaultApplicationExceptionMapper;
 import com.sqlteacher.application.event.LearningEventService;
 import com.sqlteacher.application.exercise.ExerciseManagementService;
 import com.sqlteacher.application.exercise.ExerciseTextDraftingService;
+import com.sqlteacher.infrastructure.database.ExerciseBankSyncService;
 import com.sqlteacher.application.metadata.DatabaseMetadataService;
 import com.sqlteacher.application.knowledge.CourseKnowledgeService;
 import com.sqlteacher.application.knowledge.GroundedKnowledgeExplanationService;
@@ -232,6 +233,13 @@ public class SqlTeacherApplicationConfig {
     @Bean
     public CloudApiClient cloudApiClient(URI cloudBaseUri) {
         return new HttpCloudApiClient(cloudBaseUri);
+    }
+
+    @Bean
+    public ExerciseBankSyncService exerciseBankSyncService(
+            CloudApiClient cloudApiClient, SqlTeacherConfiguration configuration) {
+        return new ExerciseBankSyncService(
+            cloudApiClient, configuration.database().appDatabasePath().toString());
     }
 
     @Bean public GeneralSoftwareService generalSoftwareService(SqlTeacherConfiguration configuration, URI cloudBaseUri) {

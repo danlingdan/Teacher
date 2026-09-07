@@ -25,14 +25,17 @@ import type {
   AssignmentSnapshot,
   CourseWorkspace,
   ExerciseAttempt,
+  ExerciseBankUpdateResult,
+  ExerciseBankUpdateStatus,
   ExerciseHint,
   ExerciseSession,
-  ExerciseSummary,
   ExerciseView,
   RunnerCapability,
   RunnerResult,
   SqlPage,
 } from "../../shared/types";
+import { ExerciseCatalogPanel } from "./ExerciseCatalog";
+import type { ExerciseCatalogItem } from "../../shared/types";
 import { Button, Dialog, EmptyState, Feedback, Stepper, useToast } from "../../shared/ui";
 
 self.MonacoEnvironment = { getWorker: () => new EditorWorker() };
@@ -694,7 +697,7 @@ function ExerciseFlow() {
   const catalog = useQuery({
     queryKey: ["practice", "catalog"],
     queryFn: () =>
-      localAppRequest<{ items: ExerciseSummary[] }>("practice.catalog"),
+      localAppRequest<{ items: ExerciseCatalogItem[] }>("practice.catalog"),
     staleTime: 30_000,
   });
   const [selectedId, setSelectedId] = useState<string | undefined>(
@@ -708,8 +711,6 @@ function ExerciseFlow() {
   const [hint, setHint] = useState<ExerciseHint>();
   const [delivery, setDelivery] = useState<AssignmentDelivery>();
   const [resetOpen, setResetOpen] = useState(false);
-  const [catalogQuery, setCatalogQuery] = useState("");
-  const [catalogPage, setCatalogPage] = useState(0);
   const toast = useToast();
   const preview = useQuery({
     queryKey: ["practice", "preview", selectedId],
@@ -816,102 +817,77 @@ function ExerciseFlow() {
     params.set("exercise", selectedId);
     setSearchParams(params, { replace: true });
   }, [selectedId, searchParams, setSearchParams]);
+  // 目录筛选进 URL：q 为搜索词，difficulty/status 为筛选，刷新与分享不丢状态。
+  const catalogFilters = {
+    query: searchParams.get("q") ?? "",
+    difficulty: searchParams.get("difficulty") ?? "",
+    status: searchParams.get("status") ?? "",
+  };
+  const setCatalogFilter = (
+    key: "q" | "difficulty" | "status",
+    value: string,
+  ) => {
+    const params = new URLSearchParams(searchParams);
+    if (value) params.set(key, value);
+    else params.delete(key);
+    setSearchParams(params, { replace: true });
+  };
   const close = useMutation({
     mutationFn: (sessionId: string) =>
       localAppRequest("practice.close", { sessionId }),
   });
-  const filteredCatalog = useMemo(
-    () =>
-      (catalog.data?.items ?? []).filter((item) =>
-        `${item.title} ${item.knowledgePoint}`
-          .toLowerCase()
-          .includes(catalogQuery.trim().toLowerCase()),
-      ),
-    [catalog.data, catalogQuery],
-  );
-  const catalogPageSize = 10;
-  const catalogPages = Math.max(
-    1,
-    Math.ceil(filteredCatalog.length / catalogPageSize),
-  );
-  const visibleCatalog = filteredCatalog.slice(
-    catalogPage * catalogPageSize,
-    (catalogPage + 1) * catalogPageSize,
-  );
-  useEffect(() => {
-    setCatalogPage(0);
-  }, [catalogQuery]);
+  // 题库更新：先检查差集，再流式应用；任何失败都不影响本地练习。
+  const [bankStatus, setBankStatus] = useState<ExerciseBankUpdateStatus>();
+  const bankCheck = useMutation({
+    mutationFn: () =>
+      localAppRequest<ExerciseBankUpdateStatus>("practice.bank.check"),
+    onSuccess: (value) => {
+      setBankStatus(value);
+      if (value.upToDate) toast("success", value.message);
+    },
+    onError: (error: Error) => toast("error", `检查更新失败：${error.message}`),
+  });
+  const bankUpdate = useMutation({
+    mutationFn: () =>
+      localAppRequest<ExerciseBankUpdateResult>("practice.bank.update"),
+    onSuccess: (value) => {
+      setBankStatus(undefined);
+      toast("success", value.message);
+      void catalog.refetch();
+    },
+    onError: (error: Error) => toast("error", `题库更新失败：${error.message}`),
+  });
+  const handleCatalogSelect = (exerciseId: string) => {
+    if (session) close.mutate(session.id);
+    setSelectedId(exerciseId);
+    setSession(undefined);
+    setFeedback(undefined);
+    setHint(undefined);
+    setDelivery(undefined);
+    // 载入该题自己的草稿；不同题的代码互不覆盖。
+    setAnswer(loadDraft(exerciseId) ?? defaultSqlAnswer);
+  };
   const step = feedback ? 3 : session ? 2 : preview.data ? 1 : 0;
   return (
     <div className="flow-layout">
-      <aside className="content-card selection-panel">
-        <div className="section-heading">
-          <div>
-            <p className="eyebrow">题目目录</p>
-            <strong>{catalog.isPending ? "加载中…" : `${filteredCatalog.length} 道题`}</strong>
-          </div>
-        </div>
-        <input
-          aria-label="搜索练习题"
-          value={catalogQuery}
-          onChange={(event) => setCatalogQuery(event.target.value)}
-          placeholder="搜索题目或知识点"
-        />
-        {catalog.isPending ? (
-          <section className="page-skeleton">
-            <span className="spinner" />
-            正在加载题目目录
-          </section>
-        ) : (
-          visibleCatalog.map((item) => (
-            <button
-              type="button"
-              className={selectedId === item.id ? "selected" : ""}
-              key={item.id}
-              onClick={() => {
-                if (session) close.mutate(session.id);
-                setSelectedId(item.id);
-                setSession(undefined);
-                setFeedback(undefined);
-                setHint(undefined);
-                setDelivery(undefined);
-                // 载入该题自己的草稿；不同题的代码互不覆盖。
-                setAnswer(loadDraft(item.id) ?? defaultSqlAnswer);
-              }}
-            >
-              {item.title}
-              <small>
-                {knowledgePointLabel(item.knowledgePoint)} ·{" "}
-                {difficultyLabel(item.difficulty)}
-              </small>
-            </button>
-          ))
-        )}
-        {filteredCatalog.length === 0 && (
-          <p className="muted">没有匹配的题目。</p>
-        )}
-        {filteredCatalog.length > catalogPageSize && (
-          <div className="compact-pager">
-            <Button
-              variant="secondary"
-              disabled={catalogPage === 0}
-              onClick={() => setCatalogPage((value) => value - 1)}
-            >
-              上一页
-            </Button>
-            <span>
-              {catalogPage + 1} / {catalogPages}
-            </span>
-            <Button
-              variant="secondary"
-              disabled={catalogPage + 1 >= catalogPages}
-              onClick={() => setCatalogPage((value) => value + 1)}
-            >
-              下一页
-            </Button>
-          </div>
-        )}
-      </aside>
+      <ExerciseCatalogPanel
+        items={catalog.data?.items ?? []}
+        isPending={catalog.isPending}
+        selectedId={selectedId}
+        filters={catalogFilters}
+        onFilterChange={setCatalogFilter}
+        onSelect={handleCatalogSelect}
+        headerAction={
+          <Button
+            variant="secondary"
+            disabled={bankCheck.isPending || bankUpdate.isPending}
+            busy={bankCheck.isPending}
+            onClick={() => bankCheck.mutate()}
+          >
+            题库更新
+          </Button>
+        }
+      />
       <main className="flow-main">
         {assignmentContext && (
           <Feedback tone="info" title={assignmentTitle || "班级任务"}>
@@ -922,6 +898,23 @@ function ExerciseFlow() {
           steps={["选题", "预览确认", "作答", "反馈"]}
           current={step}
         />
+        {bankStatus && !bankStatus.upToDate && (
+          <Feedback tone="info" title="题库更新">
+            <p>{bankStatus.message}</p>
+            <Button
+              disabled={bankUpdate.isPending}
+              busy={bankUpdate.isPending}
+              onClick={() => bankUpdate.mutate()}
+            >
+              应用更新
+            </Button>
+          </Feedback>
+        )}
+        {bankUpdate.isError && (
+          <Feedback tone="error" title="题库更新失败">
+            本地题库保持不变：{bankUpdate.error.message}
+          </Feedback>
+        )}
         {!selectedId && (
           <EmptyState title="先选择练习" />
         )}
@@ -1162,20 +1155,6 @@ const PracticeResultTable = memo(function PracticeResultTable({
     </section>
   );
 });
-
-function difficultyLabel(value: string) {
-  return (
-    (
-      { BEGINNER: "入门", INTERMEDIATE: "进阶", ADVANCED: "高级" } as Record<
-        string,
-        string
-      >
-    )[value] ?? value
-  );
-}
-function knowledgePointLabel(value: string) {
-  return !value || value === "NOT EXISTS" ? "未设置知识点" : value;
-}
 
 function RunnerFlow() {
   const capabilities = useQuery({

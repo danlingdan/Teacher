@@ -18,6 +18,7 @@ import com.sqlteacher.application.database.DatabaseInitializationService;
 import com.sqlteacher.application.connection.ConnectionManagementService;
 import com.sqlteacher.application.connection.DatabaseConnectionProfile;
 import com.sqlteacher.application.connection.DatabaseConnectionTarget;
+import com.sqlteacher.infrastructure.database.ExerciseBankSyncService;
 import com.sqlteacher.application.connection.DatabaseConnectionTestService;
 import com.sqlteacher.application.connection.DatabaseCredentialSession;
 import com.sqlteacher.application.connection.DatabaseDialect;
@@ -144,6 +145,8 @@ public final class DefaultLocalAppApi implements LocalAppApi {
             case "practice.hint" -> practiceHint(params, cancellation);
             case "practice.reset" -> practiceReset(params, cancellation);
             case "practice.close" -> practiceClose(params, cancellation);
+            case "practice.bank.check" -> practiceBankCheck(cancellation);
+            case "practice.bank.update" -> practiceBankUpdate(cancellation, events);
             case "runner.capabilities" -> runnerCapabilities(cancellation);
             case "runner.run" -> runnerRun(params, cancellation, events);
             case "data.connections" -> dataConnections(cancellation);
@@ -183,6 +186,7 @@ public final class DefaultLocalAppApi implements LocalAppApi {
             case "teaching.exercise.parse" -> teachingExerciseParse(params, cancellation);
             case "teaching.exercise.draft" -> teachingExerciseDraft(params, cancellation);
             case "teaching.exercise.export" -> teachingExerciseExport(params, cancellation);
+            case "teaching.exercise.publish" -> teachingExercisePublish(params, cancellation);
             case "teaching.analytics" -> teachingAnalytics(cancellation);
             case "teaching.interventions" -> teachingInterventions(cancellation);
             case "teaching.intervention.update" -> teachingInterventionUpdate(params, cancellation);
@@ -1394,6 +1398,30 @@ public final class DefaultLocalAppApi implements LocalAppApi {
         cancellation.throwIfCancelled();
         emit(events, "import.progress", "phase", "completed");
         return mapper.valueToTree(report);
+    }
+
+    private JsonNode practiceBankCheck(CancellationToken cancellation) {
+        cancellation.throwIfCancelled();
+        return mapper.valueToTree(context().getBean(ExerciseBankSyncService.class).check());
+    }
+
+    private JsonNode practiceBankUpdate(CancellationToken cancellation, Consumer<LocalAppEvent> events) {
+        cancellation.throwIfCancelled();
+        var result = context().getBean(ExerciseBankSyncService.class)
+            .update(progress -> emit(events, "import.progress", "phase", progress));
+        return mapper.valueToTree(result);
+    }
+
+    private JsonNode teachingExercisePublish(JsonNode params, CancellationToken cancellation) {
+        requireTeacher();
+        cancellation.throwIfCancelled();
+        String text = requiredText(params, "text", 1_000_000);
+        // 发布前本地先跑一遍解析与自测；服务端会再次校验，AI 与网络内容一律不可信。
+        context().getBean(ExerciseManagementService.class).parsePackage(text);
+        var session = requireCloudSession();
+        int bankVersion = context().getBean(CloudApiClient.class)
+            .publishExerciseBankPackage(session.accessToken(), text);
+        return mapper.createObjectNode().put("bankVersion", bankVersion);
     }
 
     private JsonNode practiceCatalog(CancellationToken cancellation) {

@@ -180,8 +180,12 @@ public class DatabaseServiceConfig {
     }
 
     @Bean
-    public ExerciseCatalogService exerciseCatalogService(ExerciseManagementService managementService) {
-        return new JdbcExerciseCatalogService(managementService);
+    public ExerciseCatalogService exerciseCatalogService(
+        JdbcConnectionFactory connectionFactory,
+        ExerciseManagementService managementService,
+        LearningEventOwnerProvider ownerProvider
+    ) {
+        return new JdbcExerciseCatalogService(connectionFactory, managementService, ownerProvider);
     }
 
     @Bean

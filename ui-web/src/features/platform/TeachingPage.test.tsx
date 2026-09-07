@@ -87,13 +87,20 @@ describe("TeachingPage", () => {
         if (method === "teaching.exercise.parse") {
           expect(String(params.text)).toContain("===[EXERCISE]===");
           return Promise.resolve({
-            datasets: [{ id: "d1", name: "数据集" }],
+            datasets: [
+              {
+                id: "d1",
+                name: "数据集",
+                selfTest: { passed: true, message: "数据集 SQL 自测通过" },
+              },
+            ],
             exercises: [
               {
                 id: "e1",
                 title: "预览题",
                 knowledgePoint: "基础查询",
                 difficulty: "BEGINNER",
+                selfTest: { passed: true, message: "参考答案自测通过" },
               },
             ],
           });

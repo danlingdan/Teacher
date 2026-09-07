@@ -174,6 +174,16 @@ export interface ExerciseSummary {
   version: number;
   enabled: boolean;
 }
+export interface ExerciseCatalogItem {
+  id: string;
+  title: string;
+  knowledgePoint: string;
+  difficulty: string;
+  version: number;
+  attempts: number;
+  passed: boolean;
+  lastAttemptAt: string | null;
+}
 export interface ExerciseView extends ExerciseSummary {
   description: string;
   schemaSummary: string;
@@ -378,18 +388,37 @@ export interface ExerciseDefinition extends ExerciseSummary {
   createdAt: string;
   updatedAt: string;
 }
+export interface ExerciseSelfTestStatus {
+  passed: boolean;
+  message: string;
+}
 export interface ExerciseImportPreview {
-  datasets: Array<{ id: string; name: string }>;
+  datasets: Array<{ id: string; name: string; selfTest: ExerciseSelfTestStatus }>;
   exercises: Array<{
     id: string;
     title: string;
     knowledgePoint: string;
     difficulty: string;
+    selfTest: ExerciseSelfTestStatus;
   }>;
 }
 export interface ExerciseTextDraft {
   text: string;
   model: string;
+}
+export interface ExerciseBankUpdateStatus {
+  appliedVersion: number;
+  serverVersion: number;
+  pendingBlocks: number;
+  upToDate: boolean;
+  message: string;
+}
+export interface ExerciseBankUpdateResult {
+  applied: boolean;
+  appliedVersion: number;
+  updatedDatasets: number;
+  updatedExercises: number;
+  message: string;
 }
 export interface InterventionCandidate {
   id: string;

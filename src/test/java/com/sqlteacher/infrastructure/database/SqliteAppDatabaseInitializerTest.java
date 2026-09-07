@@ -41,7 +41,7 @@ class SqliteAppDatabaseInitializerTest {
         assertTrue(result.demoDatabaseCreated());
         assertTrue(Files.exists(appDb));
         assertTrue(Files.exists(demoDb));
-        assertEquals(19, readSchemaVersion(appDb));
+        assertEquals(20, readSchemaVersion(appDb));
         assertEquals(20, countExercises(appDb));
         assertEquals(20, countExercisesWithThreeHints(appDb));
         assertEquals(7, countDemoRows(demoDb, "Student"));
@@ -63,6 +63,74 @@ class SqliteAppDatabaseInitializerTest {
         }
         new SqliteAppDatabaseInitializer(properties).initialize();
         assertEquals(20, countExercisesWithThreeHints(appDb));
+    }
+
+    @Test
+    void shouldUpgradeLegacySeededCatalogToBundledBank() throws Exception {
+        Path appDb = tempDir.resolve("upgrade-app.db");
+        SqlTeacherConfiguration properties = new SqlTeacherConfiguration(
+            "SQLTeacher",
+            tempDir,
+            new DatabaseConfiguration(appDb, tempDir.resolve("upgrade-demo.db")),
+            new AiConfiguration(URI.create("http://localhost:11434"), Duration.ofSeconds(1), Duration.ofSeconds(30), "test-model")
+        );
+        new SqliteAppDatabaseInitializer(properties).initialize();
+        // 模拟 v3.1 之前的存量库：旧数据集 school-core-v1，题目引用旧数据集且版本为 2；
+        // query-02 被教师改过内容并停用（版本已到 3，与内置包相同）。
+        try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + appDb);
+             Statement statement = connection.createStatement()) {
+            statement.executeUpdate(
+                "insert into exercise_datasets(id, name, setup_sql, version, created_at, updated_at) values "
+                    + "('school-core-v1', '学校核心数据集', 'create table student(id integer);', 1, "
+                    + "'2026-07-21T00:00:00Z', '2026-07-21T00:00:00Z')"
+            );
+            statement.executeUpdate(
+                "update exercises set dataset_id = 'school-core-v1', version = 2"
+            );
+            statement.executeUpdate(
+                "update exercises set version = 3, enabled = 0, title = '教师改过的题' where id = 'query-02'"
+            );
+        }
+
+        new SqliteAppDatabaseInitializer(properties).initialize();
+
+        try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + appDb);
+             Statement statement = connection.createStatement();
+             ResultSet resultSet = statement.executeQuery(
+                 "select id, version, dataset_id, enabled from exercises"
+             )) {
+            int total = 0;
+            int onV2Dataset = 0;
+            while (resultSet.next()) {
+                total++;
+                if ("school-core-v2".equals(resultSet.getString("dataset_id"))) {
+                    onV2Dataset++;
+                }
+                if ("query-02".equals(resultSet.getString("id"))) {
+                    assertEquals(3, resultSet.getInt("version"));
+                    assertFalse(resultSet.getBoolean("enabled"));
+                }
+            }
+            assertEquals(20, total);
+            // query-02 保留教师修改，其余 19 题升级到新数据集。
+            assertEquals(19, onV2Dataset);
+        }
+        try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + appDb);
+             Statement statement = connection.createStatement();
+             ResultSet resultSet = statement.executeQuery(
+                 "select count(*) from exercise_datasets where id = 'school-core-v1'"
+             )) {
+            assertTrue(resultSet.next());
+            assertEquals(1, resultSet.getInt(1));
+        }
+        try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + appDb);
+             Statement statement = connection.createStatement();
+             ResultSet resultSet = statement.executeQuery(
+                 "select title from exercises where id = 'filter-03'"
+             )) {
+            assertTrue(resultSet.next());
+            assertEquals("查询 B 班学生", resultSet.getString(1));
+        }
     }
 
     @Test
@@ -133,7 +201,7 @@ class SqliteAppDatabaseInitializerTest {
         try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + appDb);
              Statement statement = connection.createStatement();
              ResultSet resultSet = statement.executeQuery(
-                 "select count(*) from exercises where json_array_length(hints_json) = 3 and version = 2"
+                 "select count(*) from exercises where json_array_length(hints_json) = 3 and version = 3"
              )) {
             resultSet.next();
             return resultSet.getInt(1);

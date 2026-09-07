@@ -36,43 +36,65 @@ final class ExerciseTextCodec {
         StringBuilder out = new StringBuilder();
         out.append(FORMAT_MARKER).append(' ').append(FORMAT_VERSION).append('\n');
         for (ExerciseDataset dataset : datasets) {
-            out.append('\n').append(DATASET_HEADER).append('\n')
-                .append("ID: ").append(dataset.id()).append('\n')
-                .append("NAME: ").append(dataset.name()).append('\n')
-                .append("VERSION: ").append(dataset.version()).append('\n')
-                .append("SQL:\n").append(dataset.setupSql()).append('\n');
+            encodeDataset(out, dataset);
         }
         for (ExerciseDefinition exercise : exercises) {
-            ExerciseEvaluationRule rule = exercise.evaluationRule();
-            out.append('\n').append(EXERCISE_HEADER).append('\n')
-                .append("ID: ").append(exercise.id()).append('\n')
-                .append("TITLE: ").append(exercise.title()).append('\n')
-                .append("KNOWLEDGE: ").append(exercise.knowledgePoint()).append('\n')
-                .append("DIFFICULTY: ").append(exercise.difficulty().name()).append('\n')
-                .append("DATASET: ").append(exercise.datasetId()).append('\n')
-                .append("DESCRIPTION:\n").append(exercise.description()).append('\n')
-                .append("SQL:\n").append(exercise.referenceSql()).append('\n')
-                .append("COMPARE_COLUMNS: ").append(rule.compareColumns()).append('\n')
-                .append("COMPARE_ROWS: ").append(rule.compareRows()).append('\n')
-                .append("ROW_ORDER: ").append(rule.rowOrderMatters()).append('\n');
-            if (rule.expectedRowCount() != null) {
-                out.append("EXPECTED_ROWS: ").append(rule.expectedRowCount()).append('\n');
-            }
-            if (!rule.requiredSqlKeywords().isEmpty()) {
-                out.append("KEYWORDS: ").append(String.join(", ", rule.requiredSqlKeywords())).append('\n');
-            }
-            if (!exercise.hints().isEmpty()) {
-                out.append("HINTS:\n");
-                for (String hint : exercise.hints()) {
-                    out.append(hint).append('\n');
-                }
-            }
-            out.append("VERSION: ").append(exercise.version()).append('\n')
-                .append("ENABLED: ").append(exercise.enabled()).append('\n')
-                .append("CREATED: ").append(exercise.createdAt()).append('\n')
-                .append("UPDATED: ").append(exercise.updatedAt()).append('\n');
+            encodeExercise(out, exercise);
         }
         return out.toString();
+    }
+
+    /** Encodes a single dataset as one standalone block (used for bank distribution). */
+    String encodeDatasetBlock(ExerciseDataset dataset) {
+        StringBuilder out = new StringBuilder();
+        encodeDataset(out, dataset);
+        return out.toString();
+    }
+
+    /** Encodes a single exercise as one standalone block (used for bank distribution). */
+    String encodeExerciseBlock(ExerciseDefinition exercise) {
+        StringBuilder out = new StringBuilder();
+        encodeExercise(out, exercise);
+        return out.toString();
+    }
+
+    private void encodeDataset(StringBuilder out, ExerciseDataset dataset) {
+        out.append('\n').append(DATASET_HEADER).append('\n')
+            .append("ID: ").append(dataset.id()).append('\n')
+            .append("NAME: ").append(dataset.name()).append('\n')
+            .append("VERSION: ").append(dataset.version()).append('\n')
+            .append("SQL:\n").append(dataset.setupSql()).append('\n');
+    }
+
+    private void encodeExercise(StringBuilder out, ExerciseDefinition exercise) {
+        ExerciseEvaluationRule rule = exercise.evaluationRule();
+        out.append('\n').append(EXERCISE_HEADER).append('\n')
+            .append("ID: ").append(exercise.id()).append('\n')
+            .append("TITLE: ").append(exercise.title()).append('\n')
+            .append("KNOWLEDGE: ").append(exercise.knowledgePoint()).append('\n')
+            .append("DIFFICULTY: ").append(exercise.difficulty().name()).append('\n')
+            .append("DATASET: ").append(exercise.datasetId()).append('\n')
+            .append("DESCRIPTION:\n").append(exercise.description()).append('\n')
+            .append("SQL:\n").append(exercise.referenceSql()).append('\n')
+            .append("COMPARE_COLUMNS: ").append(rule.compareColumns()).append('\n')
+            .append("COMPARE_ROWS: ").append(rule.compareRows()).append('\n')
+            .append("ROW_ORDER: ").append(rule.rowOrderMatters()).append('\n');
+        if (rule.expectedRowCount() != null) {
+            out.append("EXPECTED_ROWS: ").append(rule.expectedRowCount()).append('\n');
+        }
+        if (!rule.requiredSqlKeywords().isEmpty()) {
+            out.append("KEYWORDS: ").append(String.join(", ", rule.requiredSqlKeywords())).append('\n');
+        }
+        if (!exercise.hints().isEmpty()) {
+            out.append("HINTS:\n");
+            for (String hint : exercise.hints()) {
+                out.append(hint).append('\n');
+            }
+        }
+        out.append("VERSION: ").append(exercise.version()).append('\n')
+            .append("ENABLED: ").append(exercise.enabled()).append('\n')
+            .append("CREATED: ").append(exercise.createdAt()).append('\n')
+            .append("UPDATED: ").append(exercise.updatedAt()).append('\n');
     }
 
     DecodedPackage decode(String text) {

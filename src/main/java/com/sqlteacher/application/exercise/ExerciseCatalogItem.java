@@ -1,0 +1,32 @@
+package com.sqlteacher.application.exercise;
+
+import com.sqlteacher.domain.exercise.ExerciseDifficulty;
+
+/**
+ * Practice-catalog entry: the exercise identity plus the current local owner's attempt
+ * status, so the student can see what they have already solved without leaving the page.
+ */
+public record ExerciseCatalogItem(
+    String id,
+    String title,
+    String knowledgePoint,
+    ExerciseDifficulty difficulty,
+    int version,
+    int attempts,
+    boolean passed,
+    String lastAttemptAt
+) {
+    public ExerciseCatalogItem {
+        if (id == null || id.isBlank()) {
+            throw new IllegalArgumentException("id must not be blank");
+        }
+        if (title == null || title.isBlank()) {
+            throw new IllegalArgumentException("title must not be blank");
+        }
+        if (knowledgePoint == null || knowledgePoint.isBlank()) {
+            throw new IllegalArgumentException("knowledgePoint must not be blank");
+        }
+        difficulty = difficulty == null ? ExerciseDifficulty.BEGINNER : difficulty;
+        attempts = Math.max(0, attempts);
+    }
+}

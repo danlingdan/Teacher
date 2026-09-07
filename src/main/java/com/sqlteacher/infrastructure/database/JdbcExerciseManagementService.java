@@ -27,6 +27,7 @@ public final class JdbcExerciseManagementService implements ExerciseManagementSe
     private final JdbcConnectionFactory connectionFactory;
     private final ExercisePackageCodec codec;
     private final ExerciseTextCodec textCodec;
+    private final ExercisePackageValidator validator;
 
     public JdbcExerciseManagementService(JdbcConnectionFactory connectionFactory) {
         this(connectionFactory, new ExercisePackageCodec(), new ExerciseTextCodec());
@@ -35,9 +36,19 @@ public final class JdbcExerciseManagementService implements ExerciseManagementSe
     JdbcExerciseManagementService(
         JdbcConnectionFactory connectionFactory, ExercisePackageCodec codec, ExerciseTextCodec textCodec
     ) {
+        this(connectionFactory, codec, textCodec, new ExercisePackageValidator(new DefaultSqlRiskAnalysisService()));
+    }
+
+    JdbcExerciseManagementService(
+        JdbcConnectionFactory connectionFactory,
+        ExercisePackageCodec codec,
+        ExerciseTextCodec textCodec,
+        ExercisePackageValidator validator
+    ) {
         this.connectionFactory = connectionFactory;
         this.codec = codec;
         this.textCodec = textCodec;
+        this.validator = validator;
     }
 
     @Override
@@ -98,7 +109,11 @@ public final class JdbcExerciseManagementService implements ExerciseManagementSe
             throw new IllegalArgumentException("draft must not be null");
         }
         try (Connection connection = connectionFactory.open("app")) {
-            requireDataset(connection, draft.datasetId());
+            ExerciseDataset dataset = findDataset(connection, draft.datasetId())
+                .orElseThrow(() -> new SqlTeacherException(
+                    "EXERCISE_DATASET_NOT_FOUND", "Exercise dataset not found: " + draft.datasetId()
+                ));
+            validateDraftSelfTest(draft, dataset);
             Optional<ExerciseDefinition> existing = draft.id().isEmpty()
                 ? Optional.empty()
                 : findDefinition(connection, draft.id());
@@ -207,6 +222,15 @@ public final class JdbcExerciseManagementService implements ExerciseManagementSe
     @Override
     public ExerciseImportResult importPackage(String text) {
         ExerciseTextCodec.DecodedPackage imported = textCodec.decode(text);
+        ExercisePackageValidator.Result validation = validator.validate(
+            imported.datasets(), imported.exercises(), this::findDatasetById
+        );
+        if (!validation.passed()) {
+            throw new SqlTeacherException(
+                "EXERCISE_IMPORT_INVALID",
+                "题库包未通过导入自测：" + String.join("；", validation.failures())
+            );
+        }
         Set<String> datasetIds = imported.datasets().stream().map(ExerciseDataset::id).collect(java.util.stream.Collectors.toSet());
         try (Connection connection = connectionFactory.open("app")) {
             connection.setAutoCommit(false);
@@ -251,16 +275,42 @@ public final class JdbcExerciseManagementService implements ExerciseManagementSe
     @Override
     public ExerciseImportPreview parsePackage(String text) {
         ExerciseTextCodec.DecodedPackage decoded = textCodec.decode(text);
+        ExercisePackageValidator.Result validation = validator.validate(
+            decoded.datasets(), decoded.exercises(), this::findDatasetById
+        );
         return new ExerciseImportPreview(
             decoded.datasets().stream()
-                .map(dataset -> new ExerciseImportPreview.DatasetPreview(dataset.id(), dataset.name()))
+                .map(dataset -> new ExerciseImportPreview.DatasetPreview(
+                    dataset.id(), dataset.name(), selfTestStatus(validation.datasets(), dataset.id())))
                 .toList(),
             decoded.exercises().stream()
                 .map(exercise -> new ExerciseImportPreview.ExercisePreview(
-                    exercise.id(), exercise.title(), exercise.knowledgePoint(), exercise.difficulty()
+                    exercise.id(),
+                    exercise.title(),
+                    exercise.knowledgePoint(),
+                    exercise.difficulty(),
+                    selfTestStatus(validation.exercises(), exercise.id())
                 ))
                 .toList()
         );
+    }
+
+    private static ExerciseImportPreview.SelfTestStatus selfTestStatus(
+        List<ExercisePackageValidator.ItemStatus> statuses, String id
+    ) {
+        return statuses.stream()
+            .filter(status -> status.id().equals(id))
+            .findFirst()
+            .map(status -> new ExerciseImportPreview.SelfTestStatus(status.passed(), status.message()))
+            .orElse(new ExerciseImportPreview.SelfTestStatus(false, "未参与自测"));
+    }
+
+    private Optional<ExerciseDataset> findDatasetById(String datasetId) {
+        try (Connection connection = connectionFactory.open("app")) {
+            return findDataset(connection, datasetId);
+        } catch (SQLException error) {
+            throw failure("EXERCISE_DATASET_LIST_FAILED", "Failed to list exercise datasets", error);
+        }
     }
 
     private Optional<ExerciseDefinition> findDefinition(Connection connection, String id) throws SQLException {
@@ -310,6 +360,20 @@ public final class JdbcExerciseManagementService implements ExerciseManagementSe
         return new ExerciseDataset(
             row.getString("id"), row.getString("name"), row.getString("setup_sql"), row.getInt("version")
         );
+    }
+
+    private void validateDraftSelfTest(ExerciseDraft draft, ExerciseDataset dataset) {
+        String candidateId = draft.id() == null || draft.id().isEmpty() ? "draft-self-test" : draft.id();
+        ExerciseDefinition candidate = fromDraft(draft, candidateId, 1, Instant.now(), Instant.now());
+        ExercisePackageValidator.Result result = validator.validate(
+            List.of(dataset), List.of(candidate), id -> Optional.empty()
+        );
+        if (!result.passed()) {
+            throw new SqlTeacherException(
+                "EXERCISE_SAVE_INVALID",
+                "题目未通过自测：" + String.join("；", result.failures())
+            );
+        }
     }
 
     private ExerciseDefinition fromDraft(
@@ -401,12 +465,6 @@ public final class JdbcExerciseManagementService implements ExerciseManagementSe
             try (ResultSet row = statement.executeQuery()) {
                 return row.next() ? Optional.of(readDataset(row)) : Optional.empty();
             }
-        }
-    }
-
-    private static void requireDataset(Connection connection, String id) throws SQLException {
-        if (!datasetExists(connection, id)) {
-            throw new SqlTeacherException("EXERCISE_DATASET_NOT_FOUND", "Exercise dataset not found: " + id);
         }
     }
 
