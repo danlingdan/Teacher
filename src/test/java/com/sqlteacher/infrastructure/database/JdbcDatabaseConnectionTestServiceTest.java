@@ -19,9 +19,11 @@ class JdbcDatabaseConnectionTestServiceTest {
     Path tempDir;
 
     @Test
-    void shouldReturnStandardMetadataForAWorkingSqliteProfile() {
+    void shouldReturnStandardMetadataForAWorkingSqliteProfile() throws Exception {
         JdbcDatabaseConnectionTestService service = service(Duration.ofSeconds(1));
-        DatabaseConnectionProfile profile = profile(tempDir.resolve("working.db"), true);
+        Path working = tempDir.resolve("working.db");
+        java.nio.file.Files.createFile(working);
+        DatabaseConnectionProfile profile = profile(working, true);
 
         DatabaseConnectionTestResult result = service.testConnection(profile, new char[0]);
 
@@ -30,6 +32,19 @@ class JdbcDatabaseConnectionTestServiceTest {
         assertEquals("SQLite", result.databaseProduct());
         assertFalse(result.databaseVersion().isBlank());
         assertFalse(result.elapsed().isNegative());
+    }
+
+    @Test
+    void shouldHintWhenSqliteDatabaseFileWillBeCreated() {
+        JdbcDatabaseConnectionTestService service = service(Duration.ofSeconds(1));
+        DatabaseConnectionProfile profile = profile(tempDir.resolve("brand-new.db"), true);
+
+        DatabaseConnectionTestResult result = service.testConnection(profile, new char[0]);
+
+        assertTrue(result.successful());
+        assertTrue(result.message().startsWith("连接成功。"));
+        assertTrue(result.message().contains("新的空数据库"));
+        assertFalse(result.message().contains("brand-new"));
     }
 
     @Test

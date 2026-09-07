@@ -1186,6 +1186,24 @@ final class SqliteSchemaMigrator {
                 "drop table connection_profiles",
                 "alter table connection_profiles_v2 rename to connection_profiles"
             )
+        ),
+        new Migration(
+            19,
+            "Add local SQL execution history for the data workbench",
+            List.of(
+                """
+                    create table sql_history (
+                        id integer primary key autoincrement,
+                        connection_id text not null,
+                        sql_text text not null,
+                        successful integer not null check (successful in (0, 1)),
+                        row_count integer not null default 0,
+                        duration_millis integer not null default 0,
+                        created_at text not null default current_timestamp
+                    )
+                    """,
+                "create index if not exists idx_sql_history_created on sql_history(created_at desc)"
+            )
         )
     );
 

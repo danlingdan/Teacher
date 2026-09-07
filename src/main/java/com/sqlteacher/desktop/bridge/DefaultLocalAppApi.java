@@ -29,6 +29,10 @@ import com.sqlteacher.application.course.CourseMapService;
 import com.sqlteacher.application.execution.SqlExecutionRequest;
 import com.sqlteacher.application.execution.SqlExecutionResult;
 import com.sqlteacher.application.execution.SqlExecutionService;
+import com.sqlteacher.application.execution.SqlHistoryEntry;
+import com.sqlteacher.application.execution.SqlHistoryService;
+import com.sqlteacher.infrastructure.execution.SqlCsvExporter;
+import com.sqlteacher.domain.SqlTeacherException;
 import com.sqlteacher.application.exercise.ExerciseAttemptResult;
 import com.sqlteacher.application.exercise.ExerciseCatalogService;
 import com.sqlteacher.application.exercise.ExerciseManagementService;
@@ -81,8 +85,10 @@ import com.sqlteacher.infrastructure.spring.SqlTeacherApplicationConfig;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 
 import java.nio.charset.StandardCharsets;
+import java.io.IOException;
 import java.time.Instant;
 import java.time.Duration;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.util.HexFormat;
@@ -141,6 +147,7 @@ public final class DefaultLocalAppApi implements LocalAppApi {
             case "runner.capabilities" -> runnerCapabilities(cancellation);
             case "runner.run" -> runnerRun(params, cancellation, events);
             case "data.connections" -> dataConnections(cancellation);
+            case "data.connection.dialects" -> dataConnectionDialects(cancellation);
             case "data.connection.save" -> dataConnectionSave(params, cancellation);
             case "data.connection.test" -> dataConnectionTest(params, cancellation);
             case "data.connection.select" -> dataConnectionSelect(params, cancellation);
@@ -149,6 +156,9 @@ public final class DefaultLocalAppApi implements LocalAppApi {
             case "sql.analyze" -> sqlAnalyze(params, cancellation);
             case "sql.execute" -> sqlExecute(params, cancellation);
             case "sql.result.page" -> sqlResultPage(params, cancellation);
+            case "sql.history" -> sqlHistory(params, cancellation);
+            case "sql.history.clear" -> sqlHistoryClear(cancellation);
+            case "sql.result.export" -> sqlResultExport(params, cancellation);
             case "ai.knowledge.ask" -> aiKnowledgeAsk(params, cancellation, events);
             case "ai.sql.preview" -> aiSqlPreview(params, cancellation);
             case "ai.sql.generate" -> aiSqlGenerate(params, cancellation, events);
@@ -1491,17 +1501,48 @@ public final class DefaultLocalAppApi implements LocalAppApi {
         cancellation.throwIfCancelled();
         DatabaseConnectionProfile profile = connectionProfile(params);
         char[] password = params.path("password").asText("").toCharArray();
+        // 表单密码为空时回退到本进程已验证的会话凭据，让“仅测试/保存即测试”
+        // 在编辑已有连接、未重新输入密码时也能走通。
+        char[] working = resolveTestPassword(context().getBean(DatabaseCredentialSession.class), profile, password);
         try {
             var core = context();
-            var result = core.getBean(DatabaseConnectionTestService.class).testConnection(profile, password);
+            var result = core.getBean(DatabaseConnectionTestService.class).testConnection(profile, working);
             if (result.successful() && !profile.dialect().fileBased()) {
-                core.getBean(DatabaseCredentialSession.class).remember(profile.id(), password);
+                core.getBean(DatabaseCredentialSession.class).remember(profile.id(), working);
             }
             cancellation.throwIfCancelled();
             return mapper.valueToTree(result);
         } finally {
             Arrays.fill(password, '\0');
+            if (working != password) {
+                Arrays.fill(working, '\0');
+            }
         }
+    }
+
+    static char[] resolveTestPassword(
+        DatabaseCredentialSession session,
+        DatabaseConnectionProfile profile,
+        char[] formPassword
+    ) {
+        if (formPassword.length > 0 || profile.dialect().fileBased()) {
+            return formPassword;
+        }
+        return session.passwordFor(profile.id()).map(chars -> chars.clone()).orElse(formPassword);
+    }
+
+    private JsonNode dataConnectionDialects(CancellationToken cancellation) {
+        cancellation.throwIfCancelled();
+        ArrayNode items = mapper.createArrayNode();
+        for (DatabaseDialect dialect : DatabaseDialect.values()) {
+            ObjectNode item = items.addObject();
+            item.put("name", dialect.name());
+            item.put("displayName", dialect.displayName());
+            item.put("defaultPort", dialect.defaultPort());
+            item.put("fileBased", dialect.fileBased());
+            item.put("generic", dialect.generic());
+        }
+        return mapper.createObjectNode().set("items", items);
     }
 
     private JsonNode dataConnectionSelect(JsonNode params, CancellationToken cancellation) {
@@ -1611,6 +1652,7 @@ public final class DefaultLocalAppApi implements LocalAppApi {
         SqlExecutionResult execution = context().getBean(SqlExecutionService.class).execute(
             new SqlExecutionRequest(connectionId, sql, maxRows, Duration.ofSeconds(10), confirmed));
         cancellation.throwIfCancelled();
+        recordSqlHistory(connectionId, sql, execution);
         String resultId = UUID.randomUUID().toString();
         rememberSqlResult(resultId, new CachedSqlResult(execution, Instant.now().plusSeconds(600)));
         return sqlPage(resultId, execution, 0, Math.clamp(params.path("pageSize").asInt(50), 1, 100));
@@ -1635,6 +1677,70 @@ public final class DefaultLocalAppApi implements LocalAppApi {
         if (cached == null) throw new IllegalArgumentException("SQL result page has expired");
         return sqlPage(resultId, cached.result(), Math.max(0, params.path("page").asInt(0)),
             Math.clamp(params.path("pageSize").asInt(50), 1, 100));
+    }
+
+    private void recordSqlHistory(String connectionId, String sql, SqlExecutionResult execution) {
+        try {
+            int effectiveRows = execution.rows().isEmpty()
+                ? execution.affectedRows()
+                : execution.rows().size();
+            context().getBean(SqlHistoryService.class).record(new SqlHistoryEntry(
+                connectionId,
+                "",
+                sql,
+                execution.success(),
+                effectiveRows,
+                execution.duration().toMillis(),
+                Instant.now()
+            ));        } catch (RuntimeException error) {
+            // 历史是非关键旁路，记录失败不影响已完成的执行结果。
+        }
+    }
+
+    private JsonNode sqlHistory(JsonNode params, CancellationToken cancellation) {
+        cancellation.throwIfCancelled();
+        List<SqlHistoryEntry> entries = context().getBean(SqlHistoryService.class)
+            .list(params.path("limit").asInt(50));
+        ArrayNode items = mapper.createArrayNode();
+        for (SqlHistoryEntry entry : entries) {
+            ObjectNode item = items.addObject();
+            item.put("connectionId", entry.connectionId());
+            item.put("connectionName", entry.connectionName());
+            item.put("sql", entry.sqlText());
+            item.put("successful", entry.successful());
+            item.put("rowCount", entry.rowCount());
+            item.put("durationMillis", entry.durationMillis());
+            item.put("createdAt", entry.createdAt().toString());
+        }
+        return mapper.createObjectNode().set("items", items);
+    }
+
+    private JsonNode sqlHistoryClear(CancellationToken cancellation) {
+        cancellation.throwIfCancelled();
+        context().getBean(SqlHistoryService.class).clear();
+        return mapper.createObjectNode().put("cleared", true);
+    }
+
+    private JsonNode sqlResultExport(JsonNode params, CancellationToken cancellation) {
+        cancellation.throwIfCancelled();
+        expireSqlState();
+        String resultId = requiredText(params, "resultId", 128);
+        CachedSqlResult cached = sqlResults.get(resultId);
+        if (cached == null) throw new IllegalArgumentException("SQL result page has expired");
+        String path = requiredText(params, "path", 4096);
+        try {
+            Files.writeString(
+                Path.of(path),
+                SqlCsvExporter.toCsv(cached.result().columns(), cached.result().rows()),
+                StandardCharsets.UTF_8
+            );
+        } catch (IOException error) {
+            throw new SqlTeacherException("SQL_EXPORT_FAILED", "无法写入 CSV 文件，请检查保存位置。");
+        }
+        cancellation.throwIfCancelled();
+        return mapper.createObjectNode()
+            .put("rows", cached.result().rows().size())
+            .put("columns", cached.result().columns().size());
     }
 
     private ObjectNode sqlPage(String resultId, SqlExecutionResult result, int page, int pageSize) {

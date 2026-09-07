@@ -12,6 +12,7 @@ import com.sqlteacher.application.activity.QuizActivityEvaluator;
 import com.sqlteacher.application.activity.ProjectActivityEvaluator;
 import com.sqlteacher.application.activity.ProjectPortfolioService;
 import com.sqlteacher.application.activity.ReadingActivityEvaluator;
+import com.sqlteacher.application.execution.SqlHistoryService;
 import com.sqlteacher.application.activity.SimulationActivityEvaluator;
 import com.sqlteacher.application.activity.SqlActivityEvaluator;
 import com.sqlteacher.application.activity.TraceActivityEvaluator;
@@ -144,6 +145,11 @@ public class DatabaseServiceConfig {
     @Bean
     public DatabaseMetadataService databaseMetadataService(JdbcConnectionProvider connectionProvider) {
         return new JdbcDatabaseMetadataService(connectionProvider);
+    }
+
+    @Bean
+    public SqlHistoryService sqlHistoryService(JdbcConnectionFactory connectionFactory) {
+        return new JdbcSqlHistoryService(connectionFactory);
     }
 
     @Bean

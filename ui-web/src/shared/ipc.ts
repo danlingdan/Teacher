@@ -111,6 +111,7 @@ export type LocalAppMethod =
   | "runner.capabilities"
   | "runner.run"
   | "data.connections"
+  | "data.connection.dialects"
   | "data.connection.save"
   | "data.connection.test"
   | "data.connection.select"
@@ -119,6 +120,9 @@ export type LocalAppMethod =
   | "sql.analyze"
   | "sql.execute"
   | "sql.result.page"
+  | "sql.history"
+  | "sql.history.clear"
+  | "sql.result.export"
   | "editor.languages"
   | "system.cancel"
   | "system.shutdown";

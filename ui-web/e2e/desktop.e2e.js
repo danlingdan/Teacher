@@ -167,6 +167,87 @@ describe("SQLTeacher 3.0 packaged desktop", () => {
     });
   });
 
+  it("creates a database connection through the simplified connection manager", async () => {
+    await browser.execute(() => {
+      window.location.hash = "#/data";
+    });
+    await expect($(".data-workspace")).toBeDisplayed({ wait: 15_000 });
+    const manager = await $(".connection-manager");
+    await manager.waitForDisplayed({ timeout: 15_000 });
+    if (!(await manager.isDisplayed())) {
+      await $("summary=管理连接").click();
+    }
+
+    // 方言下拉由 Java 侧 data.connection.dialects 提供，含中文显示名。
+    await browser.waitUntil(
+      () =>
+        browser.execute(() =>
+          [
+            ...document.querySelectorAll(".connection-manager select option"),
+          ].some((option) => option.textContent === "达梦 DM8"),
+        ),
+      {
+        timeout: 15_000,
+        timeoutMsg: "dialect options were not loaded from Java",
+      },
+    );
+
+    // React 受控 select 需要用原生 value setter + change 事件驱动（与 chooseSetting 一致）。
+    const chooseDialect = (value) =>
+      browser.execute((next) => {
+        const select = document.querySelector(".connection-manager select");
+        const setter = Object.getOwnPropertyDescriptor(
+          HTMLSelectElement.prototype,
+          "value",
+        )?.set;
+        if (!(select instanceof HTMLSelectElement) || !setter)
+          throw new Error("dialect selector is unavailable");
+        setter.call(select, next);
+        select.dispatchEvent(new Event("change", { bubbles: true }));
+      }, value);
+
+    await chooseDialect("MYSQL");
+    await browser.waitUntil(
+      async () =>
+        (await $(".connection-manager input[type='number']").getValue()) ===
+        "3306",
+      { timeout: 15_000, timeoutMsg: "default port was not auto-filled" },
+    );
+
+    // 保存一个指向真实 demo.db 的 SQLite 连接：ID 与显示名称留空自动生成。
+    const demoDbPath = path.resolve("..", "target", "e2e-app-data", "demo.db");
+    await chooseDialect("SQLITE");
+    await $(
+      ".connection-manager input[placeholder='选择或输入文件路径']",
+    ).waitForExist({ timeout: 15_000 });
+    await $(".connection-manager input[placeholder='选择或输入文件路径']").setValue(
+      demoDbPath,
+    );
+    await $("button=测试并保存").click();
+    await browser.waitUntil(
+      () =>
+        browser.execute(() =>
+          document.body.innerText.includes("连接成功"),
+        ),
+      { timeout: 30_000, timeoutMsg: "connection test did not succeed" },
+    );
+    await browser.waitUntil(
+      () =>
+        browser.execute(
+          (optionText) =>
+            [...document.querySelectorAll(".schema-panel select option")].some(
+              (option) => option.textContent.includes(optionText),
+            ),
+          "SQLite demo.db",
+        ),
+      {
+        timeout: 15_000,
+        timeoutMsg: "saved connection did not appear in the connection list",
+      },
+    );
+    await screenshot("connection-manager");
+  });
+
   it("renders the role-protected teaching workspace without a production preview route", async () => {
     await browser.execute(() => {
       const client = window.__SQLTEACHER_E2E_QUERY_CLIENT__;

@@ -220,6 +220,13 @@ export interface RunnerResult {
   };
 }
 
+export interface ConnectionDialectOption {
+  name: string;
+  displayName: string;
+  defaultPort: number;
+  fileBased: boolean;
+  generic: boolean;
+}
 export interface ConnectionSummary {
   id: string;
   displayName: string;
@@ -243,6 +250,15 @@ export interface ConnectionTestResult {
   databaseProduct: string;
   databaseVersion: string;
   elapsed: number | string;
+}
+export interface SqlHistoryItem {
+  connectionId: string;
+  connectionName: string;
+  sql: string;
+  successful: boolean;
+  rowCount: number;
+  durationMillis: number;
+  createdAt: string;
 }
 export interface DatabaseColumn {
   name: string;

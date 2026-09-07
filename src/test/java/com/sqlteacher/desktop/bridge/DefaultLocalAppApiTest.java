@@ -2,13 +2,22 @@ package com.sqlteacher.desktop.bridge;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import com.sqlteacher.application.connection.DatabaseConnectionProfile;
+import com.sqlteacher.application.connection.DatabaseCredentialSession;
+import com.sqlteacher.application.connection.DatabaseDialect;
+import com.sqlteacher.application.connection.ServerConnectionTarget;
+import com.sqlteacher.application.connection.SqliteConnectionTarget;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.api.parallel.ResourceLock;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Optional;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -196,5 +205,77 @@ class DefaultLocalAppApiTest {
         } finally {
             System.clearProperty("sqlteacher.data.dir");
         }
+    }
+
+    @Test
+    @ResourceLock("sqlteacher.data.dir")
+    void shouldExposeConnectionDialectMetadataThroughTheBridge() throws Exception {
+        System.setProperty("sqlteacher.data.dir", tempDirectory.resolve("dialect-data").toString());
+        try (var api = new DefaultLocalAppApi(mapper)) {
+            var result = api.invoke(
+                "data.connection.dialects", mapper.createObjectNode(), () -> false, ignored -> { });
+
+            assertTrue(result.path("items").isArray());
+            Map<String, com.fasterxml.jackson.databind.JsonNode> byName = new HashMap<>();
+            result.path("items").forEach(item -> byName.put(item.path("name").asText(), item));
+            assertEquals(DatabaseDialect.values().length, byName.size());
+
+            var mysql = byName.get("MYSQL");
+            assertEquals("MySQL", mysql.path("displayName").asText());
+            assertEquals(3306, mysql.path("defaultPort").asInt());
+            assertFalse(mysql.path("fileBased").asBoolean());
+
+            var sqlite = byName.get("SQLITE");
+            assertEquals("SQLite", sqlite.path("displayName").asText());
+            assertTrue(sqlite.path("fileBased").asBoolean());
+
+            var dameng = byName.get("DAMENG");
+            assertEquals("达梦 DM8", dameng.path("displayName").asText());
+            assertEquals(5236, dameng.path("defaultPort").asInt());
+        } finally {
+            System.clearProperty("sqlteacher.data.dir");
+        }
+    }
+
+    @Test
+    void shouldReuseRememberedPasswordForConnectionTestWhenFormIsBlank() {
+        DatabaseConnectionProfile serverProfile = new DatabaseConnectionProfile(
+            "mysql.local", "MySQL",
+            new ServerConnectionTarget(DatabaseDialect.MYSQL, "localhost", 3306, "school", "root"),
+            false, true, false);
+        DatabaseConnectionProfile fileProfile = new DatabaseConnectionProfile(
+            "sqlite.local", "SQLite", new SqliteConnectionTarget(Path.of("school.db")),
+            false, true, false);
+        DatabaseCredentialSession session = new DatabaseCredentialSession() {
+            private final Map<String, char[]> passwords = new HashMap<>();
+
+            @Override public void remember(String connectionId, char[] password) {
+                passwords.put(connectionId, password.clone());
+            }
+
+            @Override public Optional<char[]> passwordFor(String connectionId) {
+                return Optional.ofNullable(passwords.get(connectionId)).map(chars -> chars.clone());
+            }
+
+            @Override public void forget(String connectionId) {
+                passwords.remove(connectionId);
+            }
+
+            @Override public void close() {
+            }
+        };
+
+        assertArrayEquals(
+            "typed".toCharArray(),
+            DefaultLocalAppApi.resolveTestPassword(session, serverProfile, "typed".toCharArray()));
+        assertArrayEquals(
+            new char[0], DefaultLocalAppApi.resolveTestPassword(session, fileProfile, new char[0]));
+        assertArrayEquals(
+            new char[0], DefaultLocalAppApi.resolveTestPassword(session, serverProfile, new char[0]));
+
+        session.remember("mysql.local", "kept".toCharArray());
+        assertArrayEquals(
+            "kept".toCharArray(),
+            DefaultLocalAppApi.resolveTestPassword(session, serverProfile, new char[0]));
     }
 }
