@@ -50,6 +50,11 @@ public final class JdbcDatabaseMetadataService implements DatabaseMetadataServic
                 while (tableResult.next()) {
 
                     String tableName = tableResult.getString("TABLE_NAME");
+                    // SQLite 的 TEXT/复合主键会生成 sqlite_autoindex_* 内部索引；
+                    // 驱动的 getTables 不过滤它们，后续 getColumns 会报 Table not found。
+                    if (tableName == null || tableName.startsWith("sqlite_")) {
+                        continue;
+                    }
                     String catalog = tableResult.getString("TABLE_CAT");
                     String schema = tableResult.getString("TABLE_SCHEM");
 
