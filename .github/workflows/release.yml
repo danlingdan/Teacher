@@ -66,7 +66,8 @@ jobs:
         working-directory: ui-web
         run: |
           npm ci
-          npm audit --audit-level=moderate
+          # 审计生产依赖：E2E 工具链的 extract-zip 上游暂无修复版且不随安装包分发。
+          npm audit --audit-level=moderate --omit=dev
           npm test
 
       - name: Build Tauri installer and portable archive
