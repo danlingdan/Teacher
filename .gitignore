@@ -50,3 +50,6 @@ build/
 ### Mac OS ###
 .DS_Store
 __pycache__/
+
+# ZCode session-local state
+.zcode/

@@ -104,8 +104,15 @@ server -> application/domain/infrastructure as currently wired
 - Treat model output and retrieved/imported content as untrusted.
 - Generated SQL must follow the Java-enforced path: structured parsing, validation, SQL building,
   risk analysis, preview, required confirmation, bounded execution, and audit recording.
-- Block multi-statement SQL by default. Block `DROP DATABASE`, `GRANT`, and `REVOKE`; require
-  explicit user confirmation for supported high-risk mutations.
+- Block multi-statement SQL by default; it is never relaxed by the safety mode. High-risk
+  statements (`DROP`, `TRUNCATE`, `GRANT`, `REVOKE`, `DROP DATABASE`) are executable only behind
+  an explicit user confirmation; user/role administration and file-writing operations
+  (`INTO OUTFILE`, `COPY ... TO FILE/PROGRAM`) stay forbidden. Since v3.2.0 the local SQL safety
+  mode defaults to teaching mode (all writes confirm) and is fail-closed: a missing or unreadable
+  settings file never enables developer mode.
+- Keep risk analysis and execution text-aligned: dialect-specific constructs that servers execute
+  (such as MySQL `/*! ... */` executable comments) must keep their content inside the analyzed
+  text instead of being stripped as plain comments.
 - Prompts and UI warnings do not replace enforcement in shared Java services and adapters.
 - AI may draft explanations and review material; deterministic code owns mastery, queue priority,
   interventions, permissions, and other authoritative learning state.

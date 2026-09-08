@@ -27,29 +27,29 @@ SQLTeacher 必须保证模型不能直接执行 SQL，所有 SQL 必须经过 Ja
 
 ## 2. SQL 执行安全要求
 
-首版安全要求：
+自 v3.2.0 起的安全要求（按输入来源与风险分级，而非按语句一刀切）：
 
 - 禁止模型直接持有 JDBC `Connection`。
-- 禁止未确认执行高风险 SQL；开发者模式只减少普通操作确认。
-- 禁止默认执行多语句。
-- 禁止默认执行 `DROP DATABASE`。
-- 禁止默认执行 `GRANT`、`REVOKE`。
+- 禁止未确认执行高风险 SQL；教学模式要求全部写操作确认，开发者模式只减少 `INSERT`/`CREATE` 等普通操作确认。
+- 禁止默认执行多语句；多语句拦截不受安全模式影响。
+- `DROP`、`TRUNCATE`、`GRANT`、`REVOKE`、`DROP DATABASE` 必须明确确认后执行（`DROP DATABASE` 确认弹窗附备份强提示）。
+- 用户/角色管理（`CREATE USER`、`ALTER USER`、`DROP USER/ROLE`）与写文件类操作（`INTO OUTFILE`/`DUMPFILE`、`COPY ... TO FILE/PROGRAM`）一律禁止。
+- 读取本地文件的函数（如 `LOAD_FILE`、`FILE_READ`、`read_csv`、`pg_read_file`）按高风险处理，确认后可执行。
+- MySQL 方言族（及未知服务器方言）的 `/*! ... */` 可执行注释内容参与风险分析，分析与执行的文本保持一致；良性版本化注释照常放行。
 - 查询默认限制最大 500 行。
-- 执行 `UPDATE`、`DELETE`、`ALTER`、`DROP TABLE`、`TRUNCATE` 必须最终确认。
 - 所有 SQL 执行必须记录审计事件。
-- 错误信息展示给用户前应转换为教学友好说明。
+- 错误信息展示给本地用户时附分类后的失败细节（SQLState、vendorCode、根因），其中密码类片段与文件路径脱敏；日志与服务端维持既有脱敏。
 
 ## 3. 风险等级
 
 | 等级 | 示例 | 策略 |
 |---|---|---|
-| 低 | `SELECT` | 允许执行，限制行数 |
-| 中 | `INSERT`、`CREATE` | 开发者模式直接执行；谨慎模式确认 |
-| 高 | `UPDATE`、`DELETE`、`ALTER` | 二次确认 |
-| 高 | `DROP TABLE`、`TRUNCATE` | 开发者模式允许，但必须最终确认 |
-| 禁止 | 多语句、数据库/账号/角色管理、`GRANT`、`REVOKE` | 直接拦截 |
+| 低 | `SELECT`（含 CTE `WITH ... SELECT`、括号复合查询） | 允许执行，限制行数 |
+| 中 | `INSERT`、`CREATE` | 开发者模式直接执行；教学模式确认 |
+| 高 | `UPDATE`、`DELETE`、`ALTER`、`DROP`、`TRUNCATE`、`GRANT`、`REVOKE`、`DROP DATABASE`、文件读取函数 | 必须最终确认 |
+| 禁止 | 多语句、用户/角色管理、写文件类操作（`INTO OUTFILE`、`COPY ... TO FILE/PROGRAM`） | 直接拦截 |
 
-开发者模式是新安装的默认设置。它不改变 AI 的草稿边界、课程查询评测合同、只读连接、数据库账号权限、结果与超时限制或审计记录。
+教学模式（全部写操作需确认）是新安装的默认设置，配置文件缺失或损坏时也回落到教学模式；开发者模式需用户明确选择。两者都不改变 AI 的草稿边界、课程查询评测合同、只读连接、数据库账号权限、结果与超时限制或审计记录。
 
 风险判断至少考虑：
 
