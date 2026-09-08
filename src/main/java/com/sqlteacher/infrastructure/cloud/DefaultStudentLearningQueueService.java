@@ -33,8 +33,12 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public final class DefaultStudentLearningQueueService implements StudentLearningQueueService {
+    private static final Logger log = LoggerFactory.getLogger(DefaultStudentLearningQueueService.class);
+
     private final LearningDiagnosisService diagnosis;
     private final CloudApiClient api;
     private final CloudSessionService sessions;
@@ -100,6 +104,9 @@ public final class DefaultStudentLearningQueueService implements StudentLearning
                         overdue ? null : new AssignmentTaskContext(classroom.id(), assignment), ""));
                 }
             }
+            // Known boundary: only the first page (50) of notifications is inspected; the
+            // cloud notification API does not yet expose the pagination contract this
+            // refresh loop would need, so older unread feedback may surface late.
             for (var notification : api.listNotifications(token, 0, 50)) {
                 if (!notification.unread() || notification.type() != NotificationType.FEEDBACK_PUBLISHED) continue;
                 String id = "feedback:" + notification.id();
@@ -124,6 +131,8 @@ public final class DefaultStudentLearningQueueService implements StudentLearning
             items.addAll(cloudItems);
             return new StudentLearningQueue(dashboard, limit(items), true);
         } catch (RuntimeException unavailable) {
+            log.warn("Cloud learning queue degraded to local-only, reason={}, code={}",
+                unavailable.getClass().getSimpleName(), cloudErrorCode(unavailable));
             if (planCache != null) {
                 planCache.currentPlans().forEach(plan -> plan.actions().stream()
                     .filter(action -> action.state() != StudyPlanActionState.COMPLETED
@@ -188,6 +197,13 @@ public final class DefaultStudentLearningQueueService implements StudentLearning
         }
     }
 
+    /**
+     * Redelivers queued study plan operations. A retryable failure of a single operation
+     * (throttling, transient server error) is skipped with a warning so the rest of the
+     * queue still submits and the refresh does not degrade to local-only; only cloud-level
+     * unreachability (authentication rejected by the server, network failures) falls back
+     * to the existing degraded path.
+     */
     private void retryPending(String token) {
         if (planCache == null) return;
         for (var operation : planCache.pending()) {
@@ -197,9 +213,23 @@ public final class DefaultStudentLearningQueueService implements StudentLearning
                 planCache.markDelivered(operation.operationId(), operation.actionId(), delivered.version());
             } catch (com.sqlteacher.application.collaboration.CloudApiRequestException error) {
                 planCache.markFailed(operation.operationId(), error.code(), error.retryable());
-                if (error.retryable()) throw error;
+                if (error.retryable()) {
+                    log.warn("Skipped retryable study plan sync operation, operationState={}, errorCode={}",
+                        operation.state(), error.code());
+                    continue;
+                }
+                if (error.statusCode() == 401 || error.statusCode() == 403) {
+                    throw error;
+                }
+                log.warn("Rejected study plan sync operation, operationState={}, errorCode={}",
+                    operation.state(), error.code());
             }
         }
+    }
+
+    private static String cloudErrorCode(RuntimeException error) {
+        return error instanceof com.sqlteacher.application.collaboration.CloudApiRequestException request
+            ? request.code() : "CLOUD_UNAVAILABLE";
     }
 
     private static StudentLearningQueueItem planItem(String courseId, StudyPlanAction item) {
@@ -221,7 +251,11 @@ public final class DefaultStudentLearningQueueService implements StudentLearning
                                                 com.sqlteacher.application.learning.LearningDashboard dashboard) {
         Map<String, String> names = points.stream().collect(java.util.stream.Collectors.toMap(
             com.sqlteacher.application.collaboration.KnowledgePoint::id,
-            com.sqlteacher.application.collaboration.KnowledgePoint::name));
+            com.sqlteacher.application.collaboration.KnowledgePoint::name,
+            (left, right) -> {
+                log.warn("Duplicate knowledge point id while grounding study plan; keeping the first name");
+                return left;
+            }));
         Map<String, com.sqlteacher.application.learning.MasterySnapshot> mastery = dashboard.mastery().stream()
             .collect(java.util.stream.Collectors.toMap(item -> item.knowledgePoint().toLowerCase(java.util.Locale.ROOT),
                 item -> item, (left, right) -> left));

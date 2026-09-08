@@ -16,6 +16,7 @@ import java.time.Duration;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class JdbcExerciseProgressServiceTest {
@@ -27,7 +28,7 @@ class JdbcExerciseProgressServiceTest {
         DatabaseConfiguration databases = initialize();
         JdbcConnectionFactory connections = new JdbcConnectionFactory(databases);
         insertProgressFixture(connections);
-        JdbcExerciseProgressService service = new JdbcExerciseProgressService(connections);
+        JdbcExerciseProgressService service = new JdbcExerciseProgressService(connections, () -> "guest");
 
         ExerciseProgressOverview overview = service.overview();
         List<ExerciseProgressItem> items = service.listExerciseProgress();
@@ -46,6 +47,47 @@ class JdbcExerciseProgressServiceTest {
         assertEquals(3, passed.attempts());
         assertEquals(1, passed.failedSubmissions());
         assertTrue(passed.passed());
+    }
+
+    @Test
+    void shouldAggregateProgressOnlyForTheCurrentOwner() throws Exception {
+        DatabaseConfiguration databases = initialize();
+        JdbcConnectionFactory connections = new JdbcConnectionFactory(databases);
+        try (Connection connection = connections.open("app"); Statement statement = connection.createStatement()) {
+            statement.executeUpdate("""
+                insert into exercise_sessions(id, exercise_id, exercise_version, started_at, hints_used, owner_id)
+                values ('s1', 'query-01', 1, '2026-07-21T01:00:00Z', 1, 'owner-a'),
+                       ('s2', 'query-02', 1, '2026-07-21T02:00:00Z', 2, 'owner-b')
+                """);
+            statement.executeUpdate("""
+                insert into exercise_attempts(id, session_id, status, sql_text, execution_success, passed,
+                    duration_ms, created_at)
+                values ('a1', 's1', 'PASSED', 'select 1', 1, 1, 100, '2026-07-21T01:03:00Z'),
+                       ('a2', 's2', 'FAILED', 'select 1', 1, 0, 300, '2026-07-21T02:01:00Z')
+                """);
+        }
+        JdbcExerciseProgressService ownerA = new JdbcExerciseProgressService(connections, () -> "owner-a");
+        JdbcExerciseProgressService ownerB = new JdbcExerciseProgressService(connections, () -> "owner-b");
+
+        ExerciseProgressOverview overviewA = ownerA.overview();
+        ExerciseProgressOverview overviewB = ownerB.overview();
+
+        assertEquals(1, overviewA.sessions());
+        assertEquals(1, overviewA.attempts());
+        assertEquals(1, overviewA.passedSubmissions());
+        assertEquals(1, overviewA.completedExercises());
+        assertEquals(1, overviewB.sessions());
+        assertEquals(1, overviewB.attempts());
+        assertEquals(0, overviewB.passedSubmissions());
+
+        ExerciseProgressItem passedA = ownerA.listExerciseProgress().stream()
+            .filter(item -> item.exerciseId().equals("query-01")).findFirst().orElseThrow();
+        assertEquals(1, passedA.attempts());
+        assertTrue(passedA.passed());
+        ExerciseProgressItem untouchedB = ownerB.listExerciseProgress().stream()
+            .filter(item -> item.exerciseId().equals("query-01")).findFirst().orElseThrow();
+        assertEquals(0, untouchedB.attempts());
+        assertFalse(untouchedB.passed());
     }
 
     private DatabaseConfiguration initialize() {

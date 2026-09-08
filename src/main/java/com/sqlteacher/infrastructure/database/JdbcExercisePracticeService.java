@@ -16,7 +16,6 @@ import com.sqlteacher.application.event.LearningEventService;
 import com.sqlteacher.application.event.LearningEventOwnerProvider;
 import com.sqlteacher.application.risk.SqlRiskAnalysis;
 import com.sqlteacher.application.risk.SqlRiskAnalysisService;
-import com.sqlteacher.application.risk.SqlSafetyModeService;
 import com.sqlteacher.domain.SqlTeacherException;
 import com.sqlteacher.domain.exercise.ExerciseAttemptStatus;
 import com.sqlteacher.domain.exercise.ExerciseDataset;
@@ -50,7 +49,6 @@ public final class JdbcExercisePracticeService implements ExercisePracticeServic
     private final JdbcConnectionFactory connectionFactory;
     private final ExerciseManagementService managementService;
     private final SqlRiskAnalysisService riskAnalysisService;
-    private final SqlSafetyModeService safetyModeService;
     private final SqlExerciseEvaluationService evaluationService;
     private final SqlResultMapper resultMapper;
     private final ExerciseAttemptCodec attemptCodec;
@@ -68,8 +66,7 @@ public final class JdbcExercisePracticeService implements ExercisePracticeServic
         LearningEventService learningEventService
     ) {
         this(connectionFactory, managementService, riskAnalysisService, evaluationService, resultMapper,
-            configuration, SqlSafetyModeService.standardMode(), learningEventService,
-            () -> LearningEventOwnerProvider.GUEST_OWNER);
+            configuration, learningEventService, () -> LearningEventOwnerProvider.GUEST_OWNER);
     }
 
     public JdbcExercisePracticeService(
@@ -79,29 +76,12 @@ public final class JdbcExercisePracticeService implements ExercisePracticeServic
         SqlExerciseEvaluationService evaluationService,
         SqlResultMapper resultMapper,
         SqlTeacherConfiguration configuration,
-        SqlSafetyModeService safetyModeService,
-        LearningEventService learningEventService
-    ) {
-        this(connectionFactory, managementService, riskAnalysisService, evaluationService, resultMapper,
-            configuration, safetyModeService, learningEventService,
-            () -> LearningEventOwnerProvider.GUEST_OWNER);
-    }
-
-    public JdbcExercisePracticeService(
-        JdbcConnectionFactory connectionFactory,
-        ExerciseManagementService managementService,
-        SqlRiskAnalysisService riskAnalysisService,
-        SqlExerciseEvaluationService evaluationService,
-        SqlResultMapper resultMapper,
-        SqlTeacherConfiguration configuration,
-        SqlSafetyModeService safetyModeService,
         LearningEventService learningEventService,
         LearningEventOwnerProvider ownerProvider
     ) {
         this.connectionFactory = connectionFactory;
         this.managementService = managementService;
         this.riskAnalysisService = riskAnalysisService;
-        this.safetyModeService = safetyModeService;
         this.evaluationService = evaluationService;
         this.resultMapper = resultMapper;
         this.attemptCodec = new ExerciseAttemptCodec();
@@ -362,12 +342,16 @@ public final class JdbcExercisePracticeService implements ExercisePracticeServic
 
     private SessionRecord requireSession(String sessionId, boolean active) {
         String normalizedId = validateSessionId(sessionId);
-        String sql = "select id, exercise_id, exercise_version, started_at, hints_used, completed_at from exercise_sessions where id = ?";
+        String sql = """
+            select id, exercise_id, exercise_version, started_at, hints_used, completed_at, owner_id
+            from exercise_sessions where id = ?
+            """;
         try (Connection connection = connectionFactory.open("app");
              PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setString(1, normalizedId);
             try (ResultSet row = statement.executeQuery()) {
-                if (!row.next()) {
+                if (!row.next() || !currentOwnerId().equals(row.getString("owner_id"))) {
+                    // Sessions of another owner are reported as not found, not forbidden.
                     throw new SqlTeacherException("EXERCISE_SESSION_NOT_FOUND", "Exercise session not found");
                 }
                 SessionRecord session = new SessionRecord(

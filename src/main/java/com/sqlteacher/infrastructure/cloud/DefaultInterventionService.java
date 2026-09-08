@@ -14,6 +14,9 @@ import com.sqlteacher.application.learning.DiagnosisReasonCode;
 import com.sqlteacher.application.learning.InterventionCandidate;
 import com.sqlteacher.application.learning.InterventionService;
 import com.sqlteacher.application.learning.InterventionStatus;
+import com.sqlteacher.domain.SqlTeacherException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
@@ -26,11 +29,29 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.EnumMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
-/** Builds a teacher work queue only from class-scoped APIs that already enforce authorization. */
+/**
+ * Builds a teacher work queue only from class-scoped APIs that already enforce authorization.
+ *
+ * <p>Candidate identifiers are natural keys hashed from
+ * {@code classroomId|assignmentId|userId|reason}. Since the 2026-09 upgrade removed the
+ * attempt count and last submission time from the key, previously handled intervention
+ * items reappear once after the upgrade; that one-time replay is expected migration
+ * behavior (no schema migration is performed for the old rows).
+ *
+ * <p>Status transitions are constrained: {@code OPEN} may move to
+ * {@code ACKNOWLEDGED|RESOLVED|DISMISSED} and {@code ACKNOWLEDGED} to
+ * {@code RESOLVED|DISMISSED}; {@code RESOLVED} and {@code DISMISSED} are terminal.
+ */
 public final class DefaultInterventionService implements InterventionService {
+    private static final Logger log = LoggerFactory.getLogger(DefaultInterventionService.class);
+    private static final Map<InterventionStatus, Set<InterventionStatus>> ALLOWED_TRANSITIONS = allowedTransitions();
+
     private final CloudApiClient api;
     private final CloudSessionService sessions;
     private final Path databasePath;
@@ -63,31 +84,50 @@ public final class DefaultInterventionService implements InterventionService {
                 for (AssignmentAnalyticsRow row : report.rows()) {
                     CandidateRule rule = classify(assignment, row, now);
                     if (rule == null) continue;
-                    String id = stableId(classroom.id(), assignment.id(), row.userId(), rule.reason(),
-                        row.attemptCount(), row.lastSubmittedAt());
+                    String id = stableId(classroom.id(), assignment.id(), row.userId(), rule.reason());
                     result.add(new InterventionCandidate(id, classroom.id(), classroom.name(), assignment.id(),
-                        assignment.title(), row.userId(), displayName(row), rule.reason(), rule.summary(),
-                        rule.priority(), loadStatus(id), now));
+                        assignment.title(), row.userId(), displayName(row), rule.reason(),
+                        evidenceSummary(rule, row), rule.priority(), InterventionStatus.OPEN, now));
                 }
             }
         }
-        return result.stream().filter(item -> item.status() != InterventionStatus.RESOLVED
-                && item.status() != InterventionStatus.DISMISSED)
-            .sorted(Comparator.comparingInt(InterventionCandidate::priority).reversed()
-                .thenComparing(InterventionCandidate::classroomName)
-                .thenComparing(InterventionCandidate::studentDisplayName)).toList();
+        try (Connection connection = open()) {
+            return result.stream().map(item -> withStatus(item, loadStatus(connection, item.id())))
+                .filter(item -> item.status() != InterventionStatus.RESOLVED
+                    && item.status() != InterventionStatus.DISMISSED)
+                .sorted(Comparator.comparingInt(InterventionCandidate::priority).reversed()
+                    .thenComparing(InterventionCandidate::classroomName)
+                    .thenComparing(InterventionCandidate::studentDisplayName)).toList();
+        } catch (SQLException error) {
+            throw new IllegalStateException("无法读取干预状态", error);
+        }
     }
 
     @Override
     public void updateStatus(String candidateId, InterventionStatus status) {
         if (candidateId == null || candidateId.isBlank()) throw new IllegalArgumentException("candidateId must not be blank");
         Objects.requireNonNull(status);
-        try (Connection connection = open(); PreparedStatement statement = connection.prepareStatement("""
-            insert into intervention_state(candidate_id,status,updated_at) values(?,?,?)
-            on conflict(candidate_id) do update set status=excluded.status,updated_at=excluded.updated_at
-            """)) {
-            statement.setString(1, candidateId.trim()); statement.setString(2, status.name());
-            statement.setString(3, clock.instant().toString()); statement.executeUpdate();
+        String normalizedId = candidateId.trim();
+        try (Connection connection = open()) {
+            connection.setAutoCommit(false);
+            try {
+                InterventionStatus current = loadStatus(connection, normalizedId);
+                if (!ALLOWED_TRANSITIONS.get(current).contains(status)) {
+                    throw new SqlTeacherException("INTERVENTION_INVALID_STATUS_TRANSITION",
+                        "干预状态不能从 " + current.name() + " 变更为 " + status.name());
+                }
+                try (PreparedStatement statement = connection.prepareStatement("""
+                    insert into intervention_state(candidate_id,status,updated_at) values(?,?,?)
+                    on conflict(candidate_id) do update set status=excluded.status,updated_at=excluded.updated_at
+                    """)) {
+                    statement.setString(1, normalizedId); statement.setString(2, status.name());
+                    statement.setString(3, clock.instant().toString()); statement.executeUpdate();
+                }
+                connection.commit();
+            } catch (SQLException | RuntimeException error) {
+                connection.rollback();
+                throw error;
+            }
         } catch (SQLException error) {
             throw new IllegalStateException("无法更新干预状态", error);
         }
@@ -103,16 +143,43 @@ public final class DefaultInterventionService implements InterventionService {
         return csv.toString();
     }
 
-    private InterventionStatus loadStatus(String id) {
-        try (Connection connection = open(); PreparedStatement statement = connection.prepareStatement(
+    private InterventionStatus loadStatus(Connection connection, String id) {
+        try (PreparedStatement statement = connection.prepareStatement(
             "select status from intervention_state where candidate_id=?")) {
             statement.setString(1, id);
             try (ResultSet row = statement.executeQuery()) {
-                return row.next() ? InterventionStatus.valueOf(row.getString(1)) : InterventionStatus.OPEN;
+                return row.next() ? parseStatus(row.getString(1)) : InterventionStatus.OPEN;
             }
         } catch (SQLException error) {
             throw new IllegalStateException("无法读取干预状态", error);
         }
+    }
+
+    private static InterventionStatus parseStatus(String raw) {
+        if (raw == null) return InterventionStatus.OPEN;
+        try {
+            return InterventionStatus.valueOf(raw);
+        } catch (IllegalArgumentException dirtyValue) {
+            log.warn("Unknown persisted intervention status '{}' degraded to OPEN", raw);
+            return InterventionStatus.OPEN;
+        }
+    }
+
+    private static InterventionCandidate withStatus(InterventionCandidate item, InterventionStatus status) {
+        return new InterventionCandidate(item.id(), item.classroomId(), item.classroomName(), item.assignmentId(),
+            item.assignmentTitle(), item.studentUserId(), item.studentDisplayName(), item.reason(),
+            item.evidenceSummary(), item.priority(), status, item.updatedAt());
+    }
+
+    private static Map<InterventionStatus, Set<InterventionStatus>> allowedTransitions() {
+        Map<InterventionStatus, Set<InterventionStatus>> transitions = new EnumMap<>(InterventionStatus.class);
+        transitions.put(InterventionStatus.OPEN, Set.of(
+            InterventionStatus.ACKNOWLEDGED, InterventionStatus.RESOLVED, InterventionStatus.DISMISSED));
+        transitions.put(InterventionStatus.ACKNOWLEDGED, Set.of(
+            InterventionStatus.RESOLVED, InterventionStatus.DISMISSED));
+        transitions.put(InterventionStatus.RESOLVED, Set.of());
+        transitions.put(InterventionStatus.DISMISSED, Set.of());
+        return Map.copyOf(transitions);
     }
 
     private Connection open() throws SQLException {
@@ -125,8 +192,7 @@ public final class DefaultInterventionService implements InterventionService {
             return new CandidateRule(DiagnosisReasonCode.OVERDUE_TASK, 100, "任务已逾期且尚无有效提交");
         }
         if (row.status() == AssignmentStudentStatus.FAILED && row.attemptCount() >= 2) {
-            return new CandidateRule(DiagnosisReasonCode.REPEATED_FAILURE, 85,
-                "已尝试 " + row.attemptCount() + " 次，仍未通过");
+            return new CandidateRule(DiagnosisReasonCode.REPEATED_FAILURE, 85, "多次尝试仍未通过");
         }
         if (row.status() == AssignmentStudentStatus.FAILED || row.status() == AssignmentStudentStatus.SUBMITTED) {
             return new CandidateRule(DiagnosisReasonCode.STALE_PROGRESS, 65,
@@ -135,14 +201,22 @@ public final class DefaultInterventionService implements InterventionService {
         return null;
     }
 
+    /** Attempt count and last submission time are evidence text; they no longer feed the stable id. */
+    private static String evidenceSummary(CandidateRule rule, AssignmentAnalyticsRow row) {
+        List<String> facts = new ArrayList<>();
+        if (row.attemptCount() > 0) facts.add("已尝试 " + row.attemptCount() + " 次");
+        if (row.lastSubmittedAt() != null) facts.add("最近提交 " + row.lastSubmittedAt());
+        return facts.isEmpty() ? rule.summary() : rule.summary() + "（" + String.join("，", facts) + "）";
+    }
+
     private static String displayName(AssignmentAnalyticsRow row) {
         if (row.displayName() != null && !row.displayName().isBlank()) return row.displayName();
         return row.userId();
     }
 
     private static String stableId(String classroomId, String assignmentId, String userId,
-                                   DiagnosisReasonCode reason, int attempts, Instant last) {
-        String raw = classroomId + "|" + assignmentId + "|" + userId + "|" + reason + "|" + attempts + "|" + last;
+                                   DiagnosisReasonCode reason) {
+        String raw = classroomId + "|" + assignmentId + "|" + userId + "|" + reason;
         try {
             byte[] hash = java.security.MessageDigest.getInstance("SHA-256").digest(raw.getBytes(StandardCharsets.UTF_8));
             return java.util.HexFormat.of().formatHex(hash).substring(0, 32);

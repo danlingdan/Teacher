@@ -12,7 +12,6 @@ import com.sqlteacher.application.exercise.ExerciseSession;
 import com.sqlteacher.application.exercise.SqlExerciseEvaluationService;
 import com.sqlteacher.domain.SqlTeacherException;
 import com.sqlteacher.domain.exercise.ExerciseAttemptStatus;
-import com.sqlteacher.application.risk.SqlSafetyModeService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -52,8 +51,8 @@ class JdbcExercisePracticeServiceTest {
     }
 
     @Test
-    void developerModeShouldNotBypassQueryExerciseContract() throws Exception {
-        Fixture fixture = fixture(true);
+    void shouldRejectMutationsRegardlessOfDeveloperMode() throws Exception {
+        Fixture fixture = fixture();
         ExerciseSession session = fixture.service().start("query-02");
 
         ExerciseAttemptResult mutation = fixture.service().run(
@@ -109,7 +108,7 @@ class JdbcExercisePracticeServiceTest {
             fixture.connections(), new JdbcExerciseManagementService(fixture.connections()),
             new DefaultSqlRiskAnalysisService(), (exercise, dataset, sql) -> new ExerciseEvaluationResult(
                 true, List.of(), "通过", Duration.ZERO, ""), new SqlResultMapper(), fixture.configuration(),
-            safetyMode(false), new MockLearningEventService(), () -> "student-42");
+            new MockLearningEventService(), () -> "student-42");
 
         ExerciseSession session = service.start("query-02");
 
@@ -121,6 +120,30 @@ class JdbcExercisePracticeServiceTest {
                 assertEquals("student-42", row.getString(1));
             }
         }
+    }
+
+    @Test
+    void shouldHideSessionsOfOtherOwnersAsNotFound() {
+        Fixture fixture = fixture();
+        var ownerA = practiceService(fixture, "student-42");
+        var ownerB = practiceService(fixture, "student-43");
+        ExerciseSession session = ownerA.start("query-02");
+
+        SqlTeacherException hidden = assertThrows(
+            SqlTeacherException.class, () -> ownerB.run(session.id(), "select 1"));
+
+        assertEquals("EXERCISE_SESSION_NOT_FOUND", hidden.errorCode());
+        // The owner still works with the session as usual.
+        ExerciseAttemptResult result = ownerA.run(session.id(), "select name from student order by id");
+        assertTrue(result.execution().success());
+    }
+
+    private static JdbcExercisePracticeService practiceService(Fixture fixture, String ownerId) {
+        return new JdbcExercisePracticeService(
+            fixture.connections(), new JdbcExerciseManagementService(fixture.connections()),
+            new DefaultSqlRiskAnalysisService(), (exercise, dataset, sql) -> new ExerciseEvaluationResult(
+                true, List.of(), "通过", Duration.ZERO, ""), new SqlResultMapper(), fixture.configuration(),
+            new MockLearningEventService(), () -> ownerId);
     }
 
     @Test
@@ -169,10 +192,6 @@ class JdbcExercisePracticeServiceTest {
     }
 
     private Fixture fixture() {
-        return fixture(false);
-    }
-
-    private Fixture fixture(boolean unrestricted) {
         Path appDb = tempDir.resolve("app.db");
         Path demoDb = tempDir.resolve("demo.db");
         DatabaseConfiguration databases = new DatabaseConfiguration(appDb, demoDb);
@@ -201,24 +220,9 @@ class JdbcExercisePracticeServiceTest {
             evaluator,
             new SqlResultMapper(),
             configuration,
-            safetyMode(unrestricted),
             new MockLearningEventService()
         );
         return new Fixture(service, appDb, tempDir.resolve("exercise-sessions"), connections, configuration);
-    }
-
-    private static SqlSafetyModeService safetyMode(boolean unrestricted) {
-        return new SqlSafetyModeService() {
-            @Override
-            public boolean isUnrestrictedModeEnabled() {
-                return unrestricted;
-            }
-
-            @Override
-            public void setUnrestrictedModeEnabled(boolean enabled) {
-                throw new UnsupportedOperationException();
-            }
-        };
     }
 
     private static int count(Path database, String table) throws Exception {

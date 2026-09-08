@@ -24,27 +24,61 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Objects;
 import java.util.UUID;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 import java.util.zip.ZipOutputStream;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
+/**
+ * SQLite application backup and restore service.
+ *
+ * <p>Backup, restore, and demo-reset actions are serialized among themselves through a
+ * process-level {@link SqliteAccessGate}, so two restores or a backup and a restore never
+ * replace database files concurrently. Before a target database file is replaced, its WAL
+ * residue is reduced: a best-effort {@code PRAGMA wal_checkpoint(TRUNCATE)} folds existing
+ * WAL content into the old database file and then the {@code -wal}/{@code -shm} sidecar
+ * files are deleted.
+ *
+ * <p>Honest boundary: long-lived connections opened by other services are not held through
+ * this gate, so a tiny window still exists during which a concurrently opened read
+ * connection can observe the file replacement. The checkpoint plus sidecar cleanup keeps
+ * the risk of stale WAL residue low but not zero.
+ *
+ * <p>After a successful application-database restore, the knowledge index state is
+ * invalidated: {@code knowledge_chunks_v2.index_status} and {@code knowledge_index_jobs}
+ * rows are reset to {@code PENDING} so the next rebuild re-indexes the restored content,
+ * and the injected invalidator callback clears the local vector index (wired to the
+ * vector store at assembly time so this service stays free of index technology types).
+ * Invalidation is best effort: a failed vector-store clear is logged and left to the next
+ * manual index rebuild.
+ */
 public final class SqliteApplicationBackupService implements ApplicationBackupService {
+    private static final Logger log = LoggerFactory.getLogger(SqliteApplicationBackupService.class);
     private static final DateTimeFormatter ID_TIME =
         DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss").withZone(ZoneOffset.UTC);
     private static final int MAX_BACKUPS = 20;
 
     private final SqlTeacherConfiguration configuration;
     private final Path backupDirectory;
+    private final SqliteAccessGate accessGate = new SqliteAccessGate();
+    private final Runnable indexInvalidator;
 
     public SqliteApplicationBackupService(SqlTeacherConfiguration configuration) {
+        this(configuration, () -> { });
+    }
+
+    public SqliteApplicationBackupService(SqlTeacherConfiguration configuration, Runnable indexInvalidator) {
         this.configuration = configuration;
         this.backupDirectory = configuration.dataDirectory().resolve("backups").toAbsolutePath().normalize();
+        this.indexInvalidator = Objects.requireNonNull(indexInvalidator);
     }
 
     @Override
     public BackupSnapshot createBackup() {
-        return createBackup(false, "manual");
+        return accessGate.exclusively(() -> createBackup(false, "manual"));
     }
 
     BackupSnapshot createAutomaticBackup(String reason) {
@@ -70,6 +104,13 @@ public final class SqliteApplicationBackupService implements ApplicationBackupSe
 
     @Override
     public void restoreBackup(String backupId) {
+        accessGate.exclusively(() -> {
+            restoreBackupUnderGate(backupId);
+            return null;
+        });
+    }
+
+    private void restoreBackupUnderGate(String backupId) {
         Path archive = resolveBackup(backupId);
         if (Files.notExists(archive)) {
             throw new SqlTeacherException("BACKUP_NOT_FOUND", "The selected backup no longer exists");
@@ -96,6 +137,7 @@ public final class SqliteApplicationBackupService implements ApplicationBackupSe
             if (Files.exists(restoredDemo)) {
                 replaceDatabase(restoredDemo, configuration.database().demoDatabasePath());
             }
+            invalidateKnowledgeIndex();
         } catch (IOException | SQLException error) {
             if (replacementStarted && safetyBackupId != null) {
                 try {
@@ -119,6 +161,13 @@ public final class SqliteApplicationBackupService implements ApplicationBackupSe
 
     @Override
     public void restoreDemoDatabase() {
+        accessGate.exclusively(() -> {
+            restoreDemoDatabaseUnderGate();
+            return null;
+        });
+    }
+
+    private void restoreDemoDatabaseUnderGate() {
         Path staged = configuration.dataDirectory().resolve(".demo-restore-" + UUID.randomUUID() + ".db");
         try {
             SqliteAppDatabaseInitializer.createDemoDatabase(staged, true);
@@ -216,12 +265,59 @@ public final class SqliteApplicationBackupService implements ApplicationBackupSe
 
     private static void replaceDatabase(Path source, Path destination) throws IOException {
         Files.createDirectories(destination.toAbsolutePath().getParent());
+        checkpointTargetQuietly(destination);
+        deleteWalSidecars(destination);
         Path staged = destination.resolveSibling(destination.getFileName() + ".restore-staged");
         Files.copy(source, staged, StandardCopyOption.REPLACE_EXISTING);
         try {
             Files.move(staged, destination, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
         } catch (AtomicMoveNotSupportedException ignored) {
             Files.move(staged, destination, StandardCopyOption.REPLACE_EXISTING);
+        }
+    }
+
+    /**
+     * Best-effort checkpoint of the database that is about to be replaced. Folding an
+     * existing WAL into the main file first keeps concurrently opened connections from
+     * re-materializing stale WAL content over the restored database. Failures are ignored:
+     * the sidecar cleanup below still removes the residue.
+     */
+    private static void checkpointTargetQuietly(Path destination) {
+        if (Files.notExists(destination)) {
+            return;
+        }
+        try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + destination.toAbsolutePath());
+             Statement statement = connection.createStatement()) {
+            statement.execute("pragma wal_checkpoint(truncate)");
+        } catch (SQLException error) {
+            log.info("Skipped WAL checkpoint before replacing database: {}", error.getMessage());
+        }
+    }
+
+    private static void deleteWalSidecars(Path destination) throws IOException {
+        Files.deleteIfExists(Path.of(destination + "-wal"));
+        Files.deleteIfExists(Path.of(destination + "-shm"));
+    }
+
+    /**
+     * Resets the knowledge index state of the freshly restored application database and
+     * clears the local vector index through the injected callback. Best effort only: the
+     * restored backup may predate the knowledge tables, and the callback owns its own
+     * failure modes.
+     */
+    private void invalidateKnowledgeIndex() {
+        try (Connection connection = DriverManager.getConnection(
+                 "jdbc:sqlite:" + configuration.database().appDatabasePath().toAbsolutePath());
+             Statement statement = connection.createStatement()) {
+            statement.executeUpdate("update knowledge_chunks_v2 set index_status = 'PENDING'");
+            statement.executeUpdate("update knowledge_index_jobs set status = 'PENDING', error_message = null");
+        } catch (SQLException error) {
+            log.warn("Skipped knowledge index state reset after restore: {}", error.getMessage());
+        }
+        try {
+            indexInvalidator.run();
+        } catch (RuntimeException error) {
+            log.warn("Skipped vector index invalidation after restore: {}", error.getMessage());
         }
     }
 

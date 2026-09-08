@@ -289,7 +289,6 @@ public class DatabaseServiceConfig {
             SqlExerciseEvaluationService evaluationService,
             SqlResultMapper resultMapper,
             SqlTeacherConfiguration configuration,
-            SqlSafetyModeService safetyModeService,
             LearningEventService learningEventService,
             LearningEventOwnerProvider ownerProvider) {
         return new JdbcExercisePracticeService(
@@ -299,7 +298,6 @@ public class DatabaseServiceConfig {
             evaluationService,
             resultMapper,
             configuration,
-            safetyModeService,
             learningEventService,
             ownerProvider
         );
@@ -318,8 +316,9 @@ public class DatabaseServiceConfig {
     }
 
     @Bean
-    public ExerciseProgressService exerciseProgressService(JdbcConnectionFactory connectionFactory) {
-        return new JdbcExerciseProgressService(connectionFactory);
+    public ExerciseProgressService exerciseProgressService(JdbcConnectionFactory connectionFactory,
+                                                           LearningEventOwnerProvider ownerProvider) {
+        return new JdbcExerciseProgressService(connectionFactory, ownerProvider);
     }
 
     @Bean
@@ -382,8 +381,11 @@ public class DatabaseServiceConfig {
     }
 
     @Bean
-    public ApplicationBackupService applicationBackupService(SqlTeacherConfiguration configuration) {
-        return new SqliteApplicationBackupService(configuration);
+    public ApplicationBackupService applicationBackupService(SqlTeacherConfiguration configuration,
+                                                             KnowledgeVectorStore vectorStore) {
+        // The callback clears the local vector index after a restore without coupling the
+        // backup service to Lucene or KnowledgeVectorStore types.
+        return new SqliteApplicationBackupService(configuration, vectorStore::clear);
     }
 
     @Bean
