@@ -36,6 +36,21 @@ public final class FileSqlSafetyModeService implements SqlSafetyModeService {
     }
 
     @Override
+    public boolean isDeveloperModeExplicit() {
+        if (!Files.isRegularFile(settingsFile)) {
+            return false;
+        }
+        Properties properties = new Properties();
+        try (InputStream input = Files.newInputStream(settingsFile)) {
+            properties.load(input);
+        } catch (IOException error) {
+            log.warn("Failed to read SQL safety settings; treating the mode as not chosen", error);
+            return false;
+        }
+        return properties.containsKey(KEY) || properties.containsKey(LEGACY_KEY);
+    }
+
+    @Override
     public synchronized void setUnrestrictedModeEnabled(boolean enabled) {
         Properties properties = new Properties();
         properties.setProperty(KEY, Boolean.toString(enabled));
@@ -68,16 +83,18 @@ public final class FileSqlSafetyModeService implements SqlSafetyModeService {
     }
 
     private boolean load() {
-        if (!Files.isRegularFile(settingsFile)) return true;
+        // Fail closed: an untouched or unreadable configuration means teaching mode (write
+        // operations require confirmation), never silent developer mode.
+        if (!Files.isRegularFile(settingsFile)) return false;
         Properties properties = new Properties();
         try (InputStream input = Files.newInputStream(settingsFile)) {
             properties.load(input);
             if (properties.containsKey(KEY)) return Boolean.parseBoolean(properties.getProperty(KEY));
             if (properties.containsKey(LEGACY_KEY)) return Boolean.parseBoolean(properties.getProperty(LEGACY_KEY));
-            return true;
+            return false;
         } catch (IOException error) {
-            log.warn("Failed to load SQL safety settings; falling back to developer mode", error);
-            return true;
+            log.warn("Failed to load SQL safety settings; falling back to teaching mode", error);
+            return false;
         }
     }
 }

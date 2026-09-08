@@ -56,8 +56,10 @@ class JdbcDatabaseConnectionTestServiceTest {
         DatabaseConnectionTestResult result = service.testConnection(profile, new char[0]);
 
         assertFalse(result.successful());
-        assertEquals("连接失败，请检查数据库地址、凭据和服务状态。", result.message());
+        assertTrue(result.message().startsWith("连接失败，请检查数据库地址、凭据和服务状态。"));
+        assertTrue(result.message().contains("SQLITE_CANTOPEN"));
         assertFalse(result.message().contains("secret-name"));
+        assertFalse(result.message().contains(unavailablePath.toString()));
         assertEquals("", result.databaseProduct());
         assertEquals("", result.databaseVersion());
     }

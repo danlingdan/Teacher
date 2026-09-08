@@ -94,18 +94,52 @@ class JdbcSqlExecutionServiceTest {
     }
 
     @Test
-    void developerModeShouldNeverAllowDropDatabaseOrMultipleStatements() throws Exception {
+    void developerModeShouldGateDatabaseLevelAndPrivilegeStatementsBehindConfirmation() {
         JdbcConnectionProvider provider = (connectionId, timeout) -> {
-            throw new AssertionError("Forbidden SQL must not open a connection");
+            throw new AssertionError("Unconfirmed SQL must not open a connection");
         };
         JdbcSqlExecutionService service = new JdbcSqlExecutionService(provider, new SqlResultMapper(),
             new DefaultSqlRiskAnalysisService(), enabledSafetyMode(), new MockLearningEventService());
 
-        for (String sql : java.util.List.of("DROP DATABASE school", "GRANT ALL ON school.* TO user", "SELECT 1; SELECT 2")) {
+        for (String sql : java.util.List.of("DROP DATABASE school", "GRANT ALL ON school.* TO user")) {
             SqlTeacherException error = assertThrows(SqlTeacherException.class, () -> service.execute(
-                new SqlExecutionRequest("demo", sql, 100, Duration.ofSeconds(5), true)));
-            assertEquals("SQL_BLOCKED", error.errorCode(), sql);
+                new SqlExecutionRequest("demo", sql, 100, Duration.ofSeconds(5))), sql);
+            assertEquals("SQL_CONFIRMATION_REQUIRED", error.errorCode(), sql);
         }
+    }
+
+    @Test
+    void shouldRejectSubSecondTimeoutInsteadOfDisablingTheQueryTimeout() {
+        JdbcSqlExecutionService service = new JdbcSqlExecutionService(
+            (connectionId, timeout) -> {
+                throw new AssertionError("Invalid timeout must not open a connection");
+            },
+            new SqlResultMapper(),
+            new DefaultSqlRiskAnalysisService(),
+            new MockLearningEventService()
+        );
+
+        assertThrows(IllegalArgumentException.class, () -> service.execute(new SqlExecutionRequest(
+            "demo", "SELECT 1", 10, Duration.ofMillis(500)
+        )));
+    }
+
+    @Test
+    void shouldRecordAndClassifyUnexpectedRuntimeFailures() {
+        JdbcSqlExecutionService service = new JdbcSqlExecutionService(
+            (connectionId, timeout) -> {
+                throw new IllegalStateException("driver exploded");
+            },
+            new SqlResultMapper(),
+            new DefaultSqlRiskAnalysisService(),
+            new MockLearningEventService()
+        );
+
+        SqlTeacherException error = assertThrows(SqlTeacherException.class, () -> service.execute(
+            new SqlExecutionRequest("demo", "SELECT 1", 10, Duration.ofSeconds(5))));
+
+        assertEquals("SQL_EXECUTION_FAILED", error.errorCode());
+        assertTrue(error.getMessage().contains("driver exploded"));
     }
 
     @Test
@@ -141,7 +175,7 @@ class JdbcSqlExecutionServiceTest {
     }
 
     @Test
-    void shouldNotExposeJdbcDetailsWhenExecutionFails() {
+    void shouldNotExposeCredentialsWhenExecutionFailsButKeepLocalDiagnosticDetail() {
         JdbcSqlExecutionService service = new JdbcSqlExecutionService(
             (connectionId, timeout) -> {
                 throw new SQLException("password=do-not-display", "28000", 1045);
@@ -162,7 +196,9 @@ class JdbcSqlExecutionServiceTest {
         );
 
         assertEquals("DATABASE_AUTHENTICATION_FAILED", error.errorCode());
-        assertEquals("数据库身份验证失败，请检查用户名和临时密码。", error.getMessage());
+        assertTrue(error.getMessage().startsWith("数据库身份验证失败"));
+        assertTrue(error.getMessage().contains("SQLState=28000"));
+        assertFalse(error.getMessage().contains("do-not-display"));
     }
 
     @Test

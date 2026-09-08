@@ -61,6 +61,7 @@ import com.sqlteacher.application.learning.LearningDiagnosisService;
 import com.sqlteacher.application.metadata.DatabaseMetadataService;
 import com.sqlteacher.application.nl2sql.Nl2SqlRequest;
 import com.sqlteacher.application.nl2sql.Nl2SqlSafetyService;
+import com.sqlteacher.application.risk.DeveloperSqlExecutionPolicy;
 import com.sqlteacher.application.risk.SqlRiskAnalysis;
 import com.sqlteacher.application.risk.SqlRiskAnalysisService;
 import com.sqlteacher.application.risk.SqlSafetyModeService;
@@ -991,6 +992,7 @@ public final class DefaultLocalAppApi implements LocalAppApi {
         ObjectNode result = mapper.createObjectNode();
         result.put("role", webRole(profile));
         result.put("developerMode", core.getBean(SqlSafetyModeService.class).isDeveloperModeEnabled());
+        result.put("developerModeExplicit", core.getBean(SqlSafetyModeService.class).isDeveloperModeExplicit());
         result.put("canMaintainLocalData", profile.canConfigure(
             com.sqlteacher.application.collaboration.DesktopSettingPermission.LOCAL_DATA_MAINTENANCE));
         result.set("general", mapper.valueToTree(settings));
@@ -1644,7 +1646,9 @@ public final class DefaultLocalAppApi implements LocalAppApi {
         ConnectionManagementService connections = context().getBean(ConnectionManagementService.class);
         var profile = connections.findProfile(connectionId)
             .orElseThrow(() -> new IllegalArgumentException("Database connection does not exist"));
-        SqlRiskAnalysis risk = context().getBean(SqlRiskAnalysisService.class).analyze(sql, profile.dialect());
+        // Apply the same safety-mode policy as SqlExecutionService so the preview the user
+        // confirms and the gate that executes the statement always agree.
+        SqlRiskAnalysis risk = analyzedRisk(sql, profile.dialect());
         ObjectNode result = mapper.valueToTree(risk);
         if (risk.executable() && risk.confirmationRequired()) {
             String token = UUID.randomUUID().toString();
@@ -1667,7 +1671,7 @@ public final class DefaultLocalAppApi implements LocalAppApi {
         ConnectionManagementService connections = context().getBean(ConnectionManagementService.class);
         var profile = connections.findProfile(connectionId)
             .orElseThrow(() -> new IllegalArgumentException("Database connection does not exist"));
-        SqlRiskAnalysis risk = context().getBean(SqlRiskAnalysisService.class).analyze(sql, profile.dialect());
+        SqlRiskAnalysis risk = analyzedRisk(sql, profile.dialect());
         if (!risk.executable()) throw new IllegalArgumentException("SQL is blocked by Java risk analysis");
         boolean confirmed = false;
         if (risk.confirmationRequired()) {
@@ -1686,9 +1690,14 @@ public final class DefaultLocalAppApi implements LocalAppApi {
         return sqlPage(resultId, execution, 0, Math.clamp(params.path("pageSize").asInt(50), 1, 100));
     }
 
+    private SqlRiskAnalysis analyzedRisk(String sql, com.sqlteacher.application.connection.DatabaseDialect dialect) {
+        boolean developerMode = context().getBean(SqlSafetyModeService.class).isDeveloperModeEnabled();
+        return DeveloperSqlExecutionPolicy.apply(
+            context().getBean(SqlRiskAnalysisService.class).analyze(sql, dialect), developerMode);
+    }
+
     /** 结果缓存有上限：过期清理后仍满时移除最早的条目，避免长会话内存无界增长。 */
-    private void rememberSqlResult(String resultId, CachedSqlResult cached) {
-        if (sqlResults.size() >= 64) {
+    private void rememberSqlResult(String resultId, CachedSqlResult cached) {        if (sqlResults.size() >= 64) {
             expireSqlState();
             if (sqlResults.size() >= 64) {
                 sqlResults.keySet().stream().findFirst().ifPresent(sqlResults::remove);

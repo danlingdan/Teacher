@@ -11,6 +11,10 @@ import java.util.Set;
 final class JdbcFailureClassifier {
     private static final Set<Integer> AUTHENTICATION_CODES = Set.of(1045);
     private static final Set<Integer> PERMISSION_CODES = Set.of(1044, 1142, 1143, 1227, 1370, 1419);
+    private static final java.util.regex.Pattern CREDENTIAL_FRAGMENT = java.util.regex.Pattern.compile(
+            "(?i)\\b(password|passwd|pwd|secret|token|api[_-]?key)\\s*[=:]\\s*(\\S+)");
+    private static final java.util.regex.Pattern PATH_FRAGMENT = java.util.regex.Pattern.compile(
+            "(?:[A-Za-z]:\\\\[^\\s（）()]+|/[\\w.@-]+(?:/[\\w.@-]+)+)");
 
     private JdbcFailureClassifier() {
     }
@@ -56,6 +60,53 @@ final class JdbcFailureClassifier {
     static int vendorCode(Throwable error) {
         SQLException sqlError = findSqlException(error);
         return sqlError == null ? 0 : sqlError.getErrorCode();
+    }
+
+    /**
+     * Builds a local-display detail suffix (SQLState, vendor code, root cause) for the desktop
+     * UI, where the user owns the connection and needs the concrete failure reason. Log and
+     * server-side paths keep using the classified message and structured fields only.
+     */
+    static String localDetail(Throwable error) {
+        String sqlState = sqlState(error);
+        int vendorCode = vendorCode(error);
+        Throwable root = rootCause(error);
+        String cause = "";
+        if (root != null && root.getMessage() != null && !root.getMessage().isBlank()) {
+            cause = root.getClass().getSimpleName() + ": "
+                    + root.getMessage().replace('\n', ' ').replace('\r', ' ').strip();
+            cause = CREDENTIAL_FRAGMENT.matcher(cause).replaceAll("$1=***");
+            cause = PATH_FRAGMENT.matcher(cause).replaceAll("<path>");
+            if (cause.length() > 200) {
+                cause = cause.substring(0, 200) + "...";
+            }
+        }
+        StringBuilder detail = new StringBuilder("（");
+        if (!sqlState.isBlank()) {
+            detail.append("SQLState=").append(sqlState);
+        }
+        if (vendorCode != 0) {
+            if (detail.length() > 1) {
+                detail.append("，");
+            }
+            detail.append("vendorCode=").append(vendorCode);
+        }
+        if (!cause.isBlank()) {
+            if (detail.length() > 1) {
+                detail.append("，");
+            }
+            detail.append(cause);
+        }
+        detail.append("）");
+        return detail.length() == 2 ? "" : detail.toString();
+    }
+
+    private static Throwable rootCause(Throwable error) {
+        Throwable current = error;
+        for (int depth = 0; current != null && current.getCause() != null && depth < 12; depth++) {
+            current = current.getCause();
+        }
+        return current;
     }
 
     private static SQLException findSqlException(Throwable error) {

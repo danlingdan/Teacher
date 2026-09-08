@@ -25,14 +25,14 @@ public final class DefaultSqlRiskAnalysisService implements SqlRiskAnalysisServi
             return forbidden("UNKNOWN", false, "SQL must not be blank");
         }
 
-        String normalized = removeComments(sql).strip();
+        String normalized = removeComments(sql, dialect).strip();
 
         if (normalized.isBlank()) {
             return forbidden("UNKNOWN", false, "SQL must contain a statement");
         }
 
         boolean multiStatement = hasMultipleStatements(normalized);
-        String statementType = firstKeyword(normalized);
+        String statementType = firstStatementKeyword(normalized);
 
         if (isForbiddenAdministrativeStatement(normalized, statementType)) {
             return forbidden(statementType + "_ADMIN", false,
@@ -66,11 +66,17 @@ public final class DefaultSqlRiskAnalysisService implements SqlRiskAnalysisServi
             return dialectRisk;
         }
 
-        if (statementType.equals("DROP") || statementType.equals("TRUNCATE")) {
-            return forbidden(
-                    statementType,
+        if (isWholeDatabaseDrop(statementType, normalized)) {
+            return new SqlRiskAnalysis(
+                    SqlRiskLevel.HIGH,
+                    true,
+                    true,
                     false,
-                    statementType + " statements are not allowed."
+                    statementType,
+                    List.of(
+                            "This statement deletes an entire database and cannot be undone.",
+                            "Confirm that a recent backup exists before executing."
+                    )
             );
         }
 
@@ -112,6 +118,24 @@ public final class DefaultSqlRiskAnalysisService implements SqlRiskAnalysisServi
                     List.of("This statement modifies database schema.")
             );
 
+            case "DROP", "TRUNCATE" -> new SqlRiskAnalysis(
+                    SqlRiskLevel.HIGH,
+                    true,
+                    true,
+                    false,
+                    statementType,
+                    List.of(statementType + " is irreversible and requires explicit confirmation.")
+            );
+
+            case "GRANT", "REVOKE" -> new SqlRiskAnalysis(
+                    SqlRiskLevel.HIGH,
+                    true,
+                    true,
+                    false,
+                    statementType,
+                    List.of(statementType + " changes database permissions and requires explicit confirmation.")
+            );
+
             default -> forbidden(
                     statementType,
                     false,
@@ -125,32 +149,97 @@ public final class DefaultSqlRiskAnalysisService implements SqlRiskAnalysisServi
             String statementType,
             DatabaseDialect dialect
     ) {
-        if (dialect.family() != DatabaseDialect.Family.MYSQL
-                || !"SELECT".equals(statementType)) {
-            return null;
-        }
         String tokens = maskQuotedText(sql).toUpperCase(Locale.ROOT);
+        // Write-class file operations stay forbidden on every dialect: they place data on the
+        // machine outside anything the preview can show, regardless of the safety mode.
         if (MYSQL_FILE_OUTPUT.matcher(tokens).find()) {
-            return forbidden("SELECT", false, "MySQL file output is not allowed.");
+            return forbidden(statementType, false,
+                    "Writing query output to files (INTO OUTFILE/DUMPFILE) is not allowed.");
         }
-        if (MYSQL_LOCKING_SELECT.matcher(tokens).find()) {
-            return forbidden("SELECT", false, "MySQL locking queries are not allowed.");
+        if (isDestructiveCopyTarget(tokens)) {
+            return forbidden(statementType, false,
+                    "Copying data to files or programs (COPY ... TO FILE/PROGRAM) is not allowed.");
         }
-        if (MYSQL_DANGEROUS_FUNCTION.matcher(tokens).find()) {
-            return forbidden("SELECT", false, "MySQL file, lock, or delay functions are not allowed.");
+        if (dialect.family() == DatabaseDialect.Family.MYSQL && "SELECT".equals(statementType)
+                && MYSQL_LOCKING_SELECT.matcher(tokens).find()) {
+            return forbidden(statementType, false, "MySQL locking queries are not allowed.");
+        }
+        if (dialect.family() == DatabaseDialect.Family.MYSQL
+                && MYSQL_DELAY_LOCK_FUNCTION.matcher(tokens).find()) {
+            return forbidden(statementType, false, "MySQL delay or lock functions are not allowed.");
+        }
+        // Read-class file functions expose local file content; allowed only behind an explicit
+        // confirmation because the file belongs to the user's own machine.
+        if (fileReadFunctionPattern(dialect).matcher(tokens).find()) {
+            return new SqlRiskAnalysis(
+                    SqlRiskLevel.HIGH,
+                    true,
+                    true,
+                    false,
+                    statementType,
+                    List.of("This statement reads local files through a database file function "
+                            + "and requires explicit confirmation.")
+            );
+        }
+        if (("COPY".equals(statementType))
+                && (dialect.family() == DatabaseDialect.Family.POSTGRESQL
+                    || dialect.family() == DatabaseDialect.Family.GENERIC)) {
+            return new SqlRiskAnalysis(
+                    SqlRiskLevel.HIGH,
+                    true,
+                    true,
+                    false,
+                    statementType,
+                    List.of("COPY imports data from a file or standard input "
+                            + "and requires explicit confirmation.")
+            );
         }
         return null;
     }
 
+    private static Pattern fileReadFunctionPattern(DatabaseDialect dialect) {
+        return switch (dialect.family()) {
+            case MYSQL -> Pattern.compile("\\bLOAD_FILE\\s*\\(");
+            case H2 -> Pattern.compile("\\b(FILE_READ|CSVREAD)\\s*\\(");
+            case DUCKDB -> Pattern.compile("\\b(READ_TEXT|READ_CSV|READ_JSON|READ_PARQUET)\\s*\\(");
+            case POSTGRESQL -> Pattern.compile("\\b(PG_READ_FILE|PG_READ_BINARY_FILE)\\s*\\(");
+            case GENERIC -> Pattern.compile(
+                    "\\b(LOAD_FILE|FILE_READ|CSVREAD|READ_TEXT|READ_CSV|READ_JSON|READ_PARQUET"
+                            + "|PG_READ_FILE|PG_READ_BINARY_FILE)\\s*\\(");
+            default -> Pattern.compile("\\bLOAD_FILE\\s*\\(");
+        };
+    }
+
     private static boolean isForbiddenAdministrativeStatement(String sql, String statementType) {
-        if (statementType.equals("GRANT") || statementType.equals("REVOKE")) return true;
         String tokens = maskQuotedText(sql).toUpperCase(Locale.ROOT);
         return switch (statementType) {
-            case "DROP" -> tokens.matches("(?s)^DROP\\s+(DATABASE|SCHEMA|USER|ROLE)\\b.*");
+            case "DROP" -> tokens.matches("(?s)^DROP\\s+(USER|ROLE)\\b.*");
             case "CREATE" -> tokens.matches("(?s)^CREATE\\s+(USER|ROLE)\\b.*");
             case "ALTER" -> tokens.matches("(?s)^ALTER\\s+USER\\b.*");
             default -> false;
         };
+    }
+
+    /**
+     * Decides whether a COPY ... TO target writes outside the session. Quoted targets are
+     * masked out of {@code tokens}, so an invisible target after TO means a quoted file path;
+     * only STDOUT stays out of the forbidden class (it writes no file).
+     */
+    private static boolean isDestructiveCopyTarget(String tokens) {
+        java.util.regex.Matcher matcher = COPY_TO_TARGET.matcher(tokens);
+        if (!matcher.find()) {
+            return false;
+        }
+        String target = matcher.group(1);
+        return target.isEmpty() || target.equals("PROGRAM") || target.equals("FILE");
+    }
+
+    private static boolean isWholeDatabaseDrop(String statementType, String sql) {
+        if (!"DROP".equals(statementType)) {
+            return false;
+        }
+        String tokens = maskQuotedText(sql).toUpperCase(Locale.ROOT);
+        return tokens.matches("(?s)^DROP\\s+(DATABASE|SCHEMA)\\b.*");
     }
 
     private SqlRiskAnalysis forbidden(
@@ -179,9 +268,10 @@ public final class DefaultSqlRiskAnalysisService implements SqlRiskAnalysisServi
     private static final Pattern MYSQL_LOCKING_SELECT = Pattern.compile(
             "\\bFOR\\s+UPDATE\\b|\\bLOCK\\s+IN\\s+SHARE\\s+MODE\\b"
     );
-    private static final Pattern MYSQL_DANGEROUS_FUNCTION = Pattern.compile(
-            "\\b(SLEEP|BENCHMARK|GET_LOCK|RELEASE_LOCK|LOAD_FILE)\\s*\\("
+    private static final Pattern MYSQL_DELAY_LOCK_FUNCTION = Pattern.compile(
+            "\\b(SLEEP|BENCHMARK|GET_LOCK|RELEASE_LOCK)\\s*\\("
     );
+    private static final Pattern COPY_TO_TARGET = Pattern.compile("\\bCOPY\\b(?s).*\\bTO\\s+(\\S*)\\s*$");
 
     private boolean containsAiSeparatedStatement(String sql) {
         return AI_MULTI_STATEMENT.matcher(sql).find();
@@ -266,7 +356,165 @@ public final class DefaultSqlRiskAnalysisService implements SqlRiskAnalysisServi
         return sql.substring(0, index).toUpperCase(Locale.ROOT);
     }
 
-    private String removeComments(String sql) {
+    /**
+     * Resolves the risk-bearing statement keyword, seeing through CTE headers
+     * (WITH name AS (...), ...) and leading parenthesized compound groups
+     * ((SELECT ...) UNION (SELECT ...)) instead of rejecting them as unsupported.
+     */
+    private String firstStatementKeyword(String sql) {
+        String stripped = sql.strip();
+        if (stripped.isEmpty()) {
+            return "UNKNOWN";
+        }
+        if (stripped.charAt(0) == '(') {
+            int close = endOfBalancedGroup(stripped, 0);
+            if (close < 0) {
+                return "UNKNOWN";
+            }
+            String innerVerb = leadingVerb(stripped.substring(1, close));
+            String remainder = stripped.substring(close + 1).strip();
+            if (remainder.isEmpty()) {
+                return innerVerb;
+            }
+            String following = leadingVerb(remainder);
+            return switch (following) {
+                case "UNION", "INTERSECT", "EXCEPT", "ORDER", "LIMIT", "OFFSET", "FETCH" -> innerVerb;
+                case "SELECT", "INSERT", "UPDATE", "DELETE", "VALUES" -> following;
+                default -> "UNKNOWN";
+            };
+        }
+        if (startsWithWord(stripped, "WITH")) {
+            return mainVerbAfterCtes(stripped);
+        }
+        return firstKeyword(stripped);
+    }
+
+    private String mainVerbAfterCtes(String sql) {
+        int index = "WITH".length();
+        while (index < sql.length()) {
+            char current = sql.charAt(index);
+            if (Character.isWhitespace(current) || current == ',') {
+                index++;
+                continue;
+            }
+            if (current == '(') {
+                index = endOfBalancedGroup(sql, index);
+                if (index < 0) {
+                    return "WITH";
+                }
+                index++;
+                continue;
+            }
+            if (Character.isLetter(current)) {
+                String word = leadingVerb(sql.substring(index));
+                index += word.length();
+                if (isRiskBearingVerb(word)) {
+                    return word;
+                }
+                continue;
+            }
+            return "WITH";
+        }
+        return "WITH";
+    }
+
+    private static boolean isRiskBearingVerb(String word) {
+        return switch (word) {
+            case "SELECT", "INSERT", "UPDATE", "DELETE", "VALUES",
+                 "DROP", "TRUNCATE", "ALTER", "CREATE", "GRANT", "REVOKE" -> true;
+            default -> false;
+        };
+    }
+
+    private static String leadingVerb(String sql) {
+        int index = 0;
+        while (index < sql.length() && !Character.isLetter(sql.charAt(index))) {
+            index++;
+        }
+        int start = index;
+        while (index < sql.length()
+                && (Character.isLetterOrDigit(sql.charAt(index)) || sql.charAt(index) == '_')) {
+            index++;
+        }
+        if (index == start) {
+            return "UNKNOWN";
+        }
+        return sql.substring(start, index).toUpperCase(Locale.ROOT);
+    }
+
+    private static boolean startsWithWord(String sql, String word) {
+        if (!sql.regionMatches(true, 0, word, 0, word.length())) {
+            return false;
+        }
+        if (sql.length() == word.length()) {
+            return true;
+        }
+        char following = sql.charAt(word.length());
+        return !Character.isLetterOrDigit(following) && following != '_';
+    }
+
+    private static int endOfBalancedGroup(String sql, int openIndex) {
+        boolean singleQuoted = false;
+        boolean doubleQuoted = false;
+        boolean backtickQuoted = false;
+        int depth = 0;
+        for (int index = openIndex; index < sql.length(); index++) {
+            char current = sql.charAt(index);
+            char next = index + 1 < sql.length() ? sql.charAt(index + 1) : '\0';
+            if (singleQuoted) {
+                if (current == '\'') {
+                    if (next == '\'') {
+                        index++;
+                    } else {
+                        singleQuoted = false;
+                    }
+                }
+                continue;
+            }
+            if (doubleQuoted) {
+                if (current == '"') {
+                    if (next == '"') {
+                        index++;
+                    } else {
+                        doubleQuoted = false;
+                    }
+                }
+                continue;
+            }
+            if (backtickQuoted) {
+                if (current == '`') {
+                    if (next == '`') {
+                        index++;
+                    } else {
+                        backtickQuoted = false;
+                    }
+                }
+                continue;
+            }
+            if (current == '\'') {
+                singleQuoted = true;
+            } else if (current == '"') {
+                doubleQuoted = true;
+            } else if (current == '`') {
+                backtickQuoted = true;
+            } else if (current == '(') {
+                depth++;
+            } else if (current == ')') {
+                depth--;
+                if (depth == 0) {
+                    return index;
+                }
+            }
+        }
+        return -1;
+    }
+
+    private String removeComments(String sql, DatabaseDialect dialect) {
+        // MySQL-family servers (and unknown servers, conservatively) execute the content of
+        // /*! ... */ comments, so that content must stay in the analyzed text. Stripping it
+        // here would let hidden payloads pass analysis while the original text is executed.
+        boolean keepExecutableComments = dialect.family() == DatabaseDialect.Family.MYSQL
+                || dialect.family() == DatabaseDialect.Family.GENERIC;
         StringBuilder normalized = new StringBuilder(sql.length());
         boolean singleQuoted = false;
         boolean doubleQuoted = false;
@@ -291,8 +539,13 @@ public final class DefaultSqlRiskAnalysisService implements SqlRiskAnalysisServi
             }
             if (!singleQuoted && !doubleQuoted && !backtickQuoted && !bracketQuoted
                     && current == '/' && next == '*') {
+                boolean executableComment = keepExecutableComments
+                        && index + 2 < sql.length() && sql.charAt(index + 2) == '!';
                 normalized.append(' ');
                 index += 2;
+                if (executableComment) {
+                    index++;
+                }
                 while (index < sql.length()) {
                     char commentCurrent = sql.charAt(index);
                     char commentNext = index + 1 < sql.length() ? sql.charAt(index + 1) : '\0';
@@ -300,7 +553,7 @@ public final class DefaultSqlRiskAnalysisService implements SqlRiskAnalysisServi
                         index++;
                         break;
                     }
-                    if (commentCurrent == '\n' || commentCurrent == '\r') {
+                    if (executableComment || commentCurrent == '\n' || commentCurrent == '\r') {
                         normalized.append(commentCurrent);
                     }
                     index++;

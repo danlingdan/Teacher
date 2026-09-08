@@ -20,6 +20,14 @@ public interface SqlSafetyModeService {
         setUnrestrictedModeEnabled(enabled);
     }
 
+    /**
+     * True when the user explicitly picked a safety mode; false marks an untouched default so
+     * the UI can offer the first-run choice between teaching and developer mode.
+     */
+    default boolean isDeveloperModeExplicit() {
+        return true;
+    }
+
     static SqlSafetyModeService standardMode() {
         return new SqlSafetyModeService() {
             @Override

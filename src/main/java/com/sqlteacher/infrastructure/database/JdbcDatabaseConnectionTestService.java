@@ -66,7 +66,8 @@ public final class JdbcDatabaseConnectionTestService implements DatabaseConnecti
                 JdbcFailureClassifier.sqlState(error),
                 JdbcFailureClassifier.vendorCode(error)
             );
-            return failure(connectionTestMessage(failure), startedAt);
+            return failure(connectionTestMessage(failure)
+                    + JdbcFailureClassifier.localDetail(error), startedAt);
         }
     }
 

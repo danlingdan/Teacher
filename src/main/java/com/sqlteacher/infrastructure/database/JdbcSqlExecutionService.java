@@ -131,7 +131,7 @@ public final class JdbcSqlExecutionService implements SqlExecutionService {
         ) {
 
             statement.setQueryTimeout(
-                    (int) request.timeout().toSeconds()
+                    (int) Math.min(request.timeout().toSeconds(), Integer.MAX_VALUE)
             );
 
             statement.setMaxRows(queryProbeLimit(request.maxRows()));
@@ -208,7 +208,30 @@ public final class JdbcSqlExecutionService implements SqlExecutionService {
             
             throw new SqlTeacherException(
                     failure.errorCode(),
-                    failure.userMessage()
+                    failure.userMessage() + JdbcFailureClassifier.localDetail(exception)
+            );
+
+        } catch (RuntimeException exception) {
+            // Driver-level runtime failures must reach the same audit and classification path
+            // as SQLExceptions instead of escaping unrecorded.
+            JdbcFailureClassifier.JdbcFailure failure = JdbcFailureClassifier.classify(exception);
+            Duration duration = Duration.between(start, Instant.now());
+            eventService.recordSqlExecution(
+                    request.connectionId(),
+                    false,
+                    risk.statementType(),
+                    duration,
+                    0,
+                    failure.errorCode()
+            );
+            log.warn("SQL execution failed unexpectedly, connectionId={}, failureType={}, exceptionType={}",
+                    request.connectionId(),
+                    failure,
+                    exception.getClass().getSimpleName()
+            );
+            throw new SqlTeacherException(
+                    failure.errorCode(),
+                    failure.userMessage() + JdbcFailureClassifier.localDetail(exception)
             );
 
         }
@@ -218,7 +241,6 @@ public final class JdbcSqlExecutionService implements SqlExecutionService {
     private static int queryProbeLimit(int maxRows) {
         return maxRows == Integer.MAX_VALUE ? Integer.MAX_VALUE : maxRows + 1;
     }
-
     private static void validate(SqlExecutionRequest request) {
 
         Objects.requireNonNull(request, "request must not be null");
@@ -253,6 +275,12 @@ public final class JdbcSqlExecutionService implements SqlExecutionService {
             throw new IllegalArgumentException(
                     "timeout must be positive"
             );
+        }
+
+        // JDBC treats setQueryTimeout(0) as "no timeout", so sub-second durations must be
+        // rejected instead of silently disabling the execution guard.
+        if (request.timeout().toMillis() < 1000) {
+            throw new IllegalArgumentException("timeout must be at least one second");
         }
 
     }

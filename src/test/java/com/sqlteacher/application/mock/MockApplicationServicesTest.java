@@ -4,6 +4,7 @@ import com.sqlteacher.application.execution.SqlExecutionRequest;
 import com.sqlteacher.application.execution.SqlExecutionResult;
 import com.sqlteacher.application.nl2sql.Nl2SqlRequest;
 import com.sqlteacher.application.risk.SqlRiskAnalysis;
+import com.sqlteacher.application.risk.SqlRiskLevel;
 import com.sqlteacher.domain.SqlTeacherException;
 import org.junit.jupiter.api.Test;
 
@@ -35,10 +36,11 @@ class MockApplicationServicesTest {
     }
 
     @Test
-    void shouldBlockUnsafeStatementsInUiMock() {
+    void shouldKeepUiMockSelectOnly() {
         SqlRiskAnalysis risk = riskService.analyze("DROP TABLE student");
 
         assertFalse(risk.executable());
+        assertEquals(SqlRiskLevel.FORBIDDEN, risk.level());
         assertThrows(SqlTeacherException.class, () -> new MockSqlExecutionService(riskService).execute(
             new SqlExecutionRequest("demo", "DROP TABLE student", 100, Duration.ofSeconds(2))
         ));
