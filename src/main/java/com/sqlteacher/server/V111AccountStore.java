@@ -13,6 +13,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
@@ -41,9 +42,14 @@ final class V111AccountStore {
     private static final int RESET_TOKEN_MINUTES = 30;
     private static final int RESET_MAX_ATTEMPTS = 5;
     private static final int DELETE_CANCEL_DAYS = 7;
+    private static final int VERIFICATION_MAILS_PER_ACCOUNT_PER_HOUR = 3;
+    private static final int VERIFICATION_MAILS_PER_EMAIL_PER_DAY = 1;
+    private static final Duration VERIFICATION_ACCOUNT_WINDOW = Duration.ofHours(1);
+    private static final Duration VERIFICATION_EMAIL_WINDOW = Duration.ofDays(1);
     private final String url;
     private final SecureRandom random = new SecureRandom();
     private final MailSender mail;
+    private final AuthRateLimiter verificationMailLimiter = new AuthRateLimiter();
 
     V111AccountStore(java.nio.file.Path database, MailSender mail) throws SQLException {
         url = "jdbc:sqlite:" + database.toAbsolutePath().normalize();
@@ -87,6 +93,15 @@ final class V111AccountStore {
     // ---- email verification ----
 
     void requestEmailVerification(String userId, String email) {
+        // Fail-closed quotas for mail-triggering endpoints: consumed before the mail is written so
+        // concurrent retries cannot exceed the caps. Keys use the account id and the normalized
+        // target email; neither is logged.
+        String accountKey = "verify-mail:account:" + userId;
+        String emailKey = "verify-mail:email:" + (email == null ? "" : email.strip().toLowerCase(Locale.ROOT));
+        verificationMailLimiter.checkQuota(accountKey, VERIFICATION_MAILS_PER_ACCOUNT_PER_HOUR);
+        verificationMailLimiter.recordEvent(accountKey, VERIFICATION_ACCOUNT_WINDOW);
+        verificationMailLimiter.checkQuota(emailKey, VERIFICATION_MAILS_PER_EMAIL_PER_DAY);
+        verificationMailLimiter.recordEvent(emailKey, VERIFICATION_EMAIL_WINDOW);
         String token = randomToken(); Instant now = Instant.now();
         try (Connection connection = open(); PreparedStatement statement = connection.prepareStatement(
             "insert into email_verifications(id,user_id,email,token_hash,created_at,expires_at,used_at) values(?,?,?,?,?,?,null)")) {
@@ -100,22 +115,43 @@ final class V111AccountStore {
 
     void confirmEmailVerification(String token) {
         if (token == null || token.isBlank()) throw new IllegalArgumentException("verification token is invalid");
-        try (Connection connection = open(); PreparedStatement statement = connection.prepareStatement(
-            "select id,user_id,expires_at,used_at from email_verifications where token_hash=?")) {
-            statement.setBytes(1, tokenHash(token));
-            try (ResultSet row = statement.executeQuery()) {
-                if (!row.next()) throw new IllegalArgumentException("verification token is invalid");
-                String used = row.getString("used_at");
-                if (used != null || Instant.parse(row.getString("expires_at")).isBefore(Instant.now())) {
-                    throw new IllegalArgumentException("verification token has expired or already been used");
+        try (Connection connection = open()) {
+            connection.setAutoCommit(false);
+            try {
+                String verificationId;
+                String userId;
+                String email;
+                try (PreparedStatement statement = connection.prepareStatement(
+                    "select id,user_id,email,expires_at,used_at from email_verifications where token_hash=?")) {
+                    statement.setBytes(1, tokenHash(token));
+                    try (ResultSet row = statement.executeQuery()) {
+                        if (!row.next()) throw new IllegalArgumentException("verification token is invalid");
+                        verificationId = row.getString("id");
+                        userId = row.getString("user_id");
+                        email = row.getString("email");
+                        if (row.getString("used_at") != null
+                            || Instant.parse(row.getString("expires_at")).isBefore(Instant.now())) {
+                            throw new IllegalArgumentException("verification token has expired or already been used");
+                        }
+                    }
                 }
-                String now = Instant.now().toString();
-                try (PreparedStatement update = connection.prepareStatement("update email_verifications set used_at=? where id=?")) {
-                    update.setString(1, now); update.setString(2, row.getString("id")); update.executeUpdate();
+                // Atomic consume: only the first concurrent confirmation wins the conditional update.
+                int consumed;
+                try (PreparedStatement consume = connection.prepareStatement(
+                    "update email_verifications set used_at=? where id=? and used_at is null")) {
+                    consume.setString(1, Instant.now().toString());
+                    consume.setString(2, verificationId);
+                    consumed = consume.executeUpdate();
                 }
-                try (PreparedStatement user = connection.prepareStatement("update users set email_verified=1 where id=?")) {
-                    user.setString(1, row.getString("user_id")); user.executeUpdate();
+                if (consumed != 1) throw new IllegalArgumentException("verification token has expired or already been used");
+                try (PreparedStatement user = connection.prepareStatement(
+                    "update users set email=?, email_verified=1 where id=?")) {
+                    user.setString(1, email); user.setString(2, userId); user.executeUpdate();
                 }
+                connection.commit();
+            } catch (SQLException | RuntimeException error) {
+                connection.rollback();
+                throw error;
             }
         } catch (SQLException error) { throw database(error); }
     }
@@ -145,7 +181,6 @@ final class V111AccountStore {
 
     void resetPassword(String token, char[] newPassword) {
         if (token == null || token.isBlank()) throw new IllegalArgumentException("reset token is invalid");
-        validatePassword(newPassword);
         byte[] hash = tokenHash(token);
         try (Connection connection = open()) {
             connection.setAutoCommit(false);
@@ -163,20 +198,39 @@ final class V111AccountStore {
                     userId = row.getString("user_id");
                 }
             }
-            byte[] salt = bytes(SALT_BYTES); byte[] passwordHash = hash(newPassword, salt);
-            try (PreparedStatement update = connection.prepareStatement("update users set password_hash=?,password_salt=? where id=?")) {
-                update.setBytes(1, passwordHash); update.setBytes(2, salt); update.setString(3, userId); update.executeUpdate();
+            try {
+                validatePassword(newPassword);
+                byte[] salt = bytes(SALT_BYTES); byte[] passwordHash = hash(newPassword, salt);
+                try (PreparedStatement update = connection.prepareStatement("update users set password_hash=?,password_salt=? where id=?")) {
+                    update.setBytes(1, passwordHash); update.setBytes(2, salt); update.setString(3, userId); update.executeUpdate();
+                }
+                String now = Instant.now().toString();
+                try (PreparedStatement revokeAccess = connection.prepareStatement("update access_tokens set revoked_at=? where user_id=? and revoked_at is null");
+                     PreparedStatement revokeRefresh = connection.prepareStatement("update refresh_tokens set revoked_at=? where user_id=? and revoked_at is null")) {
+                    revokeAccess.setString(1, now); revokeAccess.setString(2, userId); revokeAccess.executeUpdate();
+                    revokeRefresh.setString(1, now); revokeRefresh.setString(2, userId); revokeRefresh.executeUpdate();
+                }
+                try (PreparedStatement markUsed = connection.prepareStatement("update reset_tokens set used_at=? where token_hash=?")) {
+                    markUsed.setString(1, now); markUsed.setBytes(2, hash); markUsed.executeUpdate();
+                }
+                connection.commit();
+            } catch (RuntimeException failure) {
+                // The token matched but the attempt failed (for example an invalid new password):
+                // roll back and burn one of the RESET_MAX_ATTEMPTS so repeated failed attempts
+                // against a live token invalidate it.
+                try {
+                    connection.rollback();
+                    try (PreparedStatement bump = connection.prepareStatement(
+                        "update reset_tokens set attempts=attempts+1 where token_hash=? and used_at is null")) {
+                        bump.setBytes(1, hash);
+                        bump.executeUpdate();
+                    }
+                    connection.commit();
+                } catch (SQLException suppressed) {
+                    failure.addSuppressed(suppressed);
+                }
+                throw failure;
             }
-            String now = Instant.now().toString();
-            try (PreparedStatement revokeAccess = connection.prepareStatement("update access_tokens set revoked_at=? where user_id=? and revoked_at is null");
-                 PreparedStatement revokeRefresh = connection.prepareStatement("update refresh_tokens set revoked_at=? where user_id=? and revoked_at is null")) {
-                revokeAccess.setString(1, now); revokeAccess.setString(2, userId); revokeAccess.executeUpdate();
-                revokeRefresh.setString(1, now); revokeRefresh.setString(2, userId); revokeRefresh.executeUpdate();
-            }
-            try (PreparedStatement markUsed = connection.prepareStatement("update reset_tokens set used_at=? where token_hash=?")) {
-                markUsed.setString(1, now); markUsed.setBytes(2, hash); markUsed.executeUpdate();
-            }
-            connection.commit();
         } catch (SQLException error) { throw database(error); }
         finally { java.util.Arrays.fill(newPassword, '\0'); }
     }

@@ -41,6 +41,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
@@ -55,6 +56,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
@@ -83,6 +85,14 @@ public final class SqlTeacherCloudServer {
     private static final int HASH_BITS = 256;
     private static final long ACCESS_TOKEN_HOURS = 8;
     private static final long REFRESH_TOKEN_DAYS = 30;
+    private static final Duration ONE_HOUR = Duration.ofHours(1);
+    private static final int REGISTER_MAX_PER_EMAIL_PER_HOUR = 10;
+    private static final int REGISTER_MAX_PER_IP_PER_HOUR = 20;
+    private static final int RESET_MAX_PER_EMAIL_PER_HOUR = 3;
+    private static final int RESET_MAX_PER_IP_PER_HOUR = 10;
+    private static final int SYNC_UPLOAD_MAX_BYTES = 1024 * 1024;
+    private static final int BANK_PUBLISH_MAX_BYTES = 2 * 1024 * 1024;
+    private static final int MAX_SYNC_ITEM_PAYLOAD_BYTES = 16_384;
 
     private final CloudStore store;
     private final V14CloudStore v14Store;
@@ -91,6 +101,7 @@ public final class SqlTeacherCloudServer {
     private final V111AccountStore v111AccountStore;
     private final V31ExerciseBankStore v31BankStore;
     private final CloudKnowledgeIndexService knowledgeIndex;
+    private final AuthRateLimiter authRateLimiter = new AuthRateLimiter();
     private final HttpServer server;
 
     SqlTeacherCloudServer(Path databasePath, int port) throws IOException, SQLException {
@@ -159,9 +170,14 @@ public final class SqlTeacherCloudServer {
         if (!"POST".equals(exchange.getRequestMethod())) { methodNotAllowed(exchange); return; }
         try {
             Map<String, String> body = request(exchange);
+            String emailKey = normalizedEmailKey(body.get("email"));
+            String clientKey = clientPrincipal(exchange);
+            enforceQuota("register:email:" + emailKey, REGISTER_MAX_PER_EMAIL_PER_HOUR, ONE_HOUR);
+            enforceQuota("register:ip:" + clientKey, REGISTER_MAX_PER_IP_PER_HOUR, ONE_HOUR);
             SessionData session = store.registerData(body.get("email"), body.get("displayName"), password(body));
             respond(exchange, 201, sessionResponse(session));
-        } catch (IllegalArgumentException error) { respond(exchange, 400, errorResponse("INVALID_REQUEST", error.getMessage())); }
+        } catch (AuthRateLimiter.RateLimitedException error) { respondRateLimited(exchange, error); }
+        catch (IllegalArgumentException error) { respond(exchange, 400, errorResponse("INVALID_REQUEST", error.getMessage())); }
         catch (SecurityException error) { respond(exchange, 409, errorResponse("ACCOUNT_EXISTS", "This email is already registered.")); }
         catch (RuntimeException error) { logUnexpectedFailure("registration", error); respond(exchange, 500, errorResponse("SERVER_ERROR", "Registration failed.")); }
         finally { clearPassword(exchange); }
@@ -169,12 +185,20 @@ public final class SqlTeacherCloudServer {
 
     private void login(HttpExchange exchange) throws IOException {
         if (!"POST".equals(exchange.getRequestMethod())) { methodNotAllowed(exchange); return; }
+        String failureKey = "";
         try {
             Map<String, String> body = request(exchange);
+            failureKey = "login:" + normalizedEmailKey(body.get("email"));
+            authRateLimiter.checkLocked(failureKey);
             SessionData session = store.loginData(body.get("email"), password(body));
+            authRateLimiter.clearFailures(failureKey);
             respond(exchange, 200, sessionResponse(session));
-        } catch (IllegalArgumentException error) { respond(exchange, 400, errorResponse("INVALID_REQUEST", error.getMessage())); }
-        catch (SecurityException error) { respond(exchange, 401, errorResponse("LOGIN_FAILED", "Email or password is incorrect.")); }
+        } catch (AuthRateLimiter.RateLimitedException error) { respondRateLimited(exchange, error); }
+        catch (IllegalArgumentException error) { respond(exchange, 400, errorResponse("INVALID_REQUEST", error.getMessage())); }
+        catch (SecurityException error) {
+            authRateLimiter.recordFailure(failureKey);
+            respond(exchange, 401, errorResponse("LOGIN_FAILED", "Email or password is incorrect."));
+        }
         catch (RuntimeException error) { logUnexpectedFailure("login", error); respond(exchange, 500, errorResponse("SERVER_ERROR", "Login failed.")); }
         finally { clearPassword(exchange); }
     }
@@ -190,11 +214,19 @@ public final class SqlTeacherCloudServer {
 
     private void refresh(HttpExchange exchange) throws IOException {
         if (!"POST".equals(exchange.getRequestMethod())) { methodNotAllowed(exchange); return; }
+        String failureKey = "refresh:" + clientPrincipal(exchange);
         try {
             Map<String, String> body = request(exchange);
-            respond(exchange, 200, sessionResponse(store.refreshData(body.get("refreshToken"))));
-        } catch (IllegalArgumentException error) { respond(exchange, 400, errorResponse("INVALID_REQUEST", error.getMessage())); }
-        catch (SecurityException error) { respond(exchange, 401, errorResponse("REFRESH_FAILED", "Refresh token is invalid or expired.")); }
+            authRateLimiter.checkLocked(failureKey);
+            SessionData session = store.refreshData(body.get("refreshToken"));
+            authRateLimiter.clearFailures(failureKey);
+            respond(exchange, 200, sessionResponse(session));
+        } catch (AuthRateLimiter.RateLimitedException error) { respondRateLimited(exchange, error); }
+        catch (IllegalArgumentException error) { respond(exchange, 400, errorResponse("INVALID_REQUEST", error.getMessage())); }
+        catch (SecurityException error) {
+            authRateLimiter.recordFailure(failureKey);
+            respond(exchange, 401, errorResponse("REFRESH_FAILED", "Refresh token is invalid or expired."));
+        }
         catch (RuntimeException error) { logUnexpectedFailure("session refresh", error); respond(exchange, 500, errorResponse("SERVER_ERROR", "Session refresh failed.")); }
     }
 
@@ -202,9 +234,14 @@ public final class SqlTeacherCloudServer {
         if (!"POST".equals(exchange.getRequestMethod())) { methodNotAllowed(exchange); return; }
         try {
             Map<String, String> body = request(exchange);
+            String emailKey = normalizedEmailKey(body.get("email"));
+            String clientKey = clientPrincipal(exchange);
+            enforceQuota("reset:email:" + emailKey, RESET_MAX_PER_EMAIL_PER_HOUR, ONE_HOUR);
+            enforceQuota("reset:ip:" + clientKey, RESET_MAX_PER_IP_PER_HOUR, ONE_HOUR);
             v111AccountStore.requestPasswordReset(body.get("email"));
             respond(exchange, 200, Map.of("status", "ok"));
-        } catch (RuntimeException error) { logUnexpectedFailure("password reset request", error); respond(exchange, 500, errorResponse("SERVER_ERROR", "Password reset request failed.")); }
+        } catch (AuthRateLimiter.RateLimitedException error) { respondRateLimited(exchange, error); }
+        catch (RuntimeException error) { logUnexpectedFailure("password reset request", error); respond(exchange, 500, errorResponse("SERVER_ERROR", "Password reset request failed.")); }
     }
 
     private void resetPassword(HttpExchange exchange) throws IOException {
@@ -401,7 +438,7 @@ public final class SqlTeacherCloudServer {
         try {
             AuthenticatedUser actor = store.authenticate(token(exchange));
             if ("POST".equals(exchange.getRequestMethod())) {
-                SyncUpload upload = JSON.readValue(exchange.getRequestBody(), SyncUpload.class);
+                SyncUpload upload = JSON.readValue(requestBytes(exchange, SYNC_UPLOAD_MAX_BYTES), SyncUpload.class);
                 respond(exchange, 200, Map.of("accepted", store.upload(actor, upload.items())));
                 return;
             }
@@ -411,6 +448,10 @@ public final class SqlTeacherCloudServer {
                 return;
             }
             methodNotAllowed(exchange);
+        } catch (PayloadTooLargeException error) {
+            respond(exchange, 413, errorResponse("REQUEST_TOO_LARGE", "Request body is too large."));
+        } catch (SyncItemPayloadTooLargeException error) {
+            respond(exchange, 400, errorResponse("PAYLOAD_TOO_LARGE", error.getMessage()));
         } catch (SecurityException error) {
             respond(exchange, 401, errorResponse("UNAUTHORIZED", "Login is required."));
         } catch (IllegalArgumentException error) {
@@ -662,7 +703,7 @@ public final class SqlTeacherCloudServer {
                 return;
             }
             if (segments.length == 5 && "publish".equals(segments[4]) && "POST".equals(method)) {
-                Map<String, Object> body = JSON.readValue(exchange.getRequestBody(), new TypeReference<>() { });
+                Map<String, Object> body = JSON.readValue(requestBytes(exchange, BANK_PUBLISH_MAX_BYTES), new TypeReference<>() { });
                 String text = String.valueOf(body.getOrDefault("text", ""));
                 AuthenticatedUser actor = store.authenticate(token(exchange));
                 int bankVersion = v31BankStore.publish(actor, text);
@@ -681,6 +722,8 @@ public final class SqlTeacherCloudServer {
             methodNotAllowed(exchange);
         } catch (SecurityException error) {
             respond(exchange, 403, errorResponse("FORBIDDEN", error.getMessage()));
+        } catch (PayloadTooLargeException error) {
+            respond(exchange, 413, errorResponse("REQUEST_TOO_LARGE", "Request body is too large."));
         } catch (IllegalArgumentException error) {
             respond(exchange, 400, errorResponse("INVALID_REQUEST", error.getMessage()));
         } catch (SqlTeacherException error) {
@@ -843,7 +886,7 @@ public final class SqlTeacherCloudServer {
                 String authorization = exchange.getRequestHeaders().getFirst("Authorization");
                 if (authorization != null && !authorization.isBlank()) userId = store.authenticate(token(exchange)).id();
                 Map<String, Object> body = objectRequest(exchange);
-                String remote = exchange.getRemoteAddress() == null ? "unknown" : exchange.getRemoteAddress().getAddress().getHostAddress();
+                String remote = clientPrincipal(exchange);
                 respond(exchange, 201, v110SupportStore.submit(body, userId, remote));
                 return;
             }
@@ -1066,12 +1109,65 @@ public final class SqlTeacherCloudServer {
     }
 
     private static byte[] requestBytes(HttpExchange exchange) throws IOException {
-        byte[] bytes = exchange.getRequestBody().readNBytes(64 * 1024 + 1);
-        if (bytes.length > 64 * 1024) throw new PayloadTooLargeException();
+        return requestBytes(exchange, 64 * 1024);
+    }
+
+    private static byte[] requestBytes(HttpExchange exchange, int maxBytes) throws IOException {
+        byte[] bytes = exchange.getRequestBody().readNBytes(maxBytes + 1);
+        if (bytes.length > maxBytes) throw new PayloadTooLargeException();
         return bytes;
     }
 
     private static final class PayloadTooLargeException extends IllegalArgumentException { }
+
+    /** Rejects one sync item whose payloadJson exceeds the advertised per-item limit. */
+    static final class SyncItemPayloadTooLargeException extends IllegalArgumentException {
+        SyncItemPayloadTooLargeException(String message) { super(message); }
+    }
+
+    /** Applies a fixed-window quota; the limit is intentionally coarse and never echoed to the caller. */
+    private void enforceQuota(String key, int limit, Duration window) {
+        authRateLimiter.checkQuota(key, limit);
+        authRateLimiter.recordEvent(key, window);
+    }
+
+    private static void respondRateLimited(HttpExchange exchange, AuthRateLimiter.RateLimitedException error) throws IOException {
+        exchange.getResponseHeaders().set("Retry-After", Long.toString(error.retryAfterSeconds()));
+        respond(exchange, 429, errorResponse("RATE_LIMITED", "尝试过于频繁，请稍后再试"));
+    }
+
+    private static String normalizedEmailKey(String email) {
+        return email == null ? "" : email.strip().toLowerCase(Locale.ROOT);
+    }
+
+    /**
+     * Resolves the rate-limit principal for a request. The production service is loopback-bound
+     * behind Nginx, which appends the real client to {@code X-Forwarded-For}; the last entry is
+     * therefore the trustworthy client address. Direct non-loopback peers keep the previous
+     * behavior of using the direct address. The result feeds hashed rate-limit keys only and is
+     * never logged with user identity data.
+     */
+    private static String clientPrincipal(HttpExchange exchange) {
+        if (exchange.getRemoteAddress() == null || exchange.getRemoteAddress().getAddress() == null) return "unknown";
+        InetAddress direct = exchange.getRemoteAddress().getAddress();
+        return resolveClientAddress(direct.isLoopbackAddress(), direct.getHostAddress(),
+            exchange.getRequestHeaders().getFirst("X-Forwarded-For"));
+    }
+
+    static String resolveClientAddress(boolean directPeerIsLoopback, String directAddress, String forwardedFor) {
+        if (!directPeerIsLoopback) return directAddress == null || directAddress.isBlank() ? "unknown" : directAddress;
+        return lastForwardedEntry(forwardedFor);
+    }
+
+    static String lastForwardedEntry(String forwardedFor) {
+        if (forwardedFor == null || forwardedFor.isBlank()) return "unknown";
+        String[] entries = forwardedFor.split(",");
+        for (int index = entries.length - 1; index >= 0; index--) {
+            String candidate = entries[index].trim();
+            if (!candidate.isEmpty()) return candidate;
+        }
+        return "unknown";
+    }
 
     private static String string(Map<String, Object> body, String name) {
         Object value = body.get(name);
@@ -1255,11 +1351,18 @@ public final class SqlTeacherCloudServer {
                 try (ResultSet result = statement.executeQuery()) {
                     boolean exists = result.next();
                     userId = exists ? result.getString("id") : null;
-                    boolean valid = exists && result.getInt("disabled") == 0
+                    boolean hashable = exists && result.getInt("disabled") == 0;
+                    boolean valid = hashable
                         && constantTimeEquals(result.getBytes("password_hash"),
                             hash(password, result.getBytes("password_salt")));
+                    if (!valid && !hashable) {
+                        // Match the PBKDF2 cost of an existing account so unknown or disabled
+                        // accounts fail with the same response time and the identical 401 body.
+                        hash(password, bytes(SALT_BYTES));
+                    }
                     if (!valid) {
-                        audit(connection, null, "AUTH_LOGIN", "USER", userId, "DENIED", "INVALID_CREDENTIALS");
+                        // Failed logins are not audited; the in-process rate limiter is the
+                        // failure record and writing one row per guessing attempt floods admin_audit.
                         throw new SecurityException("invalid credentials");
                     }
                     audit(connection, userId, "AUTH_LOGIN", "USER", userId, "SUCCESS", "CREDENTIAL_VERIFIED");
@@ -1339,6 +1442,14 @@ public final class SqlTeacherCloudServer {
 
         int upload(AuthenticatedUser actor, List<CloudSyncItem> items) {
             if (items.size() > 500) throw new IllegalArgumentException("A sync batch may contain at most 500 items");
+            for (int index = 0; index < items.size(); index++) {
+                String payload = items.get(index).payloadJson();
+                int size = payload == null ? 0 : payload.getBytes(StandardCharsets.UTF_8).length;
+                if (size > MAX_SYNC_ITEM_PAYLOAD_BYTES) {
+                    throw new SyncItemPayloadTooLargeException("Sync item " + (index + 1)
+                        + " payloadJson exceeds the limit of " + MAX_SYNC_ITEM_PAYLOAD_BYTES + " bytes");
+                }
+            }
             try (Connection connection = open(); PreparedStatement statement = connection.prepareStatement(
                 "insert into sync_events(user_id,event_id,event_type,payload_json,occurred_at) values(?,?,?,?,?) "
                     + "on conflict(user_id,event_id) do update set event_type=excluded.event_type,payload_json=excluded.payload_json,occurred_at=excluded.occurred_at")) {

@@ -24,6 +24,8 @@ final class V110SupportStore {
     private static final ObjectMapper JSON = new ObjectMapper().findAndRegisterModules();
     private static final Set<String> TYPES = Set.of("BUG", "UPDATE_PROBLEM", "USABILITY", "SUGGESTION", "OTHER");
     private static final Set<String> SEVERITIES = Set.of("DATA_OR_STARTUP_RISK", "MAIN_FLOW_BLOCKED", "PARTIAL_FAILURE", "MINOR");
+    private static final int MAX_REPORTS_PER_PRINCIPAL_PER_HOUR = 5;
+    private static final int MAX_REPORTS_PER_INSTALL_PER_HOUR = 5;
     private final String url;
     private final byte[] hashSecret;
     private final SecureRandom random = new SecureRandom();
@@ -67,6 +69,9 @@ final class V110SupportStore {
                 }
             }
             enforceRate(principal);
+            // The principal rotates when the client address or installId changes, so the install
+            // dimension is capped separately to blunt report flooding with spoofed or rotating XFF entries.
+            enforceInstallRate(digest(installId));
             String id = "FB-" + UUID.randomUUID().toString().replace("-", "").substring(0, 12).toUpperCase(Locale.ROOT);
             String queryToken = randomToken(); Instant now = Instant.now();
             connection.setAutoCommit(false);
@@ -198,7 +203,15 @@ final class V110SupportStore {
         try (Connection connection = open(); PreparedStatement statement = connection.prepareStatement(
             "select count(*) from problem_reports where principal_key=? and created_at>=?")) {
             statement.setString(1, principal); statement.setString(2, Instant.now().minus(1, ChronoUnit.HOURS).toString());
-            try (ResultSet row = statement.executeQuery()) { if (row.next() && row.getInt(1) >= 5) throw new RateLimitException(); }
+            try (ResultSet row = statement.executeQuery()) { if (row.next() && row.getInt(1) >= MAX_REPORTS_PER_PRINCIPAL_PER_HOUR) throw new RateLimitException(); }
+        } catch (SQLException error) { throw database(error); }
+    }
+
+    private void enforceInstallRate(String installIdHash) {
+        try (Connection connection = open(); PreparedStatement statement = connection.prepareStatement(
+            "select count(*) from problem_reports where install_id_hash=? and created_at>=?")) {
+            statement.setString(1, installIdHash); statement.setString(2, Instant.now().minus(1, ChronoUnit.HOURS).toString());
+            try (ResultSet row = statement.executeQuery()) { if (row.next() && row.getInt(1) >= MAX_REPORTS_PER_INSTALL_PER_HOUR) throw new RateLimitException(); }
         } catch (SQLException error) { throw database(error); }
     }
 

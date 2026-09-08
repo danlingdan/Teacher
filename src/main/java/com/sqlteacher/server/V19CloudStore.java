@@ -335,7 +335,10 @@ final class V19CloudStore {
                 DraftRow draft = draft(connection, actor.id(), courseId, draftId);
                 requireClassTeacher(actor, draft.classroomId());
                 if (!"DRAFT".equals(draft.status())) throw new IllegalArgumentException("Intervention draft is not pending");
-                if (!sha256(confirmationToken).equals(draft.tokenHash())) throw new SecurityException("confirmation token is invalid");
+                if (!MessageDigest.isEqual(sha256(confirmationToken).getBytes(StandardCharsets.US_ASCII),
+                    draft.tokenHash().getBytes(StandardCharsets.US_ASCII))) {
+                    throw new SecurityException("confirmation token is invalid");
+                }
                 if (draft.createdAt().plusSeconds(600).isBefore(now)) throw new IllegalArgumentException("confirmation token expired");
                 CourseObjective objective = findObjective(connection, draft.objectiveId());
                 if (objective.version() != draft.objectiveVersion() || objective.status() != ContentStatus.ACTIVE) {

@@ -168,6 +168,99 @@ class V111AccountStoreTest {
         assertEquals(AccountTaskState.Status.CANCELLED, store.getAccountDeletionStatus(userId).status());
     }
 
+    @Test void confirmEmailVerificationIsSingleUseAndBindsTheEmail() throws Exception {
+        V111AccountStore store = newStore();
+        try (var connection = connection()) {
+            insertUser(connection, "user-bind", "old@example.com");
+        }
+        store.requestEmailVerification("user-bind", "new@example.com");
+        String token = readTokenFromOutbox();
+
+        store.confirmEmailVerification(token);
+
+        try (var connection = connection();
+             var rows = connection.createStatement().executeQuery("select email,email_verified from users where id='user-bind'")) {
+            assertTrue(rows.next());
+            assertEquals("new@example.com", rows.getString("email"), "the verified address must replace the old one");
+            assertEquals(1, rows.getInt("email_verified"));
+        }
+        IllegalArgumentException replay = assertThrows(IllegalArgumentException.class,
+            () -> store.confirmEmailVerification(token), "a consumed token must not confirm twice");
+        assertTrue(replay.getMessage().contains("expired or already been used"));
+        try (var connection = connection();
+             var rows = connection.createStatement().executeQuery("select email from users where id='user-bind'")) {
+            assertTrue(rows.next());
+            assertEquals("new@example.com", rows.getString("email"), "a replay must not change the bound email");
+        }
+    }
+
+    @Test void verificationMailsAreRateLimitedPerAccountAndPerTargetEmail() throws Exception {
+        V111AccountStore store = newStore();
+        try (var connection = connection()) {
+            insertUser(connection, "user-mail-a", "mail-a@example.com");
+            insertUser(connection, "user-mail-b", "mail-b@example.com");
+        }
+        // Per-account hourly cap: three distinct targets succeed, a fourth is refused.
+        store.requestEmailVerification("user-mail-a", "a1@example.com");
+        store.requestEmailVerification("user-mail-a", "a2@example.com");
+        store.requestEmailVerification("user-mail-a", "a3@example.com");
+        assertThrows(AuthRateLimiter.RateLimitedException.class,
+            () -> store.requestEmailVerification("user-mail-a", "a4@example.com"),
+            "the per-account hourly cap must engage after three mails");
+        // Per-target-email daily cap: a different account cannot mail an address that already received one.
+        assertThrows(AuthRateLimiter.RateLimitedException.class,
+            () -> store.requestEmailVerification("user-mail-b", "a1@example.com"),
+            "the per-target-email daily cap must hold across accounts");
+        assertDoesNotThrow(() -> store.requestEmailVerification("user-mail-b", "b1@example.com"),
+            "a fresh account and target email stay allowed");
+    }
+
+    @Test void resetTokenIsInvalidatedAfterFiveFailedAttempts() throws Exception {
+        V111AccountStore store = newStore();
+        String userId = "user-attempts";
+        try (var connection = connection()) {
+            insertUser(connection, userId, "attempts@example.com");
+        }
+        store.requestPasswordReset("attempts@example.com");
+        String token = readTokenFromOutbox();
+
+        for (int index = 0; index < 5; index++) {
+            final int attempt = index + 1;
+            assertThrows(IllegalArgumentException.class,
+                () -> store.resetPassword(token, ("short-" + attempt).toCharArray()),
+                "failed attempt " + attempt + " must be rejected");
+        }
+        IllegalArgumentException blocked = assertThrows(IllegalArgumentException.class,
+            () -> store.resetPassword(token, "brand-new-passphrase-123".toCharArray()),
+            "the attempts threshold must reject the token after five failures");
+        assertTrue(blocked.getMessage().contains("expired or already been used"));
+        try (var connection = connection();
+             var rows = connection.createStatement().executeQuery("select password_hash from users where id='" + userId + "'")) {
+            assertTrue(rows.next());
+            assertEquals(1, rows.getBytes(1)[0], "failed attempts must not change the password");
+        }
+
+        // A freshly requested token is unaffected: the burn is per token, not per account.
+        store.requestPasswordReset("attempts@example.com");
+        String freshToken = newestTokenNotIn(java.util.List.of(token));
+        store.resetPassword(freshToken, "brand-new-passphrase-123".toCharArray());
+        try (var connection = connection();
+             var rows = connection.createStatement().executeQuery("select password_hash from users where id='" + userId + "'")) {
+            assertTrue(rows.next());
+            assertNotEquals(1, rows.getBytes(1)[0], "the fresh token must still reset the password");
+        }
+    }
+
+    private String newestTokenNotIn(List<String> knownTokens) throws Exception {
+        try (var entries = Files.list(directory.resolve("mails"))) {
+            for (Path mail : entries.filter(p -> p.toString().endsWith(".mail")).toList()) {
+                Matcher matcher = TOKEN.matcher(Files.readString(mail));
+                if (matcher.find() && !knownTokens.contains(matcher.group(1))) return matcher.group(1);
+            }
+        }
+        throw new AssertionError("no unused token found in the outbox");
+    }
+
     private java.sql.Connection connection() throws Exception {
         return java.sql.DriverManager.getConnection("jdbc:sqlite:" + directory.resolve("cloud.db").toAbsolutePath());
     }

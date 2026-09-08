@@ -409,7 +409,9 @@ class SqlTeacherCloudServerTest {
         assertTrue(disableAudit.toString().contains("LAST_ADMIN_PROTECTED"));
         JsonNode authAudit = JSON.readTree(getText(
             "admin/audit?action=AUTH_LOGIN&page=0&pageSize=50", adminToken));
-        assertTrue(authAudit.get("totalRows").asInt() >= 2);
+        // Only successful logins are audited since W3 hardening; failed attempts are covered by
+        // the in-process rate limiter instead of one admin_audit row per guessing attempt.
+        assertTrue(authAudit.get("totalRows").asInt() >= 1);
         assertTrue(!authAudit.toString().toLowerCase(java.util.Locale.ROOT).contains("password"));
         JsonNode taskAudit = JSON.readTree(getText(
             "admin/audit?action=ASSIGNMENT_CREATE&page=0&pageSize=50", adminToken));
