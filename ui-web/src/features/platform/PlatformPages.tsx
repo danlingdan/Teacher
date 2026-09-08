@@ -220,6 +220,8 @@ export function TeachingPage() {
   const loadAnalytics = useMutation({
     mutationFn: () => localAppRequest<LearningAnalytics>("teaching.analytics"),
     onSuccess: setAnalytics,
+    onError: (error: Error) =>
+      toast("error", `加载学情分析失败：${error.message}`),
   });
   const loadInterventions = useMutation({
     mutationFn: () =>
@@ -227,6 +229,8 @@ export function TeachingPage() {
         "teaching.interventions",
       ),
     onSuccess: (value) => setInterventions(value.items),
+    onError: (error: Error) =>
+      toast("error", `加载干预队列失败：${error.message}`),
   });
   const updateIntervention = useMutation({
     mutationFn: (value: {
@@ -234,6 +238,8 @@ export function TeachingPage() {
       status: InterventionCandidate["status"];
     }) => localAppRequest("teaching.intervention.update", value),
     onSuccess: () => loadInterventions.mutate(),
+    onError: (error: Error) =>
+      toast("error", `更新干预状态失败：${error.message}`),
   });
   // 挂载即加载干预队列，让折叠区外的“待处理 N”徽章有数据。
   useEffect(() => {
@@ -258,9 +264,10 @@ export function TeachingPage() {
     1,
     Math.ceil(filteredExercises.length / exercisePageSize),
   );
+  const visibleExercisePage = Math.min(exercisePage, exercisePages - 1);
   const visibleExercises = filteredExercises.slice(
-    exercisePage * exercisePageSize,
-    (exercisePage + 1) * exercisePageSize,
+    visibleExercisePage * exercisePageSize,
+    (visibleExercisePage + 1) * exercisePageSize,
   );
   const progressPageSize = 8;
   const progressPages = Math.max(
@@ -357,21 +364,21 @@ export function TeachingPage() {
           ]}
         />
         {filteredExercises.length > exercisePageSize && (
-          <div className="compact-pager">
+          <div className="compact-pager" aria-label="题库分页">
             <Button
               variant="secondary"
-              disabled={exercisePage === 0}
-              onClick={() => setExercisePage((value) => value - 1)}
+              disabled={visibleExercisePage === 0}
+              onClick={() => setExercisePage(visibleExercisePage - 1)}
             >
               上一页
             </Button>
             <span>
-              第 {exercisePage + 1} / {exercisePages} 页
+              第 {visibleExercisePage + 1} / {exercisePages} 页
             </span>
             <Button
               variant="secondary"
-              disabled={exercisePage + 1 >= exercisePages}
-              onClick={() => setExercisePage((value) => value + 1)}
+              disabled={visibleExercisePage + 1 >= exercisePages}
+              onClick={() => setExercisePage(visibleExercisePage + 1)}
             >
               下一页
             </Button>
@@ -881,22 +888,34 @@ export function CloudPage() {
   const [analyticsStatus, setAnalyticsStatus] = useState("");
   const [analyticsFrom, setAnalyticsFrom] = useState("");
   const [analyticsTo, setAnalyticsTo] = useState("");
+  // 持有最新选中的班级 id：异步响应返回时用它丢弃已过期的请求结果。
+  const classroomIdRef = useRef(classroomId);
+  classroomIdRef.current = classroomId;
   const query = useQuery({
     queryKey: cloudKey,
     queryFn: () => localAppRequest<CloudWorkspace>("cloud.workspace"),
     staleTime: 15_000,
   });
-  const refresh = useMutation({
+  // variables 为 silent 标记：创建班级后的自动刷新不弹“班级已刷新”，避免双 toast。
+  const refresh = useMutation<CloudWorkspace, Error, boolean | undefined>({
     mutationFn: () =>
       localAppRequest<CloudWorkspace>("cloud.workspace", {
         refreshRemote: true,
       }),
-    onSuccess: (data) => client.setQueryData(cloudKey, data),
+    onSuccess: (data, silent) => {
+      client.setQueryData(cloudKey, data);
+      if (!silent) toast("success", "班级已刷新");
+    },
+    onError: (error: Error) => toast("error", `刷新班级失败：${error.message}`),
   });
   const sync = useMutation({
     mutationFn: () =>
       localAppRequest<{ uploaded: number; downloaded: number }>("cloud.sync"),
-    onSuccess: () => void client.invalidateQueries({ queryKey: cloudKey }),
+    onSuccess: (value) => {
+      void client.invalidateQueries({ queryKey: cloudKey });
+      toast("success", `同步完成：上传 ${value.uploaded} 项，下载 ${value.downloaded} 项`);
+    },
+    onError: (error: Error) => toast("error", `同步失败：${error.message}`),
   });
   const logout = useMutation({
     mutationFn: () => localAppRequest("account.logout"),
@@ -904,18 +923,19 @@ export function CloudPage() {
       await client.invalidateQueries({ queryKey: ["session", "current"] });
       await client.invalidateQueries({ queryKey: cloudKey });
     },
+    onError: (error: Error) => toast("error", `退出登录失败：${error.message}`),
   });
   const createClass = useMutation({
     mutationFn: () =>
-      localAppRequest("cloud.class.create", { name: className }),
-    onSuccess: async () => {
+      localAppRequest<{ classroom: { id: string } }>("cloud.class.create", {
+        name: className,
+      }),
+    onSuccess: (value) => {
       setClassName("");
-      toast("success", `班级「${className}」已创建`);
-      const refreshed = await localAppRequest<CloudWorkspace>(
-        "cloud.workspace",
-        { refreshRemote: true },
-      );
-      client.setQueryData(cloudKey, refreshed);
+      setClassroomId(value.classroom.id);
+      loadAssignments.mutate(value.classroom.id);
+      toast("success", `班级「${className}」已创建，已自动选中，可在下方添加成员与任务`);
+      refresh.mutate(true);
     },
     onError: (error: Error) => toast("error", `班级创建失败：${error.message}`),
   });
@@ -926,11 +946,20 @@ export function CloudPage() {
     enabled: Boolean(query.data?.signedIn),
   });
   const loadAssignments = useMutation({
-    mutationFn: (id: string) =>
-      localAppRequest<{ items: CloudAssignment[] }>("cloud.assignments", {
-        classroomId: id,
-      }),
-    onSuccess: (value) => setAssignments(value.items),
+    // 请求发出时记下目标班级；响应返回时若已切换班级则丢弃，防止旧响应覆盖新班级。
+    mutationFn: async (id: string) => {
+      const value = await localAppRequest<{ items: CloudAssignment[] }>(
+        "cloud.assignments",
+        { classroomId: id },
+      );
+      return { value, requestedClassroomId: id };
+    },
+    onSuccess: ({ value, requestedClassroomId }) => {
+      if (requestedClassroomId !== classroomIdRef.current) return;
+      setAssignments(value.items);
+    },
+    onError: (error: Error) =>
+      toast("error", `加载班级任务失败：${error.message}`),
   });
   const addMember = useMutation({
     mutationFn: () =>
@@ -1009,6 +1038,8 @@ export function CloudPage() {
         classroomId,
       }),
     onSuccess: setAnalyticsResult,
+    onError: (error: Error) =>
+      toast("error", `班级分析失败：${error.message}`),
   });
   const assignmentAnalytics = useMutation({
     mutationFn: (assignmentId: string) =>
@@ -1020,21 +1051,30 @@ export function CloudPage() {
         to: analyticsTo ? new Date(analyticsTo).toISOString() : "",
       }),
     onSuccess: setAnalyticsResult,
+    onError: (error: Error) =>
+      toast("error", `作业分析失败：${error.message}`),
   });
   const loadFeedback = useMutation({
-    mutationFn: (assignmentId: string) =>
-      localAppRequest<{ items: SubmissionFeedback[]; cached: boolean }>(
-        "cloud.feedback.list",
-        {
-          classroomId,
-          assignmentId,
-          refreshRemote: true,
-        },
-      ),
-    onSuccess: (value, assignmentId) => {
+    // 与 loadAssignments 相同：请求时快照班级，返回时班级已切换则丢弃。
+    mutationFn: async (assignmentId: string) => {
+      const requestedClassroomId = classroomIdRef.current;
+      const value = await localAppRequest<{
+        items: SubmissionFeedback[];
+        cached: boolean;
+      }>("cloud.feedback.list", {
+        classroomId: requestedClassroomId,
+        assignmentId,
+        refreshRemote: true,
+      });
+      return { value, requestedClassroomId };
+    },
+    onSuccess: ({ value, requestedClassroomId }, assignmentId) => {
+      if (requestedClassroomId !== classroomIdRef.current) return;
       setFeedbackAssignmentId(assignmentId);
       setFeedbackItems(value.items);
     },
+    onError: (error: Error) =>
+      toast("error", `加载提交反馈失败：${error.message}`),
   });
   const saveFeedback = useMutation({
     mutationFn: (item: SubmissionFeedback) =>
@@ -1061,20 +1101,31 @@ export function CloudPage() {
     onError: (error: Error) => toast("error", `反馈保存失败：${error.message}`),
   });
   const loadMastery = useMutation({
-    mutationFn: () =>
-      localAppRequest<{ items: KnowledgeMastery[]; cached: boolean }>(
-        "cloud.mastery",
-        {
-          classroomId,
-          refreshRemote: true,
-        },
-      ),
-    onSuccess: (value) => setMasteryItems(value.items),
+    // 与 loadAssignments 相同：请求时快照班级，返回时班级已切换则丢弃。
+    mutationFn: async () => {
+      const requestedClassroomId = classroomIdRef.current;
+      const value = await localAppRequest<{
+        items: KnowledgeMastery[];
+        cached: boolean;
+      }>("cloud.mastery", {
+        classroomId: requestedClassroomId,
+        refreshRemote: true,
+      });
+      return { value, requestedClassroomId };
+    },
+    onSuccess: ({ value, requestedClassroomId }) => {
+      if (requestedClassroomId !== classroomIdRef.current) return;
+      setMasteryItems(value.items);
+    },
+    onError: (error: Error) =>
+      toast("error", `加载掌握度失败：${error.message}`),
   });
   const loadPortfolio = useMutation({
     mutationFn: () =>
       localAppRequest<{ items: PortfolioEntry[] }>("learning.portfolio"),
     onSuccess: (value) => setPortfolioItems(value.items),
+    onError: (error: Error) =>
+      toast("error", `加载作品集失败：${error.message}`),
   });
   const exportPortfolio = useMutation({
     mutationFn: () =>
@@ -1083,6 +1134,8 @@ export function CloudPage() {
       }),
     onSuccess: (value) =>
       downloadText("sqlteacher-portfolio.json", value.content),
+    onError: (error: Error) =>
+      toast("error", `导出作品集失败：${error.message}`),
   });
   const loadCourses = useMutation({
     mutationFn: () =>
@@ -1094,6 +1147,7 @@ export function CloudPage() {
       setCourses(value.items);
       if (!courseId && value.items[0]) setCourseId(value.items[0].id);
     },
+    onError: (error: Error) => toast("error", `刷新课程失败：${error.message}`),
   });
   const createCourse = useMutation({
     mutationFn: () =>
@@ -1105,8 +1159,10 @@ export function CloudPage() {
       setCourseName("");
       setCourseDescription("");
       setCourseId(value.id);
+      toast("success", `课程「${value.name}」已创建`);
       loadCourses.mutate();
     },
+    onError: (error: Error) => toast("error", `课程创建失败：${error.message}`),
   });
   const loadCourseContent = useMutation({
     mutationFn: () =>
@@ -1119,6 +1175,7 @@ export function CloudPage() {
       if (!knowledgeSectionId && value.sections[0])
         setKnowledgeSectionId(value.sections[0].id);
     },
+    onError: (error: Error) => toast("error", `打开课程失败：${error.message}`),
   });
   const createSection = useMutation({
     mutationFn: () =>
@@ -1128,9 +1185,11 @@ export function CloudPage() {
         sortOrder: courseContent?.sections.length ?? 0,
       }),
     onSuccess: () => {
+      toast("success", `章节「${sectionName}」已添加`);
       setSectionName("");
       loadCourseContent.mutate();
     },
+    onError: (error: Error) => toast("error", `章节添加失败：${error.message}`),
   });
   const createKnowledgePoint = useMutation({
     mutationFn: () =>
@@ -1142,10 +1201,13 @@ export function CloudPage() {
         sortOrder: courseContent?.knowledgePoints.length ?? 0,
       }),
     onSuccess: () => {
+      toast("success", `知识点「${knowledgeName}」已添加`);
       setKnowledgeName("");
       setKnowledgeDescription("");
       loadCourseContent.mutate();
     },
+    onError: (error: Error) =>
+      toast("error", `知识点添加失败：${error.message}`),
   });
   const publishSharedExercise = useMutation({
     mutationFn: async () => {
@@ -1165,7 +1227,11 @@ export function CloudPage() {
           : [],
       });
     },
-    onSuccess: () => loadCourseContent.mutate(),
+    onSuccess: () => {
+      toast("success", "本地题目已发布到共享课程");
+      loadCourseContent.mutate();
+    },
+    onError: (error: Error) => toast("error", `题目发布失败：${error.message}`),
   });
   const createVersionedAssignment = useMutation({
     mutationFn: (exerciseVersionId: string) =>
@@ -1179,13 +1245,18 @@ export function CloudPage() {
         description: assignmentDescription,
         dueAt: assignmentDueAt ? new Date(assignmentDueAt).toISOString() : "",
       }),
-    onSuccess: () => loadAssignments.mutate(classroomId),
+    onSuccess: () => {
+      loadAssignments.mutate(classroomId);
+      toast("success", "版本化任务已创建");
+    },
+    onError: (error: Error) => toast("error", `任务创建失败：${error.message}`),
   });
   const exportCourse = useMutation({
     mutationFn: () =>
       localAppRequest<{ content: string }>("cloud.course.export", { courseId }),
     onSuccess: (value) =>
       downloadText(`sqlteacher-course-${courseId}.json`, value.content),
+    onError: (error: Error) => toast("error", `课程导出失败：${error.message}`),
   });
   const previewCoursePackage = useMutation({
     mutationFn: () =>
@@ -1193,6 +1264,8 @@ export function CloudPage() {
         content: coursePackage,
       }),
     onSuccess: setPackagePreview,
+    onError: (error: Error) =>
+      toast("error", `课程包解析失败：${error.message}`),
   });
   const importCoursePackage = useMutation({
     mutationFn: () =>
@@ -1204,8 +1277,11 @@ export function CloudPage() {
     onSuccess: () => {
       setCoursePackage("");
       setPackagePreview(undefined);
+      toast("success", "课程包已导入");
       loadCourses.mutate();
     },
+    onError: (error: Error) =>
+      toast("error", `课程包导入失败：${error.message}`),
   });
   const exportClassAnalytics = useMutation({
     mutationFn: () =>
@@ -1214,6 +1290,8 @@ export function CloudPage() {
       }),
     onSuccess: (value) =>
       downloadText(`class-${classroomId}-analytics.csv`, value.csv),
+    onError: (error: Error) =>
+      toast("error", `班级分析导出失败：${error.message}`),
   });
   const exportAssignmentAnalytics = useMutation({
     mutationFn: (assignmentId: string) =>
@@ -1226,16 +1304,22 @@ export function CloudPage() {
       }),
     onSuccess: (value, assignmentId) =>
       downloadText(`assignment-${assignmentId}-analytics.csv`, value.csv),
+    onError: (error: Error) =>
+      toast("error", `作业分析导出失败：${error.message}`),
   });
   const loadSessions = useMutation({
     mutationFn: () =>
       localAppRequest<{ items: ActiveSession[] }>("account.sessions"),
     onSuccess: (value) => setSessions(value.items),
+    onError: (error: Error) =>
+      toast("error", `加载会话失败：${error.message}`),
   });
   const revokeSession = useMutation({
     mutationFn: (sessionId: string) =>
       localAppRequest("account.session.revoke", { sessionId }),
     onSuccess: () => loadSessions.mutate(),
+    onError: (error: Error) =>
+      toast("error", `撤销会话失败：${error.message}`),
   });
   const changePassword = useMutation({
     mutationFn: () =>
@@ -1263,12 +1347,16 @@ export function CloudPage() {
       setExportTaskId(id);
       setAccountMessage(`数据导出任务已创建：${id || "请稍后刷新"}`);
     },
+    onError: (error: Error) =>
+      toast("error", `数据导出申请失败：${error.message}`),
   });
   const getExport = useMutation({
     mutationFn: () =>
       localAppRequest<unknown>("account.export.get", { taskId: exportTaskId }),
     onSuccess: (value) =>
       downloadJson(`sqlteacher-account-export-${exportTaskId}.json`, value),
+    onError: (error: Error) =>
+      toast("error", `获取导出结果失败：${error.message}`),
   });
   const requestDeletion = useMutation({
     mutationFn: () =>
@@ -1277,16 +1365,22 @@ export function CloudPage() {
       setAccountMessage(
         `账号删除已进入撤销期：${String(value.status ?? "PENDING")}`,
       ),
+    onError: (error: Error) =>
+      toast("error", `账号删除申请失败：${error.message}`),
   });
   const cancelDeletion = useMutation({
     mutationFn: () => localAppRequest("account.deletion.cancel"),
     onSuccess: () => setAccountMessage("账号删除已取消。"),
+    onError: (error: Error) =>
+      toast("error", `取消账号删除失败：${error.message}`),
   });
   const deletionStatus = useMutation({
     mutationFn: () =>
       localAppRequest<Record<string, unknown>>("account.deletion.status"),
     onSuccess: (value) =>
       setAccountMessage(`账号删除状态：${String(value.status ?? "NONE")}`),
+    onError: (error: Error) =>
+      toast("error", `查询删除状态失败：${error.message}`),
   });
   useEffect(() => {
     if (!classroomId && query.data?.classes[0]) {
@@ -1321,6 +1415,9 @@ export function CloudPage() {
         </div>
       </section>
     );
+  const selectedClassName = data.classes.find(
+    (item) => item.id === classroomId,
+  )?.name;
   return (
     <div className="platform-workspace page-grid">
       <section className="hero-card">
@@ -1333,7 +1430,7 @@ export function CloudPage() {
           <Button
             variant="secondary"
             busy={refresh.isPending}
-            onClick={() => refresh.mutate()}
+            onClick={() => refresh.mutate(false)}
           >
             刷新班级
           </Button>
@@ -1384,14 +1481,22 @@ export function CloudPage() {
           )}
         </div>
         {data.classes.length === 0 ? (
-          <p className="muted">尚未从云端刷新班级。</p>
+          <p className="muted">
+            {data.role === "TEACHER" || data.role === "ADMINISTRATOR"
+              ? "尚无班级。输入班级名称点击「创建班级」，或点击「刷新班级」同步云端班级。"
+              : "尚无班级，教师将你加入班级后即可在此显示。"}
+          </p>
         ) : (
           <ul className="plain-list">
             {data.classes.map((item) => (
-              <li key={item.id}>
+              <li
+                key={item.id}
+                className={item.id === classroomId ? "selected" : ""}
+              >
                 <button
                   type="button"
                   className="table-link"
+                  aria-current={item.id === classroomId ? "true" : undefined}
                   onClick={() => {
                     setClassroomId(item.id);
                     loadAssignments.mutate(item.id);
@@ -1408,7 +1513,10 @@ export function CloudPage() {
       {classroomId && (
         <section className="content-card class-assignments">
           <div className="section-heading">
-            <h2>班级任务</h2>
+            <h2>
+              班级任务
+              {selectedClassName ? `：${selectedClassName}` : ""}
+            </h2>
             <span className="policy-chip">{assignments.length} 项</span>
           </div>
           {(data.role === "TEACHER" || data.role === "ADMINISTRATOR") && (
@@ -2258,6 +2366,7 @@ type SettingsDraft = SettingsPreferences["general"] & {
 
 export function SettingsPage() {
   const client = useQueryClient();
+  const toast = useToast();
   const query = useQuery({
     queryKey: settingsKey,
     queryFn: () => localAppRequest<SettingsPreferences>("settings.preferences"),
@@ -2326,6 +2435,7 @@ export function SettingsPage() {
       if (query.data?.general.language !== value.language)
         window.location.reload();
     },
+    onError: (error: Error) => toast("error", `设置保存失败：${error.message}`),
   });
   const install = useMutation({
     mutationFn: (componentId: string) =>
@@ -2340,10 +2450,14 @@ export function SettingsPage() {
     mutationFn: () =>
       localAppRequest<{ items: BackupSnapshot[] }>("settings.backups"),
     onSuccess: (value) => setBackups(value.items),
+    onError: (error: Error) =>
+      toast("error", `加载备份列表失败：${error.message}`),
   });
   const createBackup = useMutation({
     mutationFn: () => localAppRequest<BackupSnapshot>("settings.backup.create"),
     onSuccess: () => loadBackups.mutate(),
+    onError: (error: Error) =>
+      toast("error", `创建备份失败：${error.message}`),
   });
   const restoreBackup = useMutation({
     mutationFn: () =>
@@ -2351,27 +2465,38 @@ export function SettingsPage() {
         backupId: restoreTarget?.id,
       }),
     onSuccess: () => setRestoreTarget(undefined),
+    onError: (error: Error) =>
+      toast("error", `恢复备份失败，当前数据未被替换：${error.message}`),
   });
   const restoreDemo = useMutation({
     mutationFn: () => localAppRequest("settings.demo.restore"),
+    onError: (error: Error) =>
+      toast("error", `恢复演示数据库失败：${error.message}`),
   });
   const resetLearning = useMutation({
     mutationFn: () =>
       localAppRequest("settings.learning.reset", { confirmation: resetPhrase }),
     onSuccess: () => setResetPhrase(""),
+    onError: (error: Error) =>
+      toast("error", `清空学习数据失败：${error.message}`),
   });
   const clearCache = useMutation({
     mutationFn: () =>
       localAppRequest<{ clearedBytes: number }>("settings.cache.clear"),
+    onError: (error: Error) =>
+      toast("error", `清理缓存失败：${error.message}`),
   });
   const checkUpdate = useMutation({
     mutationFn: () => localAppRequest<UpdateCheck>("settings.update.check"),
     onSuccess: setUpdateResult,
+    onError: (error: Error) =>
+      toast("error", `检查更新失败：${error.message}`),
   });
   const loadHelp = useMutation({
     mutationFn: (topicId: string) =>
       localAppRequest<{ content: string }>("settings.help", { topicId }),
     onSuccess: (value) => setHelpContent(value.content),
+    onError: (error: Error) => toast("error", `加载帮助失败：${error.message}`),
   });
   if (query.isPending || !draft) return <Loading label="正在读取设置" />;
   if (query.isError)
@@ -2795,9 +2920,13 @@ export function SettingsPage() {
               <Button
                 variant="secondary"
                 onClick={() =>
-                  localAppRequest("settings.notifications.read").then(() =>
-                    client.invalidateQueries({ queryKey: settingsKey }),
-                  )
+                  localAppRequest("settings.notifications.read")
+                    .then(() =>
+                      client.invalidateQueries({ queryKey: settingsKey }),
+                    )
+                    .catch((error: Error) =>
+                      toast("error", `标记已读失败：${error.message}`),
+                    )
                 }
               >
                 全部标为已读

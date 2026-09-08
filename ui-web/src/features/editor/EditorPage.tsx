@@ -921,6 +921,11 @@ function ExerciseFlow() {
         {preview.data && !session && (
           <section className="content-card preview-card">
             <p className="eyebrow">作答前预览</p>
+            {assignmentContext && assignmentSnapshot.isError && (
+              <p className="muted">
+                任务快照不可用，正在显示本地预览，不影响作答与提交。
+              </p>
+            )}
             <h2>{assignmentSnapshot.data?.title ?? preview.data.title}</h2>
             <p>{assignmentSnapshot.data?.prompt ?? preview.data.description}</p>
             {assignmentSnapshot.data && (
@@ -1263,9 +1268,11 @@ function RunnerFlow() {
         </label>
         <footer className="editor-actions">
           <span>
-            {capability?.available
-              ? "工具链可用"
-              : (capability?.reasonCode ?? "正在探测")}{" "}
+            {capabilities.isError
+              ? `探测失败：${capabilities.error.message}`
+              : capability?.available
+                ? "工具链可用"
+                : (capability?.reasonCode ?? "正在探测")}{" "}
             · 源码上限 256 KiB · 输出上限 64 KiB
           </span>
           {run.isPending && requestId && (
@@ -1363,14 +1370,20 @@ function CodeEditor({
 }) {
   // 渲染时刷新模块级 schema 槽位，补全始终拿到当前练习的结构。
   practiceEditorSchema = schema;
+  // 快捷键命令只在挂载时注册一次；用 ref 持有最新回调，命令触发时再解引用。
+  // 否则 Ctrl+Enter 提交的是挂载帧的旧代码，F1 也会绕过提示按钮当前的禁用状态。
+  const callbacks = useRef({ onRun, onSubmit, onHint });
+  callbacks.current = { onRun, onSubmit, onHint };
   const mount: OnMount = (editor, api) => {
-    editor.addCommand(api.KeyMod.CtrlCmd | api.KeyCode.Enter, onRun);
-    if (onSubmit)
-      editor.addCommand(
-        api.KeyMod.CtrlCmd | api.KeyMod.Shift | api.KeyCode.Enter,
-        onSubmit,
-      );
-    if (onHint) editor.addCommand(api.KeyCode.F1, onHint);
+    editor.addCommand(
+      api.KeyMod.CtrlCmd | api.KeyCode.Enter,
+      () => callbacks.current.onRun(),
+    );
+    editor.addCommand(
+      api.KeyMod.CtrlCmd | api.KeyMod.Shift | api.KeyCode.Enter,
+      () => callbacks.current.onSubmit?.(),
+    );
+    editor.addCommand(api.KeyCode.F1, () => callbacks.current.onHint?.());
     const model = editor.getModel();
     if (!model) return;
     // 256 KiB 超限警告跟随内容变化；只在挂载时算一次会永远过期。

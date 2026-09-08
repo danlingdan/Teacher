@@ -1861,6 +1861,10 @@ kbd {
 .parity-list li .policy-chip {
   margin-left: auto;
 }
+.plain-list li.selected {
+  border-color: var(--teal);
+  background: var(--teal-soft);
+}
 .parity-list li div {
   display: grid;
   gap: 2px;

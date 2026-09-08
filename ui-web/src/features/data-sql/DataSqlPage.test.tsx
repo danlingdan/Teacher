@@ -34,6 +34,20 @@ const dialectItems = {
   ],
 };
 
+const preferences = {
+  role: "STUDENT",
+  developerMode: false,
+  canMaintainLocalData: true,
+  secretsExposed: false,
+  general: {
+    automaticUpdateChecks: true, skippedVersion: "", proxyMode: "SYSTEM", proxyHost: "", proxyPort: 0,
+    reducedMotion: false, highContrast: false, supportLogging: false, supportLoggingExpiresAt: 0,
+    updateMirrorsEnabled: false, language: "zh", nativeNotificationsEnabled: true, meteredNetwork: false,
+    theme: "system", font: "modern", density: "comfortable",
+  },
+  notifications: [], tasks: [], helpTopics: [],
+};
+
 function renderPage() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
@@ -164,5 +178,46 @@ describe("DataSqlPage connection manager", () => {
 
     expect(await screen.findAllByText(/连接失败，请检查数据库地址/)).not.toHaveLength(0);
     expect(requestMock).not.toHaveBeenCalledWith("data.connection.save", expect.anything());
+  });
+
+  it("does not prompt for an SQL safety mode when the backend reports no first-run state", async () => {
+    // 默认 mock 没有 settings.preferences（旧版后端/字段缺失）——不弹选择框。
+    renderPage();
+
+    await screen.findByText("管理连接");
+    expect(screen.queryByText("选择 SQL 安全模式")).not.toBeInTheDocument();
+    expect(requestMock).not.toHaveBeenCalledWith("settings.update", expect.anything());
+  });
+
+  it("prompts first-run users to choose an SQL safety mode and persists the choice", async () => {
+    requestMock.mockImplementation((method: string) => {
+      if (method === "data.connections") return Promise.resolve({ items: [] });
+      if (method === "data.connection.dialects") return Promise.resolve(dialectItems);
+      if (method === "settings.preferences") {
+        return Promise.resolve({ ...preferences, developerModeExplicit: false });
+      }
+      if (method === "settings.update") return Promise.resolve({});
+      throw new Error(`Unexpected request: ${method}`);
+    });
+    renderPage();
+
+    expect(await screen.findByText("选择 SQL 安全模式")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /开发者模式/ }));
+
+    // 写入 developerMode 布尔值，且携带既有 general 偏好一起提交。
+    await waitFor(() =>
+      expect(requestMock).toHaveBeenCalledWith(
+        "settings.update",
+        expect.objectContaining({ developerMode: true, language: "zh", theme: "system" }),
+      ),
+    );
+    // 选择完成后选择框关闭，且不会因刷新回来的旧载荷再次弹出。
+    await waitFor(() =>
+      expect(screen.queryByText("选择 SQL 安全模式")).not.toBeInTheDocument(),
+    );
+    expect(
+      screen.queryByRole("button", { name: /教学模式（推荐）/ }),
+    ).not.toBeInTheDocument();
   });
 });

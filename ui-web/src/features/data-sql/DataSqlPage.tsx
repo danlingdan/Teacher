@@ -6,7 +6,7 @@ import "monaco-editor/languages/definitions/sql/register";
 import { useEffect, useState } from "react";
 import { Button, Dialog, Feedback, FormField, useToast } from "../../shared/ui";
 import { cancelLocalAppRequest, localAppRequest, localAppRequestWithId } from "../../shared/ipc";
-import type { AiContextPreview, ConnectionDialectOption, ConnectionSummary, ConnectionTestResult, DatabaseTable, Nl2SqlSafetyResult, SqlHistoryItem, SqlPage, SqlRisk } from "../../shared/types";
+import type { AiContextPreview, ConnectionDialectOption, ConnectionSummary, ConnectionTestResult, DatabaseTable, Nl2SqlSafetyResult, SettingsPreferences, SqlHistoryItem, SqlPage, SqlRisk } from "../../shared/types";
 
 self.MonacoEnvironment = { getWorker: () => new EditorWorker() };
 loader.config({ monaco });
@@ -44,9 +44,30 @@ export default function DataSqlPage() {
   const [sql, setSql] = useState(initialSql);
   useEffect(() => { if (!connectionId && connections.data?.items.length) setConnectionId((connections.data.items.find(item => item.selected) ?? connections.data.items[0]).id); }, [connectionId, connections.data]);
   const schema = useQuery({ queryKey: ["data", "schema", connectionId], queryFn: () => localAppRequest<{ tables: DatabaseTable[] }>("data.schema", { connectionId }), enabled: Boolean(connectionId) });
+  // 首次运行选择 SQL 安全模式：后端明确返回 developerModeExplicit=false 时弹一次选择框。
+  // 旧版后端没有该字段（undefined），视为已选择，不弹框，保持向前兼容。
+  const settings = useQuery({ queryKey: ["settings", "preferences"], queryFn: () => localAppRequest<SettingsPreferences>("settings.preferences"), staleTime: 30_000 });
+  const [modeDialogDismissed, setModeDialogDismissed] = useState(false);
+  const sqlModeOpen = Boolean(settings.data) && settings.data?.developerModeExplicit === false && !modeDialogDismissed;
+  const chooseSqlMode = useMutation({
+    mutationFn: (developerMode: boolean) => localAppRequest("settings.update", { ...settings.data?.general, developerMode }),
+    onSuccess: (_value, chosenDeveloperMode) => {
+      // 立即写回缓存，后端尚未上线 developerModeExplicit 时也不会重复弹框。
+      if (settings.data) client.setQueryData<SettingsPreferences>(["settings", "preferences"], { ...settings.data, developerMode: chosenDeveloperMode, developerModeExplicit: true });
+      setModeDialogDismissed(true);
+      void client.invalidateQueries({ queryKey: ["settings", "preferences"] });
+    },
+  });
   return <div className="data-workspace">
     <aside className="content-card schema-panel"><p className="eyebrow">数据库连接</p><select aria-label="数据库连接" value={connectionId} onChange={event => setConnectionId(event.target.value)}>{connections.data?.items.map(item => <option key={item.id} value={item.id}>{item.displayName} · {dialectLabel(dialectOptions, item.dialect)}{item.readOnly ? " · 只读" : ""}</option>)}</select><ConnectionManager items={connections.data?.items ?? []} selectedId={connectionId} dialectOptions={dialectOptions} onSelected={id => { setConnectionId(id); void client.invalidateQueries({ queryKey: ["data", "connections"] }); }} /><div className="schema-tree">{schema.data?.tables.map(table => <details key={table.name} open><summary>{table.name}</summary><ul>{table.columns.map(column => <li key={column.name}><strong>{column.name}</strong><span>{column.typeName}{column.primaryKey ? " · PK" : ""}{column.nullable ? "" : " · NOT NULL"}</span></li>)}</ul></details>)}</div>{schema.isError && <Feedback tone="error" title="结构读取失败">{schema.error.message}</Feedback>}</aside>
     <main className="data-main"><SqlWorkbench connectionId={connectionId} tables={schema.data?.tables ?? []} sql={sql} onSqlChange={setSql} /><AiAssistant connectionId={connectionId} onDraft={setSql} /></main>
+    <Dialog open={sqlModeOpen} title="选择 SQL 安全模式" onClose={() => setModeDialogDismissed(true)}>
+      <p>决定写操作（INSERT、UPDATE、DELETE、CREATE 等）是否需要逐条确认。安全边界由 Java 强制执行，之后可在「设置」中更改。</p>
+      <div className="button-row">
+        <Button onClick={() => chooseSqlMode.mutate(false)}>教学模式（推荐）：写操作需逐条确认</Button>
+        <Button variant="secondary" onClick={() => chooseSqlMode.mutate(true)}>开发者模式：INSERT/CREATE 免确认，DROP 等仍需确认</Button>
+      </div>
+    </Dialog>
   </div>;
 }
 

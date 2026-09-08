@@ -203,17 +203,27 @@ export default function KnowledgePage() {
         </FormField>
         {query.trim().length >= 2 && (
           <div className="search-results" aria-live="polite">
-            {search.data?.items.map((item) => (
-              <button
-                type="button"
-                disabled={!item.articleId}
-                key={`${item.documentId}-${item.chunkIndex}`}
-                onClick={() => setSelectedId(item.articleId)}
-              >
-                <strong>{item.title}</strong>
-                <span>{item.snippet}</span>
-              </button>
-            ))}
+            {search.isFetching ? (
+              <p className="muted">正在检索课程知识…</p>
+            ) : search.isError ? (
+              <Feedback tone="error" title="检索失败">
+                {search.error.message}
+              </Feedback>
+            ) : !search.data || search.data.items.length === 0 ? (
+              <p className="muted">无匹配结果。</p>
+            ) : (
+              search.data.items.map((item) => (
+                <button
+                  type="button"
+                  disabled={!item.articleId}
+                  key={`${item.documentId}-${item.chunkIndex}`}
+                  onClick={() => setSelectedId(item.articleId)}
+                >
+                  <strong>{item.title}</strong>
+                  <span>{item.snippet}</span>
+                </button>
+              ))
+            )}
           </div>
         )}
         <div className="course-tree">

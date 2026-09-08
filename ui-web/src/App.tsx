@@ -106,6 +106,7 @@ export default function App() {
 }
 
 function AppEffects() {
+  const queryClient = useQueryClient();
   const appearance = useQuery({
     queryKey: ["settings", "preferences"],
     queryFn: () => localAppRequest<SettingsPreferences>("settings.preferences"),
@@ -157,9 +158,15 @@ function AppEffects() {
     const data = appearance.data;
     if (!data?.general.nativeNotificationsEnabled) return;
     void deliverNativeNotifications(data.notifications).then((delivered) => {
-      if (delivered > 0) void localAppRequest("settings.notifications.read");
+      if (delivered > 0)
+        void localAppRequest("settings.notifications.read").then(() =>
+          // 已读状态在后端偏好里，必须失效缓存让通知徽标与列表立即更新。
+          void queryClient.invalidateQueries({
+            queryKey: ["settings", "preferences"],
+          }),
+        );
     });
-  }, [appearance.data]);
+  }, [appearance.data, queryClient]);
   return null;
 }
 
