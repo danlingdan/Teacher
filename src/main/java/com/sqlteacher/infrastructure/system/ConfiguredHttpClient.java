@@ -2,6 +2,7 @@ package com.sqlteacher.infrastructure.system;
 
 import com.sqlteacher.application.system.GeneralSoftwareService;
 import com.sqlteacher.application.system.GeneralSoftwareSettings;
+import com.sqlteacher.infrastructure.support.HttpClients;
 
 import java.net.InetSocketAddress;
 import java.net.ProxySelector;
@@ -13,7 +14,7 @@ public final class ConfiguredHttpClient {
     private ConfiguredHttpClient() { }
 
     public static HttpClient create(GeneralSoftwareService service, HttpClient.Redirect redirects) {
-        HttpClient.Builder builder = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(8)).followRedirects(redirects);
+        HttpClient.Builder builder = HttpClients.newBuilder(Duration.ofSeconds(8)).followRedirects(redirects);
         GeneralSoftwareSettings settings = service.settings();
         if (settings.proxyMode() == GeneralSoftwareSettings.ProxyMode.SYSTEM) builder.proxy(ProxySelector.getDefault());
         if (settings.proxyMode() == GeneralSoftwareSettings.ProxyMode.MANUAL) {

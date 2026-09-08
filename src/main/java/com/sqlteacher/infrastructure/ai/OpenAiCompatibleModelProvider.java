@@ -6,6 +6,7 @@ import com.sqlteacher.application.ai.AiCompletionRequest;
 import com.sqlteacher.application.ai.AiCompletionResult;
 import com.sqlteacher.application.ai.AiModelProvider;
 import com.sqlteacher.application.ai.OpenAiCompatibleConfiguration;
+import com.sqlteacher.infrastructure.support.HttpClients;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -24,7 +25,7 @@ import java.util.List;
 import java.util.Objects;
 
 /** OpenAI Chat Completions compatible provider. Never logs the supplied API key. */
-public final class OpenAiCompatibleModelProvider implements AiModelProvider {
+public final class OpenAiCompatibleModelProvider implements AiModelProvider, AutoCloseable {
     private static final Logger log = LoggerFactory.getLogger(OpenAiCompatibleModelProvider.class);
     private static final int MAX_RESPONSE_BYTES = 1_000_000;
 
@@ -34,7 +35,7 @@ public final class OpenAiCompatibleModelProvider implements AiModelProvider {
 
     public OpenAiCompatibleModelProvider(OpenAiCompatibleConfiguration configuration) {
         this.configuration = Objects.requireNonNull(configuration, "configuration must not be null");
-        this.httpClient = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
+        this.httpClient = HttpClients.create(Duration.ofSeconds(10));
     }
 
     @Override
@@ -81,6 +82,12 @@ public final class OpenAiCompatibleModelProvider implements AiModelProvider {
         } finally {
             Arrays.fill(key, '\0');
         }
+    }
+
+    /** Releases the connection pool of the underlying HTTP client; safe to call once. */
+    @Override
+    public void close() {
+        httpClient.close();
     }
 
     static URI chatCompletionsEndpoint(URI configuredEndpoint) {

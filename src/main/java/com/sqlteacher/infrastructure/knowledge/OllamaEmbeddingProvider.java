@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sqlteacher.application.config.AiConfiguration;
 import com.sqlteacher.application.knowledge.EmbeddingProvider;
 import com.sqlteacher.domain.SqlTeacherException;
+import com.sqlteacher.infrastructure.support.HttpClients;
 
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -23,7 +24,7 @@ public final class OllamaEmbeddingProvider implements EmbeddingProvider {
     private final ObjectMapper mapper;
 
     public OllamaEmbeddingProvider(AiConfiguration configuration, String model) {
-        this(configuration, model, HttpClient.newBuilder().connectTimeout(configuration.healthTimeout()).build(), new ObjectMapper());
+        this(configuration, model, HttpClients.create(configuration.healthTimeout()), new ObjectMapper());
     }
 
     OllamaEmbeddingProvider(AiConfiguration configuration, String model, HttpClient client, ObjectMapper mapper) {

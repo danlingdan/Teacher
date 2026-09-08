@@ -6,6 +6,7 @@ import com.sqlteacher.application.ai.AiStatus;
 import com.sqlteacher.application.ai.AiAvailability;
 import com.sqlteacher.application.ai.AiStatusService;
 import com.sqlteacher.application.config.AiConfiguration;
+import com.sqlteacher.infrastructure.support.HttpClients;
 
 import java.io.IOException;
 import java.net.http.HttpClient;
@@ -19,9 +20,7 @@ public final class OllamaAiStatusService implements AiStatusService {
 
     public OllamaAiStatusService(AiConfiguration properties) {
         this.properties = properties;
-        this.httpClient = HttpClient.newBuilder()
-            .connectTimeout(properties.healthTimeout())
-            .build();
+        this.httpClient = HttpClients.create(properties.healthTimeout());
         this.objectMapper = new ObjectMapper();
     }
 

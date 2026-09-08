@@ -3,6 +3,7 @@ package com.sqlteacher.infrastructure.cloud;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sqlteacher.application.collaboration.CloudApiClient;
+import com.sqlteacher.application.collaboration.CloudApiRequestException;
 import com.sqlteacher.application.collaboration.CloudLearningSyncService;
 import com.sqlteacher.application.collaboration.CloudSessionService;
 import com.sqlteacher.application.collaboration.CloudSyncItem;
@@ -227,6 +228,11 @@ public final class DefaultCloudLearningSyncService implements CloudLearningSyncS
 
     private static String classify(RuntimeException error) {
         if (error == null) return "SYNC_UNKNOWN";
+        if (error instanceof CloudApiRequestException request
+                && (request.statusCode() == 401 || request.statusCode() == 403)) {
+            return "SYNC_AUTH";
+        }
+        // Fallback for errors that carry the status only in their message text.
         String message = error.getMessage() == null ? "" : error.getMessage();
         if (message.contains("HTTP 401") || message.contains("HTTP 403")) return "SYNC_AUTH";
         if (message.contains("invalid")) return "SYNC_DATA";

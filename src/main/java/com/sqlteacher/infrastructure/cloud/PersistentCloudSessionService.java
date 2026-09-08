@@ -1,5 +1,6 @@
 package com.sqlteacher.infrastructure.cloud;
 
+import com.sqlteacher.application.collaboration.CloudApiRequestException;
 import com.sqlteacher.application.collaboration.CloudAuthenticationService;
 import com.sqlteacher.application.collaboration.CloudApiClient;
 import com.sqlteacher.application.collaboration.CloudSessionService;
@@ -40,12 +41,21 @@ public final class PersistentCloudSessionService implements CloudSessionService 
             signIn(api.refresh(session.refreshToken()));
             return Optional.of(session);
         } catch (RuntimeException error) {
-            String message = error.getMessage() == null ? "" : error.getMessage();
-            if (message.contains("HTTP 401") || message.contains("HTTP 403")) {
+            if (isSessionRejected(error)) {
                 signOut();
             }
             return Optional.empty();
         }
+    }
+
+    /** A rejected refresh must clear the stored session; string matching stays only as a fallback. */
+    private static boolean isSessionRejected(RuntimeException error) {
+        if (error instanceof CloudApiRequestException request
+                && (request.statusCode() == 401 || request.statusCode() == 403)) {
+            return true;
+        }
+        String message = error.getMessage() == null ? "" : error.getMessage();
+        return message.contains("HTTP 401") || message.contains("HTTP 403");
     }
 
     @Override

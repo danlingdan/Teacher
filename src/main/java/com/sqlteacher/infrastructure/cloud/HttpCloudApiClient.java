@@ -51,6 +51,7 @@ import com.sqlteacher.application.planning.StudyPlanActionStateRecord;
 import com.sqlteacher.application.planning.ObjectiveClassSummary;
 import com.sqlteacher.application.planning.ObjectiveInterventionDraft;
 import com.sqlteacher.application.planning.PlanningHealthSummary;
+import com.sqlteacher.infrastructure.support.HttpClients;
 
 import java.io.IOException;
 import java.net.URI;
@@ -72,9 +73,9 @@ public final class HttpCloudApiClient implements CloudApiClient {
     private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(30);
 
     private final URI baseUri;
-    // HTTP/1.1 pins the protocol: the JDK h2c upgrade path can deadlock POST bodies
-    // against fast loopback responders, and every production call is HTTPS.
-    private final HttpClient client = HttpClient.newBuilder().version(HttpClient.Version.HTTP_1_1).build();
+    // The shared factory pins HTTP/1.1: the JDK h2c upgrade path can deadlock POST
+    // bodies against fast loopback responders, and every production call is HTTPS.
+    private final HttpClient client = HttpClients.create(REQUEST_TIMEOUT);
     private final ObjectMapper json = new ObjectMapper().findAndRegisterModules()
         .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
 

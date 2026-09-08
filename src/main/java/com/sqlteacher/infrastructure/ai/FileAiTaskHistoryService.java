@@ -9,8 +9,6 @@ import com.sqlteacher.application.ai.AiTaskHistoryService;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.time.LocalDate;
-import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -34,6 +32,9 @@ public final class FileAiTaskHistoryService implements AiTaskHistoryService {
     @Override public synchronized void record(AiTaskHistoryEntry entry) {
         entries.add(Objects.requireNonNull(entry));
         while (entries.size() > MAX_ENTRIES) {
+            // Entries are in insertion order, so index 0 is the oldest. Evict the oldest
+            // non-favorite when one exists; when every entry is a favorite the loop keeps
+            // index 0 and deliberately evicts the oldest favorite to preserve the bound.
             int index = 0;
             for (int i = 0; i < entries.size(); i++) if (!entries.get(i).favorite()) { index = i; break; }
             entries.remove(index);
@@ -51,11 +52,6 @@ public final class FileAiTaskHistoryService implements AiTaskHistoryService {
             save();
             return;
         }
-    }
-
-    @Override public synchronized int requestsToday() {
-        LocalDate today = LocalDate.now();
-        return (int) entries.stream().filter(entry -> LocalDate.ofInstant(entry.createdAt(), ZoneId.systemDefault()).equals(today)).count();
     }
 
     private List<AiTaskHistoryEntry> load() {

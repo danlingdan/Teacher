@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sqlteacher.application.knowledge.WebSearchProvider;
 import com.sqlteacher.domain.SqlTeacherException;
+import com.sqlteacher.infrastructure.support.HttpClients;
 
 import java.net.URI;
 import java.net.URLEncoder;
@@ -22,7 +23,7 @@ public final class BraveWebSearchProvider implements WebSearchProvider {
 
     public BraveWebSearchProvider(String apiKey) {
         this.apiKey = apiKey == null ? "" : apiKey.trim();
-        this.client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
+        this.client = HttpClients.create(Duration.ofSeconds(5));
     }
 
     @Override public boolean enabled() { return !apiKey.isBlank(); }

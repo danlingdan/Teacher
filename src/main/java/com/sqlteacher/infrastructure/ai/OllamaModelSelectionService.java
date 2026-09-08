@@ -6,6 +6,7 @@ import com.sqlteacher.application.ai.AiModelSelection;
 import com.sqlteacher.application.ai.AiModelSelectionService;
 import com.sqlteacher.application.config.AiConfiguration;
 import com.sqlteacher.domain.SqlTeacherException;
+import com.sqlteacher.infrastructure.support.HttpClients;
 
 import java.io.IOException;
 import java.net.http.HttpClient;
@@ -32,10 +33,7 @@ public final class OllamaModelSelectionService implements AiModelSelectionServic
     public OllamaModelSelectionService(AiConfiguration properties, Path preferenceFile) {
         this.properties = Objects.requireNonNull(properties, "properties must not be null");
         this.preferenceFile = Objects.requireNonNull(preferenceFile, "preferenceFile must not be null");
-        this.httpClient = HttpClient.newBuilder()
-            .version(HttpClient.Version.HTTP_1_1)
-            .connectTimeout(properties.healthTimeout())
-            .build();
+        this.httpClient = HttpClients.create(properties.healthTimeout());
         this.objectMapper = new ObjectMapper();
         this.preferredModel = readPreference();
     }

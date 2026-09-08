@@ -31,8 +31,6 @@ public final class DefaultAiTaskService implements AiTaskService {
         AiTaskResult outcome;
         if (request.prompt().length() > policy.maxInputCharacters()) {
             outcome = AiTaskResult.failure(AiTaskErrorCode.RESPONSE_TOO_LARGE, "发送内容超过设备限制，请缩小上下文。", model);
-        } else if (history.requestsToday() >= policy.dailyRequestLimit()) {
-            outcome = AiTaskResult.failure(AiTaskErrorCode.RATE_LIMITED, "已达到设备今日 AI 调用提醒上限。", model);
         } else if (model == null || model.isBlank()) {
             outcome = AiTaskResult.failure(AiTaskErrorCode.MODEL_NOT_FOUND, "没有可用模型，请先在 AI 助手中选择模型。", "");
         } else {

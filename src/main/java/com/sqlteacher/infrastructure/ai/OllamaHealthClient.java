@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sqlteacher.infrastructure.environment.VerificationItem;
 import com.sqlteacher.infrastructure.environment.VerificationStatus;
+import com.sqlteacher.infrastructure.support.HttpClients;
 
 import java.io.IOException;
 import java.net.URI;
@@ -21,9 +22,7 @@ public final class OllamaHealthClient {
     public OllamaHealthClient(URI endpoint, Duration timeout) {
         this.endpoint = endpoint;
         this.timeout = timeout;
-        this.httpClient = HttpClient.newBuilder()
-            .connectTimeout(timeout)
-            .build();
+        this.httpClient = HttpClients.create(timeout);
         this.objectMapper = new ObjectMapper();
     }
 

@@ -1,6 +1,7 @@
 package com.sqlteacher.infrastructure.system;
 
 import com.sqlteacher.application.system.*;
+import com.sqlteacher.infrastructure.support.HttpClients;
 
 import java.io.IOException;
 import java.net.URI;
@@ -111,7 +112,7 @@ public final class FileGeneralSoftwareService implements GeneralSoftwareService 
 
     @Override public String connectivitySummary() {
         try {
-            HttpClient client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(4)).build();
+            HttpClient client = HttpClients.create(Duration.ofSeconds(4));
             HttpRequest request = HttpRequest.newBuilder(cloudBaseUri.resolve("/health")).timeout(Duration.ofSeconds(6)).GET().build();
             int status = client.send(request, HttpResponse.BodyHandlers.discarding()).statusCode();
             return status == 200 ? "Cloud HTTPS 正常" : "Cloud 返回 HTTP " + status;

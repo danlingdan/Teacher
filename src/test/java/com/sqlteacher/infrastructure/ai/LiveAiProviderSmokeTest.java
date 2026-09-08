@@ -69,12 +69,11 @@ class LiveAiProviderSmokeTest {
     }
 
     private static DefaultAiTaskService taskService(AiModelProvider provider) {
-        return new DefaultAiTaskService(provider, new AiUsagePolicy(10_000, 10_000, 10, Duration.ofSeconds(90)),
+        return new DefaultAiTaskService(provider, new AiUsagePolicy(10_000, 10_000, Duration.ofSeconds(90)),
             new AiTaskHistoryService() {
                 @Override public List<AiTaskHistoryEntry> recent() { return List.of(); }
                 @Override public void record(AiTaskHistoryEntry entry) { }
                 @Override public void favorite(String id, boolean favorite, String draftContent) { }
-                @Override public int requestsToday() { return 0; }
             });
     }
 

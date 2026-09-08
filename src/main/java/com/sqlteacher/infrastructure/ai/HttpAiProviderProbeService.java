@@ -3,6 +3,7 @@ package com.sqlteacher.infrastructure.ai;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sqlteacher.application.ai.*;
+import com.sqlteacher.infrastructure.support.HttpClients;
 
 import java.net.URI;
 import java.io.InputStream;
@@ -21,7 +22,7 @@ public final class HttpAiProviderProbeService implements AiProviderProbeService 
     private final ObjectMapper mapper = new ObjectMapper();
 
     public HttpAiProviderProbeService() {
-        this(HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5))
+        this(HttpClients.newBuilder(Duration.ofSeconds(5))
             .followRedirects(HttpClient.Redirect.NEVER).build());
     }
 

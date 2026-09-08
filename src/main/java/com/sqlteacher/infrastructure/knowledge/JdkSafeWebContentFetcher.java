@@ -2,6 +2,7 @@ package com.sqlteacher.infrastructure.knowledge;
 
 import com.sqlteacher.application.knowledge.SafeWebContentFetcher;
 import com.sqlteacher.domain.SqlTeacherException;
+import com.sqlteacher.infrastructure.support.HttpClients;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 
@@ -24,7 +25,7 @@ public final class JdkSafeWebContentFetcher implements SafeWebContentFetcher {
     private static final int MAX_BYTES = 1024 * 1024;
     private static final int MAX_REDIRECTS = 3;
     private static final Set<String> TYPES = Set.of("text/html", "text/plain", "application/xhtml+xml");
-    private final HttpClient client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5))
+    private final HttpClient client = HttpClients.newBuilder(Duration.ofSeconds(5))
         .followRedirects(HttpClient.Redirect.NEVER).build();
 
     @Override

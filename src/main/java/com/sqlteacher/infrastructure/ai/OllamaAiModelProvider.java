@@ -7,6 +7,7 @@ import com.sqlteacher.application.ai.AiCompletionResult;
 import com.sqlteacher.application.ai.AiModelProvider;
 import com.sqlteacher.application.ai.AiStatusService;
 import com.sqlteacher.application.config.AiConfiguration;
+import com.sqlteacher.infrastructure.support.HttpClients;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -29,9 +30,7 @@ public final class OllamaAiModelProvider implements AiModelProvider {
     public OllamaAiModelProvider(AiConfiguration properties, AiStatusService aiStatusService) {
         this.properties = properties;
         this.aiStatusService = aiStatusService;
-        this.httpClient = HttpClient.newBuilder()
-            .connectTimeout(properties.healthTimeout())
-            .build();
+        this.httpClient = HttpClients.create(properties.healthTimeout());
         this.objectMapper = new ObjectMapper();
     }
 
