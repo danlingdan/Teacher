@@ -65,6 +65,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -677,6 +678,18 @@ public final class HttpCloudApiClient implements CloudApiClient {
             com.fasterxml.jackson.databind.JsonNode.class);
         return tree.path("bankVersion").asInt(0);
     }
+    @Override public Map<String, Boolean> listOwnAssignmentPassedStatuses(String token, String classroomId) {
+        var tree = request("classes/" + encodeSegment(classroomId) + "/assignments/own-status",
+            "GET", null, token, com.fasterxml.jackson.databind.JsonNode.class);
+        Map<String, Boolean> result = new LinkedHashMap<>();
+        var fields = tree.fields();
+        while (fields.hasNext()) {
+            var entry = fields.next();
+            result.put(entry.getKey(), entry.getValue().asBoolean(false));
+        }
+        return result;
+    }
+
     @Override public List<Map<String, Object>> fetchExerciseBankChannels() {
         var tree = request("bank/channels", "GET", null, null, com.fasterxml.jackson.databind.JsonNode.class);
         List<Map<String, Object>> items = new ArrayList<>();

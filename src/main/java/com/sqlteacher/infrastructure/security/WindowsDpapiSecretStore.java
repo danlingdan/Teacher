@@ -38,10 +38,18 @@ public final class WindowsDpapiSecretStore {
     public Optional<byte[]> load() {
         if (!supported() || Files.notExists(file)) return Optional.empty();
         try {
+            // v3.3 W6.5: a transient file read problem keeps the ciphertext on disk; only
+            // a deterministic decrypt pipeline failure (empty/undecryptable payload)
+            // clears it.
             String encrypted = Files.readString(file, StandardCharsets.US_ASCII).trim();
-            if (encrypted.isBlank()) throw new IllegalStateException("Encrypted secret is empty");
+            if (encrypted.isBlank()) {
+                clear();
+                return Optional.empty();
+            }
             return Optional.of(unprotect(encrypted));
-        } catch (RuntimeException | IOException error) {
+        } catch (IOException error) {
+            return Optional.empty();
+        } catch (RuntimeException error) {
             clear();
             return Optional.empty();
         }

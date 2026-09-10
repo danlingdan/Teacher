@@ -49,16 +49,27 @@ class WindowsManagedComponentServiceTest {
     }
 
     @Test
-    void shouldInstallVerifyAndReportReadyWithAFakeProcess() {
+    void shouldInstallVerifyAndReportReadyWithAFakeProcess() throws Exception {
         AtomicBoolean ready = new AtomicBoolean();
         var service = new WindowsManagedComponentService(
             ignored -> ready.get(), ignored -> java.util.List.of("fixed-installer"),
             ignored -> true, () -> false, ignored -> new FinishedProcess(0, ready)
         );
 
+        // W6.4：install 异步返回；假进程可能在返回前已完成，两种初始状态都合法。
         var result = service.install(ManagedComponentId.PYTHON, ignored -> { });
+        if (!result.ready()) {
+            assertEquals("DOWNLOADING_AND_INSTALLING", result.detail());
+        }
 
-        assertTrue(result.ready());
+        var deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(5);
+        while (System.nanoTime() < deadline) {
+            var status = service.statuses().stream()
+                .filter(item -> item.id() == ManagedComponentId.PYTHON).findFirst().orElseThrow();
+            if (status.ready()) return;
+            java.util.concurrent.TimeUnit.MILLISECONDS.sleep(20);
+        }
+        throw new AssertionError("install never reached READY within 5 seconds");
     }
 
     @Test
@@ -74,7 +85,17 @@ class WindowsManagedComponentServiceTest {
 
             service.cancel(ManagedComponentId.OLLAMA);
 
-            assertEquals("INSTALL_CANCELLED", result.get(2, TimeUnit.SECONDS).detail());
+            // 取消后后台线程结束，statuses() 报告 INSTALL_CANCELLED。
+            var deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+            String detail = "";
+            while (System.nanoTime() < deadline) {
+                detail = service.statuses().stream()
+                    .filter(item -> item.id() == ManagedComponentId.OLLAMA).findFirst().orElseThrow()
+                    .detail();
+                if ("INSTALL_CANCELLED".equals(detail)) return;
+                TimeUnit.MILLISECONDS.sleep(20);
+            }
+            assertEquals("INSTALL_CANCELLED", detail);
         }
     }
 

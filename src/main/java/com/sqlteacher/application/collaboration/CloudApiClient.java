@@ -414,6 +414,14 @@ public interface CloudApiClient {
         throw new UnsupportedOperationException("Exercise bank distribution is unavailable");
     }
 
+    /**
+     * W6.2 batch read: per-assignment PASSED status of the current user in one classroom.
+     * Servers without the capability throw; callers degrade to per-assignment queries.
+     */
+    default Map<String, Boolean> listOwnAssignmentPassedStatuses(String accessToken, String classroomId) {
+        throw new UnsupportedOperationException("Batch submission status is unavailable");
+    }
+
     /** Lists server-known channels with active versions; used for client subscriptions. */
     default List<Map<String, Object>> fetchExerciseBankChannels() {
         throw new UnsupportedOperationException("Exercise bank distribution is unavailable");

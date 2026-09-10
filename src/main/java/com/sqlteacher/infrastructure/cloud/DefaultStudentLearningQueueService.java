@@ -84,10 +84,27 @@ public final class DefaultStudentLearningQueueService implements StudentLearning
                 boolean student = classroom.members().stream().anyMatch(member -> member.userId().equals(userId)
                     && member.role() == UserRole.STUDENT);
                 if (!student) continue;
-                for (var assignment : api.listAssignments(token, classroom.id())) {
-                    if (assignment.status() != AssignmentStatus.PUBLISHED) continue;
-                    boolean passed = api.listOwnAssignmentSubmissions(token, classroom.id(), assignment.id()).stream()
-                        .anyMatch(item -> item.status() == AssignmentSubmissionStatus.PASSED);
+                // W6.2：优先走批量端点一次取回全班任务的本员通过状态，消除逐任务 N+1；
+                // 旧服务端不支持该 capability 时回退为逐任务查询，部署顺序无关。
+                var publishedAssignments = api.listAssignments(token, classroom.id()).stream()
+                    .filter(assignment -> assignment.status() == AssignmentStatus.PUBLISHED)
+                    .toList();
+                java.util.Map<String, Boolean> passedByAssignment = null;
+                try {
+                    if (api.capabilities().supports("BATCH_SUBMISSION_STATUS")) {
+                        passedByAssignment = api.listOwnAssignmentPassedStatuses(token, classroom.id());
+                    }
+                } catch (RuntimeException unavailableBatch) {
+                    passedByAssignment = null;
+                }
+                for (var assignment : publishedAssignments) {
+                    boolean passed;
+                    if (passedByAssignment != null) {
+                        passed = passedByAssignment.getOrDefault(assignment.id(), false);
+                    } else {
+                        passed = api.listOwnAssignmentSubmissions(token, classroom.id(), assignment.id()).stream()
+                            .anyMatch(item -> item.status() == AssignmentSubmissionStatus.PASSED);
+                    }
                     if (passed) continue;
                     boolean overdue = assignment.dueAt() != null && !assignment.dueAt().isAfter(now);
                     String id = "assignment:" + assignment.id() + ":" + assignment.version();

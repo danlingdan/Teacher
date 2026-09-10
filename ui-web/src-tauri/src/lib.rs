@@ -59,6 +59,11 @@ const ALLOWED_METHODS: &[&str] = &[
     "practice.close",
     "practice.bank.check",
     "practice.bank.update",
+    "practice.bank.channels",
+    "practice.bank.notice",
+    "practice.wrongbook",
+    "practice.recommend",
+    "settings.bank.update",
     "runner.capabilities",
     "runner.run",
     "data.connections",
@@ -77,12 +82,15 @@ const ALLOWED_METHODS: &[&str] = &[
     "ai.knowledge.ask",
     "ai.sql.preview",
     "ai.sql.generate",
+    "ai.exercise.explain",
     "teaching.workspace",
     "teaching.exercise.toggle",
     "teaching.exercise.detail",
     "teaching.exercise.save",
     "teaching.exercise.copy",
     "teaching.exercise.import",
+    "teaching.exercise.health",
+    "teaching.bank.rollback",
     "teaching.exercise.parse",
     "teaching.exercise.draft",
     "teaching.exercise.export",
@@ -483,7 +491,9 @@ impl SidecarManager {
                 });
                 let _ = writeln!(process.stdin, "{request}");
                 let _ = process.stdin.flush();
-                for _ in 0..20 {
+                // W6.5: give the Java sidecar up to 5s to drain and flush SQLite before
+                // killing it, matching the Java shutdown drain budget.
+                for _ in 0..200 {
                     match process.child.try_wait() {
                         Ok(Some(_)) => return,
                         Ok(None) => std::thread::sleep(Duration::from_millis(25)),

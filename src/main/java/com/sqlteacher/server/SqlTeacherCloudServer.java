@@ -370,6 +370,11 @@ public final class SqlTeacherCloudServer {
                     positiveLong(body, "expectedVersion")));
                 return;
             }
+            if (segments.length == 7 && "assignments".equals(segments[5]) && "own-status".equals(segments[6])
+                && "GET".equals(exchange.getRequestMethod())) {
+                respond(exchange, 200, store.listOwnPassedStatuses(actor, segments[4]));
+                return;
+            }
             if (segments.length == 8 && "assignments".equals(segments[5]) && "submissions".equals(segments[7])) {
                 if ("POST".equals(exchange.getRequestMethod())) {
                     Map<String, String> body = request(exchange);
@@ -846,6 +851,20 @@ public final class SqlTeacherCloudServer {
                 respond(exchange, 200, store.restoreRetention(actor, segments[5]));
                 return;
             }
+            // W6.3：令牌与保留备份的保留期清理；dry-run 默认先行，保留期可用环境变量覆盖。
+            if (segments.length == 6 && "cleanup".equals(segments[4]) && "GET".equals(exchange.getRequestMethod())) {
+                String query = exchange.getRequestURI().getRawQuery();
+                respond(exchange, 200, store.cleanupPreview(actor, segments[5],
+                    (int) queryLong(query, "days", -1)));
+                return;
+            }
+            if (segments.length == 6 && "cleanup".equals(segments[4])
+                && "POST".equals(exchange.getRequestMethod())) {
+                Map<String, String> body = request(exchange);
+                respond(exchange, 200, store.cleanupExecute(actor, segments[5],
+                    (int) queryLong(exchange.getRequestURI().getRawQuery(), "days", -1)));
+                return;
+            }
             respond(exchange, 404, errorResponse("NOT_FOUND", "API endpoint was not found."));
         } catch (AdminOperationRejectedException error) {
             respond(exchange, 409, errorResponse(error.code(), error.getMessage()));
@@ -890,7 +909,7 @@ public final class SqlTeacherCloudServer {
             respond(exchange, 200, Map.of("apiVersion", "2.0", "minimumClientVersion", "1.9.0",
                 "serverTime", Instant.now().toString(), "maintenance", false,
                 "maximumSyncBatch", 200, "maximumSummaryBytes", 16384,
-                "capabilities", List.of("SIGNED_UPDATES", "PROBLEM_REPORTS", "CHANGE_PASSWORD", "REPORT_STATUS",
+                "capabilities", List.of("BATCH_SUBMISSION_STATUS", "SIGNED_UPDATES", "PROBLEM_REPORTS", "CHANGE_PASSWORD", "REPORT_STATUS",
                     "REPORT_WITHDRAWAL", "REPORT_EXPORT", "SCREENSHOT_ATTACHMENT", "SESSIONS", "ACCOUNT_EXPORT",
                     "ACCOUNT_DELETION", "PASSWORD_RESET", "ROLLOUT", "COURSE_PACKAGE_V2",
                     "ARTIFACT_SYNC_V2", "EXPLICIT_SYNC_CONFLICTS", "PROJECT_METADATA_SYNC")));
@@ -1773,6 +1792,29 @@ public final class SqlTeacherCloudServer {
             } catch (SQLException error) { throw database(error); }
         }
 
+        /**
+         * W6.2 batch read: for one classroom, whether the current student has a PASSED
+         * submission per assignment, in a single query (removes the queue's N+1).
+         */
+        private Map<String, Boolean> listOwnPassedStatuses(AuthenticatedUser actor, String classroomId) {
+            requireStudent(actor, classroomId);
+            try (Connection connection = open();
+                 PreparedStatement statement = connection.prepareStatement(
+                     "select assignment_id, max(case when status='PASSED' then 1 else 0 end) as passed "
+                         + "from assignment_submissions where classroom_id=? and user_id=? "
+                         + "group by assignment_id")) {
+                statement.setString(1, classroomId);
+                statement.setString(2, actor.id());
+                Map<String, Boolean> result = new LinkedHashMap<>();
+                try (ResultSet rows = statement.executeQuery()) {
+                    while (rows.next()) {
+                        result.put(rows.getString("assignment_id"), rows.getInt("passed") == 1);
+                    }
+                }
+                return Map.copyOf(result);
+            } catch (SQLException error) { throw database(error); }
+        }
+
         private void ensureSubmissionOpen(ClassAssignment assignment) {
             if (assignment.status() == AssignmentStatus.PUBLISHED
                 && (assignment.dueAt() == null || assignment.dueAt().isAfter(Instant.now()))) return;
@@ -2423,6 +2465,118 @@ public final class SqlTeacherCloudServer {
                 throw new IllegalArgumentException("reasonCode must contain only A-Z, 0-9, or underscore");
             }
             return reasonCode;
+        }
+
+        private static final String[] CLEANUP_TARGETS = {"auth-tokens", "retention-backups"};
+
+        private int cleanupRetentionDays(String target, int override) {
+            if (override > 0) return override;
+            String configured;
+            if ("auth-tokens".equals(target)) {
+                configured = System.getenv("SQLTEACHER_CLOUD_TOKEN_RETENTION_DAYS");
+                return configured == null ? 30 : Integer.parseInt(configured);
+            }
+            configured = System.getenv("SQLTEACHER_CLOUD_BACKUP_RETENTION_DAYS");
+            return configured == null ? 90 : Integer.parseInt(configured);
+        }
+
+        /** W6.3 dry-run: reports how many expired tokens or stale backup files would go. */
+        private Map<String, Object> cleanupPreview(AuthenticatedUser actor, String target, int daysOverride) {
+            requireAdmin(actor);
+            if (!java.util.Arrays.asList(CLEANUP_TARGETS).contains(target)) {
+                throw new IllegalArgumentException("Unknown cleanup target: " + target);
+            }
+            int days = cleanupRetentionDays(target, daysOverride);
+            Instant cutoff = Instant.now().minus(java.time.Duration.ofDays(days));
+            Map<String, Object> result = new LinkedHashMap<>();
+            result.put("target", target);
+            result.put("retentionDays", days);
+            result.put("cutoff", cutoff.toString());
+            if ("auth-tokens".equals(target)) {
+                try (Connection connection = open();
+                     PreparedStatement access = connection.prepareStatement(
+                         "select count(*) from access_tokens where expires_at<? or (revoked_at is not null and revoked_at<?)");
+                     PreparedStatement refresh = connection.prepareStatement(
+                         "select count(*) from refresh_tokens where expires_at<? or (revoked_at is not null and revoked_at<?)")) {
+                    access.setString(1, cutoff.toString());
+                    access.setString(2, cutoff.toString());
+                    refresh.setString(1, cutoff.toString());
+                    refresh.setString(2, cutoff.toString());
+                    try (ResultSet rows = access.executeQuery()) { rows.next(); result.put("accessTokens", rows.getInt(1)); }
+                    try (ResultSet rows = refresh.executeQuery()) { rows.next(); result.put("refreshTokens", rows.getInt(1)); }
+                } catch (SQLException error) { throw database(error); }
+            } else {
+                result.put("files", staleRetentionBackups(cutoff).size());
+            }
+            try (Connection connection = open()) {
+                audit(connection, actor.id(), "ADMIN_CLEANUP_PREVIEW", "CLEANUP", target,
+                    "SUCCESS", "days=" + days);
+            } catch (SQLException error) { throw database(error); }
+            return result;
+        }
+
+        /** W6.3 execute: deletes the rows/files reported by the matching preview. */
+        private Map<String, Object> cleanupExecute(AuthenticatedUser actor, String target, int daysOverride) {
+            requireAdmin(actor);
+            if (!java.util.Arrays.asList(CLEANUP_TARGETS).contains(target)) {
+                throw new IllegalArgumentException("Unknown cleanup target: " + target);
+            }
+            int days = cleanupRetentionDays(target, daysOverride);
+            Instant cutoff = Instant.now().minus(java.time.Duration.ofDays(days));
+            Map<String, Object> result = new LinkedHashMap<>();
+            result.put("target", target);
+            result.put("retentionDays", days);
+            if ("auth-tokens".equals(target)) {
+                try (Connection connection = open()) {
+                    int removed = 0;
+                    for (String table : List.of("access_tokens", "refresh_tokens")) {
+                        try (PreparedStatement statement = connection.prepareStatement(
+                            "delete from " + table + " where expires_at<? or (revoked_at is not null and revoked_at<?)")) {
+                            statement.setString(1, cutoff.toString());
+                            statement.setString(2, cutoff.toString());
+                            removed += statement.executeUpdate();
+                        }
+                    }
+                    result.put("removed", removed);
+                    audit(connection, actor.id(), "ADMIN_CLEANUP_EXECUTE", "CLEANUP", target,
+                        "SUCCESS", "removed=" + removed);
+                } catch (SQLException error) { throw database(error); }
+            } else {
+                int removed = 0;
+                for (Path file : staleRetentionBackups(cutoff)) {
+                    try {
+                        Files.deleteIfExists(file);
+                        removed++;
+                    } catch (IOException error) {
+                        log.warn("Could not delete stale retention backup {}", file, error);
+                    }
+                }
+                result.put("removed", removed);
+                try (Connection connection = open()) {
+                    audit(connection, actor.id(), "ADMIN_CLEANUP_EXECUTE", "CLEANUP", target,
+                        "SUCCESS", "removed=" + removed);
+                } catch (SQLException ignored) {
+                }
+            }
+            return result;
+        }
+
+        private List<Path> staleRetentionBackups(Instant cutoff) {
+            Path directory = database.getParent().resolve("retention-backups");
+            if (!Files.isDirectory(directory)) return List.of();
+            List<Path> stale = new ArrayList<>();
+            try (var files = Files.list(directory)) {
+                files.filter(file -> file.getFileName().toString().startsWith("retention-")
+                        && file.getFileName().toString().endsWith(".db"))
+                    .forEach(file -> {
+                        try {
+                            if (Files.getLastModifiedTime(file).toInstant().isBefore(cutoff)) stale.add(file);
+                        } catch (IOException ignored) {
+                        }
+                    });
+            } catch (IOException ignored) {
+            }
+            return List.copyOf(stale);
         }
 
         private void audit(Connection connection, String actorUserId, String action, String targetType,

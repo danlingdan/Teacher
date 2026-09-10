@@ -29,6 +29,7 @@ public final class WindowsManagedComponentService implements ManagedComponentSer
     private static final Map<ManagedComponentId, Descriptor> DESCRIPTORS = descriptors();
 
     private final Map<ManagedComponentId, Process> running = new ConcurrentHashMap<>();
+    private final java.util.Set<ManagedComponentId> starting = ConcurrentHashMap.newKeySet();
     private final Map<ManagedComponentId, String> failures = new ConcurrentHashMap<>();
     private final java.util.Set<ManagedComponentId> restartPending = ConcurrentHashMap.newKeySet();
     private final Predicate<ManagedComponentId> componentProbe;
@@ -64,6 +65,13 @@ public final class WindowsManagedComponentService implements ManagedComponentSer
         return List.of(ManagedComponentId.values()).stream().map(this::status).toList();
     }
 
+    /**
+     * v3.3 W6.4: starts the installer on a virtual thread and returns the INSTALLING
+     * status immediately; progress flows through the callback on that thread and callers
+     * observe the terminal state via {@link #statuses()} polling. The starter pipes the
+     * child streams, which makes the JVM pass CREATE_NO_WINDOW on Windows so no console
+     * window flashes for winget/wsl.
+     */
     @Override
     public ManagedComponentStatus install(
         ManagedComponentId componentId,
@@ -71,11 +79,32 @@ public final class WindowsManagedComponentService implements ManagedComponentSer
     ) {
         Objects.requireNonNull(componentId);
         Objects.requireNonNull(progress);
-        if (running.containsKey(componentId)) return status(componentId);
+        if (starting.contains(componentId) || running.containsKey(componentId)) {
+            return status(componentId);
+        }
         if (componentProbe.test(componentId)) return status(componentId);
         List<String> command = commandFactory.apply(componentId);
         failures.remove(componentId);
         restartPending.remove(componentId);
+        // Synchronously mark INSTALLING so the caller never observes a stale pre-install
+        // state after this method returns.
+        starting.add(componentId);
+        Thread.ofVirtual().start(() -> {
+            try {
+                runInstall(componentId, command, progress);
+            } finally {
+                starting.remove(componentId);
+            }
+        });
+        return status(componentId);
+    }
+
+    /** Blocking installer body; runs on the dedicated virtual thread started by install. */
+    private void runInstall(
+        ManagedComponentId componentId,
+        List<String> command,
+        Consumer<ComponentInstallProgress> progress
+    ) {
         progress.accept(new ComponentInstallProgress(0, "STARTING"));
         Process process = null;
         try {
@@ -83,7 +112,7 @@ public final class WindowsManagedComponentService implements ManagedComponentSer
             Process previous = running.putIfAbsent(componentId, process);
             if (previous != null) {
                 process.destroyForcibly();
-                return status(componentId);
+                return;
             }
             Process owned = process;
             Thread reader = Thread.ofVirtual().start(() -> drain(owned.getInputStream()));
@@ -106,7 +135,6 @@ public final class WindowsManagedComponentService implements ManagedComponentSer
         } finally {
             if (process != null) running.remove(componentId, process);
         }
-        return status(componentId);
     }
 
     @Override
@@ -123,7 +151,7 @@ public final class WindowsManagedComponentService implements ManagedComponentSer
         Descriptor descriptor = DESCRIPTORS.get(id);
         ManagedComponentStatus.State state;
         String detail;
-        if (running.containsKey(id)) {
+        if (starting.contains(id) || running.containsKey(id)) {
             state = ManagedComponentStatus.State.INSTALLING;
             detail = "DOWNLOADING_AND_INSTALLING";
         } else if (componentProbe.test(id)) {
