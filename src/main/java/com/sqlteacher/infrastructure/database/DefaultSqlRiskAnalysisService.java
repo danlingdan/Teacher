@@ -67,6 +67,18 @@ public final class DefaultSqlRiskAnalysisService implements SqlRiskAnalysisServi
             return dialectRisk;
         }
 
+        // SQLite query-plan inspection is read-only and bounded like a SELECT (W3.1).
+        if ("EXPLAIN".equals(statementType) && dialect.family() == DatabaseDialect.Family.SQLITE) {
+            return new SqlRiskAnalysis(
+                SqlRiskLevel.LOW,
+                true,
+                false,
+                false,
+                statementType,
+                List.of("Read-only query plan inspection.")
+            );
+        }
+
         if (isWholeDatabaseDrop(statementType, normalized)) {
             return new SqlRiskAnalysis(
                     SqlRiskLevel.HIGH,

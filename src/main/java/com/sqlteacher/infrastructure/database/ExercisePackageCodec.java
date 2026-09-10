@@ -8,6 +8,7 @@ import com.sqlteacher.domain.SqlTeacherException;
 import com.sqlteacher.domain.exercise.ExerciseEvaluationRule;
 
 import java.util.List;
+import java.util.Map;
 
 final class ExercisePackageCodec {
     private final ObjectMapper mapper = new ObjectMapper()
@@ -33,11 +34,11 @@ final class ExercisePackageCodec {
     /** Serializes the per-exercise-type grading configuration (empty object for QUERY). */
     String encodeTypeConfig(String verificationSql, List<String> allowedStatementTypes,
                             Integer expectedAffectedRows, List<String> requiredTransactionKeywords,
-                            String triggerProbeSql) {
+                            String triggerProbeSql, List<String> expectedColumns, String revealMode) {
         try {
             return mapper.writeValueAsString(new TypeConfigData(
                 verificationSql, allowedStatementTypes, expectedAffectedRows,
-                requiredTransactionKeywords, triggerProbeSql
+                requiredTransactionKeywords, triggerProbeSql, expectedColumns, revealMode
             ));
         } catch (JsonProcessingException error) {
             throw new SqlTeacherException("EXERCISE_DATA_INVALID", "Failed to encode exercise type config", error);
@@ -52,7 +53,9 @@ final class ExercisePackageCodec {
                 data.allowedStatementTypes() == null ? List.of() : List.copyOf(data.allowedStatementTypes()),
                 data.expectedAffectedRows(),
                 data.requiredTransactionKeywords() == null ? List.of() : List.copyOf(data.requiredTransactionKeywords()),
-                data.triggerProbeSql()
+                data.triggerProbeSql(),
+                data.expectedColumns() == null ? List.of() : List.copyOf(data.expectedColumns()),
+                data.revealMode()
             );
         } catch (JsonProcessingException | IllegalArgumentException error) {
             throw new SqlTeacherException("EXERCISE_DATA_INVALID", "Invalid stored exercise type config", error);
@@ -80,18 +83,23 @@ final class ExercisePackageCodec {
         boolean compareRows,
         boolean rowOrderMatters,
         Integer expectedRowCount,
-        List<String> requiredSqlKeywords
+        List<String> requiredSqlKeywords,
+        Map<String, Integer> criterionWeights,
+        List<String> planKeywords
     ) {
         static RuleData from(ExerciseEvaluationRule rule) {
             return new RuleData(
                 rule.compareColumns(), rule.compareRows(), rule.rowOrderMatters(),
-                rule.expectedRowCount(), rule.requiredSqlKeywords()
+                rule.expectedRowCount(), rule.requiredSqlKeywords(),
+                rule.criterionWeights(), rule.planKeywords()
             );
         }
 
         ExerciseEvaluationRule toDomain() {
             return new ExerciseEvaluationRule(
-                compareColumns, compareRows, rowOrderMatters, expectedRowCount, requiredSqlKeywords
+                compareColumns, compareRows, rowOrderMatters, expectedRowCount, requiredSqlKeywords,
+                criterionWeights == null ? Map.of() : criterionWeights,
+                planKeywords == null ? List.of() : planKeywords
             );
         }
     }
@@ -102,7 +110,9 @@ final class ExercisePackageCodec {
         List<String> allowedStatementTypes,
         Integer expectedAffectedRows,
         List<String> requiredTransactionKeywords,
-        String triggerProbeSql
+        String triggerProbeSql,
+        List<String> expectedColumns,
+        String revealMode
     ) {
     }
 }

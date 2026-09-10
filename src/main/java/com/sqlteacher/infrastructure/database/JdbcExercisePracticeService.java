@@ -363,8 +363,8 @@ public final class JdbcExercisePracticeService implements ExercisePracticeServic
         String insert = """
             insert into exercise_attempts(
                 id, session_id, status, sql_text, execution_success, passed, duration_ms,
-                result_columns_json, result_rows_json, feedback_json, error_code, created_at
-            ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                result_columns_json, result_rows_json, feedback_json, error_code, created_at, score
+            ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """;
         try (Connection connection = connectionFactory.open("app");
              PreparedStatement statement = connection.prepareStatement(insert)) {
@@ -384,6 +384,11 @@ public final class JdbcExercisePracticeService implements ExercisePracticeServic
             statement.setString(10, attemptCodec.encode(feedback(evaluation)));
             statement.setString(11, errorCode == null || errorCode.isBlank() ? null : errorCode);
             statement.setString(12, occurredAt.toString());
+            if (evaluation == null || evaluation.score() == null) {
+                statement.setNull(13, Types.INTEGER);
+            } else {
+                statement.setInt(13, evaluation.score());
+            }
             statement.executeUpdate();
         } catch (SQLException error) {
             throw new SqlTeacherException("EXERCISE_ATTEMPT_RECORD_FAILED", "Failed to record exercise attempt", error);
@@ -541,7 +546,7 @@ public final class JdbcExercisePracticeService implements ExercisePracticeServic
             id,
             new ExerciseView(
                 exercise.id(), exercise.title(), exercise.description(), exercise.knowledgePoint(),
-                exercise.difficulty(), exercise.exerciseType(),
+                exercise.difficulty(), exercise.exerciseType(), exercise.expectedColumns(),
                 ExerciseDatasetSchemaSummary.fromSetupSql(dataset.setupSql()), exercise.version()
             ),
             startedAt,

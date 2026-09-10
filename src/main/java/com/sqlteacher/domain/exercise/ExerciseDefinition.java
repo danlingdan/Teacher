@@ -1,6 +1,7 @@
 package com.sqlteacher.domain.exercise;
 
 import java.time.Instant;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
@@ -25,7 +26,9 @@ public record ExerciseDefinition(
     List<String> allowedStatementTypes,
     Integer expectedAffectedRows,
     List<String> requiredTransactionKeywords,
-    String triggerProbeSql
+    String triggerProbeSql,
+    List<String> expectedColumns,
+    ExerciseRevealMode revealMode
 ) {
     /** Statement keywords teachers may allow for STATE submissions via the DSL. */
     public static final Set<String> ALLOWABLE_STATEMENT_TYPES =
@@ -54,6 +57,8 @@ public record ExerciseDefinition(
         allowedStatementTypes = normalizeKeywords(allowedStatementTypes, "allowedStatementTypes", true);
         requiredTransactionKeywords = normalizeKeywords(requiredTransactionKeywords, "requiredTransactionKeywords", false);
         triggerProbeSql = normalizeOptionalText(triggerProbeSql);
+        expectedColumns = normalizeKeywords(expectedColumns, "expectedColumns", false);
+        revealMode = revealMode == null ? ExerciseRevealMode.ON_FAIL : revealMode;
         if (expectedAffectedRows != null && expectedAffectedRows < 0) {
             throw new IllegalArgumentException("expectedAffectedRows must not be negative");
         }
@@ -77,6 +82,16 @@ public record ExerciseDefinition(
         if (exerciseType == ExerciseType.TRIGGER && triggerProbeSql == null) {
             throw new IllegalArgumentException("triggerProbeSql is required for TRIGGER exercises");
         }
+        if (exerciseType == ExerciseType.QUERY && !evaluationRule.planKeywords().isEmpty()) {
+            throw new IllegalArgumentException("planKeywords applies to verification-query exercises only");
+        }
+        Set<String> scored = scoredCriteria(exerciseType, evaluationRule, expectedAffectedRows,
+            requiredTransactionKeywords);
+        for (String criterion : evaluationRule.criterionWeights().keySet()) {
+            if (!scored.contains(criterion.toLowerCase(Locale.ROOT))) {
+                throw new IllegalArgumentException("Unknown scored criterion in weights: " + criterion);
+            }
+        }
     }
 
     /** Compatibility view for pre-v3.3 callers: every QUERY-era constructor arity. */
@@ -97,7 +112,78 @@ public record ExerciseDefinition(
     ) {
         this(id, title, description, knowledgePoint, difficulty, datasetId, referenceSql,
             evaluationRule, hints, version, enabled, createdAt, updatedAt,
-            ExerciseType.QUERY, null, List.of(), null, List.of(), null);
+            ExerciseType.QUERY, null, List.of(), null, List.of(), null, List.of(), null);
+    }
+
+    /** Compatibility view for v3.3 W1 callers, before expected columns and reveal mode. */
+    public ExerciseDefinition(
+        String id,
+        String title,
+        String description,
+        String knowledgePoint,
+        ExerciseDifficulty difficulty,
+        String datasetId,
+        String referenceSql,
+        ExerciseEvaluationRule evaluationRule,
+        List<String> hints,
+        int version,
+        boolean enabled,
+        Instant createdAt,
+        Instant updatedAt,
+        ExerciseType exerciseType,
+        String verificationSql,
+        List<String> allowedStatementTypes,
+        Integer expectedAffectedRows,
+        List<String> requiredTransactionKeywords,
+        String triggerProbeSql
+    ) {
+        this(id, title, description, knowledgePoint, difficulty, datasetId, referenceSql,
+            evaluationRule, hints, version, enabled, createdAt, updatedAt,
+            exerciseType, verificationSql, allowedStatementTypes, expectedAffectedRows,
+            requiredTransactionKeywords, triggerProbeSql, List.of(), null);
+    }
+
+    /**
+     * The deterministic set of comparable criteria this exercise produces on a normal
+     * evaluation. Failure-only criteria (safety/execution/reference/verification) are not
+     * scored; the display score is a weighted sum over this set.
+     */
+    public Set<String> scoredCriteria() {
+        return scoredCriteria(exerciseType, evaluationRule, expectedAffectedRows, requiredTransactionKeywords);
+    }
+
+    private static Set<String> scoredCriteria(
+        ExerciseType type,
+        ExerciseEvaluationRule rule,
+        Integer affectedRows,
+        List<String> transactionKeywords
+    ) {
+        Set<String> criteria = new LinkedHashSet<>();
+        if (rule.compareColumns()) {
+            criteria.add("columns");
+        }
+        if (rule.compareRows()) {
+            criteria.add("rows");
+            if (rule.rowOrderMatters()) {
+                criteria.add("order");
+            }
+        }
+        if (rule.expectedRowCount() != null) {
+            criteria.add("row_count");
+        }
+        if (!rule.requiredSqlKeywords().isEmpty()) {
+            criteria.add("structure");
+        }
+        if (affectedRows != null) {
+            criteria.add("affected_rows");
+        }
+        if (type == ExerciseType.SCRIPT && !transactionKeywords.isEmpty()) {
+            criteria.add("transaction");
+        }
+        if (!rule.planKeywords().isEmpty()) {
+            criteria.add("plan_keywords");
+        }
+        return criteria;
     }
 
     /** Returns the statement types a student may submit; empty means the type default. */
@@ -110,9 +196,9 @@ public record ExerciseDefinition(
     private static List<String> normalizeKeywords(List<String> values, String fieldName, boolean enforceVocabulary) {
         Objects.requireNonNull(values, fieldName + " must not be null");
         List<String> normalized = values.stream()
-            .map(value -> Objects.requireNonNull(value, fieldName + " entry must not be null").trim()
-                .toUpperCase(Locale.ROOT))
+            .map(value -> Objects.requireNonNull(value, fieldName + " entry must not be null").trim())
             .filter(value -> !value.isEmpty())
+            .map(value -> value.toUpperCase(Locale.ROOT))
             .distinct()
             .toList();
         if (enforceVocabulary) {

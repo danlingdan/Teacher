@@ -4,6 +4,7 @@ import com.sqlteacher.application.config.SqlTeacherConfiguration;
 import com.sqlteacher.application.connection.DatabaseDialect;
 import com.sqlteacher.application.exercise.EvaluationCriterionResult;
 import com.sqlteacher.application.exercise.ExerciseEvaluationResult;
+import com.sqlteacher.application.exercise.ResultComparison;
 import com.sqlteacher.application.exercise.SqlExerciseEvaluationService;
 import com.sqlteacher.application.risk.SqlRiskAnalysis;
 import com.sqlteacher.application.risk.SqlRiskAnalysisService;
@@ -11,6 +12,7 @@ import com.sqlteacher.domain.SqlTeacherException;
 import com.sqlteacher.domain.exercise.ExerciseDataset;
 import com.sqlteacher.domain.exercise.ExerciseDefinition;
 import com.sqlteacher.domain.exercise.ExerciseEvaluationRule;
+import com.sqlteacher.domain.exercise.ExerciseRevealMode;
 import com.sqlteacher.domain.exercise.ExerciseType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -33,11 +35,15 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 
 public final class DeterministicSqlExerciseEvaluationService implements SqlExerciseEvaluationService {
     private static final Logger log = LoggerFactory.getLogger(DeterministicSqlExerciseEvaluationService.class);
     private static final int MAX_EVALUATION_ROWS = 5_000;
     private static final int QUERY_TIMEOUT_SECONDS = 10;
+    /** Caps the comparison view payload; result sets above this stay governed by the row rules. */
+    private static final int COMPARISON_ROW_LIMIT = 200;
 
     private final SqlRiskAnalysisService riskAnalysisService;
     private final Path evaluationDirectory;
@@ -109,14 +115,7 @@ public final class DeterministicSqlExerciseEvaluationService implements SqlExerc
             List<EvaluationCriterionResult> criteria = evaluateCriteria(
                 exercise.evaluationRule(), submittedSql, expected, actual
             );
-            boolean passed = criteria.stream().allMatch(EvaluationCriterionResult::passed);
-            return new ExerciseEvaluationResult(
-                passed,
-                criteria,
-                passed ? "提交通过，结果满足题目要求。" : "提交未通过，请根据分项反馈调整查询。",
-                elapsed(started),
-                passed ? "" : "RESULT_MISMATCH"
-            );
+            return finish(started, exercise, criteria, expected, actual);
         } catch (SQLException error) {
             return failure(
                 started,
@@ -226,6 +225,9 @@ public final class DeterministicSqlExerciseEvaluationService implements SqlExerc
             List<EvaluationCriterionResult> criteria = new ArrayList<>(evaluateCriteria(
                 exercise.evaluationRule(), studentText, expected, actual
             ));
+            if (!exercise.evaluationRule().planKeywords().isEmpty()) {
+                criteria.add(planKeywordCriterion(exercise.evaluationRule().planKeywords(), actual));
+            }
             if (exercise.expectedAffectedRows() != null) {
                 boolean affected = outcome.affectedRows() == exercise.expectedAffectedRows();
                 criteria.add(new EvaluationCriterionResult(
@@ -244,14 +246,7 @@ public final class DeterministicSqlExerciseEvaluationService implements SqlExerc
                     missing.isEmpty() ? "事务结构满足要求。" : "脚本尚未使用题目要求的事务关键字。"
                 ));
             }
-            boolean passed = criteria.stream().allMatch(EvaluationCriterionResult::passed);
-            return new ExerciseEvaluationResult(
-                passed,
-                criteria,
-                passed ? "提交通过，结果满足题目要求。" : "提交未通过，请根据分项反馈调整后重试。",
-                elapsed(started),
-                passed ? "" : "RESULT_MISMATCH"
-            );
+            return finish(started, exercise, criteria, expected, actual);
         } catch (SQLException error) {
             return failure(
                 started,
@@ -307,6 +302,185 @@ public final class DeterministicSqlExerciseEvaluationService implements SqlExerc
             }
         }
         return new ScriptOutcome(true, 0, affectedRows);
+    }
+
+    /** Deterministic 0-100 display score plus the reveal-controlled comparison view. */
+    private static ExerciseEvaluationResult finish(
+        long started,
+        ExerciseDefinition exercise,
+        List<EvaluationCriterionResult> criteria,
+        QueryResult expected,
+        QueryResult actual
+    ) {
+        boolean passed = criteria.stream().allMatch(EvaluationCriterionResult::passed);
+        Integer score = computeScore(exercise, criteria);
+        ResultComparison comparison = buildComparison(exercise, passed, expected, actual);
+        return new ExerciseEvaluationResult(
+            passed,
+            criteria,
+            passed ? "提交通过，结果满足题目要求。" : "提交未通过，请根据分项反馈调整后重试。",
+            elapsed(started),
+            passed ? "" : "RESULT_MISMATCH",
+            score,
+            comparison
+        );
+    }
+
+    /**
+     * Weighted display score over the exercise's scored criteria only; absent weights
+     * weigh 1 and missing criterion results count as failed. Passing still requires every
+     * criterion, so the score alone never grants a pass.
+     */
+    private static Integer computeScore(ExerciseDefinition exercise, List<EvaluationCriterionResult> criteria) {
+        Set<String> scored = exercise.scoredCriteria();
+        if (scored.isEmpty()) {
+            return null;
+        }
+        Map<String, Boolean> outcomes = new LinkedHashMap<>();
+        for (EvaluationCriterionResult criterion : criteria) {
+            outcomes.putIfAbsent(criterion.criterion(), criterion.passed());
+        }
+        long total = 0;
+        long earned = 0;
+        for (String criterion : scored) {
+            int weight = exercise.evaluationRule().weightOf(criterion);
+            total += weight;
+            if (Boolean.TRUE.equals(outcomes.get(criterion))) {
+                earned += weight;
+            }
+        }
+        return total == 0 ? null : (int) Math.round(100.0 * earned / total);
+    }
+
+    /** Never leaks expected rows before a submission; NEVER never leaks them at all. */
+    private static ResultComparison buildComparison(
+        ExerciseDefinition exercise,
+        boolean passed,
+        QueryResult expected,
+        QueryResult actual
+    ) {
+        ExerciseRevealMode mode = exercise.revealMode();
+        if (mode == ExerciseRevealMode.NEVER || (passed && mode != ExerciseRevealMode.ALWAYS)) {
+            return null;
+        }
+        return compareResults(expected, actual, COMPARISON_ROW_LIMIT);
+    }
+
+    /**
+     * Pairs expected and actual rows deterministically: each expected row takes the first
+     * unused actual row with the smallest per-cell difference count. Paired cells are
+     * marked where they differ; unpaired rows are marked entirely.
+     */
+    static ResultComparison compareResults(QueryResult expected, QueryResult actual, int rowLimit) {
+        List<String> columns = expected.columns().isEmpty() ? actual.columns() : expected.columns();
+        List<List<Object>> expectedRows = expected.rows();
+        List<List<Object>> actualRows = actual.rows();
+        int expectedCapped = Math.min(expectedRows.size(), rowLimit);
+        int actualCapped = Math.min(actualRows.size(), rowLimit);
+        // One uniform cell width keeps every cells/cellDiff pair aligned even when the
+        // two result sets disagree on column count.
+        int width = columns.size();
+        for (int index = 0; index < expectedCapped; index++) {
+            width = Math.max(width, expectedRows.get(index).size());
+        }
+        for (int index = 0; index < actualCapped; index++) {
+            width = Math.max(width, actualRows.get(index).size());
+        }
+
+        boolean[] usedActual = new boolean[actualCapped];
+        List<List<Boolean>> actualDiffs = new ArrayList<>(actualCapped);
+        for (int index = 0; index < actualCapped; index++) {
+            actualDiffs.add(null);
+        }
+        List<ResultComparison.ComparisonRow> expectedOut = new ArrayList<>(expectedCapped);
+        for (int index = 0; index < expectedCapped; index++) {
+            List<Object> cells = normalizeCells(expectedRows.get(index), width);
+            int bestActual = -1;
+            long bestDistance = Long.MAX_VALUE;
+            for (int candidate = 0; candidate < actualCapped; candidate++) {
+                if (usedActual[candidate]) {
+                    continue;
+                }
+                long distance = rowDistance(cells, normalizeCells(actualRows.get(candidate), width));
+                if (distance < bestDistance) {
+                    bestDistance = distance;
+                    bestActual = candidate;
+                }
+            }
+            List<Boolean> diff;
+            if (bestActual < 0) {
+                diff = allTrue(width);
+            } else {
+                usedActual[bestActual] = true;
+                diff = cellDiff(cells, normalizeCells(actualRows.get(bestActual), width));
+                actualDiffs.set(bestActual, diff);
+            }
+            expectedOut.add(new ResultComparison.ComparisonRow(cells, diff));
+        }
+        List<ResultComparison.ComparisonRow> actualOut = new ArrayList<>(actualCapped);
+        for (int index = 0; index < actualCapped; index++) {
+            List<Object> cells = normalizeCells(actualRows.get(index), width);
+            List<Boolean> diff = actualDiffs.get(index);
+            actualOut.add(new ResultComparison.ComparisonRow(cells, diff != null ? diff : allTrue(width)));
+        }
+        return new ResultComparison(columns, expectedOut, actualOut);
+    }
+
+    private static long rowDistance(List<Object> expectedRow, List<Object> actualRow) {
+        int shared = Math.min(expectedRow.size(), actualRow.size());
+        long distance = Math.abs(expectedRow.size() - actualRow.size());
+        for (int index = 0; index < shared; index++) {
+            if (!Objects.equals(expectedRow.get(index), actualRow.get(index))) {
+                distance++;
+            }
+        }
+        return distance;
+    }
+
+    private static List<Boolean> cellDiff(List<Object> expectedRow, List<Object> actualRow) {
+        int size = Math.max(expectedRow.size(), actualRow.size());
+        List<Boolean> diff = new ArrayList<>(size);
+        for (int index = 0; index < size; index++) {
+            Object expectedCell = index < expectedRow.size() ? expectedRow.get(index) : null;
+            Object actualCell = index < actualRow.size() ? actualRow.get(index) : null;
+            diff.add(!Objects.equals(expectedCell, actualCell));
+        }
+        return List.copyOf(diff);
+    }
+
+    /** Pads the row with null cells up to the uniform comparison width. */
+    private static List<Object> normalizeCells(List<Object> row, int width) {
+        List<Object> cells = new ArrayList<>(Math.max(row.size(), width));
+        cells.addAll(row);
+        for (int index = row.size(); index < width; index++) {
+            cells.add(null);
+        }
+        return Collections.unmodifiableList(cells);
+    }
+
+    private static List<Boolean> allTrue(int size) {
+        List<Boolean> diff = new ArrayList<>(size);
+        for (int index = 0; index < size; index++) {
+            diff.add(true);
+        }
+        return List.copyOf(diff);
+    }
+
+    private static EvaluationCriterionResult planKeywordCriterion(List<String> planKeywords, QueryResult planOutput) {
+        StringBuilder text = new StringBuilder();
+        for (List<Object> row : planOutput.rows()) {
+            for (Object cell : row) {
+                text.append(cell == null ? "" : String.valueOf(cell)).append(' ');
+            }
+        }
+        String normalized = SqlStructureMatcher.normalize(text.toString());
+        List<String> missing = planKeywords.stream()
+            .filter(keyword -> !SqlStructureMatcher.containsKeyword(normalized, keyword))
+            .toList();
+        return new EvaluationCriterionResult(
+            "plan_keywords", missing.isEmpty(),
+            missing.isEmpty() ? "执行计划满足要求。" : "执行计划尚未满足题目要求：未出现 " + String.join("、", missing) + "。"
+        );
     }
 
     private record ScriptOutcome(boolean success, int failedIndex, int affectedRows) {

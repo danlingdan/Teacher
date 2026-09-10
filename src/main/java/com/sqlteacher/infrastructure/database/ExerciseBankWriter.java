@@ -121,7 +121,8 @@ final class ExerciseBankWriter {
         statement.setString(configIndex, codec.encodeTypeConfig(
             exercise.verificationSql(), exercise.allowedStatementTypes(),
             exercise.expectedAffectedRows(), exercise.requiredTransactionKeywords(),
-            exercise.triggerProbeSql()
+            exercise.triggerProbeSql(), exercise.expectedColumns(),
+            exercise.revealMode().name()
         ));
     }
 

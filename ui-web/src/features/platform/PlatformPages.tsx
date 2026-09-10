@@ -194,6 +194,40 @@ export function TeachingPage() {
       toast("success", `已发布到服务器，题库版本 ${value.bankVersion}`),
     onError: (error: Error) => toast("error", `发布失败：${error.message}`),
   });
+  // 题库体检（W3.4）：对库内全部题目批量执行导入自测同等校验，只读无副作用。
+  const [healthReport, setHealthReport] = useState<
+    Array<{ exerciseId: string; title: string; passed: boolean; message: string }>
+  >([]);
+  const runHealthCheck = useMutation({
+    mutationFn: () =>
+      localAppRequest<{
+        items: Array<{
+          exerciseId: string;
+          title: string;
+          passed: boolean;
+          message: string;
+        }>;
+      }>("teaching.exercise.health"),
+    onSuccess: (value) => {
+      setHealthReport(value.items);
+      toast(
+        value.items.every((item) => item.passed) ? "success" : "error",
+        `题库体检完成：${value.items.filter((item) => item.passed).length}/${value.items.length} 道题通过`,
+      );
+    },
+    onError: (error: Error) => toast("error", `题库体检失败：${error.message}`),
+  });
+  const exportHealthReport = () => {
+    const lines = healthReport.map(
+      (item) =>
+        `${item.passed ? "通过" : "未通过"}\t${item.exerciseId}\t${item.title}\t${item.message}`,
+    );
+    const report = ["状态\t题目ID\t题目\t说明", ...lines].join("\n");
+    void navigator.clipboard
+      ?.writeText(report)
+      .then(() => toast("success", "体检报告已复制到剪贴板，可粘贴保存"))
+      .catch(() => toast("error", "剪贴板不可用，请手动记录"));
+  };
   const draftExercises = useMutation({
     mutationFn: () =>
       localAppRequest<ExerciseTextDraft>("teaching.exercise.draft", {
@@ -625,7 +659,42 @@ export function TeachingPage() {
             </ul>
           </Feedback>
         )}
+        {healthReport.length > 0 && (
+          <Feedback
+            tone={
+              healthReport.every((item) => item.passed) ? "success" : "warning"
+            }
+            title={`题库体检报告（${healthReport.filter((item) => item.passed).length}/${healthReport.length} 通过）`}
+          >
+            <ul className="plain-list">
+              {healthReport.map((item) => (
+                <li key={item.exerciseId}>
+                  {item.passed ? "✓" : "✕"} {item.title}
+                  {!item.passed && <>—— {item.message}</>}
+                </li>
+              ))}
+            </ul>
+            <div className="button-row">
+              <Button variant="secondary" onClick={() => exportHealthReport()}>
+                复制文字报告
+              </Button>
+              <Button
+                variant="secondary"
+                onClick={() => setHealthReport([])}
+              >
+                关闭报告
+              </Button>
+            </div>
+          </Feedback>
+        )}
         <div className="button-row">
+          <Button
+            variant="secondary"
+            busy={runHealthCheck.isPending}
+            onClick={() => runHealthCheck.mutate()}
+          >
+            题库体检
+          </Button>
           <Button
             variant="secondary"
             disabled={!importText.trim()}

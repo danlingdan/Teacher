@@ -30,9 +30,12 @@ import type {
   ExerciseHint,
   ExerciseSession,
   ExerciseView,
+  RecommendationView,
+  ResultComparison,
   RunnerCapability,
   RunnerResult,
   SqlPage,
+  WrongBookItem,
 } from "../../shared/types";
 import { ExerciseCatalogPanel } from "./ExerciseCatalog";
 import type { ExerciseCatalogItem } from "../../shared/types";
@@ -134,9 +137,13 @@ const monacoLanguage: Record<string, string> = {
 export default function EditorPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const modeParam = searchParams.get("tab");
-  const mode: "exercise" | "activity" | "runner" =
-    modeParam === "activity" || modeParam === "runner" ? modeParam : "exercise";
-  const setMode = (next: "exercise" | "activity" | "runner") => {
+  const mode: "exercise" | "activity" | "runner" | "wrongbook" =
+    modeParam === "activity" || modeParam === "runner" || modeParam === "wrongbook"
+      ? modeParam
+      : "exercise";
+  const setMode = (
+    next: "exercise" | "activity" | "runner" | "wrongbook",
+  ) => {
     const params = new URLSearchParams(searchParams);
     if (next === "exercise") params.delete("tab");
     else params.set("tab", next);
@@ -167,11 +174,20 @@ export default function EditorPage() {
         >
           自由编程
         </button>
+        <button
+          type="button"
+          className={mode === "wrongbook" ? "selected" : ""}
+          onClick={() => setMode("wrongbook")}
+        >
+          错题本
+        </button>
       </div>
       {mode === "exercise" ? (
         <ExerciseFlow />
       ) : mode === "activity" ? (
         <ActivityFlow />
+      ) : mode === "wrongbook" ? (
+        <WrongBookFlow />
       ) : (
         <RunnerFlow />
       )}
@@ -738,6 +754,15 @@ function ExerciseFlow() {
       localAppRequest<{ items: ExerciseCatalogItem[] }>("practice.catalog"),
     staleTime: 30_000,
   });
+  // 确定性推荐下一题（本地作答历史重算，无随机、无 AI）。
+  const recommendation = useQuery({
+    queryKey: ["practice", "recommend"],
+    queryFn: () =>
+      localAppRequest<{ recommendation: RecommendationView | null }>(
+        "practice.recommend",
+      ),
+    staleTime: 30_000,
+  });
   const [selectedId, setSelectedId] = useState<string | undefined>(
     () => searchParams.get("exercise") ?? undefined,
   );
@@ -822,6 +847,23 @@ function ExerciseFlow() {
         clearDraft(selectedId);
       if (submit && assignmentContext) deliverAssignment.mutate(result);
     },
+  });
+  // AI 讲解：按需起草展示文本，只读展示，不写任何学习状态。
+  const explain = useMutation({
+    mutationFn: () =>
+      localAppRequest<{ explanation: string; model: string }>(
+        "ai.exercise.explain",
+        {
+          title: session?.exercise.title ?? "",
+          description: session?.exercise.description ?? "",
+          knowledgePoint: session?.exercise.knowledgePoint ?? "",
+          exerciseType: session?.exercise.exerciseType ?? "QUERY",
+          answer,
+          feedback: (feedback?.evaluation?.criteria ?? [])
+            .filter((item) => !item.passed)
+            .map((item) => `${item.criterion}：${item.feedback}`),
+        },
+      ),
   });
   const requestHint = useMutation({
     mutationFn: () =>
@@ -934,6 +976,29 @@ function ExerciseFlow() {
             <p>提交将计入班级任务。</p>
           </Feedback>
         )}
+        {recommendation.data?.recommendation && !session && (
+          <section className="content-card recommend-card">
+            <div>
+              <p className="eyebrow">推荐下一题</p>
+              <strong>
+                {recommendation.data.recommendation.title}
+              </strong>
+              <p className="muted">
+                {recommendation.data.recommendation.reason}
+              </p>
+            </div>
+            <Button
+              variant="secondary"
+              onClick={() =>
+                handleCatalogSelect(
+                  recommendation.data!.recommendation!.exerciseId,
+                )
+              }
+            >
+              去练习
+            </Button>
+          </section>
+        )}
         <Stepper
           steps={["选题", "预览确认", "作答", "反馈"]}
           current={step}
@@ -970,6 +1035,11 @@ function ExerciseFlow() {
             )}
             <h2>{assignmentSnapshot.data?.title ?? preview.data.title}</h2>
             <p>{assignmentSnapshot.data?.prompt ?? preview.data.description}</p>
+            {preview.data.expectedColumns.length > 0 && (
+              <p className="muted">
+                期望列：{preview.data.expectedColumns.join("、")}
+              </p>
+            )}
             {assignmentSnapshot.data && (
               <p className="muted">
                 快照 {assignmentSnapshot.data.snapshotHash.slice(0, 12)} · 数据集{" "}
@@ -1077,11 +1147,44 @@ function ExerciseFlow() {
             <p>
               {feedback.evaluation?.feedback ?? feedback.execution?.message}
             </p>
+            {feedback.evaluation?.score != null && (
+              <p className="score-line">
+                得分：{feedback.evaluation.score} / 100
+                （仅用于反馈，通过仍需全部分项达标）
+              </p>
+            )}
             {feedback.evaluation?.criteria.map((item) => (
               <p key={item.criterion}>
                 {item.passed ? "✓" : "×"} {item.criterion}：{item.feedback}
               </p>
             ))}
+            {feedback.evaluation &&
+              !feedback.evaluation.passed &&
+              feedback.evaluation.comparison && (
+                <ComparisonView
+                  comparison={feedback.evaluation.comparison}
+                />
+              )}
+            {feedback.evaluation && !feedback.evaluation.passed && (
+              <div className="button-row">
+                <Button
+                  variant="secondary"
+                  disabled={explain.isPending}
+                  busy={explain.isPending}
+                  onClick={() => explain.mutate()}
+                >
+                  AI 讲解（草稿）
+                </Button>
+              </div>
+            )}
+            {explain.data && (
+              <Feedback
+                tone="info"
+                title={`AI 讲解草稿 · ${explain.data.model}（仅供参考，不影响判分）`}
+              >
+                {explain.data.explanation}
+              </Feedback>
+            )}
           </Feedback>
         )}
         {feedback?.execution && feedback.execution.columns.length > 0 && (
@@ -1171,6 +1274,136 @@ function ExerciseFlow() {
     </div>
   );
 }
+
+/** 错题本独立视图（W2.3）：本机聚合的失败题目 + 一键重练。 */
+function WrongBookFlow() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const wrongBook = useQuery({
+    queryKey: ["practice", "wrongbook"],
+    queryFn: () =>
+      localAppRequest<{ items: WrongBookItem[] }>("practice.wrongbook"),
+  });
+  const openExercise = (exerciseId: string) => {
+    const params = new URLSearchParams(searchParams);
+    params.delete("tab");
+    params.set("exercise", exerciseId);
+    setSearchParams(params, { replace: false });
+  };
+  const items = wrongBook.data?.items ?? [];
+  return (
+    <div className="flow-layout">
+      <main className="flow-main">
+        <Stepper steps={["错题回顾", "重新作答", "对比反馈"]} current={0} />
+        {wrongBook.isPending && (
+          <section className="page-skeleton">
+            <span className="spinner" />
+            正在整理错题本
+          </section>
+        )}
+        {wrongBook.isError && (
+          <Feedback tone="error" title="错题本读取失败">
+            {wrongBook.error.message}
+          </Feedback>
+        )}
+        {!wrongBook.isPending && items.length === 0 && (
+          <EmptyState title="错题本是空的" />
+        )}
+        {items.map((item) => (
+          <section className="content-card wrongbook-card" key={item.exerciseId}>
+            <header className="editor-toolbar">
+              <div>
+                <p className="eyebrow">
+                  {item.knowledgePoint} · {item.difficulty} ·{" "}
+                  {item.exerciseType}
+                </p>
+                <h2>{item.title}</h2>
+              </div>
+              <span className="policy-chip">
+                {item.attempts} 次尝试
+                {item.bestScore != null ? ` · 最佳 ${item.bestScore} 分` : ""}
+              </span>
+            </header>
+            {item.lastFeedback && (
+              <p className="muted">最近反馈：{item.lastFeedback}</p>
+            )}
+            <div className="button-row">
+              <Button onClick={() => openExercise(item.exerciseId)}>
+                一键重练
+              </Button>
+            </div>
+          </section>
+        ))}
+      </main>
+    </div>
+  );
+}
+
+/** 期望/实际并排对比视图（W2.4）：期望行受教师 REVEAL 控制，diff 由 Java 计算。 */
+const ComparisonView = memo(function ComparisonView({
+  comparison,
+}: {
+  comparison: ResultComparison;
+}) {
+  return (
+    <section className="comparison-view">
+      <p className="eyebrow">期望 / 实际对比（差异单元格已标红）</p>
+      <div className="comparison-tables">
+        <div className="virtual-table" role="region" aria-label="期望结果" tabIndex={0}>
+          <p className="muted">期望结果</p>
+          <table>
+            <thead>
+              <tr>
+                {comparison.columns.map((column) => (
+                  <th key={column}>{column}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {comparison.expectedRows.map((row, rowIndex) => (
+                <tr key={`expected-${rowIndex}`}>
+                  {row.cells.map((cell, cellIndex) => (
+                    <td
+                      key={cellIndex}
+                      className={row.cellDiff[cellIndex] ? "diff-cell" : ""}
+                    >
+                      {String(cell ?? "NULL")}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="virtual-table" role="region" aria-label="实际结果" tabIndex={0}>
+          <p className="muted">你的结果</p>
+          <table>
+            <thead>
+              <tr>
+                {comparison.columns.map((column) => (
+                  <th key={column}>{column}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {comparison.actualRows.map((row, rowIndex) => (
+                <tr key={`actual-${rowIndex}`}>
+                  {row.cells.map((cell, cellIndex) => (
+                    <td
+                      key={cellIndex}
+                      className={row.cellDiff[cellIndex] ? "diff-cell" : ""}
+                    >
+                      {String(cell ?? "NULL")}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  );
+});
 
 /** 独立 memo 化：作答每键重渲染时，几百行的结果表不随之重排。 */
 const PracticeResultTable = memo(function PracticeResultTable({

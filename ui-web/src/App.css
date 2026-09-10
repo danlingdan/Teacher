@@ -2790,3 +2790,45 @@ kbd {
 .reduced-motion .ui-toast {
   animation: none;
 }
+
+/* v3.3 W2：得分、对比视图、错题本与推荐卡片 */
+.score-line {
+  font-weight: 600;
+  margin-top: 4px;
+}
+.recommend-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.recommend-card strong {
+  font-size: 15px;
+}
+.wrongbook-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.comparison-view {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.comparison-tables {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 12px;
+  max-height: 320px;
+  overflow: auto;
+}
+.comparison-tables .virtual-table {
+  max-height: 300px;
+  overflow: auto;
+}
+.diff-cell {
+  background: rgba(220, 38, 38, 0.14);
+  color: var(--danger, #b91c1c);
+  font-weight: 600;
+}

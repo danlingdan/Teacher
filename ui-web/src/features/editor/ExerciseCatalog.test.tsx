@@ -17,6 +17,7 @@ function item(overrides: Partial<ExerciseCatalogItem>): ExerciseCatalogItem {
     attempts: 0,
     passed: false,
     lastAttemptAt: null,
+    bestScore: null,
     ...overrides,
   };
 }

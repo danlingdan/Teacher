@@ -3,32 +3,28 @@ package com.sqlteacher.application.exercise;
 import com.sqlteacher.domain.exercise.ExerciseDifficulty;
 import com.sqlteacher.domain.exercise.ExerciseType;
 
-import java.util.List;
 import java.util.Objects;
 
-public record ExerciseView(
-    String id,
+/**
+ * Deterministic "practice next" recommendation computed from the local attempt history.
+ * The rule is fixed (knowledge-point accuracy × difficulty buckets), carries no
+ * randomness and no AI; the reason is written by the same rule that picks the exercise.
+ */
+public record RecommendationView(
+    String exerciseId,
     String title,
-    String description,
     String knowledgePoint,
     ExerciseDifficulty difficulty,
     ExerciseType exerciseType,
-    List<String> expectedColumns,
-    String schemaSummary,
-    int version
+    String reason
 ) {
-    public ExerciseView {
-        id = requireText(id, "id");
+    public RecommendationView {
+        exerciseId = requireText(exerciseId, "exerciseId");
         title = requireText(title, "title");
-        description = requireText(description, "description");
-        knowledgePoint = requireText(knowledgePoint, "knowledgePoint");
+        knowledgePoint = Objects.requireNonNull(knowledgePoint, "knowledgePoint must not be null").trim();
         difficulty = Objects.requireNonNull(difficulty, "difficulty must not be null");
         exerciseType = exerciseType == null ? ExerciseType.QUERY : exerciseType;
-        expectedColumns = expectedColumns == null ? List.of() : List.copyOf(expectedColumns);
-        schemaSummary = requireText(schemaSummary, "schemaSummary");
-        if (version < 1) {
-            throw new IllegalArgumentException("version must be positive");
-        }
+        reason = requireText(reason, "reason");
     }
 
     private static String requireText(String value, String fieldName) {

@@ -1,6 +1,7 @@
 package com.sqlteacher.infrastructure.database;
 
 import com.sqlteacher.application.exercise.ExerciseDraft;
+import com.sqlteacher.application.exercise.ExerciseHealthItem;
 import com.sqlteacher.application.exercise.ExerciseImportPreview;
 import com.sqlteacher.application.exercise.ExerciseImportResult;
 import com.sqlteacher.application.exercise.ExerciseManagementService;
@@ -9,6 +10,7 @@ import com.sqlteacher.domain.SqlTeacherException;
 import com.sqlteacher.domain.exercise.ExerciseDataset;
 import com.sqlteacher.domain.exercise.ExerciseDefinition;
 import com.sqlteacher.domain.exercise.ExerciseDifficulty;
+import com.sqlteacher.domain.exercise.ExerciseRevealMode;
 import com.sqlteacher.domain.exercise.ExerciseType;
 
 import java.sql.Connection;
@@ -19,6 +21,7 @@ import java.sql.Statement;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -155,7 +158,8 @@ public final class JdbcExerciseManagementService implements ExerciseManagementSe
                 source.difficulty(), source.datasetId(), source.referenceSql(), source.evaluationRule(),
                 source.hints(), 1, false, now, now, source.exerciseType(), source.verificationSql(),
                 source.allowedStatementTypes(), source.expectedAffectedRows(),
-                source.requiredTransactionKeywords(), source.triggerProbeSql()
+                source.requiredTransactionKeywords(), source.triggerProbeSql(),
+                source.expectedColumns(), source.revealMode()
             );
             insertExercise(connection, copy);
             return copy;
@@ -190,7 +194,8 @@ public final class JdbcExerciseManagementService implements ExerciseManagementSe
                 current.difficulty(), current.datasetId(), current.referenceSql(), current.evaluationRule(),
                 current.hints(), current.version() + 1, enabled, current.createdAt(), updatedAt,
                 current.exerciseType(), current.verificationSql(), current.allowedStatementTypes(),
-                current.expectedAffectedRows(), current.requiredTransactionKeywords(), current.triggerProbeSql()
+                current.expectedAffectedRows(), current.requiredTransactionKeywords(), current.triggerProbeSql(),
+                current.expectedColumns(), current.revealMode()
             );
         } catch (SqlTeacherException error) {
             throw error;
@@ -310,6 +315,34 @@ public final class JdbcExerciseManagementService implements ExerciseManagementSe
             .orElse(new ExerciseImportPreview.SelfTestStatus(false, "未参与自测"));
     }
 
+    @Override
+    public List<ExerciseHealthItem> healthCheck() {
+        try (Connection connection = connectionFactory.open("app")) {
+            List<ExerciseDataset> datasets = readAllDatasets(connection);
+            List<ExerciseDefinition> exercises = readAllDefinitions(connection);
+            Map<String, ExerciseDataset> datasetById = new java.util.LinkedHashMap<>();
+            for (ExerciseDataset dataset : datasets) {
+                datasetById.putIfAbsent(dataset.id(), dataset);
+            }
+            ExercisePackageValidator.Result result = validator.validate(
+                datasets, exercises, id -> java.util.Optional.ofNullable(datasetById.get(id))
+            );
+            List<ExerciseHealthItem> items = new ArrayList<>();
+            for (ExerciseDefinition exercise : exercises) {
+                ExercisePackageValidator.ItemStatus status = result.exercises().stream()
+                    .filter(item -> item.id().equals(exercise.id()))
+                    .findFirst()
+                    .orElse(new ExercisePackageValidator.ItemStatus(exercise.id(), false, "未参与自测"));
+                items.add(new ExerciseHealthItem(
+                    exercise.id(), exercise.title(), status.passed(), status.message()
+                ));
+            }
+            return List.copyOf(items);
+        } catch (SQLException | IllegalArgumentException error) {
+            throw failure("EXERCISE_HEALTH_CHECK_FAILED", "Failed to run the exercise health check", error);
+        }
+    }
+
     private Optional<ExerciseDataset> findDatasetById(String datasetId) {
         try (Connection connection = connectionFactory.open("app")) {
             return findDataset(connection, datasetId);
@@ -362,8 +395,20 @@ public final class JdbcExerciseManagementService implements ExerciseManagementSe
             Instant.parse(row.getString("updated_at")), exerciseType(row),
             typeConfig.verificationSql(), typeConfig.allowedStatementTypes(),
             typeConfig.expectedAffectedRows(), typeConfig.requiredTransactionKeywords(),
-            typeConfig.triggerProbeSql()
+            typeConfig.triggerProbeSql(), typeConfig.expectedColumns(),
+            revealMode(typeConfig.revealMode())
         );
+    }
+
+    private static ExerciseRevealMode revealMode(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return ExerciseRevealMode.ON_FAIL;
+        }
+        try {
+            return ExerciseRevealMode.valueOf(raw.trim().toUpperCase(java.util.Locale.ROOT).replace('-', '_'));
+        } catch (IllegalArgumentException error) {
+            return ExerciseRevealMode.ON_FAIL;
+        }
     }
 
     private static ExerciseType exerciseType(ResultSet row) throws SQLException {
@@ -445,7 +490,8 @@ public final class JdbcExerciseManagementService implements ExerciseManagementSe
             statement.setString(13, codec.encodeTypeConfig(
                 exercise.verificationSql(), exercise.allowedStatementTypes(),
                 exercise.expectedAffectedRows(), exercise.requiredTransactionKeywords(),
-                exercise.triggerProbeSql()
+                exercise.triggerProbeSql(), exercise.expectedColumns(),
+                exercise.revealMode().name()
             ));
             statement.setString(14, exercise.id());
             statement.setInt(15, expectedVersion);
@@ -473,7 +519,8 @@ public final class JdbcExerciseManagementService implements ExerciseManagementSe
         statement.setString(15, codec.encodeTypeConfig(
             exercise.verificationSql(), exercise.allowedStatementTypes(),
             exercise.expectedAffectedRows(), exercise.requiredTransactionKeywords(),
-            exercise.triggerProbeSql()
+            exercise.triggerProbeSql(), exercise.expectedColumns(),
+            exercise.revealMode().name()
         ));
     }
 

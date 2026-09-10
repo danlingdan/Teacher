@@ -16,7 +16,8 @@ public record ExerciseCatalogItem(
     int version,
     int attempts,
     boolean passed,
-    String lastAttemptAt
+    String lastAttemptAt,
+    Integer bestScore
 ) {
     public ExerciseCatalogItem {
         if (id == null || id.isBlank()) {
@@ -31,5 +32,8 @@ public record ExerciseCatalogItem(
         difficulty = difficulty == null ? ExerciseDifficulty.BEGINNER : difficulty;
         exerciseType = exerciseType == null ? ExerciseType.QUERY : exerciseType;
         attempts = Math.max(0, attempts);
+        if (bestScore != null && (bestScore < 0 || bestScore > 100)) {
+            throw new IllegalArgumentException("bestScore must be between 0 and 100");
+        }
     }
 }

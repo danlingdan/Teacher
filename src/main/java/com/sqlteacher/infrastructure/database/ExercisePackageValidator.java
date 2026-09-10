@@ -201,7 +201,7 @@ final class ExercisePackageValidator {
                 }
             }
         }
-        ItemStatus verificationStatus = checkVerificationQuery(exercise.id(), exercise.verificationSql());
+        ItemStatus verificationStatus = checkVerificationQuery(exercise.id(), exercise.verificationSql(), exercise);
         if (!verificationStatus.passed()) {
             return verificationStatus;
         }
@@ -223,12 +223,31 @@ final class ExercisePackageValidator {
                     statement.setQueryTimeout(QUERY_TIMEOUT_SECONDS);
                     statement.setMaxRows(MAX_SELF_TEST_ROWS + 1);
                     int rowCount = 0;
+                    StringBuilder planText = new StringBuilder();
                     try (ResultSet rows = statement.executeQuery(exercise.verificationSql())) {
+                        int columnCount = rows.getMetaData().getColumnCount();
                         while (rows.next()) {
                             rowCount++;
+                            for (int column = 1; column <= columnCount; column++) {
+                                Object cell = rows.getObject(column);
+                                planText.append(cell == null ? "" : String.valueOf(cell)).append(' ');
+                            }
                             if (rowCount > MAX_SELF_TEST_ROWS) {
                                 break;
                             }
+                        }
+                    }
+                    if (!exercise.evaluationRule().planKeywords().isEmpty()) {
+                        String normalizedPlan = SqlStructureMatcher.normalize(planText.toString());
+                        List<String> missingPlans = exercise.evaluationRule().planKeywords().stream()
+                            .filter(keyword -> !SqlStructureMatcher.containsKeyword(normalizedPlan, keyword))
+                            .toList();
+                        if (!missingPlans.isEmpty()) {
+                            connection.rollback();
+                            return new ItemStatus(
+                                exercise.id(), false,
+                                "参考答案的执行计划未满足 PLAN_KEYWORDS：" + String.join("、", missingPlans)
+                            );
                         }
                     }
                     ItemStatus ruleStatus = checkRule(exercise.evaluationRule(), rowCount, exercise);
@@ -298,12 +317,21 @@ final class ExercisePackageValidator {
         return pass(exerciseId);
     }
 
-    private ItemStatus checkVerificationQuery(String exerciseId, String verificationSql) {
+    private ItemStatus checkVerificationQuery(String exerciseId, String verificationSql, ExerciseDefinition exercise) {
         if (verificationSql == null || verificationSql.isBlank()) {
             return new ItemStatus(exerciseId, false, "本题必须提供验证查询（VERIFY）");
         }
         SqlRiskAnalysis risk = riskAnalysisService.analyze(verificationSql, DatabaseDialect.SQLITE);
-        if (!risk.executable() || risk.multiStatement() || !"SELECT".equals(risk.statementType())) {
+        if (!risk.executable() || risk.multiStatement()) {
+            return new ItemStatus(exerciseId, false, "验证查询必须是单条只读 SELECT 查询");
+        }
+        boolean explain = "EXPLAIN".equals(risk.statementType());
+        if (explain) {
+            if (exercise.evaluationRule().planKeywords().isEmpty()) {
+                return new ItemStatus(
+                    exerciseId, false, "只有声明 PLAN_KEYWORDS 的题目才允许用 EXPLAIN QUERY PLAN 作为验证查询");
+            }
+        } else if (!"SELECT".equals(risk.statementType())) {
             return new ItemStatus(exerciseId, false, "验证查询必须是单条只读 SELECT 查询");
         }
         return pass(exerciseId);

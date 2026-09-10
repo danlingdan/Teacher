@@ -1226,6 +1226,13 @@ final class SqliteSchemaMigrator {
                 "alter table exercises add column exercise_type text not null default 'QUERY'",
                 "alter table exercises add column type_config_json text not null default '{}'"
             )
+        ),
+        new Migration(
+            22,
+            "Track the deterministic display score of exercise attempts",
+            List.of(
+                "alter table exercise_attempts add column score integer"
+            )
         )
     );
 

@@ -183,6 +183,7 @@ export function ExerciseCatalogPanel({
                     {exerciseTypeLabel(item.exerciseType)} ·{" "}
                     {knowledgePointLabel(item.knowledgePoint)} ·{" "}
                     {difficultyLabel(item.difficulty)}
+                    {item.bestScore != null ? ` · ${item.bestScore} 分` : ""}
                     <span className={`catalog-badge ${status}`}>
                       {statusNames[status]}
                     </span>

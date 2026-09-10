@@ -24,4 +24,10 @@ public interface ExerciseManagementService {
     ExerciseImportResult importPackage(String text);
 
     ExerciseImportPreview parsePackage(String text);
+
+    /**
+     * Read-only batch self-test of the whole stored catalog (all datasets and exercises,
+     * including disabled ones and every question type); never mutates anything.
+     */
+    List<ExerciseHealthItem> healthCheck();
 }

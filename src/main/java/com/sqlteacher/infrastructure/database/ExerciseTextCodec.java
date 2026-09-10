@@ -5,6 +5,7 @@ import com.sqlteacher.domain.exercise.ExerciseDataset;
 import com.sqlteacher.domain.exercise.ExerciseDefinition;
 import com.sqlteacher.domain.exercise.ExerciseDifficulty;
 import com.sqlteacher.domain.exercise.ExerciseEvaluationRule;
+import com.sqlteacher.domain.exercise.ExerciseRevealMode;
 import com.sqlteacher.domain.exercise.ExerciseType;
 
 import java.time.Instant;
@@ -12,6 +13,7 @@ import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.regex.Matcher;
@@ -31,7 +33,8 @@ final class ExerciseTextCodec {
         "ID", "TITLE", "KNOWLEDGE", "DIFFICULTY", "DATASET", "DESCRIPTION", "SQL",
         "RULE", "COMPARE_COLUMNS", "COMPARE_ROWS", "ROW_ORDER", "EXPECTED_ROWS",
         "KEYWORDS", "HINTS", "VERSION", "ENABLED", "CREATED", "UPDATED",
-        "TYPE", "VERIFY", "ALLOWED", "AFFECTED", "TXN", "PROBE"
+        "TYPE", "VERIFY", "ALLOWED", "AFFECTED", "TXN", "PROBE",
+        "WEIGHTS", "REVEAL", "EXPECT_COLUMNS", "PLAN_KEYWORDS"
     );
     private static final Set<String> MULTILINE_LABELS = Set.of("SQL", "DESCRIPTION", "HINTS", "VERIFY", "PROBE");
 
@@ -99,6 +102,14 @@ final class ExerciseTextCodec {
         if (exercise.triggerProbeSql() != null) {
             out.append("PROBE:\n").append(exercise.triggerProbeSql()).append('\n');
         }
+        if (!exercise.expectedColumns().isEmpty()) {
+            out.append("EXPECT_COLUMNS: ")
+                .append(String.join(", ", exercise.expectedColumns())).append('\n');
+        }
+        if (exercise.revealMode() != ExerciseRevealMode.ON_FAIL) {
+            out.append("REVEAL: ").append(exercise.revealMode().name()
+                .toLowerCase(Locale.ROOT).replace('_', '-')).append('\n');
+        }
         out.append("COMPARE_COLUMNS: ").append(rule.compareColumns()).append('\n')
             .append("COMPARE_ROWS: ").append(rule.compareRows()).append('\n')
             .append("ROW_ORDER: ").append(rule.rowOrderMatters()).append('\n');
@@ -107,6 +118,14 @@ final class ExerciseTextCodec {
         }
         if (!rule.requiredSqlKeywords().isEmpty()) {
             out.append("KEYWORDS: ").append(String.join(", ", rule.requiredSqlKeywords())).append('\n');
+        }
+        if (!rule.criterionWeights().isEmpty()) {
+            out.append("WEIGHTS: ").append(rule.criterionWeights().entrySet().stream()
+                .map(entry -> entry.getKey() + ":" + entry.getValue())
+                .collect(java.util.stream.Collectors.joining(", "))).append('\n');
+        }
+        if (!rule.planKeywords().isEmpty()) {
+            out.append("PLAN_KEYWORDS: ").append(String.join(", ", rule.planKeywords())).append('\n');
         }
         if (!exercise.hints().isEmpty()) {
             out.append("HINTS:\n");
@@ -241,10 +260,64 @@ final class ExerciseTextCodec {
         Integer affectedRows = optionalInt(block, "AFFECTED");
         List<String> transactionKeywords = keywordList(block, "TXN");
         String triggerProbeSql = optionalMultiline(block, "PROBE");
+        List<String> expectedColumns = keywordList(block, "EXPECT_COLUMNS");
+        ExerciseRevealMode revealMode = revealMode(block);
+        rule = withRuleExtensions(block, rule);
         return new ExerciseDefinition(
             id, title, description, knowledgePoint, difficulty, datasetId, referenceSql,
             rule, hints, version, enabled, createdAt, updatedAt,
-            type, verificationSql, allowedTypes, affectedRows, transactionKeywords, triggerProbeSql
+            type, verificationSql, allowedTypes, affectedRows, transactionKeywords, triggerProbeSql,
+            expectedColumns, revealMode
+        );
+    }
+
+    private static ExerciseRevealMode revealMode(Block block) {
+        Field field = find(block, "REVEAL");
+        if (field == null || field.value.isBlank()) {
+            return ExerciseRevealMode.ON_FAIL;
+        }
+        try {
+            return ExerciseRevealMode.parse(field.value);
+        } catch (IllegalArgumentException error) {
+            throw invalid("Unknown reveal mode: " + field.value, field.line);
+        }
+    }
+
+    /** Applies WEIGHTS/PLAN_KEYWORDS on top of the parsed base rule. */
+    private static ExerciseEvaluationRule withRuleExtensions(Block block, ExerciseEvaluationRule base) {
+        Field weightsField = find(block, "WEIGHTS");
+        Field planField = find(block, "PLAN_KEYWORDS");
+        if (weightsField == null && planField == null) {
+            return base;
+        }
+        Map<String, Integer> weights = new java.util.LinkedHashMap<>();
+        if (weightsField != null && !weightsField.value.isBlank()) {
+            for (String part : weightsField.value.split(",")) {
+                String entry = part.trim();
+                if (entry.isEmpty()) {
+                    continue;
+                }
+                int separator = entry.indexOf(':');
+                if (separator <= 0 || separator == entry.length() - 1) {
+                    throw invalid("WEIGHTS entries must be criterion:weight", weightsField.line);
+                }
+                try {
+                    weights.put(entry.substring(0, separator).trim(),
+                        Integer.valueOf(entry.substring(separator + 1).trim()));
+                } catch (NumberFormatException error) {
+                    throw invalid("WEIGHTS entries must be criterion:weight", weightsField.line);
+                }
+            }
+        }
+        List<String> planKeywords = planField == null || planField.value.isBlank()
+            ? List.of()
+            : java.util.Arrays.stream(planField.value.split(","))
+                .map(String::trim)
+                .filter(value -> !value.isEmpty())
+                .toList();
+        return new ExerciseEvaluationRule(
+            base.compareColumns(), base.compareRows(), base.rowOrderMatters(),
+            base.expectedRowCount(), base.requiredSqlKeywords(), weights, planKeywords
         );
     }
 

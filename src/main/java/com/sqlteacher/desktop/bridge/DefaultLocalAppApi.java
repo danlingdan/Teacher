@@ -40,6 +40,7 @@ import com.sqlteacher.application.exercise.ExerciseManagementService;
 import com.sqlteacher.application.exercise.ExercisePracticeService;
 import com.sqlteacher.application.exercise.ExerciseProgressService;
 import com.sqlteacher.application.exercise.ExerciseDraft;
+import com.sqlteacher.application.exercise.ExerciseExplainRequest;
 import com.sqlteacher.application.exercise.ExerciseTextDraftingService;
 import com.sqlteacher.application.analytics.AnalyticsFilter;
 import com.sqlteacher.application.analytics.LearningAnalyticsService;
@@ -146,6 +147,8 @@ public final class DefaultLocalAppApi implements LocalAppApi {
             case "practice.hint" -> practiceHint(params, cancellation);
             case "practice.reset" -> practiceReset(params, cancellation);
             case "practice.close" -> practiceClose(params, cancellation);
+            case "practice.wrongbook" -> practiceWrongBook(cancellation);
+            case "practice.recommend" -> practiceRecommend(cancellation);
             case "practice.bank.check" -> practiceBankCheck(cancellation);
             case "practice.bank.update" -> practiceBankUpdate(cancellation, events);
             case "runner.capabilities" -> runnerCapabilities(cancellation);
@@ -166,6 +169,7 @@ public final class DefaultLocalAppApi implements LocalAppApi {
             case "ai.knowledge.ask" -> aiKnowledgeAsk(params, cancellation, events);
             case "ai.sql.preview" -> aiSqlPreview(params, cancellation);
             case "ai.sql.generate" -> aiSqlGenerate(params, cancellation, events);
+            case "ai.exercise.explain" -> aiExerciseExplain(params, cancellation);
             case "account.login" -> accountLogin(params, cancellation);
             case "account.register" -> accountRegister(params, cancellation);
             case "account.logout" -> accountLogout(cancellation);
@@ -188,6 +192,7 @@ public final class DefaultLocalAppApi implements LocalAppApi {
             case "teaching.exercise.draft" -> teachingExerciseDraft(params, cancellation);
             case "teaching.exercise.export" -> teachingExerciseExport(params, cancellation);
             case "teaching.exercise.publish" -> teachingExercisePublish(params, cancellation);
+            case "teaching.exercise.health" -> teachingExerciseHealth(cancellation);
             case "teaching.analytics" -> teachingAnalytics(cancellation);
             case "teaching.interventions" -> teachingInterventions(cancellation);
             case "teaching.intervention.update" -> teachingInterventionUpdate(params, cancellation);
@@ -1414,6 +1419,13 @@ public final class DefaultLocalAppApi implements LocalAppApi {
         return mapper.valueToTree(result);
     }
 
+    private JsonNode teachingExerciseHealth(CancellationToken cancellation) {
+        requireTeacher();
+        cancellation.throwIfCancelled();
+        var items = context().getBean(ExerciseManagementService.class).healthCheck();
+        return mapper.createObjectNode().set("items", mapper.valueToTree(items));
+    }
+
     private JsonNode teachingExercisePublish(JsonNode params, CancellationToken cancellation) {
         requireTeacher();
         cancellation.throwIfCancelled();
@@ -1424,6 +1436,40 @@ public final class DefaultLocalAppApi implements LocalAppApi {
         int bankVersion = context().getBean(CloudApiClient.class)
             .publishExerciseBankPackage(session.accessToken(), text);
         return mapper.createObjectNode().put("bankVersion", bankVersion);
+    }
+
+    private JsonNode practiceWrongBook(CancellationToken cancellation) {
+        cancellation.throwIfCancelled();
+        var items = context().getBean(ExerciseCatalogService.class).wrongBook();
+        return mapper.createObjectNode().set("items", mapper.valueToTree(items));
+    }
+
+    private JsonNode practiceRecommend(CancellationToken cancellation) {
+        cancellation.throwIfCancelled();
+        var recommendation = context().getBean(ExerciseCatalogService.class).recommendNextExercise();
+        ObjectNode node = mapper.createObjectNode();
+        if (recommendation.isPresent()) {
+            node.set("recommendation", mapper.valueToTree(recommendation.get()));
+        } else {
+            node.putNull("recommendation");
+        }
+        return node;
+    }
+
+    private JsonNode aiExerciseExplain(JsonNode params, CancellationToken cancellation) {
+        cancellation.throwIfCancelled();
+        ArrayNode feedback = mapper.createArrayNode();
+        params.withArray("feedback").forEach(item -> feedback.add(item.asText("")));
+        var request = new ExerciseExplainRequest(
+            requiredText(params, "title", 240),
+            params.path("description").asText(""),
+            params.path("knowledgePoint").asText(""),
+            params.path("exerciseType").asText("QUERY"),
+            requiredText(params, "answer", 256 * 1024),
+            mapper.convertValue(feedback, mapper.getTypeFactory().constructCollectionType(List.class, String.class))
+        );
+        // 展示型讲解草稿：只返回文本，不写入任何学习状态。
+        return mapper.valueToTree(context().getBean(ExerciseTextDraftingService.class).explainFailure(request));
     }
 
     private JsonNode practiceCatalog(CancellationToken cancellation) {

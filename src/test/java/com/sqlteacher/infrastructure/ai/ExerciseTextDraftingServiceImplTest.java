@@ -193,6 +193,34 @@ class ExerciseTextDraftingServiceImplTest {
         ));
     }
 
+    @Test
+    void shouldDraftDisplayOnlyFailureExplanation() {
+        MockProvider provider = new MockProvider(
+            AiCompletionResult.success("错题讲解：请检查 WHERE 条件。", "test-model"));
+        ExerciseTextDraftingServiceImpl service = service(provider);
+        var request = new com.sqlteacher.application.exercise.ExerciseExplainRequest(
+            "查询练习", "返回及格学生", "基础查询", "QUERY",
+            "select name from student", java.util.List.of("rows：结果行不符合要求。"));
+
+        var explanation = service.explainFailure(request);
+
+        assertEquals("错题讲解：请检查 WHERE 条件。", explanation.explanation());
+        assertEquals("test-model", explanation.model());
+        String prompt = provider.requests.getFirst().prompt();
+        assertTrue(prompt.contains("查询练习") && prompt.contains("rows"), prompt);
+    }
+
+    @Test
+    void shouldRejectBlankExplanationOutput() {
+        MockProvider provider = new MockProvider(AiCompletionResult.success("   ", "test-model"));
+        ExerciseTextDraftingServiceImpl service = service(provider);
+        var request = new com.sqlteacher.application.exercise.ExerciseExplainRequest(
+            "查询练习", "d", "kp", "QUERY", "select 1", java.util.List.of());
+
+        SqlTeacherException error = assertThrows(SqlTeacherException.class, () -> service.explainFailure(request));
+        assertEquals("EXERCISE_EXPLAIN_UNAVAILABLE", error.errorCode());
+    }
+
     private static class MockProvider implements AiModelProvider {
         final AiCompletionResult result;
         final List<AiCompletionRequest> requests = new ArrayList<>();

@@ -9,6 +9,8 @@ import com.sqlteacher.application.ai.AiModelProvider;
 import com.sqlteacher.application.ai.AiModelSelection;
 import com.sqlteacher.application.ai.AiModelSelectionService;
 import com.sqlteacher.application.config.AiConfiguration;
+import com.sqlteacher.application.exercise.ExerciseExplainRequest;
+import com.sqlteacher.application.exercise.ExerciseExplanation;
 import com.sqlteacher.application.exercise.ExerciseManagementService;
 import com.sqlteacher.application.exercise.ExerciseTextDraft;
 import com.sqlteacher.application.exercise.ExerciseTextDraftingService;
@@ -99,6 +101,51 @@ public final class ExerciseTextDraftingServiceImpl implements ExerciseTextDrafti
             );
         }
         return new ExerciseTextDraft(text, result.model());
+    }
+
+    private static final int MAX_EXPLANATION_CHARS = 4_000;
+
+    @Override
+    public ExerciseExplanation explainFailure(ExerciseExplainRequest request) {
+        Objects.requireNonNull(request, "request must not be null");
+        String model = resolveSelectedModel();
+        if (model.isBlank()) {
+            throw new SqlTeacherException(
+                "EXERCISE_EXPLAIN_UNAVAILABLE",
+                "No local Ollama model is installed. Install a model or refresh the model list."
+            );
+        }
+        String prompt = PromptTemplateLoader.render("/prompts/exercise-explain-v1.txt", Map.of(
+            "title", request.title(),
+            "knowledgePoint", request.knowledgePoint(),
+            "exerciseType", request.exerciseType(),
+            "description", request.description(),
+            "studentSql", request.studentSql(),
+            "feedback", request.feedbackText()
+        ));
+        AiCompletionResult result;
+        try {
+            result = aiModelProvider.complete(
+                new AiCompletionRequest(model, prompt, DRAFT_TIMEOUT)
+            );
+        } catch (RuntimeException error) {
+            throw new SqlTeacherException(
+                "EXERCISE_EXPLAIN_UNAVAILABLE",
+                "AI provider failed: " + error.getClass().getSimpleName(),
+                error
+            );
+        }
+        if (!result.success()) {
+            throw new SqlTeacherException("EXERCISE_EXPLAIN_UNAVAILABLE", result.errorMessage());
+        }
+        String explanation = stripFences(result.content() == null ? "" : result.content());
+        if (explanation.length() > MAX_EXPLANATION_CHARS) {
+            explanation = explanation.substring(0, MAX_EXPLANATION_CHARS);
+        }
+        if (explanation.isBlank()) {
+            throw new SqlTeacherException("EXERCISE_EXPLAIN_UNAVAILABLE", "The model returned an empty explanation.");
+        }
+        return new ExerciseExplanation(explanation, result.model());
     }
 
     private String resolveSelectedModel() {

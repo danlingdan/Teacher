@@ -187,10 +187,40 @@ export interface ExerciseCatalogItem {
   attempts: number;
   passed: boolean;
   lastAttemptAt: string | null;
+  bestScore: number | null;
 }
 export interface ExerciseView extends ExerciseSummary {
   description: string;
+  expectedColumns: string[];
   schemaSummary: string;
+}
+export interface ComparisonRow {
+  cells: unknown[];
+  cellDiff: boolean[];
+}
+export interface ResultComparison {
+  columns: string[];
+  expectedRows: ComparisonRow[];
+  actualRows: ComparisonRow[];
+}
+export interface WrongBookItem {
+  exerciseId: string;
+  title: string;
+  knowledgePoint: string;
+  difficulty: string;
+  exerciseType: ExerciseKind;
+  attempts: number;
+  bestScore: number | null;
+  lastAttemptAt: string | null;
+  lastFeedback: string;
+}
+export interface RecommendationView {
+  exerciseId: string;
+  title: string;
+  knowledgePoint: string;
+  difficulty: string;
+  exerciseType: ExerciseKind;
+  reason: string;
 }
 export interface ExerciseSession {
   id: string;
@@ -209,6 +239,8 @@ export interface ExerciseAttempt {
     feedback: string;
     errorCode: string;
     criteria: Array<{ criterion: string; passed: boolean; feedback: string }>;
+    score?: number | null;
+    comparison?: ResultComparison | null;
   };
   occurredAt: string;
 }

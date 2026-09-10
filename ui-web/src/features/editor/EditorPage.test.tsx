@@ -101,7 +101,9 @@ const exerciseView = {
   attempts: 0,
   passed: false,
   lastAttemptAt: null,
+  bestScore: null,
   description: "返回全部学生",
+  expectedColumns: [],
   schemaSummary: "student(id, name)",
 };
 
