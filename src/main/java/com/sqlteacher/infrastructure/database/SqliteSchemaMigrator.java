@@ -1218,6 +1218,14 @@ final class SqliteSchemaMigrator {
                     )
                     """
             )
+        ),
+        new Migration(
+            21,
+            "Add exercise type and per-type grading configuration to exercises",
+            List.of(
+                "alter table exercises add column exercise_type text not null default 'QUERY'",
+                "alter table exercises add column type_config_json text not null default '{}'"
+            )
         )
     );
 

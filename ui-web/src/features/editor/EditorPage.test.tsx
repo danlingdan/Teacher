@@ -95,6 +95,7 @@ const exerciseView = {
   title: "查询练习",
   knowledgePoint: "基础查询",
   difficulty: "BEGINNER",
+  exerciseType: "QUERY" as const,
   version: 1,
   enabled: true,
   attempts: 0,
@@ -102,6 +103,14 @@ const exerciseView = {
   lastAttemptAt: null,
   description: "返回全部学生",
   schemaSummary: "student(id, name)",
+};
+
+const stateExerciseView = {
+  ...exerciseView,
+  id: "s1",
+  title: "写操作练习",
+  exerciseType: "STATE" as const,
+  description: "把分数改为 95",
 };
 
 function renderEditorPage() {
@@ -310,5 +319,36 @@ describe("EditorPage CodeEditor shortcuts", () => {
       monacoTest.commands.get(KEY_F1)?.();
     });
     expect(requestMock).not.toHaveBeenCalled();
+  });
+
+  it("shows writable guidance with reset for STATE exercises", async () => {
+    requestMock.mockImplementation((method: string) => {
+      if (method === "practice.catalog")
+        return Promise.resolve({ items: [stateExerciseView] });
+      if (method === "practice.preview")
+        return Promise.resolve(stateExerciseView);
+      if (method === "practice.start")
+        return Promise.resolve({
+          id: "session-2",
+          exercise: stateExerciseView,
+          startedAt: "2026-09-10T00:00:00Z",
+          hintsUsed: 0,
+          completed: false,
+        });
+      return Promise.reject(new Error(`Unexpected request: ${method}`));
+    });
+    renderEditorPage();
+
+    fireEvent.click(await screen.findByRole("button", { name: /写操作练习/ }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "确认并开始作答" }),
+    );
+
+    const guidance = await screen.findAllByText(/本题修改沙盒数据/);
+    expect(guidance.length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: "重置练习" })).toBeEnabled();
+    expect(
+      screen.getByRole("button", { name: "提交评价" }),
+    ).toBeEnabled();
   });
 });

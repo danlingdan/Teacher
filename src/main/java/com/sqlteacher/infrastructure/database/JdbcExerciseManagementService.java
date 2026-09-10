@@ -9,6 +9,7 @@ import com.sqlteacher.domain.SqlTeacherException;
 import com.sqlteacher.domain.exercise.ExerciseDataset;
 import com.sqlteacher.domain.exercise.ExerciseDefinition;
 import com.sqlteacher.domain.exercise.ExerciseDifficulty;
+import com.sqlteacher.domain.exercise.ExerciseType;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -54,7 +55,7 @@ public final class JdbcExerciseManagementService implements ExerciseManagementSe
     @Override
     public List<ExerciseSummary> listExercises(boolean includeDisabled) {
         String sql = """
-            select id, title, knowledge_point, difficulty, version, enabled
+            select id, title, knowledge_point, difficulty, exercise_type, version, enabled
             from exercises
             where enabled = 1 or ? = 1
             order by difficulty, knowledge_point, title, id
@@ -67,8 +68,8 @@ public final class JdbcExerciseManagementService implements ExerciseManagementSe
                 while (rows.next()) {
                     result.add(new ExerciseSummary(
                         rows.getString("id"), rows.getString("title"), rows.getString("knowledge_point"),
-                        ExerciseDifficulty.valueOf(rows.getString("difficulty")), rows.getInt("version"),
-                        rows.getBoolean("enabled")
+                        ExerciseDifficulty.valueOf(rows.getString("difficulty")),
+                        exerciseType(rows), rows.getInt("version"), rows.getBoolean("enabled")
                     ));
                 }
                 return List.copyOf(result);
@@ -152,7 +153,9 @@ public final class JdbcExerciseManagementService implements ExerciseManagementSe
             ExerciseDefinition copy = new ExerciseDefinition(
                 UUID.randomUUID().toString(), title, source.description(), source.knowledgePoint(),
                 source.difficulty(), source.datasetId(), source.referenceSql(), source.evaluationRule(),
-                source.hints(), 1, false, now, now
+                source.hints(), 1, false, now, now, source.exerciseType(), source.verificationSql(),
+                source.allowedStatementTypes(), source.expectedAffectedRows(),
+                source.requiredTransactionKeywords(), source.triggerProbeSql()
             );
             insertExercise(connection, copy);
             return copy;
@@ -185,7 +188,9 @@ public final class JdbcExerciseManagementService implements ExerciseManagementSe
             return new ExerciseDefinition(
                 current.id(), current.title(), current.description(), current.knowledgePoint(),
                 current.difficulty(), current.datasetId(), current.referenceSql(), current.evaluationRule(),
-                current.hints(), current.version() + 1, enabled, current.createdAt(), updatedAt
+                current.hints(), current.version() + 1, enabled, current.createdAt(), updatedAt,
+                current.exerciseType(), current.verificationSql(), current.allowedStatementTypes(),
+                current.expectedAffectedRows(), current.requiredTransactionKeywords(), current.triggerProbeSql()
             );
         } catch (SqlTeacherException error) {
             throw error;
@@ -346,14 +351,31 @@ public final class JdbcExerciseManagementService implements ExerciseManagementSe
     }
 
     private ExerciseDefinition readExercise(ResultSet row) throws SQLException {
+        ExercisePackageCodec.TypeConfigData typeConfig =
+            codec.decodeTypeConfig(row.getString("type_config_json"));
         return new ExerciseDefinition(
             row.getString("id"), row.getString("title"), row.getString("description"),
             row.getString("knowledge_point"), ExerciseDifficulty.valueOf(row.getString("difficulty")),
             row.getString("dataset_id"), row.getString("reference_sql"),
             codec.decodeRule(row.getString("evaluation_rule_json")), codec.decodeHints(row.getString("hints_json")),
             row.getInt("version"), row.getBoolean("enabled"), Instant.parse(row.getString("created_at")),
-            Instant.parse(row.getString("updated_at"))
+            Instant.parse(row.getString("updated_at")), exerciseType(row),
+            typeConfig.verificationSql(), typeConfig.allowedStatementTypes(),
+            typeConfig.expectedAffectedRows(), typeConfig.requiredTransactionKeywords(),
+            typeConfig.triggerProbeSql()
         );
+    }
+
+    private static ExerciseType exerciseType(ResultSet row) throws SQLException {
+        String raw = row.getString("exercise_type");
+        if (raw == null || raw.isBlank()) {
+            return ExerciseType.QUERY;
+        }
+        try {
+            return ExerciseType.valueOf(raw.trim().toUpperCase(java.util.Locale.ROOT));
+        } catch (IllegalArgumentException error) {
+            return ExerciseType.QUERY;
+        }
     }
 
     private static ExerciseDataset readDataset(ResultSet row) throws SQLException {
@@ -390,8 +412,9 @@ public final class JdbcExerciseManagementService implements ExerciseManagementSe
         String sql = """
             insert into exercises(
                 id, title, description, knowledge_point, difficulty, dataset_id, reference_sql,
-                evaluation_rule_json, hints_json, version, enabled, created_at, updated_at
-            ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                evaluation_rule_json, hints_json, version, enabled, created_at, updated_at,
+                exercise_type, type_config_json
+            ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """;
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             bindExercise(statement, exercise);
@@ -403,7 +426,7 @@ public final class JdbcExerciseManagementService implements ExerciseManagementSe
         String sql = """
             update exercises set title = ?, description = ?, knowledge_point = ?, difficulty = ?,
                 dataset_id = ?, reference_sql = ?, evaluation_rule_json = ?, hints_json = ?,
-                version = ?, enabled = ?, updated_at = ?
+                version = ?, enabled = ?, updated_at = ?, exercise_type = ?, type_config_json = ?
             where id = ? and version = ?
             """;
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
@@ -418,8 +441,14 @@ public final class JdbcExerciseManagementService implements ExerciseManagementSe
             statement.setInt(9, exercise.version());
             statement.setBoolean(10, exercise.enabled());
             statement.setString(11, exercise.updatedAt().toString());
-            statement.setString(12, exercise.id());
-            statement.setInt(13, expectedVersion);
+            statement.setString(12, exercise.exerciseType().name());
+            statement.setString(13, codec.encodeTypeConfig(
+                exercise.verificationSql(), exercise.allowedStatementTypes(),
+                exercise.expectedAffectedRows(), exercise.requiredTransactionKeywords(),
+                exercise.triggerProbeSql()
+            ));
+            statement.setString(14, exercise.id());
+            statement.setInt(15, expectedVersion);
             if (statement.executeUpdate() != 1) {
                 throw conflict("Exercise was changed by another operation");
             }
@@ -440,6 +469,12 @@ public final class JdbcExerciseManagementService implements ExerciseManagementSe
         statement.setBoolean(11, exercise.enabled());
         statement.setString(12, exercise.createdAt().toString());
         statement.setString(13, exercise.updatedAt().toString());
+        statement.setString(14, exercise.exerciseType().name());
+        statement.setString(15, codec.encodeTypeConfig(
+            exercise.verificationSql(), exercise.allowedStatementTypes(),
+            exercise.expectedAffectedRows(), exercise.requiredTransactionKeywords(),
+            exercise.triggerProbeSql()
+        ));
     }
 
     private static void insertDataset(Connection connection, ExerciseDataset dataset) throws SQLException {

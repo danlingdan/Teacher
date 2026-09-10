@@ -1,6 +1,7 @@
 package com.sqlteacher.application.exercise;
 
 import com.sqlteacher.domain.exercise.ExerciseDifficulty;
+import com.sqlteacher.domain.exercise.ExerciseType;
 
 import java.util.Objects;
 
@@ -9,6 +10,7 @@ public record ExerciseSummary(
     String title,
     String knowledgePoint,
     ExerciseDifficulty difficulty,
+    ExerciseType exerciseType,
     int version,
     boolean enabled
 ) {
@@ -17,6 +19,7 @@ public record ExerciseSummary(
         title = requireText(title, "title");
         knowledgePoint = requireText(knowledgePoint, "knowledgePoint");
         difficulty = Objects.requireNonNull(difficulty, "difficulty must not be null");
+        exerciseType = exerciseType == null ? ExerciseType.QUERY : exerciseType;
         if (version < 1) {
             throw new IllegalArgumentException("version must be positive");
         }

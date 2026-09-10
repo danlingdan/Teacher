@@ -75,8 +75,9 @@ final class ExerciseBankWriter {
             try (PreparedStatement statement = connection.prepareStatement(
                 "insert into exercises("
                     + "id, title, description, knowledge_point, difficulty, dataset_id, reference_sql, "
-                    + "evaluation_rule_json, hints_json, version, enabled, created_at, updated_at"
-                    + ") values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+                    + "evaluation_rule_json, hints_json, version, enabled, created_at, updated_at, "
+                    + "exercise_type, type_config_json"
+                    + ") values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
             )) {
                 bindExercise(statement, exercise, exercise.createdAt(), Instant.now());
                 statement.executeUpdate();
@@ -86,7 +87,7 @@ final class ExerciseBankWriter {
         try (PreparedStatement statement = connection.prepareStatement(
             "update exercises set title = ?, description = ?, knowledge_point = ?, difficulty = ?, "
                 + "dataset_id = ?, reference_sql = ?, evaluation_rule_json = ?, hints_json = ?, "
-                + "version = ?, enabled = ?, updated_at = ? "
+                + "version = ?, enabled = ?, updated_at = ?, exercise_type = ?, type_config_json = ? "
                 + "where id = ? and version = ?"
         )) {
             Instant now = Instant.now();
@@ -101,8 +102,9 @@ final class ExerciseBankWriter {
             statement.setInt(9, exercise.version());
             statement.setBoolean(10, exercise.enabled());
             statement.setString(11, now.toString());
-            statement.setString(12, exercise.id());
-            statement.setInt(13, storedVersion);
+            bindTypeConfig(statement, exercise, 12, 13);
+            statement.setString(14, exercise.id());
+            statement.setInt(15, storedVersion);
             if (statement.executeUpdate() != 1) {
                 throw new SqlTeacherException(
                     "EXERCISE_BANK_INVALID", "Exercise " + exercise.id() + " changed during bank application"
@@ -110,6 +112,17 @@ final class ExerciseBankWriter {
             }
             return ExerciseOutcome.UPDATED;
         }
+    }
+
+    private void bindTypeConfig(
+        PreparedStatement statement, ExerciseDefinition exercise, int typeIndex, int configIndex
+    ) throws SQLException {
+        statement.setString(typeIndex, exercise.exerciseType().name());
+        statement.setString(configIndex, codec.encodeTypeConfig(
+            exercise.verificationSql(), exercise.allowedStatementTypes(),
+            exercise.expectedAffectedRows(), exercise.requiredTransactionKeywords(),
+            exercise.triggerProbeSql()
+        ));
     }
 
     private void bindExercise(
@@ -128,5 +141,6 @@ final class ExerciseBankWriter {
         statement.setBoolean(11, exercise.enabled());
         statement.setString(12, createdAt.toString());
         statement.setString(13, updatedAt.toString());
+        bindTypeConfig(statement, exercise, 14, 15);
     }
 }

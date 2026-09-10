@@ -33,6 +33,7 @@ public final class DefaultSqlRiskAnalysisService implements SqlRiskAnalysisServi
 
         boolean multiStatement = hasMultipleStatements(normalized);
         String statementType = firstStatementKeyword(normalized);
+        boolean triggerDefinition = isCreateTriggerStatement(normalized);
 
         if (isForbiddenAdministrativeStatement(normalized, statementType)) {
             return forbidden(statementType + "_ADMIN", false,
@@ -50,7 +51,7 @@ public final class DefaultSqlRiskAnalysisService implements SqlRiskAnalysisServi
             );
         }
 
-        if (containsAiSeparatedStatement(normalized)) {
+        if (!triggerDefinition && containsAiSeparatedStatement(normalized)) {
             return new SqlRiskAnalysis(
                     SqlRiskLevel.HIGH,
                     false,
@@ -278,6 +279,11 @@ public final class DefaultSqlRiskAnalysisService implements SqlRiskAnalysisServi
     }
 
     private boolean hasMultipleStatements(String sql) {
+        if (isCreateTriggerStatement(sql)) {
+            // A trigger body legitimately contains semicolon-separated statements;
+            // only content after the body's terminating END makes it multi-statement.
+            return contentAfterTriggerBody(sql);
+        }
         boolean singleQuoted = false;
         boolean doubleQuoted = false;
         boolean lineComment = false;
@@ -330,6 +336,37 @@ public final class DefaultSqlRiskAnalysisService implements SqlRiskAnalysisServi
             }
         }
         return false;
+    }
+
+    /** True when the (comment-stripped) text is a single CREATE TRIGGER definition. */
+    private static boolean isCreateTriggerStatement(String normalizedSql) {
+        String tokens = maskQuotedText(normalizedSql).toUpperCase(Locale.ROOT).trim();
+        return tokens.matches("(?s)^CREATE\\s+(?:TEMP|TEMPORARY)?\\s*TRIGGER\\b.*");
+    }
+
+    /**
+     * Detects statements appended after a trigger definition. Quotes are masked first, so
+     * the first standalone END that follows the body-opening BEGIN terminates the trigger.
+     */
+    private static boolean contentAfterTriggerBody(String sql) {
+        String tokens = maskQuotedText(sql).toUpperCase(Locale.ROOT);
+        java.util.regex.Matcher header = java.util.regex.Pattern
+            .compile("(?s)^CREATE\\s+(?:TEMP|TEMPORARY)?\\s*TRIGGER\\b.*?\\bBEGIN\\b")
+            .matcher(tokens);
+        if (!header.find()) {
+            // Malformed header without a body; fall back to plain semicolon counting.
+            return true;
+        }
+        String tail = tokens.substring(header.end());
+        java.util.regex.Matcher end = java.util.regex.Pattern.compile("\\bEND\\b").matcher(tail);
+        if (!end.find()) {
+            return false;
+        }
+        String remainder = tail.substring(end.end()).strip();
+        if (remainder.startsWith(";")) {
+            remainder = remainder.substring(1).strip();
+        }
+        return !remainder.isEmpty();
     }
 
     private boolean hasStatementContent(String sql, int start) {

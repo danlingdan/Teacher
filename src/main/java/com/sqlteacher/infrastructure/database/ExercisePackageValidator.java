@@ -7,6 +7,7 @@ import com.sqlteacher.domain.SqlTeacherException;
 import com.sqlteacher.domain.exercise.ExerciseDataset;
 import com.sqlteacher.domain.exercise.ExerciseDefinition;
 import com.sqlteacher.domain.exercise.ExerciseEvaluationRule;
+import com.sqlteacher.domain.exercise.ExerciseType;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -141,6 +142,9 @@ final class ExercisePackageValidator {
         if (!datasetById.containsKey(exercise.datasetId())) {
             return new ItemStatus(exercise.id(), false, "引用的数据集不存在：" + exercise.datasetId());
         }
+        if (exercise.exerciseType() != ExerciseType.QUERY) {
+            return validateStatefulExercise(exercise, datasetById.get(exercise.datasetId()));
+        }
         SqlRiskAnalysis risk = riskAnalysisService.analyze(exercise.referenceSql(), DatabaseDialect.SQLITE);
         if (!risk.executable() || risk.multiStatement() || !"SELECT".equals(risk.statementType())) {
             return new ItemStatus(exercise.id(), false, "参考答案必须是单条只读 SELECT 查询");
@@ -168,6 +172,160 @@ final class ExercisePackageValidator {
         } catch (SQLException error) {
             return new ItemStatus(exercise.id(), false, "参考答案未能在数据集上执行");
         }
+    }
+
+    /**
+     * Self-test for STATE/SCRIPT/TRIGGER: identical gate and execution order as the
+     * runtime evaluator, run on a dedicated in-memory database because the reference
+     * answer mutates data (the shared per-dataset self-test connection stays read-only).
+     */
+    private ItemStatus validateStatefulExercise(ExerciseDefinition exercise, ExerciseDataset dataset) {
+        ItemStatus structural = checkStatefulStructure(exercise);
+        if (!structural.passed()) {
+            return structural;
+        }
+        ExerciseSubmissionGate gate = new ExerciseSubmissionGate(riskAnalysisService);
+        ExerciseSubmissionGate.Decision decision = gate.check(
+            exercise.exerciseType(), exercise.effectiveAllowedStatementTypes(), exercise.referenceSql()
+        );
+        if (!decision.allowed()) {
+            return new ItemStatus(exercise.id(), false, "参考答案未通过类型检查：" + decision.reason());
+        }
+        List<String> probeStatements = List.of();
+        if (exercise.exerciseType() == ExerciseType.TRIGGER) {
+            probeStatements = SqlScriptSplitter.split(exercise.triggerProbeSql());
+            for (int index = 0; index < probeStatements.size(); index++) {
+                ItemStatus status = checkProbeStatement(exercise.id(), probeStatements.get(index), index + 1);
+                if (!status.passed()) {
+                    return status;
+                }
+            }
+        }
+        ItemStatus verificationStatus = checkVerificationQuery(exercise.id(), exercise.verificationSql());
+        if (!verificationStatus.passed()) {
+            return verificationStatus;
+        }
+
+        try {
+            SqliteDriver.ensureLoaded();
+            try (Connection connection = DriverManager.getConnection("jdbc:sqlite::memory:")) {
+                connection.setAutoCommit(false);
+            try {
+                int affectedRows;
+                try (Statement statement = connection.createStatement()) {
+                    for (String sql : SqlScriptSplitter.split(dataset.setupSql())) {
+                        statement.execute(sql);
+                    }
+                    affectedRows = executeScript(statement, decision.statements());
+                    if (exercise.exerciseType() == ExerciseType.TRIGGER) {
+                        executeScript(statement, probeStatements);
+                    }
+                    statement.setQueryTimeout(QUERY_TIMEOUT_SECONDS);
+                    statement.setMaxRows(MAX_SELF_TEST_ROWS + 1);
+                    int rowCount = 0;
+                    try (ResultSet rows = statement.executeQuery(exercise.verificationSql())) {
+                        while (rows.next()) {
+                            rowCount++;
+                            if (rowCount > MAX_SELF_TEST_ROWS) {
+                                break;
+                            }
+                        }
+                    }
+                    ItemStatus ruleStatus = checkRule(exercise.evaluationRule(), rowCount, exercise);
+                    if (!ruleStatus.passed()) {
+                        connection.rollback();
+                        return ruleStatus;
+                    }
+                }
+                if (exercise.expectedAffectedRows() != null && exercise.expectedAffectedRows() != affectedRows) {
+                    connection.rollback();
+                    return new ItemStatus(
+                        exercise.id(), false,
+                        "参考答案影响 " + affectedRows + " 行，与声明的期望影响行数 " + exercise.expectedAffectedRows() + " 不一致"
+                    );
+                }
+                if (exercise.exerciseType() == ExerciseType.SCRIPT
+                    && !exercise.requiredTransactionKeywords().isEmpty()) {
+                    String normalized = SqlStructureMatcher.normalize(exercise.referenceSql());
+                    List<String> missing = exercise.requiredTransactionKeywords().stream()
+                        .filter(keyword -> !SqlStructureMatcher.containsKeyword(normalized, keyword))
+                        .toList();
+                    if (!missing.isEmpty()) {
+                        connection.rollback();
+                        return new ItemStatus(
+                            exercise.id(), false,
+                            "参考脚本未使用题目要求的事务关键字：" + String.join("、", missing)
+                        );
+                    }
+                }
+                connection.rollback();
+                return new ItemStatus(exercise.id(), true, "参考答案自测通过");
+            } catch (SQLException error) {
+                connection.rollback();
+                return new ItemStatus(exercise.id(), false, "参考答案未能在数据集上执行");
+            }
+            }
+        } catch (SQLException error) {
+            return new ItemStatus(exercise.id(), false, "数据集未能建立自测环境");
+        }
+    }
+
+    private ItemStatus checkStatefulStructure(ExerciseDefinition exercise) {
+        List<String> statements = SqlScriptSplitter.split(exercise.referenceSql());
+        return switch (exercise.exerciseType()) {
+            case STATE -> statements.size() == 1
+                ? pass(exercise.id())
+                : fail(exercise.id(), "写操作题参考答案必须是单条写语句");
+            case TRIGGER -> statements.size() == 1
+                && ExerciseSubmissionGate.isTriggerDefinition(statements.getFirst())
+                ? pass(exercise.id())
+                : fail(exercise.id(), "触发器题参考答案必须是单条 CREATE TRIGGER 语句");
+            default -> statements.isEmpty()
+                ? fail(exercise.id(), "脚本题参考答案不能为空")
+                : pass(exercise.id());
+        };
+    }
+
+    private ItemStatus checkProbeStatement(String exerciseId, String statement, int position) {
+        SqlRiskAnalysis risk = riskAnalysisService.analyze(statement, DatabaseDialect.SQLITE);
+        if (!risk.executable() || risk.multiStatement()
+            || !(ExerciseSubmissionGate.isScriptStatementType(risk.statementType())
+                || ExerciseSubmissionGate.isTransactionStatementType(risk.statementType()))) {
+            return new ItemStatus(
+                exerciseId, false, "触发场景第 " + position + " 条语句不被允许：只支持 INSERT、UPDATE、DELETE、SELECT 和事务控制语句"
+            );
+        }
+        return pass(exerciseId);
+    }
+
+    private ItemStatus checkVerificationQuery(String exerciseId, String verificationSql) {
+        if (verificationSql == null || verificationSql.isBlank()) {
+            return new ItemStatus(exerciseId, false, "本题必须提供验证查询（VERIFY）");
+        }
+        SqlRiskAnalysis risk = riskAnalysisService.analyze(verificationSql, DatabaseDialect.SQLITE);
+        if (!risk.executable() || risk.multiStatement() || !"SELECT".equals(risk.statementType())) {
+            return new ItemStatus(exerciseId, false, "验证查询必须是单条只读 SELECT 查询");
+        }
+        return pass(exerciseId);
+    }
+
+    private static int executeScript(Statement statement, List<String> statements) throws SQLException {
+        int affectedRows = 0;
+        for (String sql : statements) {
+            boolean hasResult = statement.execute(sql);
+            if (!hasResult) {
+                affectedRows += Math.max(0, statement.getUpdateCount());
+            }
+        }
+        return affectedRows;
+    }
+
+    private static ItemStatus pass(String id) {
+        return new ItemStatus(id, true, "自测通过");
+    }
+
+    private static ItemStatus fail(String id, String message) {
+        return new ItemStatus(id, false, message);
     }
 
     private ItemStatus checkRule(ExerciseEvaluationRule rule, int rowCount, ExerciseDefinition exercise) {

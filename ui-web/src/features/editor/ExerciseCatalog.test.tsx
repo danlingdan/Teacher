@@ -12,6 +12,7 @@ function item(overrides: Partial<ExerciseCatalogItem>): ExerciseCatalogItem {
     title: "题目",
     knowledgePoint: "基础查询",
     difficulty: "BEGINNER",
+    exerciseType: "QUERY",
     version: 3,
     attempts: 0,
     passed: false,

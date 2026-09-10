@@ -316,6 +316,43 @@ class DefaultSqlRiskAnalysisServiceTest {
         assertTrue(fromFile.confirmationRequired());
     }
 
+    @Test
+    void shouldTreatCreateTriggerBodyAsSingleStatement() {
+        SqlRiskAnalysis result = service.analyze("""
+            create trigger trg after insert on student
+            begin
+              insert into audit values (new.id);
+              update stats set total = total + 1;
+            end
+            """);
+
+        assertTrue(result.executable(), "trigger body must not count as multiple statements");
+        assertEquals("CREATE", result.statementType());
+        assertEquals(SqlRiskLevel.HIGH, result.level());
+        assertTrue(result.confirmationRequired());
+    }
+
+    @Test
+    void shouldRejectStatementsAfterTriggerBodyEnd() {
+        SqlRiskAnalysis withSemicolon = service.analyze("""
+            create trigger trg after insert on student
+            begin
+              insert into audit values (new.id);
+            end;
+            delete from student
+            """);
+        SqlRiskAnalysis withoutSemicolon = service.analyze("""
+            create trigger trg after insert on student
+            begin
+              insert into audit values (new.id);
+            end
+            drop table student
+            """);
+
+        assertFalse(withSemicolon.executable());
+        assertFalse(withoutSemicolon.executable());
+    }
+
     private record SqlCase(DatabaseDialect dialect, String sql) {
     }
 

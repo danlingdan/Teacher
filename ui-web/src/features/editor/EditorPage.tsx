@@ -79,6 +79,44 @@ monaco.languages.registerCompletionItemProvider("sql", {
 
 const defaultSqlAnswer = "SELECT *\nFROM ";
 
+/** 按题型给出起始模板；QUERY 保持原默认，写类题型给出可修改的起点。 */
+function answerTemplate(exerciseType: string | undefined): string {
+  switch (exerciseType) {
+    case "STATE":
+      return "UPDATE 表名\nSET 列名 = 新值\nWHERE 条件;";
+    case "SCRIPT":
+      return "-- 脚本题：多条语句按顺序执行，每条以分号结尾\n-- 需要事务时使用 BEGIN; ... COMMIT;\n";
+    case "TRIGGER":
+      return "CREATE TRIGGER 触发器名\nAFTER INSERT ON 表名\nFOR EACH ROW\nBEGIN\n  \nEND;";
+    default:
+      return defaultSqlAnswer;
+  }
+}
+
+const typeNames: Record<string, string> = {
+  QUERY: "查询题",
+  STATE: "写操作题",
+  SCRIPT: "脚本题",
+  TRIGGER: "触发器题",
+};
+
+function typeLabel(exerciseType: string | undefined) {
+  return typeNames[exerciseType ?? "QUERY"] ?? "查询题";
+}
+
+function typeGuidance(exerciseType: string | undefined): string | undefined {
+  switch (exerciseType) {
+    case "STATE":
+      return "本题修改沙盒数据：执行一条写语句即可，随时可重置恢复初始数据；判分以验证查询结果与影响行数为准。";
+    case "SCRIPT":
+      return "本题按顺序执行多条语句（沙盒数据，可随时重置）；注意题目要求的事务关键字，最终以验证查询结果判分。";
+    case "TRIGGER":
+      return "本题提交一条 CREATE TRIGGER 定义（沙盒数据，可随时重置）；系统会执行触发场景语句并比对验证查询结果。";
+    default:
+      return undefined;
+  }
+}
+
 const templates: Record<string, string> = {
   JAVA: 'public class Main {\n    public static void main(String[] args) {\n        System.out.println("Hello, SQLTeacher");\n    }\n}\n',
   PYTHON: 'print("Hello, SQLTeacher")\n',
@@ -729,6 +767,8 @@ function ExerciseFlow() {
     onSuccess: (value) => {
       setSession(value);
       setFeedback(undefined);
+      // 从通用查询模板起步时按题型替换起始模板；已有草稿不动。
+      if (answer === defaultSqlAnswer) setAnswer(answerTemplate(value.exercise.exerciseType));
     },
   });
   // 作答写入按题持久化的草稿；300ms 防抖避免每个按键都同步写 localStorage。
@@ -802,7 +842,7 @@ function ExerciseFlow() {
       }),
     onSuccess: (value) => {
       setSession(value);
-      setAnswer(defaultSqlAnswer);
+      setAnswer(answerTemplate(value.exercise.exerciseType));
       if (selectedId) clearDraft(selectedId);
       setFeedback(undefined);
       setHint(undefined);
@@ -920,7 +960,9 @@ function ExerciseFlow() {
         )}
         {preview.data && !session && (
           <section className="content-card preview-card">
-            <p className="eyebrow">作答前预览</p>
+            <p className="eyebrow">
+              作答前预览 · {typeLabel(preview.data.exerciseType)}
+            </p>
             {assignmentContext && assignmentSnapshot.isError && (
               <p className="muted">
                 任务快照不可用，正在显示本地预览，不影响作答与提交。
@@ -933,6 +975,9 @@ function ExerciseFlow() {
                 快照 {assignmentSnapshot.data.snapshotHash.slice(0, 12)} · 数据集{" "}
                 {assignmentSnapshot.data.datasetVersion}
               </p>
+            )}
+            {typeGuidance(preview.data.exerciseType) && (
+              <p className="muted">{typeGuidance(preview.data.exerciseType)}</p>
             )}
             <dl>
               <div>
@@ -954,13 +999,18 @@ function ExerciseFlow() {
           <section className="content-card coding-card">
             <header className="editor-toolbar">
               <div>
-                <p className="eyebrow">SQL 练习</p>
+                <p className="eyebrow">
+                  SQL 练习 · {typeLabel(session.exercise.exerciseType)}
+                </p>
                 <h2>{session.exercise.title}</h2>
               </div>
               <span className="policy-chip">
                 Java 评价 · 提示 {session.hintsUsed}/3
               </span>
             </header>
+            {typeGuidance(session.exercise.exerciseType) && (
+              <p className="muted">{typeGuidance(session.exercise.exerciseType)}</p>
+            )}
             <CodeEditor
               language="SQL"
               value={answer}

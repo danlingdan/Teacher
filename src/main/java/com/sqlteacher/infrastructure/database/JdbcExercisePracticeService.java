@@ -20,6 +20,7 @@ import com.sqlteacher.domain.SqlTeacherException;
 import com.sqlteacher.domain.exercise.ExerciseAttemptStatus;
 import com.sqlteacher.domain.exercise.ExerciseDataset;
 import com.sqlteacher.domain.exercise.ExerciseDefinition;
+import com.sqlteacher.domain.exercise.ExerciseType;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -52,6 +53,7 @@ public final class JdbcExercisePracticeService implements ExercisePracticeServic
     private final SqlExerciseEvaluationService evaluationService;
     private final SqlResultMapper resultMapper;
     private final ExerciseAttemptCodec attemptCodec;
+    private final ExerciseSubmissionGate submissionGate;
     private final LearningEventService learningEventService;
     private final LearningEventOwnerProvider ownerProvider;
     private final Path sessionDirectory;
@@ -85,6 +87,7 @@ public final class JdbcExercisePracticeService implements ExercisePracticeServic
         this.evaluationService = evaluationService;
         this.resultMapper = resultMapper;
         this.attemptCodec = new ExerciseAttemptCodec();
+        this.submissionGate = new ExerciseSubmissionGate(riskAnalysisService);
         this.learningEventService = learningEventService;
         this.ownerProvider = Objects.requireNonNull(ownerProvider);
         this.sessionDirectory = configuration.dataDirectory().resolve("exercise-sessions").toAbsolutePath().normalize();
@@ -142,8 +145,8 @@ public final class JdbcExercisePracticeService implements ExercisePracticeServic
     @Override
     public ExerciseAttemptResult run(String sessionId, String sql) {
         SessionRecord session = requireSession(sessionId, true);
-        requireCurrentExercise(session);
-        SqlExecutionResult execution = executeStudentQuery(session.id(), sql);
+        ExerciseDefinition exercise = requireCurrentExercise(session);
+        SqlExecutionResult execution = executeStudentSubmission(session.id(), sql, exercise);
         Instant occurredAt = Instant.now();
         String attemptId = UUID.randomUUID().toString();
         recordAttempt(
@@ -164,7 +167,7 @@ public final class JdbcExercisePracticeService implements ExercisePracticeServic
         SessionRecord session = requireSession(sessionId, true);
         ExerciseDefinition exercise = requireCurrentExercise(session);
         ExerciseDataset dataset = requireDataset(exercise.datasetId());
-        SqlExecutionResult execution = executeStudentQuery(session.id(), sql);
+        SqlExecutionResult execution = executeStudentSubmission(session.id(), sql, exercise);
         ExerciseEvaluationResult evaluation = execution.success()
             ? evaluationService.evaluate(exercise, dataset, sql)
             : failedExecutionEvaluation(execution.duration());
@@ -233,7 +236,84 @@ public final class JdbcExercisePracticeService implements ExercisePracticeServic
         }
     }
 
-    private SqlExecutionResult executeStudentQuery(String sessionId, String sql) {
+    private SqlExecutionResult executeStudentSubmission(String sessionId, String sql, ExerciseDefinition exercise) {
+        if (exercise.exerciseType() == ExerciseType.QUERY) {
+            return executeReadOnlyQuery(sessionId, sql);
+        }
+        // STATE/SCRIPT/TRIGGER run on the one-shot isolated session database: the
+        // confirmation gate is exempted (v3.2.0 safety model) while the submission gate
+        // stays the single shared enforcement point for the per-type statement classes.
+        ExerciseSubmissionGate.Decision decision = submissionGate.check(
+            exercise.exerciseType(), exercise.effectiveAllowedStatementTypes(), sql
+        );
+        if (!decision.allowed()) {
+            return new SqlExecutionResult(false, List.of(), List.of(), 0, false, decision.reason(), Duration.ZERO);
+        }
+        return executeWritableSubmission(sessionId, decision.statements());
+    }
+
+    private SqlExecutionResult executeWritableSubmission(String sessionId, List<String> statements) {
+        long started = System.nanoTime();
+        long deadline = started + QUERY_TIMEOUT_SECONDS * 1_000_000_000L;
+        int affectedRows = 0;
+        try {
+            SqliteDriver.ensureLoaded();
+            try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + sessionDatabase(sessionId));
+                 Statement statement = connection.createStatement()) {
+                statement.setMaxRows(MAX_RESULT_ROWS + 1);
+                SqlExecutionResult lastQueryResult = null;
+                for (String sql : statements) {
+                    long remaining = deadline - System.nanoTime();
+                    if (remaining <= 0) {
+                        return new SqlExecutionResult(
+                            false, List.of(), List.of(), affectedRows, false,
+                            "执行超过 " + QUERY_TIMEOUT_SECONDS + " 秒上限，已中止；可重置练习后重试。",
+                            Duration.ofNanos(System.nanoTime() - started)
+                        );
+                    }
+                    statement.setQueryTimeout(Math.max(1, (int) (remaining / 1_000_000_000L)));
+                    boolean hasResult = statement.execute(sql);
+                    if (hasResult) {
+                        try (ResultSet rows = statement.getResultSet()) {
+                            lastQueryResult = resultMapper.mapQueryResult(
+                                rows, Duration.ofNanos(System.nanoTime() - started), MAX_RESULT_ROWS
+                            );
+                        }
+                    } else {
+                        affectedRows += Math.max(0, statement.getUpdateCount());
+                    }
+                }
+                if (lastQueryResult != null) {
+                    return new SqlExecutionResult(
+                        true, lastQueryResult.columns(), lastQueryResult.rows(), affectedRows,
+                        lastQueryResult.truncated(),
+                        describeExecution(statements.size(), affectedRows),
+                        Duration.ofNanos(System.nanoTime() - started)
+                    );
+                }
+                return new SqlExecutionResult(
+                    true, List.of(), List.of(), affectedRows, false,
+                    describeExecution(statements.size(), affectedRows),
+                    Duration.ofNanos(System.nanoTime() - started)
+                );
+            }
+        } catch (SQLException error) {
+            return new SqlExecutionResult(
+                false, List.of(), List.of(), affectedRows, false,
+                "SQL 执行失败，请检查语法、表名和字段名；需要时可重置练习恢复初始数据。",
+                Duration.ofNanos(System.nanoTime() - started)
+            );
+        }
+    }
+
+    private static String describeExecution(int statementCount, int affectedRows) {
+        if (statementCount == 1) {
+            return "已执行，影响 " + affectedRows + " 行。";
+        }
+        return "已按顺序执行 " + statementCount + " 条语句，累计影响 " + affectedRows + " 行。";
+    }
+
+    private SqlExecutionResult executeReadOnlyQuery(String sessionId, String sql) {
         SqlRiskAnalysis risk = riskAnalysisService.analyze(sql, DatabaseDialect.SQLITE);
         if (!risk.executable() || risk.multiStatement() || !"SELECT".equals(risk.statementType())) {
             return new SqlExecutionResult(
@@ -461,7 +541,8 @@ public final class JdbcExercisePracticeService implements ExercisePracticeServic
             id,
             new ExerciseView(
                 exercise.id(), exercise.title(), exercise.description(), exercise.knowledgePoint(),
-                exercise.difficulty(), ExerciseDatasetSchemaSummary.fromSetupSql(dataset.setupSql()), exercise.version()
+                exercise.difficulty(), exercise.exerciseType(),
+                ExerciseDatasetSchemaSummary.fromSetupSql(dataset.setupSql()), exercise.version()
             ),
             startedAt,
             hintsUsed,

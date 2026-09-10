@@ -19,6 +19,17 @@ const statusNames = {
   todo: "未做",
 } as const;
 
+const typeNames: Record<string, string> = {
+  QUERY: "查询",
+  STATE: "写操作",
+  SCRIPT: "脚本",
+  TRIGGER: "触发器",
+};
+
+export function exerciseTypeLabel(value: string) {
+  return typeNames[value] ?? "查询";
+}
+
 export type CatalogStatus = keyof typeof statusNames;
 
 export function catalogItemStatus(item: ExerciseCatalogItem): CatalogStatus {
@@ -169,6 +180,7 @@ export function ExerciseCatalogPanel({
                 >
                   <span className="catalog-item-title">{item.title}</span>
                   <small>
+                    {exerciseTypeLabel(item.exerciseType)} ·{" "}
                     {knowledgePointLabel(item.knowledgePoint)} ·{" "}
                     {difficultyLabel(item.difficulty)}
                     <span className={`catalog-badge ${status}`}>

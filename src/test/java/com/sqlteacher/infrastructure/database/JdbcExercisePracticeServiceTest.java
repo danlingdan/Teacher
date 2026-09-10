@@ -191,6 +191,134 @@ class JdbcExercisePracticeServiceTest {
         assertEquals("EXERCISE_DATASET_POLICY_VIOLATION", error.errorCode());
     }
 
+    @Test
+    void shouldRunWritableStateSubmissionInSession() throws Exception {
+        Fixture fixture = fixture();
+        seedStatefulExercise(fixture, "state-ex", "STATE",
+            "{\"verificationSql\":\"select n from counter\",\"expectedAffectedRows\":1}");
+        ExerciseSession session = fixture.service().start("state-ex");
+
+        ExerciseAttemptResult update = fixture.service().run(session.id(), "update counter set n = 5");
+        ExerciseAttemptResult insert = fixture.service().run(session.id(), "insert into counter values (7)");
+
+        assertTrue(update.execution().success(), update.execution().message());
+        assertEquals(1, update.execution().affectedRows());
+        assertTrue(update.execution().message().contains("影响 1 行"), update.execution().message());
+        assertTrue(insert.execution().success());
+        assertEquals(2, count(fixture.sessionDatabase(session.id()), "counter"));
+    }
+
+    @Test
+    void shouldGateStateSessionByAllowedTypesAndForbiddenClass() throws Exception {
+        Fixture fixture = fixture();
+        seedStatefulExercise(fixture, "state-ex", "STATE",
+            "{\"verificationSql\":\"select n from counter\"}");
+        ExerciseSession session = fixture.service().start("state-ex");
+
+        ExerciseAttemptResult select = fixture.service().run(session.id(), "select * from counter");
+        ExerciseAttemptResult attach = fixture.service().run(session.id(), "attach database 'x.db' as extra");
+        ExerciseAttemptResult multi = fixture.service().run(
+            session.id(), "insert into counter values (1); insert into counter values (2);"
+        );
+
+        assertFalse(select.execution().success());
+        assertTrue(select.execution().message().contains("写操作题只允许"), select.execution().message());
+        assertFalse(attach.execution().success());
+        assertFalse(multi.execution().success());
+        assertEquals(1, count(fixture.sessionDatabase(session.id()), "counter"));
+    }
+
+    @Test
+    void shouldResetStatefulSessionData() throws Exception {
+        Fixture fixture = fixture();
+        seedStatefulExercise(fixture, "state-ex", "STATE",
+            "{\"verificationSql\":\"select n from counter\"}");
+        ExerciseSession session = fixture.service().start("state-ex");
+        fixture.service().run(session.id(), "update counter set n = 5");
+
+        fixture.service().reset(session.id());
+
+        try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + fixture.sessionDatabase(session.id()));
+             Statement statement = connection.createStatement();
+             ResultSet result = statement.executeQuery("select n from counter")) {
+            assertTrue(result.next());
+            assertEquals(0, result.getInt(1));
+        }
+    }
+
+    @Test
+    void shouldRunScriptStatementsInOrderInsideSession() throws Exception {
+        Fixture fixture = fixture();
+        seedStatefulExercise(fixture, "script-ex", "SCRIPT",
+            "{\"verificationSql\":\"select n from counter\"}");
+        ExerciseSession session = fixture.service().start("script-ex");
+
+        ExerciseAttemptResult script = fixture.service().run(
+            session.id(), "insert into counter values (1);\ninsert into counter values (2);"
+        );
+        ExerciseAttemptResult transaction = fixture.service().run(
+            session.id(), "begin;\nupdate counter set n = 9;\ncommit;"
+        );
+        ExerciseAttemptResult forbidden = fixture.service().run(
+            session.id(), "begin;\nattach database 'x.db' as extra;\ncommit;"
+        );
+
+        assertTrue(script.execution().success(), script.execution().message());
+        assertEquals(2, script.execution().affectedRows());
+        assertTrue(script.execution().message().contains("2 条语句"), script.execution().message());
+        assertTrue(transaction.execution().success(), transaction.execution().message());
+        assertFalse(forbidden.execution().success());
+        assertEquals(3, count(fixture.sessionDatabase(session.id()), "counter"));
+    }
+
+    @Test
+    void shouldRunCreateTriggerInSession() throws Exception {
+        Fixture fixture = fixture();
+        seedStatefulExercise(fixture, "trigger-ex", "TRIGGER",
+            "{\"verificationSql\":\"select id from audit\","
+                + "\"triggerProbeSql\":\"insert into t2 values (1);\"}");
+        ExerciseSession session = fixture.service().start("trigger-ex");
+
+        ExerciseAttemptResult create = fixture.service().run(
+            session.id(),
+            "create trigger trg after insert on t2 begin insert into audit values (new.n); end"
+        );
+        ExerciseAttemptResult notATrigger = fixture.service().run(session.id(), "insert into audit values (1)");
+
+        assertTrue(create.execution().success(), create.execution().message());
+        assertFalse(notATrigger.execution().success());
+        assertTrue(notATrigger.execution().message().contains("CREATE TRIGGER"), notATrigger.execution().message());
+    }
+
+    private static void seedStatefulExercise(Fixture fixture, String exerciseId, String type, String typeConfig)
+        throws Exception {
+        String dataset = "TRIGGER".equals(type)
+            ? "create table t2(n integer); create table audit(id integer);"
+            : "create table counter(n integer); insert into counter values (0);";
+        String reference = switch (type) {
+            case "SCRIPT" -> "begin;\ninsert into counter values (1);\ncommit;";
+            case "TRIGGER" -> "create trigger trg after insert on t2 begin insert into audit values (new.n); end";
+            default -> "update counter set n = 5";
+        };
+        try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + fixture.appDb());
+             Statement statement = connection.createStatement()) {
+            statement.executeUpdate(
+                "insert into exercise_datasets(id, name, setup_sql, version) values "
+                    + "('stateful-ds', '可写数据集', '" + dataset + "', 1)"
+            );
+            statement.executeUpdate(
+                "insert into exercises(id, title, description, knowledge_point, difficulty, dataset_id, "
+                    + "reference_sql, evaluation_rule_json, hints_json, version, enabled, created_at, updated_at, "
+                    + "exercise_type, type_config_json) values ("
+                    + "'" + exerciseId + "', '可写题', 'd', 'k', 'BEGINNER', 'stateful-ds', '"
+                    + reference.replace("'", "''") + "', "
+                    + "'{\"compareColumns\":true,\"compareRows\":true,\"rowOrderMatters\":false,\"requiredSqlKeywords\":[]}', "
+                    + "'[]', 1, 1, '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z', '" + type + "', '"
+                    + typeConfig.replace("'", "''") + "')"
+            );
+        }
+    }
+
     private Fixture fixture() {
         Path appDb = tempDir.resolve("app.db");
         Path demoDb = tempDir.resolve("demo.db");

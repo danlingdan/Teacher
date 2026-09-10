@@ -1,6 +1,7 @@
 package com.sqlteacher.application.exercise;
 
 import com.sqlteacher.domain.exercise.ExerciseDifficulty;
+import com.sqlteacher.domain.exercise.ExerciseType;
 
 /**
  * Practice-catalog entry: the exercise identity plus the current local owner's attempt
@@ -11,6 +12,7 @@ public record ExerciseCatalogItem(
     String title,
     String knowledgePoint,
     ExerciseDifficulty difficulty,
+    ExerciseType exerciseType,
     int version,
     int attempts,
     boolean passed,
@@ -27,6 +29,7 @@ public record ExerciseCatalogItem(
             throw new IllegalArgumentException("knowledgePoint must not be blank");
         }
         difficulty = difficulty == null ? ExerciseDifficulty.BEGINNER : difficulty;
+        exerciseType = exerciseType == null ? ExerciseType.QUERY : exerciseType;
         attempts = Math.max(0, attempts);
     }
 }

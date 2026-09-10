@@ -166,11 +166,14 @@ export interface ImportReport {
   errors: string[];
 }
 
+export type ExerciseKind = "QUERY" | "STATE" | "SCRIPT" | "TRIGGER";
+
 export interface ExerciseSummary {
   id: string;
   title: string;
   knowledgePoint: string;
   difficulty: string;
+  exerciseType: ExerciseKind;
   version: number;
   enabled: boolean;
 }
@@ -179,6 +182,7 @@ export interface ExerciseCatalogItem {
   title: string;
   knowledgePoint: string;
   difficulty: string;
+  exerciseType: ExerciseKind;
   version: number;
   attempts: number;
   passed: boolean;

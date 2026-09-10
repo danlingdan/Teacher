@@ -46,7 +46,7 @@ public final class JdbcExerciseCatalogService implements ExerciseCatalogService 
             .filter(definition -> definition.enabled())
             .map(definition -> new ExerciseView(
                 definition.id(), definition.title(), definition.description(), definition.knowledgePoint(),
-                definition.difficulty(), managementService.listDatasets().stream()
+                definition.difficulty(), definition.exerciseType(), managementService.listDatasets().stream()
                     .filter(dataset -> dataset.id().equals(definition.datasetId()))
                     .findFirst()
                     .map(dataset -> ExerciseDatasetSchemaSummary.fromSetupSql(dataset.setupSql()))
@@ -57,7 +57,8 @@ public final class JdbcExerciseCatalogService implements ExerciseCatalogService 
 
     private ExerciseCatalogItem toItem(ExerciseSummary summary, OwnerStatus status) {
         return new ExerciseCatalogItem(
-            summary.id(), summary.title(), summary.knowledgePoint(), summary.difficulty(), summary.version(),
+            summary.id(), summary.title(), summary.knowledgePoint(), summary.difficulty(),
+            summary.exerciseType(), summary.version(),
             status == null ? 0 : status.attempts(),
             status != null && status.passed(),
             status == null ? null : status.lastAttemptAt()

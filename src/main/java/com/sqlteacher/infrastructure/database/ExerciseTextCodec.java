@@ -5,11 +5,13 @@ import com.sqlteacher.domain.exercise.ExerciseDataset;
 import com.sqlteacher.domain.exercise.ExerciseDefinition;
 import com.sqlteacher.domain.exercise.ExerciseDifficulty;
 import com.sqlteacher.domain.exercise.ExerciseEvaluationRule;
+import com.sqlteacher.domain.exercise.ExerciseType;
 
 import java.time.Instant;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
 import java.util.regex.Matcher;
@@ -28,9 +30,10 @@ final class ExerciseTextCodec {
     private static final Set<String> EXERCISE_LABELS = Set.of(
         "ID", "TITLE", "KNOWLEDGE", "DIFFICULTY", "DATASET", "DESCRIPTION", "SQL",
         "RULE", "COMPARE_COLUMNS", "COMPARE_ROWS", "ROW_ORDER", "EXPECTED_ROWS",
-        "KEYWORDS", "HINTS", "VERSION", "ENABLED", "CREATED", "UPDATED"
+        "KEYWORDS", "HINTS", "VERSION", "ENABLED", "CREATED", "UPDATED",
+        "TYPE", "VERIFY", "ALLOWED", "AFFECTED", "TXN", "PROBE"
     );
-    private static final Set<String> MULTILINE_LABELS = Set.of("SQL", "DESCRIPTION", "HINTS");
+    private static final Set<String> MULTILINE_LABELS = Set.of("SQL", "DESCRIPTION", "HINTS", "VERIFY", "PROBE");
 
     String encode(List<ExerciseDataset> datasets, List<ExerciseDefinition> exercises) {
         StringBuilder out = new StringBuilder();
@@ -73,10 +76,30 @@ final class ExerciseTextCodec {
             .append("TITLE: ").append(exercise.title()).append('\n')
             .append("KNOWLEDGE: ").append(exercise.knowledgePoint()).append('\n')
             .append("DIFFICULTY: ").append(exercise.difficulty().name()).append('\n')
-            .append("DATASET: ").append(exercise.datasetId()).append('\n')
-            .append("DESCRIPTION:\n").append(exercise.description()).append('\n')
-            .append("SQL:\n").append(exercise.referenceSql()).append('\n')
-            .append("COMPARE_COLUMNS: ").append(rule.compareColumns()).append('\n')
+            .append("DATASET: ").append(exercise.datasetId()).append('\n');
+        if (exercise.exerciseType() != ExerciseType.QUERY) {
+            out.append("TYPE: ").append(exercise.exerciseType().name()).append('\n');
+        }
+        out.append("DESCRIPTION:\n").append(exercise.description()).append('\n')
+            .append("SQL:\n").append(exercise.referenceSql()).append('\n');
+        if (exercise.verificationSql() != null) {
+            out.append("VERIFY:\n").append(exercise.verificationSql()).append('\n');
+        }
+        if (!exercise.allowedStatementTypes().isEmpty()) {
+            out.append("ALLOWED: ")
+                .append(String.join(", ", exercise.allowedStatementTypes())).append('\n');
+        }
+        if (exercise.expectedAffectedRows() != null) {
+            out.append("AFFECTED: ").append(exercise.expectedAffectedRows()).append('\n');
+        }
+        if (!exercise.requiredTransactionKeywords().isEmpty()) {
+            out.append("TXN: ")
+                .append(String.join(", ", exercise.requiredTransactionKeywords())).append('\n');
+        }
+        if (exercise.triggerProbeSql() != null) {
+            out.append("PROBE:\n").append(exercise.triggerProbeSql()).append('\n');
+        }
+        out.append("COMPARE_COLUMNS: ").append(rule.compareColumns()).append('\n')
             .append("COMPARE_ROWS: ").append(rule.compareRows()).append('\n')
             .append("ROW_ORDER: ").append(rule.rowOrderMatters()).append('\n');
         if (rule.expectedRowCount() != null) {
@@ -212,10 +235,53 @@ final class ExerciseTextCodec {
         Instant now = Instant.now();
         Instant createdAt = instantField(block, "CREATED", now);
         Instant updatedAt = instantField(block, "UPDATED", now);
+        ExerciseType type = exerciseType(block);
+        String verificationSql = optionalMultiline(block, "VERIFY");
+        List<String> allowedTypes = keywordList(block, "ALLOWED");
+        Integer affectedRows = optionalInt(block, "AFFECTED");
+        List<String> transactionKeywords = keywordList(block, "TXN");
+        String triggerProbeSql = optionalMultiline(block, "PROBE");
         return new ExerciseDefinition(
             id, title, description, knowledgePoint, difficulty, datasetId, referenceSql,
-            rule, hints, version, enabled, createdAt, updatedAt
+            rule, hints, version, enabled, createdAt, updatedAt,
+            type, verificationSql, allowedTypes, affectedRows, transactionKeywords, triggerProbeSql
         );
+    }
+
+    private static ExerciseType exerciseType(Block block) {
+        Field field = find(block, "TYPE");
+        if (field == null || field.value.isBlank()) {
+            return ExerciseType.QUERY;
+        }
+        try {
+            return ExerciseType.valueOf(field.value.trim().toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException error) {
+            throw invalid("Unknown exercise type: " + field.value, field.line);
+        }
+    }
+
+    private static String optionalMultiline(Block block, String label) {
+        Field field = find(block, label);
+        if (field == null) {
+            return null;
+        }
+        String value = field.value.strip();
+        return value.isEmpty() ? null : value;
+    }
+
+    private static List<String> keywordList(Block block, String label) {
+        Field field = find(block, label);
+        if (field == null || field.value.isBlank()) {
+            return List.of();
+        }
+        List<String> values = new ArrayList<>();
+        for (String part : field.value.split(",")) {
+            String value = part.trim();
+            if (!value.isEmpty()) {
+                values.add(value);
+            }
+        }
+        return values;
     }
 
     private static ExerciseDifficulty difficulty(Block block) {
