@@ -18,6 +18,7 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -161,15 +162,16 @@ class DeterministicSqlExerciseEvaluationServiceTest {
         DeterministicSqlExerciseEvaluationService evaluator = new DeterministicSqlExerciseEvaluationService(
             new DefaultSqlRiskAnalysisService(), configuration
         );
-        ExerciseDataset dataset = management.listDatasets().getFirst();
+        Map<String, ExerciseDataset> datasets = management.listDatasets().stream()
+            .collect(java.util.stream.Collectors.toMap(ExerciseDataset::id, dataset -> dataset));
 
         List<ExerciseDefinition> exercises = management.listExercises(false).stream()
             .map(summary -> management.findDefinition(summary.id()).orElseThrow())
             .toList();
 
-        assertEquals(20, exercises.size());
+        assertEquals(30, exercises.size());
         assertTrue(exercises.stream().allMatch(exercise ->
-            evaluator.evaluate(exercise, dataset, exercise.referenceSql()).passed()
+            evaluator.evaluate(exercise, datasets.get(exercise.datasetId()), exercise.referenceSql()).passed()
         ));
     }
 

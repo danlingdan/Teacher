@@ -41,7 +41,7 @@ class JdbcDataMaintenanceServiceTest {
         assertEquals(new LearningDataResetResult(1, 1, 1), result);
         assertEquals(0, count(connections, "exercise_sessions"));
         assertEquals(0, count(connections, "exercise_attempts"));
-        assertEquals(20, count(connections, "exercises"));
+        assertEquals(30, count(connections, "exercises"));
         assertEquals(0, count(connections, "study_plan_snapshot"));
         assertEquals(0, count(connections, "grounded_tutor_session"));
     }

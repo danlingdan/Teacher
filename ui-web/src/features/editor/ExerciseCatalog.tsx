@@ -59,6 +59,11 @@ interface ExerciseCatalogPanelProps {
   onSelect: (exerciseId: string) => void;
   /** Optional action (e.g. 题库更新) rendered in the panel header. */
   headerAction?: ReactNode;
+  /** Server-side pagination (W4.4): total on the server and the page controls. */
+  total?: number;
+  page?: number;
+  pageSize?: number;
+  onPageChange?: (page: number) => void;
 }
 
 export function filterCatalogItems(
@@ -86,6 +91,10 @@ export function ExerciseCatalogPanel({
   onFilterChange,
   onSelect,
   headerAction,
+  total,
+  page = 0,
+  pageSize = 50,
+  onPageChange,
 }: ExerciseCatalogPanelProps) {
   const filtered = useMemo(
     () => filterCatalogItems(items, filters),
@@ -196,6 +205,27 @@ export function ExerciseCatalogPanel({
       )}
       {!isPending && filtered.length === 0 && (
         <p className="muted">没有匹配的题目。</p>
+      )}
+      {onPageChange && total != null && total > pageSize && (
+        <div className="compact-pager" aria-label="目录分页">
+          <button
+            type="button"
+            disabled={page === 0}
+            onClick={() => onPageChange(page - 1)}
+          >
+            上一页
+          </button>
+          <span>
+            第 {page + 1} / {Math.ceil(total / pageSize)} 页 · 共 {total} 题
+          </span>
+          <button
+            type="button"
+            disabled={(page + 1) * pageSize >= total}
+            onClick={() => onPageChange(page + 1)}
+          >
+            下一页
+          </button>
+        </div>
       )}
     </aside>
   );

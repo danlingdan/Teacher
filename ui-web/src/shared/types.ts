@@ -168,6 +168,11 @@ export interface ImportReport {
 
 export type ExerciseKind = "QUERY" | "STATE" | "SCRIPT" | "TRIGGER";
 
+export interface BankPreferencesView {
+  autoCheckEnabled: boolean;
+  subscribedChannels: string[];
+}
+
 export interface ExerciseSummary {
   id: string;
   title: string;
@@ -176,6 +181,12 @@ export interface ExerciseSummary {
   exerciseType: ExerciseKind;
   version: number;
   enabled: boolean;
+}
+export interface ExerciseCatalogPage {
+  items: ExerciseCatalogItem[];
+  total: number;
+  page: number;
+  pageSize: number;
 }
 export interface ExerciseCatalogItem {
   id: string;
@@ -243,6 +254,16 @@ export interface ExerciseAttempt {
     comparison?: ResultComparison | null;
   };
   occurredAt: string;
+}
+export interface BankChannelInfo {
+  channel: string;
+  bankVersion: number;
+  updatedAt: string;
+}
+export interface BankPendingNotice {
+  channel: string;
+  bankVersion: number;
+  detectedAt: string;
 }
 export interface ExerciseHint {
   level: number;
@@ -646,6 +667,7 @@ export interface ActiveSession {
 }
 
 export interface SettingsPreferences {
+  bank?: BankPreferencesView;
   role: AppRole;
   developerMode: boolean;
   /** 用户是否已明确选择过 SQL 安全模式；false 表示首次运行待选择。旧版后端缺省该字段，视为已选择。 */

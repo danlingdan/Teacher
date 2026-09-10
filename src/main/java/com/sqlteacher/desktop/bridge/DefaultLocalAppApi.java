@@ -10,6 +10,7 @@ import com.sqlteacher.application.collaboration.CloudLearningSyncService;
 import com.sqlteacher.application.collaboration.CloudSessionService;
 import com.sqlteacher.application.collaboration.DesktopAccessProfile;
 import com.sqlteacher.application.collaboration.UserRole;
+import com.sqlteacher.application.event.LearningEventService;
 import com.sqlteacher.application.collaboration.AssignmentStatus;
 import com.sqlteacher.application.collaboration.AssignmentAnalyticsFilter;
 import com.sqlteacher.application.component.ManagedComponentService;
@@ -39,6 +40,8 @@ import com.sqlteacher.application.exercise.ExerciseCatalogService;
 import com.sqlteacher.application.exercise.ExerciseManagementService;
 import com.sqlteacher.application.exercise.ExercisePracticeService;
 import com.sqlteacher.application.exercise.ExerciseProgressService;
+import com.sqlteacher.infrastructure.system.ExerciseBankPreferences;
+import com.sqlteacher.infrastructure.system.ExerciseBankPreferencesStore;
 import com.sqlteacher.application.exercise.ExerciseDraft;
 import com.sqlteacher.application.exercise.ExerciseExplainRequest;
 import com.sqlteacher.application.exercise.ExerciseTextDraftingService;
@@ -95,6 +98,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.util.HexFormat;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Arrays;
@@ -139,7 +143,7 @@ public final class DefaultLocalAppApi implements LocalAppApi {
             case "knowledge.article.delete" -> knowledgeArticleDelete(params, cancellation);
             case "knowledge.import.preview" -> knowledgeImportPreview(params, cancellation);
             case "knowledge.import.execute" -> knowledgeImportExecute(params, cancellation, events);
-            case "practice.catalog" -> practiceCatalog(cancellation);
+            case "practice.catalog" -> practiceCatalog(params, cancellation);
             case "practice.preview" -> practicePreview(params, cancellation);
             case "practice.start" -> practiceStart(params, cancellation);
             case "practice.run" -> practiceAttempt(params, cancellation, false);
@@ -151,6 +155,9 @@ public final class DefaultLocalAppApi implements LocalAppApi {
             case "practice.recommend" -> practiceRecommend(cancellation);
             case "practice.bank.check" -> practiceBankCheck(cancellation);
             case "practice.bank.update" -> practiceBankUpdate(cancellation, events);
+            case "practice.bank.channels" -> practiceBankChannels(cancellation);
+            case "practice.bank.notice" -> practiceBankNotice(cancellation);
+            case "settings.bank.update" -> settingsBankUpdate(params, cancellation);
             case "runner.capabilities" -> runnerCapabilities(cancellation);
             case "runner.run" -> runnerRun(params, cancellation, events);
             case "data.connections" -> dataConnections(cancellation);
@@ -193,6 +200,7 @@ public final class DefaultLocalAppApi implements LocalAppApi {
             case "teaching.exercise.export" -> teachingExerciseExport(params, cancellation);
             case "teaching.exercise.publish" -> teachingExercisePublish(params, cancellation);
             case "teaching.exercise.health" -> teachingExerciseHealth(cancellation);
+            case "teaching.bank.rollback" -> teachingBankRollback(params, cancellation);
             case "teaching.analytics" -> teachingAnalytics(cancellation);
             case "teaching.interventions" -> teachingInterventions(cancellation);
             case "teaching.intervention.update" -> teachingInterventionUpdate(params, cancellation);
@@ -1001,6 +1009,12 @@ public final class DefaultLocalAppApi implements LocalAppApi {
         result.put("canMaintainLocalData", profile.canConfigure(
             com.sqlteacher.application.collaboration.DesktopSettingPermission.LOCAL_DATA_MAINTENANCE));
         result.set("general", mapper.valueToTree(settings));
+        var bankStore = core.getBean(ExerciseBankPreferencesStore.class);
+        var bankPrefs = bankStore.load();
+        var bankNode = mapper.createObjectNode();
+        bankNode.put("autoCheckEnabled", bankPrefs.autoCheckEnabled());
+        bankNode.set("subscribedChannels", mapper.valueToTree(bankPrefs.subscribedChannels()));
+        result.set("bank", bankNode);
         result.set("notifications", mapper.valueToTree(general.notifications()));
         result.set("tasks", mapper.valueToTree(general.tasks()));
         result.set("helpTopics", mapper.valueToTree(general.helpTopics()));
@@ -1409,14 +1423,115 @@ public final class DefaultLocalAppApi implements LocalAppApi {
 
     private JsonNode practiceBankCheck(CancellationToken cancellation) {
         cancellation.throwIfCancelled();
-        return mapper.valueToTree(context().getBean(ExerciseBankSyncService.class).check());
+        // 按订阅频道逐一检查（W4.2）；离线/失败静默降级，不影响本地练习。
+        var sync = context().getBean(ExerciseBankSyncService.class);
+        List<String> channels = context().getBean(ExerciseBankPreferencesStore.class)
+            .load().subscribedChannels();
+        int pendingBlocks = 0;
+        int appliedVersion = Integer.MAX_VALUE;
+        int serverVersion = 0;
+        boolean upToDate = true;
+        List<String> messages = new ArrayList<>();
+        for (String channel : channels) {
+            var status = sync.check(channel);
+            pendingBlocks += status.pendingBlocks();
+            appliedVersion = Math.min(appliedVersion, status.appliedVersion());
+            serverVersion = Math.max(serverVersion, status.serverVersion());
+            upToDate = upToDate && status.upToDate();
+            if (!status.upToDate() && status.pendingBlocks() > 0) {
+                messages.add("频道 " + channel + "：" + status.message());
+            }
+        }
+        if (messages.isEmpty()) {
+            messages.add("题库已是最新。");
+        }
+        return mapper.valueToTree(new ExerciseBankSyncService.BankUpdateStatus(
+            appliedVersion == Integer.MAX_VALUE ? 0 : appliedVersion,
+            serverVersion, pendingBlocks, upToDate && pendingBlocks == 0,
+            String.join("；", messages)));
     }
 
     private JsonNode practiceBankUpdate(CancellationToken cancellation, Consumer<LocalAppEvent> events) {
         cancellation.throwIfCancelled();
-        var result = context().getBean(ExerciseBankSyncService.class)
-            .update(progress -> emit(events, "import.progress", "phase", progress));
-        return mapper.valueToTree(result);
+        var sync = context().getBean(ExerciseBankSyncService.class);
+        var store = context().getBean(ExerciseBankPreferencesStore.class);
+        List<String> channels = store.load().subscribedChannels();
+        int appliedVersion = 0;
+        int updatedDatasets = 0;
+        int updatedExercises = 0;
+        boolean applied = false;
+        List<String> messages = new ArrayList<>();
+        for (String channel : channels) {
+            var result = sync.update(channel,
+                progress -> emit(events, "import.progress", "phase", progress));
+            applied = applied || result.applied();
+            appliedVersion = Math.max(appliedVersion, result.appliedVersion());
+            updatedDatasets += result.updatedDatasets();
+            updatedExercises += result.updatedExercises();
+            if (result.applied()) {
+                messages.add("频道 " + channel + "：" + result.message());
+            }
+        }
+        if (applied) {
+            // 更新落地后清除定时检查产生的待更新通知。
+            var prefs = store.load();
+            store.save(new ExerciseBankPreferences(
+                prefs.autoCheckEnabled(), prefs.subscribedChannels(), null));
+        } else {
+            messages.add("题库已是最新。");
+        }
+        return mapper.valueToTree(new ExerciseBankSyncService.BankUpdateResult(
+            applied, appliedVersion, updatedDatasets, updatedExercises,
+            String.join("；", messages)));
+    }
+
+    /** Lists server-known channels for the subscription UI; unavailable server means empty. */
+    private JsonNode practiceBankChannels(CancellationToken cancellation) {
+        cancellation.throwIfCancelled();
+        try {
+            var items = context().getBean(CloudApiClient.class).fetchExerciseBankChannels();
+            return mapper.createObjectNode().set("items", mapper.valueToTree(items));
+        } catch (RuntimeException error) {
+            return mapper.createObjectNode().set("items", mapper.createArrayNode());
+        }
+    }
+
+    /** Returns the pending auto-check notice (display only); null when there is none. */
+    private JsonNode practiceBankNotice(CancellationToken cancellation) {
+        cancellation.throwIfCancelled();
+        var notice = context().getBean(ExerciseBankPreferencesStore.class).load().pendingNotice();
+        if (notice == null) {
+            return mapper.createObjectNode().putNull("notice");
+        }
+        return mapper.createObjectNode().set("notice", mapper.valueToTree(notice));
+    }
+
+    private JsonNode settingsBankUpdate(JsonNode params, CancellationToken cancellation) {
+        cancellation.throwIfCancelled();
+        var store = context().getBean(ExerciseBankPreferencesStore.class);
+        var current = store.load();
+        boolean autoCheck = params.path("autoCheckEnabled").asBoolean(current.autoCheckEnabled());
+        List<String> requested = new ArrayList<>();
+        params.withArray("subscribedChannels")
+            .forEach(item -> requested.add(item.asText("").trim().toLowerCase(java.util.Locale.ROOT)));
+        requested.removeIf(String::isEmpty);
+        List<String> channels = requested.isEmpty()
+            ? List.of(ExerciseBankPreferences.DEFAULT_CHANNEL)
+            : List.copyOf(requested);
+        store.save(new ExerciseBankPreferences(autoCheck, channels, current.pendingNotice()));
+        return mapper.createObjectNode().put("saved", true);
+    }
+
+    /** Rolls the channel's active bank version back for all clients (admin/teacher). */
+    private JsonNode teachingBankRollback(JsonNode params, CancellationToken cancellation) {
+        requireTeacher();
+        cancellation.throwIfCancelled();
+        String channel = params.path("channel").asText("network");
+        int bankVersion = params.path("bankVersion").asInt(0);
+        var session = requireCloudSession();
+        int applied = context().getBean(CloudApiClient.class)
+            .rollbackExerciseBank(session.accessToken(), channel, bankVersion);
+        return mapper.createObjectNode().put("bankVersion", applied);
     }
 
     private JsonNode teachingExerciseHealth(CancellationToken cancellation) {
@@ -1433,8 +1548,9 @@ public final class DefaultLocalAppApi implements LocalAppApi {
         // 发布前本地先跑一遍解析与自测；服务端会再次校验，AI 与网络内容一律不可信。
         context().getBean(ExerciseManagementService.class).parsePackage(text);
         var session = requireCloudSession();
+        String channel = params.path("channel").asText("network");
         int bankVersion = context().getBean(CloudApiClient.class)
-            .publishExerciseBankPackage(session.accessToken(), text);
+            .publishExerciseBankPackage(session.accessToken(), channel, text);
         return mapper.createObjectNode().put("bankVersion", bankVersion);
     }
 
@@ -1472,10 +1588,22 @@ public final class DefaultLocalAppApi implements LocalAppApi {
         return mapper.valueToTree(context().getBean(ExerciseTextDraftingService.class).explainFailure(request));
     }
 
-    private JsonNode practiceCatalog(CancellationToken cancellation) {
+    private JsonNode practiceCatalog(JsonNode params, CancellationToken cancellation) {
         cancellation.throwIfCancelled();
-        var items = context().getBean(ExerciseCatalogService.class).listAvailableExercises();
-        return mapper.createObjectNode().set("items", mapper.valueToTree(items));
+        var service = context().getBean(ExerciseCatalogService.class);
+        if (!params.has("pageSize")) {
+            var items = service.listAvailableExercises();
+            return mapper.createObjectNode().set("items", mapper.valueToTree(items));
+        }
+        int pageSize = Math.min(500, Math.max(1, params.path("pageSize").asInt(50)));
+        int page = Math.max(0, params.path("page").asInt(0));
+        var result = service.listExercises(
+            page, pageSize,
+            params.path("q").asText(""),
+            params.path("difficulty").asText(""),
+            params.path("status").asText("")
+        );
+        return mapper.valueToTree(result);
     }
 
     private JsonNode practicePreview(JsonNode params, CancellationToken cancellation) {
@@ -1701,6 +1829,9 @@ public final class DefaultLocalAppApi implements LocalAppApi {
             sqlConfirmations.put(token, new SqlConfirmation(connectionId, hash(sql), Instant.now().plusSeconds(300)));
             result.put("confirmationToken", token);
             result.put("confirmationExpiresAt", Instant.now().plusSeconds(300).toString());
+            // W6.1：令牌签发处记事件，闭环审计高风险确认链路。
+            context().getBean(LearningEventService.class)
+                .recordSqlConfirmationIssued(connectionId, risk.statementType());
         }
         result.put("enforcedBy", "java");
         result.put("maxRows", 500);
@@ -1724,7 +1855,14 @@ public final class DefaultLocalAppApi implements LocalAppApi {
             SqlConfirmation confirmation = sqlConfirmations.remove(confirmationToken);
             confirmed = confirmation != null && confirmation.expiresAt().isAfter(Instant.now())
                 && confirmation.connectionId().equals(connectionId) && confirmation.sqlHash().equals(hash(sql));
-            if (!confirmed) throw new IllegalArgumentException("A current confirmation token is required");
+            if (!confirmed) {
+                // W6.1：消费失败（取消/过期/令牌不符）记取消事件。
+                context().getBean(LearningEventService.class)
+                    .recordSqlConfirmationCancelled(connectionId, "TOKEN_INVALID_OR_EXPIRED");
+                throw new IllegalArgumentException("A current confirmation token is required");
+            }
+            context().getBean(LearningEventService.class)
+                .recordSqlConfirmed(connectionId, risk.statementType());
         }
         int maxRows = Math.clamp(params.path("maxRows").asInt(500), 1, 500);
         SqlExecutionResult execution = context().getBean(SqlExecutionService.class).execute(
@@ -1811,9 +1949,18 @@ public final class DefaultLocalAppApi implements LocalAppApi {
         CachedSqlResult cached = sqlResults.get(resultId);
         if (cached == null) throw new IllegalArgumentException("SQL result page has expired");
         String path = requiredText(params, "path", 4096);
+        // 导出目标必须显式为 .csv，且父目录已存在（W5.3 路径加固）。
+        Path target = Path.of(path).toAbsolutePath().normalize();
+        if (!target.getFileName().toString().toLowerCase(java.util.Locale.ROOT).endsWith(".csv")) {
+            throw new IllegalArgumentException("导出文件必须是 .csv 扩展名");
+        }
+        Path parent = target.getParent();
+        if (parent == null || !Files.isDirectory(parent)) {
+            throw new IllegalArgumentException("导出目录不存在，请重新选择保存位置");
+        }
         try {
             Files.writeString(
-                Path.of(path),
+                target,
                 SqlCsvExporter.toCsv(cached.result().columns(), cached.result().rows()),
                 StandardCharsets.UTF_8
             );
@@ -1941,7 +2088,20 @@ public final class DefaultLocalAppApi implements LocalAppApi {
 
     private void expireSqlState() {
         Instant now = Instant.now();
-        sqlConfirmations.entrySet().removeIf(entry -> entry.getValue().expiresAt().isBefore(now));
+        List<String> expiredTokens = new ArrayList<>();
+        sqlConfirmations.entrySet().removeIf(entry -> {
+            boolean expired = entry.getValue().expiresAt().isBefore(now);
+            if (expired) {
+                expiredTokens.add(entry.getValue().connectionId());
+            }
+            return expired;
+        });
+        if (!expiredTokens.isEmpty()) {
+            LearningEventService events = context().getBean(LearningEventService.class);
+            for (String connectionId : expiredTokens) {
+                events.recordSqlConfirmationCancelled(connectionId, "EXPIRED");
+            }
+        }
         sqlResults.entrySet().removeIf(entry -> entry.getValue().expiresAt().isBefore(now));
     }
 

@@ -3,6 +3,9 @@ package com.sqlteacher.application.event;
 public enum LearningEventType {
     SQL_EXECUTION,
     SQL_RISK_BLOCKED,
+    SQL_CONFIRMATION_ISSUED,
+    SQL_CONFIRMED,
+    SQL_CONFIRMATION_CANCELLED,
     AI_SQL_GENERATED,
     AI_GENERATION_FAILED,
     EXERCISE_ATTEMPT,

@@ -64,6 +64,7 @@ import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -646,14 +647,47 @@ public final class HttpCloudApiClient implements CloudApiClient {
     }
 
     @Override public ExerciseBankManifest fetchExerciseBankManifest() {
-        return request("bank/manifest", "GET", null, null, ExerciseBankManifest.class);
+        return fetchExerciseBankManifest("network");
+    }
+    @Override public ExerciseBankManifest fetchExerciseBankManifest(String channel) {
+        return request("bank/manifest?channel=" + encodeSegment(channel), "GET", null, null, ExerciseBankManifest.class);
     }
     @Override public ExerciseBankBlock fetchExerciseBankBlock(String type, String id) {
-        return request("bank/block/" + encodeSegment(type) + "/" + encodeSegment(id), "GET", null, null, ExerciseBankBlock.class);
+        return fetchExerciseBankBlock("network", type, id);
+    }
+    @Override public ExerciseBankBlock fetchExerciseBankBlock(String channel, String type, String id) {
+        if ("network".equals(channel)) {
+            // Legacy path: works on both channel-less (pre-3.3) and channel-aware servers.
+            return request("bank/block/" + encodeSegment(type) + "/" + encodeSegment(id),
+                "GET", null, null, ExerciseBankBlock.class);
+        }
+        return request("bank/block/" + encodeSegment(channel) + "/" + encodeSegment(type) + "/" + encodeSegment(id),
+            "GET", null, null, ExerciseBankBlock.class);
     }
     @Override public int publishExerciseBankPackage(String token, String packageText) {
-        var tree = request("bank/publish", "POST", Map.of("text", packageText), token, com.fasterxml.jackson.databind.JsonNode.class);
+        return publishExerciseBankPackage(token, "network", packageText);
+    }
+    @Override public int publishExerciseBankPackage(String token, String channel, String packageText) {
+        var tree = request("bank/publish", "POST", Map.of("channel", channel, "text", packageText), token,
+            com.fasterxml.jackson.databind.JsonNode.class);
         return tree.path("bankVersion").asInt(0);
+    }
+    @Override public int rollbackExerciseBank(String token, String channel, int bankVersion) {
+        var tree = request("bank/rollback", "POST", Map.of("channel", channel, "bankVersion", bankVersion), token,
+            com.fasterxml.jackson.databind.JsonNode.class);
+        return tree.path("bankVersion").asInt(0);
+    }
+    @Override public List<Map<String, Object>> fetchExerciseBankChannels() {
+        var tree = request("bank/channels", "GET", null, null, com.fasterxml.jackson.databind.JsonNode.class);
+        List<Map<String, Object>> items = new ArrayList<>();
+        for (var item : tree.path("items")) {
+            Map<String, Object> entry = new java.util.LinkedHashMap<>();
+            entry.put("channel", item.path("channel").asText(""));
+            entry.put("bankVersion", item.path("bankVersion").asInt(0));
+            entry.put("updatedAt", item.path("updatedAt").asText(""));
+            items.add(entry);
+        }
+        return items;
     }
 
     private CloudAuthenticationService.Session authenticate(String path, Map<String, String> payload) {

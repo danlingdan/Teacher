@@ -11,6 +11,7 @@ import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 import java.sql.SQLException;
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -22,7 +23,11 @@ import java.util.Optional;
 final class ExerciseBankApplier {
     private static final Logger log = LoggerFactory.getLogger(ExerciseBankApplier.class);
     static final String DATASET_ID = "school-core-v2";
-    private static final String BANK_RESOURCE = "/exercise/exercise-bank.dsl";
+    /** Bundled bank packages, applied in order through the versioned upsert (W4.1). */
+    private static final List<String> BANK_RESOURCES = List.of(
+        "/exercise/exercise-bank.dsl",
+        "/exercise/exercise-bank-spj.dsl"
+    );
 
     private final ExerciseTextCodec textCodec = new ExerciseTextCodec();
     private final ExerciseBankWriter writer = new ExerciseBankWriter();
@@ -30,8 +35,16 @@ final class ExerciseBankApplier {
         new ExercisePackageValidator(new DefaultSqlRiskAnalysisService());
 
     int apply(Connection connection) {
+        int applied = 0;
+        for (String resource : BANK_RESOURCES) {
+            applied += applyResource(connection, resource);
+        }
+        return applied;
+    }
+
+    private int applyResource(Connection connection, String resource) {
         try {
-            ExerciseTextCodec.DecodedPackage bank = textCodec.decode(readBankResource());
+            ExerciseTextCodec.DecodedPackage bank = textCodec.decode(readBankResource(resource));
             ExercisePackageValidator.Result validation = validator.validate(
                 bank.datasets(), bank.exercises(), id -> Optional.empty()
             );
@@ -54,15 +67,15 @@ final class ExerciseBankApplier {
             }
             return applied;
         } catch (IOException | SQLException | RuntimeException error) {
-            log.error("Failed to apply the bundled exercise bank; keeping the stored catalog", error);
+            log.error("Failed to apply the bundled exercise bank {}; keeping the stored catalog", resource, error);
             return 0;
         }
     }
 
-    private String readBankResource() throws IOException {
-        try (InputStream stream = ExerciseBankApplier.class.getResourceAsStream(BANK_RESOURCE)) {
+    private String readBankResource(String resource) throws IOException {
+        try (InputStream stream = ExerciseBankApplier.class.getResourceAsStream(resource)) {
             if (stream == null) {
-                throw new IOException("Bundled exercise bank resource is missing: " + BANK_RESOURCE);
+                throw new IOException("Bundled exercise bank resource is missing: " + resource);
             }
             return new String(stream.readAllBytes(), StandardCharsets.UTF_8);
         }

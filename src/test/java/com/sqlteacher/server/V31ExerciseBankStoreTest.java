@@ -79,6 +79,68 @@ class V31ExerciseBankStoreTest {
         }
     }
 
+    @Test
+    void shouldKeepChannelsIsolatedAndListThem() {
+        V31ExerciseBankStore store = store();
+        AuthenticatedUser admin = admin();
+
+        store.publish(admin, validPackage("主频道题", "select id, name from t order by id", 1));
+        store.publish(admin, "spj", validPackage("SPJ 频道题", "select id, name from t order by id", 1));
+
+        assertEquals(1, store.manifest().get("bankVersion"));
+        Map<String, Object> spjManifest = store.manifest("spj");
+        assertEquals(1, spjManifest.get("bankVersion"));
+        assertEquals(1, ((java.util.List<?>) spjManifest.get("exercises")).size());
+
+        // 同名分块在两个频道各自维护，内容互不覆盖。
+        assertTrue(((String) store.block("network", "EXERCISE", "srv-ex").get("content")).contains("主频道题"));
+        assertTrue(((String) store.block("spj", "EXERCISE", "srv-ex").get("content")).contains("SPJ 频道题"));
+
+        var channels = store.channels();
+        assertEquals(2, channels.size());
+        assertEquals("network", channels.get(0).get("channel"));
+        assertEquals("spj", channels.get(1).get("channel"));
+    }
+
+    @Test
+    void shouldRollBackToHistoricalSnapshotForAllClients() {
+        V31ExerciseBankStore store = store();
+        AuthenticatedUser admin = admin();
+        store.publish(admin, validPackage("第一版题", "select id, name from t order by id", 1));
+        store.publish(admin, validPackage("第二版题", "select id, name from t order by id", 2));
+        assertEquals(2, store.manifest().get("bankVersion"));
+
+        int rolledBack = store.rollback(admin, "network", 1);
+
+        assertEquals(1, rolledBack);
+        assertEquals(1, store.manifest().get("bankVersion"));
+        String content = (String) store.block("EXERCISE", "srv-ex").get("content");
+        assertTrue(content.contains("第一版题"), content);
+        // 未保留的版本拒绝回滚。
+        assertThrows(SqlTeacherException.class, () -> store.rollback(admin, "network", 9));
+    }
+
+    @Test
+    void shouldAuditPublishAndRollback() throws Exception {
+        V31ExerciseBankStore store = store();
+        AuthenticatedUser admin = admin();
+        store.publish(admin, validPackage("审计题", "select id, name from t order by id", 1));
+        store.rollback(admin, "network", 1);
+
+        try (var connection = java.sql.DriverManager.getConnection(
+                 "jdbc:sqlite:" + tempDir.resolve("cloud.db").toAbsolutePath());
+             var statement = connection.createStatement();
+             var rows = statement.executeQuery(
+                 "select action, count(*) from admin_audit group by action order by action")) {
+            java.util.Map<String, Integer> counts = new java.util.LinkedHashMap<>();
+            while (rows.next()) {
+                counts.put(rows.getString(1), rows.getInt(2));
+            }
+            assertEquals(1, counts.get("EXERCISE_BANK_PUBLISH"));
+            assertEquals(1, counts.get("EXERCISE_BANK_ROLLBACK"));
+        }
+    }
+
     private static AuthenticatedUser admin() {
         return new AuthenticatedUser("a1", "admin@example.com", "管理员", Set.of(UserRole.ADMIN));
     }

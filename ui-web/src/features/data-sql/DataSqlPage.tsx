@@ -11,12 +11,16 @@ import type { AiContextPreview, ConnectionDialectOption, ConnectionSummary, Conn
 self.MonacoEnvironment = { getWorker: () => new EditorWorker() };
 loader.config({ monaco });
 
-// 补全 provider 全局只注册一次，当前连接的表/列符号经模块槽位刷新，
-// 避免每次挂载工作台都向 sql 语言累积一个 provider。
+// 补全 provider 全局只注册一次。v3.3 W5.2：按模型 URI 过滤——只服务于工作台的
+// /sql/<connectionId> 模型，与练习编辑器的 /workspace 模型互不污染；符号槽位经
+// useEffect 刷新，不再在渲染期写入模块变量。
 let sqlWorkbenchSymbols: string[] = [];
 monaco.languages.registerCompletionItemProvider("sql", {
   triggerCharacters: ["."],
   provideCompletionItems: (model, position) => {
+    if (model.uri.scheme !== "sqlteacher" || model.uri.path === "/workspace") {
+      return { suggestions: [] };
+    }
     const word = model.getWordUntilPosition(position);
     const range = new monaco.Range(
       position.lineNumber,
@@ -235,7 +239,7 @@ function SqlWorkbench({ connectionId, tables, sql, onSqlChange }: { connectionId
   const history = useQuery({ queryKey: ["sql", "history"], queryFn: () => localAppRequest<{ items: SqlHistoryItem[] }>("sql.history", { limit: 30 }), enabled: historyOpen });
   const clearHistory = useMutation({ mutationFn: () => localAppRequest("sql.history.clear", {}), onSuccess: () => { void client.invalidateQueries({ queryKey: ["sql", "history"] }); toast("success", "执行历史已清空"); }, onError: (error: Error) => toast("error", `清空失败：${error.message}`) });
   const names = tables.flatMap(table => [table.name, ...table.columns.map(column => column.name)]);
-  sqlWorkbenchSymbols = names;
+  useEffect(() => { sqlWorkbenchSymbols = names; }, [names]);
   return <section className="content-card sql-workbench"><header className="editor-toolbar"><div><p className="eyebrow">执行策略</p><h2>SQL 工作台</h2></div><div className="button-row"><span className="policy-chip">最多 500 行 · 10 秒</span><Button variant="secondary" disabled={!connectionId || analyze.isPending || execute.isPending || explainPlan.isPending} onClick={() => explainPlan.mutate()}>执行计划</Button><Button disabled={!connectionId || analyze.isPending || execute.isPending} onClick={() => analyze.mutate()}>分析并运行</Button></div></header><div className="sql-editor"><Editor height="100%" language="sql" path={`sqlteacher://sql/${connectionId || "none"}`} value={sql} onChange={value => onSqlChange(value ?? "")} options={{ automaticLayout: true, minimap: { enabled: false }, fontFamily: "'Cascadia Code', Consolas, monospace", fontSize: 14, padding: { top: 16 }, scrollBeyondLastLine: false }} /></div>
     {risk && <div className={`risk-strip risk-${risk.level.toLowerCase()}`}><strong>{risk.level} · {risk.statementType}</strong><span>{risk.executable ? risk.confirmationRequired ? "需要明确确认" : "允许执行" : "Java 已阻止"}</span>{risk.reasons.map(reason => <small key={reason}>{reason}</small>)}</div>}
     {(analyze.isError || execute.isError) && <Feedback tone="error" title="SQL 未执行">{(analyze.error ?? execute.error)?.message}</Feedback>}

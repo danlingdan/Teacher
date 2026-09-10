@@ -32,7 +32,7 @@ class JdbcCourseMapServiceTest {
         var snapshot = new JdbcCourseMapService(new JdbcConnectionFactory(databases)).load();
 
         assertEquals(12, snapshot.courses().size());
-        assertEquals(38, snapshot.activityCount());
+        assertEquals(48, snapshot.activityCount());
         var sqlCourse = snapshot.courses().stream().filter(course -> course.id().equals("builtin-data-management"))
             .findFirst().orElseThrow();
         assertEquals(1, sqlCourse.sections().size());

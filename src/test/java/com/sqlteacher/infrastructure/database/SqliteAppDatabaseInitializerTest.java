@@ -42,7 +42,7 @@ class SqliteAppDatabaseInitializerTest {
         assertTrue(Files.exists(appDb));
         assertTrue(Files.exists(demoDb));
         assertEquals(22, readSchemaVersion(appDb));
-        assertEquals(20, countExercises(appDb));
+        assertEquals(30, countExercises(appDb));
         assertEquals(20, countExercisesWithThreeHints(appDb));
         assertEquals(7, countDemoRows(demoDb, "Student"));
         assertEquals(8, countDemoRows(demoDb, "Course"));
@@ -111,8 +111,8 @@ class SqliteAppDatabaseInitializerTest {
                     assertFalse(resultSet.getBoolean("enabled"));
                 }
             }
-            assertEquals(20, total);
-            // query-02 保留教师修改，其余 19 题升级到新数据集。
+            assertEquals(30, total);
+            // query-02 保留教师修改，其余 19 题升级到新数据集；另含 10 道 SPJ 内置题。
             assertEquals(19, onV2Dataset);
         }
         try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + appDb);

@@ -115,6 +115,32 @@ public final class DefaultLearningEventService implements LearningEventService {
     }
 
     @Override
+    public void recordSqlConfirmationIssued(String connectionId, String statementType) {
+        validateConnectionId(connectionId);
+        validateText(statementType, "statementType");
+        Map<String, String> attributes = new LinkedHashMap<>();
+        attributes.put("statementType", statementType);
+        record(LearningEventType.SQL_CONFIRMATION_ISSUED, connectionId, true, attributes);
+    }
+
+    @Override
+    public void recordSqlConfirmed(String connectionId, String statementType) {
+        validateConnectionId(connectionId);
+        validateText(statementType, "statementType");
+        Map<String, String> attributes = new LinkedHashMap<>();
+        attributes.put("statementType", statementType);
+        record(LearningEventType.SQL_CONFIRMED, connectionId, true, attributes);
+    }
+
+    @Override
+    public void recordSqlConfirmationCancelled(String connectionId, String reason) {
+        validateConnectionId(connectionId);
+        Map<String, String> attributes = new LinkedHashMap<>();
+        putIfPresent(attributes, "reason", reason);
+        record(LearningEventType.SQL_CONFIRMATION_CANCELLED, connectionId, false, attributes);
+    }
+
+    @Override
     public void recordExerciseAttempt(
         String exerciseId,
         String status,

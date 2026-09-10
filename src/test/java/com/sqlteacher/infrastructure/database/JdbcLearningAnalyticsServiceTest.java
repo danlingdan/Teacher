@@ -46,7 +46,7 @@ class JdbcLearningAnalyticsServiceTest {
         assertEquals(1, report.overview().passedSubmissions());
         assertEquals(0.5, report.overview().passRate(), 0.0001);
         assertEquals(1, report.overview().completedExercises());
-        assertEquals(1, report.overview().totalExercises());
+        assertEquals(2, report.overview().totalExercises());
         assertEquals(Duration.ofMillis(150), report.overview().averageSubmissionDuration());
         assertTrue(report.commonErrors().stream().anyMatch(error -> error.errorCode().equals("SQL_EXECUTION_FAILED")));
         assertTrue(export.utf8Content().startsWith("\ufeffSQLTeacher 学情导出"));

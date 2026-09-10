@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sqlteacher.application.event.LearningEventOwnerProvider;
 import com.sqlteacher.application.exercise.ExerciseCatalogItem;
+import com.sqlteacher.application.exercise.ExerciseCatalogPage;
 import com.sqlteacher.application.exercise.ExerciseCatalogService;
 import com.sqlteacher.application.exercise.ExerciseManagementService;
 import com.sqlteacher.application.exercise.ExerciseSummary;
@@ -65,6 +66,99 @@ public final class JdbcExerciseCatalogService implements ExerciseCatalogService 
                     .orElse("暂无数据集字段说明"),
                 definition.version()
             ));
+    }
+
+    @Override
+    public ExerciseCatalogPage listExercises(
+        int page, int pageSize, String query, String difficulty, String status
+    ) {
+        String owner = currentOwner();
+        int safePage = Math.max(0, page);
+        int safeSize = Math.min(500, Math.max(1, pageSize));
+        String normalizedQuery = query == null ? "" : query.trim().toLowerCase(java.util.Locale.ROOT);
+        String normalizedDifficulty = difficulty == null ? "" : difficulty.trim();
+        String normalizedStatus = status == null ? "" : status.trim();
+        String where = """
+            where e.enabled = 1
+              and (? = '' or lower(e.title) like '%' || ? || '%' or lower(e.knowledge_point) like '%' || ? || '%')
+              and (? = '' or e.difficulty = ?)
+              and (
+                ? = ''
+                or (? = 'passed' and exists (
+                      select 1 from exercise_attempts ap
+                        join exercise_sessions sp on sp.id = ap.session_id
+                       where sp.exercise_id = e.id and sp.owner_id = ? and ap.status = 'PASSED'))
+                or (? = 'failed' and not exists (
+                      select 1 from exercise_attempts ap
+                        join exercise_sessions sp on sp.id = ap.session_id
+                       where sp.exercise_id = e.id and sp.owner_id = ? and ap.status = 'PASSED')
+                    and exists (
+                      select 1 from exercise_sessions sa
+                       where sa.exercise_id = e.id and sa.owner_id = ?))
+                or (? = 'todo' and not exists (
+                      select 1 from exercise_sessions st
+                       where st.exercise_id = e.id and st.owner_id = ?))
+              )
+            """;
+        String from = "from exercises e " + where;
+        try (Connection connection = connectionFactory.open("app")) {
+            int total;
+            try (PreparedStatement statement = connection.prepareStatement(
+                "select count(*) " + from)) {
+                bindCatalogFilter(statement, normalizedQuery, normalizedDifficulty, normalizedStatus, owner);
+                try (ResultSet rows = statement.executeQuery()) {
+                    rows.next();
+                    total = rows.getInt(1);
+                }
+            }
+            List<ExerciseCatalogItem> items = new ArrayList<>();
+            try (PreparedStatement statement = connection.prepareStatement(
+                "select e.id, e.title, e.knowledge_point, e.difficulty, e.exercise_type, e.version "
+                    + from + " order by e.difficulty, e.knowledge_point, e.title, e.id limit ? offset ?")) {
+                int index = bindCatalogFilter(statement, normalizedQuery, normalizedDifficulty, normalizedStatus, owner);
+                statement.setInt(index, safeSize);
+                statement.setInt(index + 1, safePage * safeSize);
+                try (ResultSet rows = statement.executeQuery()) {
+                    Map<String, OwnerStatus> statusMap = readOwnerStatus();
+                    while (rows.next()) {
+                        String id = rows.getString("id");
+                        OwnerStatus ownerStatus = statusMap.get(id);
+                        items.add(new ExerciseCatalogItem(
+                            id, rows.getString("title"), rows.getString("knowledge_point"),
+                            ExerciseDifficulty.valueOf(rows.getString("difficulty")),
+                            exerciseType(rows.getString("exercise_type")), rows.getInt("version"),
+                            ownerStatus == null ? 0 : ownerStatus.attempts(),
+                            ownerStatus != null && ownerStatus.passed(),
+                            ownerStatus == null ? null : ownerStatus.lastAttemptAt(),
+                            ownerStatus == null ? null : ownerStatus.bestScore()
+                        ));
+                    }
+                }
+            }
+            return new ExerciseCatalogPage(items, total, safePage, safeSize);
+        } catch (SQLException | IllegalArgumentException error) {
+            throw new SqlTeacherException("EXERCISE_CATALOG_READ_FAILED", "Failed to read the practice catalog", error);
+        }
+    }
+
+    private static int bindCatalogFilter(
+        PreparedStatement statement, String query, String difficulty, String status, String owner
+    ) throws SQLException {
+        // Placeholder order matches the shared where clause: q x3, difficulty x2, status x9.
+        int index = 1;
+        statement.setString(index++, query);
+        statement.setString(index++, query);
+        statement.setString(index++, query);
+        statement.setString(index++, difficulty);
+        statement.setString(index++, difficulty);
+        statement.setString(index++, status);
+        statement.setString(index++, status);
+        statement.setString(index++, owner);
+        statement.setString(index++, status);
+        statement.setString(index++, owner);
+        statement.setString(index++, owner);
+        statement.setString(index++, owner);
+        return index;
     }
 
     @Override

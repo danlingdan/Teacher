@@ -23,6 +23,16 @@ class SqlCsvExporterTest {
     }
 
     @Test
+    void shouldNeutralizeFormulaPrefixedCells() {
+        String csv = SqlCsvExporter.toCsv(
+            List.of("v"),
+            List.of(Map.of("v", "=1+1"), Map.of("v", "+82"), Map.of("v", "@x"))
+        );
+
+        assertEquals("\uFEFFv\r\n'=1+1\r\n'+82\r\n'@x\r\n", csv);
+    }
+
+    @Test
     void shouldRenderNullValuesAsEmptyCells() {
         java.util.Map<String, Object> row = new java.util.HashMap<>();
         row.put("a", null);

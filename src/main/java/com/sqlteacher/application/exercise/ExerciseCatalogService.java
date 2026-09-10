@@ -13,4 +13,8 @@ public interface ExerciseCatalogService {
 
     /** Deterministic next-practice suggestion from the local attempt history. */
     Optional<RecommendationView> recommendNextExercise();
+
+    /** One bounded, filtered catalog page (v3.3 W4.4); filters are optional. */
+    ExerciseCatalogPage listExercises(
+        int page, int pageSize, String query, String difficulty, String status);
 }

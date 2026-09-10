@@ -63,8 +63,10 @@ export function Dialog({ open, title, onClose, children }: { open: boolean; titl
   return <div className="ui-dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><section className="ui-dialog" role="dialog" aria-modal="true" aria-labelledby={titleId}><header><h2 id={titleId}>{title}</h2><button ref={closeRef} aria-label="关闭对话框" onClick={onClose}>×</button></header>{children}</section></div>;
 }
 
-export function DataTable<T>({ caption, rows, columns }: { caption: string; rows: T[]; columns: Array<{ key: string; title: string; render: (row: T) => ReactNode }> }) {
-  return <div className="ui-table-wrap"><table className="ui-table"><caption>{caption}</caption><thead><tr>{columns.map(column => <th scope="col" key={column.key}>{column.title}</th>)}</tr></thead><tbody>{rows.length === 0 ? <tr><td colSpan={columns.length}>暂无数据</td></tr> : rows.map((row, index) => <tr key={index}>{columns.map(column => <td key={column.key}>{column.render(row)}</td>)}</tr>)}</tbody></table></div>;
+export function DataTable<T>({ caption, rows, columns, rowKey }: { caption: string; rows: T[]; columns: Array<{ key: string; title: string; render: (row: T) => ReactNode }>; rowKey?: (row: T) => string }) {
+  // W5.4：调用方可提供稳定行 key；缺省退化为索引 key（静态行序下仍然安全）。
+  const keyOf = rowKey ?? ((_row: T, index: number) => String(index));
+  return <div className="ui-table-wrap"><table className="ui-table"><caption>{caption}</caption><thead><tr>{columns.map(column => <th scope="col" key={column.key}>{column.title}</th>)}</tr></thead><tbody>{rows.length === 0 ? <tr><td colSpan={columns.length}>暂无数据</td></tr> : rows.map((row, index) => <tr key={keyOf(row, index)}>{columns.map(column => <td key={column.key}>{column.render(row)}</td>)}</tr>)}</tbody></table></div>;
 }
 
 export type TreeNode = { id: string; label: string; children?: TreeNode[] };

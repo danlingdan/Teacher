@@ -694,24 +694,63 @@ public final class SqlTeacherCloudServer {
         }
     }
 
+    /** Reads ?channel= from the query string; blank or absent means the default channel. */
+    private static String queryChannel(String query) {
+        if (query == null || query.isBlank()) {
+            return V31ExerciseBankStore.DEFAULT_CHANNEL;
+        }
+        for (String pair : query.split("&")) {
+            int separator = pair.indexOf('=');
+            if (separator > 0 && "channel".equals(pair.substring(0, separator))) {
+                return pair.substring(separator + 1);
+            }
+        }
+        return V31ExerciseBankStore.DEFAULT_CHANNEL;
+    }
+
     private void bank(HttpExchange exchange) throws IOException {
         try {
             String[] segments = exchange.getRequestURI().getPath().split("/");
+            String query = exchange.getRequestURI().getQuery();
+            String channel = queryChannel(query);
             String method = exchange.getRequestMethod();
             if (segments.length == 5 && "manifest".equals(segments[4]) && "GET".equals(method)) {
-                respond(exchange, 200, v31BankStore.manifest());
+                respond(exchange, 200, v31BankStore.manifest(channel));
+                return;
+            }
+            if (segments.length == 5 && "channels".equals(segments[4]) && "GET".equals(method)) {
+                respond(exchange, 200, Map.of("items", v31BankStore.channels()));
                 return;
             }
             if (segments.length == 5 && "publish".equals(segments[4]) && "POST".equals(method)) {
                 Map<String, Object> body = JSON.readValue(requestBytes(exchange, BANK_PUBLISH_MAX_BYTES), new TypeReference<>() { });
                 String text = String.valueOf(body.getOrDefault("text", ""));
+                String bodyChannel = String.valueOf(body.getOrDefault("channel", "network"));
                 AuthenticatedUser actor = store.authenticate(token(exchange));
-                int bankVersion = v31BankStore.publish(actor, text);
+                int bankVersion = v31BankStore.publish(actor, bodyChannel, text);
                 respond(exchange, 200, Map.of("bankVersion", bankVersion));
                 return;
             }
+            if (segments.length == 5 && "rollback".equals(segments[4]) && "POST".equals(method)) {
+                Map<String, Object> body = JSON.readValue(requestBytes(exchange, 4_096), new TypeReference<>() { });
+                String bodyChannel = String.valueOf(body.getOrDefault("channel", "network"));
+                int bankVersion = Integer.parseInt(String.valueOf(body.get("bankVersion")));
+                AuthenticatedUser actor = store.authenticate(token(exchange));
+                int applied = v31BankStore.rollback(actor, bodyChannel, bankVersion);
+                respond(exchange, 200, Map.of("bankVersion", applied));
+                return;
+            }
             if (segments.length == 7 && "block".equals(segments[4]) && "GET".equals(method)) {
-                Map<String, Object> block = v31BankStore.block(segments[5], segments[6]);
+                Map<String, Object> block = v31BankStore.block(channel, segments[5], segments[6]);
+                if (block == null) {
+                    respond(exchange, 404, errorResponse("EXERCISE_BANK_BLOCK_NOT_FOUND", "Unknown exercise bank block."));
+                    return;
+                }
+                respond(exchange, 200, block);
+                return;
+            }
+            if (segments.length == 8 && "block".equals(segments[4]) && "GET".equals(method)) {
+                Map<String, Object> block = v31BankStore.block(segments[5], segments[6], segments[7]);
                 if (block == null) {
                     respond(exchange, 404, errorResponse("EXERCISE_BANK_BLOCK_NOT_FOUND", "Unknown exercise bank block."));
                     return;

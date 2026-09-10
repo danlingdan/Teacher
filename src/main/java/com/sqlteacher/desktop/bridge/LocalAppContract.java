@@ -17,6 +17,8 @@ public final class LocalAppContract {
         "practice.hint", "practice.reset", "practice.close",
         "practice.bank.check", "practice.bank.update",
         "practice.wrongbook", "practice.recommend",
+        "practice.bank.channels", "practice.bank.notice", "settings.bank.update",
+        "teaching.bank.rollback",
         "runner.capabilities", "runner.run", "data.connections", "data.connection.dialects",
         "data.connection.save",
         "data.connection.test", "data.connection.select", "data.connection.delete", "data.schema",

@@ -19,6 +19,8 @@ import com.sqlteacher.application.event.LearningEventService;
 import com.sqlteacher.application.exercise.ExerciseManagementService;
 import com.sqlteacher.application.exercise.ExerciseTextDraftingService;
 import com.sqlteacher.infrastructure.database.ExerciseBankSyncService;
+import com.sqlteacher.infrastructure.system.ExerciseBankAutoCheckService;
+import com.sqlteacher.infrastructure.system.ExerciseBankPreferencesStore;
 import com.sqlteacher.application.metadata.DatabaseMetadataService;
 import com.sqlteacher.application.knowledge.CourseKnowledgeService;
 import com.sqlteacher.application.knowledge.GroundedKnowledgeExplanationService;
@@ -244,6 +246,18 @@ public class SqlTeacherApplicationConfig {
 
     @Bean public GeneralSoftwareService generalSoftwareService(SqlTeacherConfiguration configuration, URI cloudBaseUri) {
         return new FileGeneralSoftwareService(configuration.dataDirectory(), cloudBaseUri);
+    }
+
+    @Bean public ExerciseBankPreferencesStore exerciseBankPreferencesStore(SqlTeacherConfiguration configuration) {
+        return new ExerciseBankPreferencesStore(configuration.dataDirectory());
+    }
+
+    @Bean(destroyMethod = "close")
+    public ExerciseBankAutoCheckService exerciseBankAutoCheckService(
+            ExerciseBankSyncService syncService, ExerciseBankPreferencesStore store) {
+        ExerciseBankAutoCheckService service = new ExerciseBankAutoCheckService(syncService, store);
+        service.start();
+        return service;
     }
 
     @Bean public DiagnosticBundleService diagnosticBundleService(SqlTeacherConfiguration configuration) {

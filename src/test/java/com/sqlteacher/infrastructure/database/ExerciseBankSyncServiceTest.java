@@ -213,8 +213,10 @@ class ExerciseBankSyncServiceTest {
         }
 
         private final class FakeCloudApi implements CloudApiClient {
-            @Override public ExerciseBankManifest fetchExerciseBankManifest() { return manifest; }
-            @Override public ExerciseBankBlock fetchExerciseBankBlock(String type, String id) { return blocks.get(type + ":" + id); }
+            @Override public ExerciseBankManifest fetchExerciseBankManifest(String channel) { return manifest; }
+            @Override public ExerciseBankBlock fetchExerciseBankBlock(String channel, String type, String id) {
+                return blocks.get(type + ":" + id);
+            }
             @Override public int uploadSyncItems(String token, List<CloudSyncItem> items) { return 0; }
             @Override public List<CloudSyncItem> downloadSyncItems(String token, long afterVersion) { return List.of(); }
             @Override public CloudAuthenticationService.Session login(String email, char[] password) { throw unsupported(); }

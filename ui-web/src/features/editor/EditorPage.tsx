@@ -1,4 +1,4 @@
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Editor, {
   loader,
   type OnMount,
@@ -29,7 +29,9 @@ import type {
   ExerciseBankUpdateStatus,
   ExerciseHint,
   ExerciseSession,
+  ExerciseCatalogPage,
   ExerciseView,
+  BankPendingNotice,
   RecommendationView,
   ResultComparison,
   RunnerCapability,
@@ -38,17 +40,20 @@ import type {
   WrongBookItem,
 } from "../../shared/types";
 import { ExerciseCatalogPanel } from "./ExerciseCatalog";
-import type { ExerciseCatalogItem } from "../../shared/types";
 import { Button, Dialog, EmptyState, Feedback, Stepper, useToast } from "../../shared/ui";
 
 self.MonacoEnvironment = { getWorker: () => new EditorWorker() };
 loader.config({ monaco });
 
-// Monaco 补全 provider 注册在全局语言上；模块级只注册一次，当前练习的 schema
-// 符号走模块槽位刷新（组件渲染时更新），避免每次挂载都累积一个 provider。
+// Monaco 补全 provider 注册在全局语言上；模块级只注册一次。v3.3 W5.2：按模型 URI
+// 过滤（仅服务于练习编辑器的 /workspace 模型），与工作台的数据编辑器互不污染；
+// schema 符号经 useEffect 刷新到模块槽位，不再在渲染期写入模块变量。
 let practiceEditorSchema = "";
 monaco.languages.registerCompletionItemProvider("sql", {
   provideCompletionItems: (model: monaco.editor.ITextModel, position: monaco.Position) => {
+    if (model.uri.scheme !== "sqlteacher" || model.uri.path !== "/workspace") {
+      return { suggestions: [] };
+    }
     const word = model.getWordUntilPosition(position);
     const range = new monaco.Range(
       position.lineNumber,
@@ -733,6 +738,7 @@ function ActivityInteraction({
 }
 
 function ExerciseFlow() {
+  const client = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
   const classroomId = searchParams.get("classroom") ?? "";
   const assignmentId = searchParams.get("assignment") ?? "";
@@ -748,11 +754,48 @@ function ExerciseFlow() {
     enabled: assignmentContext,
     retry: false,
   });
+  // 目录筛选进 URL：q 为搜索词，difficulty/status 为筛选，刷新与分享不丢状态。
+  const catalogFilters = {
+    query: searchParams.get("q") ?? "",
+    difficulty: searchParams.get("difficulty") ?? "",
+    status: searchParams.get("status") ?? "",
+  };
+  // 目录分页（W4.4）：服务端过滤 + 分页，渲染规模由 pageSize 约束。
+  const catalogPageParam = Number(searchParams.get("catPage") ?? "0") || 0;
+  const catalogPageSize = 50;
+  const setCatalogPage = (page: number) => {
+    const params = new URLSearchParams(searchParams);
+    if (page > 0) params.set("catPage", String(page));
+    else params.delete("catPage");
+    setSearchParams(params, { replace: true });
+  };
   const catalog = useQuery({
-    queryKey: ["practice", "catalog"],
+    queryKey: [
+      "practice",
+      "catalog",
+      catalogPageParam,
+      catalogFilters.query,
+      catalogFilters.difficulty,
+      catalogFilters.status,
+    ],
     queryFn: () =>
-      localAppRequest<{ items: ExerciseCatalogItem[] }>("practice.catalog"),
+      localAppRequest<ExerciseCatalogPage>("practice.catalog", {
+        page: catalogPageParam,
+        pageSize: catalogPageSize,
+        q: catalogFilters.query,
+        difficulty: catalogFilters.difficulty,
+        status: catalogFilters.status,
+      }),
     staleTime: 30_000,
+  });
+  // 定时检查产生的待更新通知（W4.3）：仅提示，不打断。
+  const bankNotice = useQuery({
+    queryKey: ["practice", "bank", "notice"],
+    queryFn: () =>
+      localAppRequest<{ notice: BankPendingNotice | null }>(
+        "practice.bank.notice",
+      ),
+    staleTime: 60_000,
   });
   // 确定性推荐下一题（本地作答历史重算，无随机、无 AI）。
   const recommendation = useQuery({
@@ -899,12 +942,6 @@ function ExerciseFlow() {
     params.set("exercise", selectedId);
     setSearchParams(params, { replace: true });
   }, [selectedId, searchParams, setSearchParams]);
-  // 目录筛选进 URL：q 为搜索词，difficulty/status 为筛选，刷新与分享不丢状态。
-  const catalogFilters = {
-    query: searchParams.get("q") ?? "",
-    difficulty: searchParams.get("difficulty") ?? "",
-    status: searchParams.get("status") ?? "",
-  };
   const setCatalogFilter = (
     key: "q" | "difficulty" | "status",
     value: string,
@@ -936,6 +973,7 @@ function ExerciseFlow() {
       setBankStatus(undefined);
       toast("success", value.message);
       void catalog.refetch();
+      void client.invalidateQueries({ queryKey: ["practice", "bank", "notice"] });
     },
     onError: (error: Error) => toast("error", `题库更新失败：${error.message}`),
   });
@@ -959,6 +997,10 @@ function ExerciseFlow() {
         filters={catalogFilters}
         onFilterChange={setCatalogFilter}
         onSelect={handleCatalogSelect}
+        total={catalog.data?.total}
+        page={catalog.data?.page ?? catalogPageParam}
+        pageSize={catalogPageSize}
+        onPageChange={setCatalogPage}
         headerAction={
           <Button
             variant="secondary"
@@ -1003,6 +1045,21 @@ function ExerciseFlow() {
           steps={["选题", "预览确认", "作答", "反馈"]}
           current={step}
         />
+        {bankNotice.data?.notice && (
+          <Feedback tone="info" title="题库有可用更新">
+            <p>
+              频道 {bankNotice.data.notice.channel} 在服务器已更新到第{" "}
+              {bankNotice.data.notice.bankVersion} 版（定时检查发现）。
+            </p>
+            <Button
+              disabled={bankUpdate.isPending}
+              busy={bankUpdate.isPending}
+              onClick={() => bankUpdate.mutate()}
+            >
+              应用更新
+            </Button>
+          </Feedback>
+        )}
         {bankStatus && !bankStatus.upToDate && (
           <Feedback tone="info" title="题库更新">
             <p>{bankStatus.message}</p>
@@ -1651,8 +1708,10 @@ function CodeEditor({
   onSubmit?: () => void;
   onHint?: () => void;
 }) {
-  // 渲染时刷新模块级 schema 槽位，补全始终拿到当前练习的结构。
-  practiceEditorSchema = schema;
+  // 副作用中刷新模块级 schema 槽位（渲染期不写模块变量），补全始终拿到当前练习的结构。
+  useEffect(() => {
+    practiceEditorSchema = schema;
+  }, [schema]);
   // 快捷键命令只在挂载时注册一次；用 ref 持有最新回调，命令触发时再解引用。
   // 否则 Ctrl+Enter 提交的是挂载帧的旧代码，F1 也会绕过提示按钮当前的禁用状态。
   const callbacks = useRef({ onRun, onSubmit, onHint });

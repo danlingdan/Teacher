@@ -32,8 +32,8 @@ class JdbcExerciseManagementServiceTest {
         JdbcExerciseManagementService service = initialize(tempDir.resolve("catalog"));
         initialize(tempDir.resolve("catalog"));
 
-        assertEquals(20, service.listExercises(false).size());
-        assertEquals(1, service.listDatasets().size());
+        assertEquals(30, service.listExercises(false).size());
+        assertEquals(2, service.listDatasets().size());
     }
 
     @Test

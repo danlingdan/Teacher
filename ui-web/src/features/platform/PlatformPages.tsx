@@ -358,6 +358,7 @@ export function TeachingPage() {
         <DataTable
           caption={`教师题库，共 ${filteredExercises.length} 道题`}
           rows={visibleExercises}
+          rowKey={(row) => row.id}
           columns={[
             {
               key: "title",
@@ -1877,9 +1878,16 @@ export function CloudPage() {
             </div>
           </Dialog>
           {analyticsResult && (
-            <pre className="help-content">
-              {JSON.stringify(analyticsResult, null, 2)}
-            </pre>
+            <AnalyticsStructuredView
+              report={
+                analyticsResult as unknown as {
+                  overview: Record<string, number>;
+                  exercises?: Array<Record<string, unknown>>;
+                  knowledgePoints?: Array<Record<string, unknown>>;
+                  commonErrors?: Array<Record<string, unknown>>;
+                }
+              }
+            />
           )}
           <div className="button-row class-actions">
             <Button
@@ -2433,6 +2441,135 @@ type SettingsDraft = SettingsPreferences["general"] & {
   developerMode: boolean;
 };
 
+type BankPreferencesView = {
+  autoCheckEnabled: boolean;
+  subscribedChannels: string[];
+};
+
+type BankChannelInfo = {
+  channel: string;
+  bankVersion: number;
+  updatedAt: string;
+};
+
+/** 题库更新设置（W4.2/W4.3）：订阅频道 + 定时检查 opt-in（默认关闭）。 */
+function BankUpdateSettings({
+  preferences,
+}: {
+  preferences?: BankPreferencesView;
+}) {
+  const client = useQueryClient();
+  const toast = useToast();
+  const channels = useQuery({
+    queryKey: ["practice", "bank", "channels"],
+    queryFn: () =>
+      localAppRequest<{ items: BankChannelInfo[] }>("practice.bank.channels"),
+    staleTime: 60_000,
+    retry: false,
+  });
+  const known = channels.data?.items.map((item) => item.channel) ?? [];
+  const subscribed = preferences?.subscribedChannels ?? ["network"];
+  const options = Array.from(new Set([...known, ...subscribed, "network"]));
+  const save = useMutation({
+    mutationFn: (next: { autoCheckEnabled: boolean; channels: string[] }) =>
+      localAppRequest("settings.bank.update", {
+        autoCheckEnabled: next.autoCheckEnabled,
+        subscribedChannels: next.channels,
+      }),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: settingsKey });
+      toast("success", "题库更新设置已保存");
+    },
+    onError: (error: Error) => toast("error", `保存失败：${error.message}`),
+  });
+  const [autoCheck, setAutoCheck] = useState<boolean | undefined>();
+  const [selected, setSelected] = useState<string[] | undefined>();
+  const autoChecked = autoCheck ?? preferences?.autoCheckEnabled ?? false;
+  const toggleChannel = (channel: string) => {
+    const current = selected ?? subscribed;
+    setSelected(
+      current.includes(channel)
+        ? current.filter((item) => item !== channel)
+        : [...current, channel],
+    );
+  };
+  const dirty =
+    autoCheck !== undefined && autoCheck !== (preferences?.autoCheckEnabled ?? false) ||
+    selected !== undefined &&
+      JSON.stringify([...(selected ?? [])].sort()) !==
+        JSON.stringify([...subscribed].sort());
+  return (
+    <section className="content-card settings-panel">
+      <div className="section-heading">
+        <div>
+          <p className="eyebrow">题库分发</p>
+          <h2>题库更新</h2>
+        </div>
+      </div>
+      <label className="setting-toggle">
+        <input
+          type="checkbox"
+          checked={autoChecked}
+          onChange={(event) => setAutoCheck(event.target.checked)}
+        />
+        <span>
+          <strong>定时检查题库更新</strong>
+          <small>开启后每 6 小时在后台检查一次；发现更新仅提示，不会自动应用，也绝不打断练习。</small>
+        </span>
+      </label>
+      <p className="muted">订阅的题库频道（未订阅的频道不会拉取）：</p>
+      {options.map((channel) => (
+        <label className="setting-toggle" key={channel}>
+          <input
+            type="checkbox"
+            checked={(selected ?? subscribed).includes(channel)}
+            onChange={() => toggleChannel(channel)}
+          />
+          <span>
+            <strong>{channel}</strong>
+            {(() => {
+              const info = channels.data?.items.find(
+                (item) => item.channel === channel,
+              );
+              return info ? (
+                <small>服务器版本 {info.bankVersion}</small>
+              ) : null;
+            })()}
+          </span>
+        </label>
+      ))}
+      {channels.isError && (
+        <p className="muted">无法获取服务器频道列表，仅显示已订阅频道。</p>
+      )}
+      <div className="button-row">
+        <Button
+          disabled={!dirty || save.isPending}
+          busy={save.isPending}
+          onClick={() =>
+            save.mutate({
+              autoCheckEnabled: autoChecked,
+              channels: selected ?? subscribed,
+            })
+          }
+        >
+          保存题库设置
+        </Button>
+        {selected && (
+          <Button
+            variant="secondary"
+            onClick={() => {
+              setSelected(undefined);
+              setAutoCheck(undefined);
+            }}
+          >
+            放弃修改
+          </Button>
+        )}
+      </div>
+    </section>
+  );
+}
+
 export function SettingsPage() {
   const client = useQueryClient();
   const toast = useToast();
@@ -2788,6 +2925,7 @@ export function SettingsPage() {
           />
         </div>
       </section>
+      <BankUpdateSettings preferences={query.data?.bank} />
       <details className="content-card settings-panel">
         <summary>
           <span className="settings-symbol">⌘</span>
@@ -3176,6 +3314,79 @@ function helpTopicLabel(value: string) {
     )[value] ?? value
   );
 }
+/**
+ * 学情报告结构化呈现（W5.1）：概览指标中文化 + 知识点/常见错误分表，
+ * 替代直接把报告 JSON dump 给教师查看的旧形态。
+ */
+function AnalyticsStructuredView({
+  report,
+}: {
+  report: {
+    overview: Record<string, number>;
+    exercises?: Array<Record<string, unknown>>;
+    knowledgePoints?: Array<Record<string, unknown>>;
+    commonErrors?: Array<Record<string, unknown>>;
+  };
+}) {
+  const entries = Object.entries(report.overview);
+  const points = (report.knowledgePoints ?? []) as Array<
+    Record<string, unknown>
+  >;
+  const errors = (report.commonErrors ?? []) as Array<
+    Record<string, unknown>
+  >;
+  return (
+    <div className="analytics-structured">
+      <div className="metric-row">
+        {entries.map(([key, value]) => (
+          <Metric
+            key={key}
+            label={analyticsMetricLabel(key)}
+            value={
+              typeof value === "number" &&
+              (key === "passRate" || key === "completionRate")
+                ? `${Math.round(value * 100)}%`
+                : value
+            }
+          />
+        ))}
+      </div>
+      {points.length > 0 && (
+        <>
+          <p className="eyebrow">知识点统计</p>
+          <ul className="plain-list">
+            {points.slice(0, 8).map((point, index) => (
+              <li key={index}>
+                <strong>{String(point.knowledgePoint ?? point.name ?? "未命名")}</strong>
+                <span>
+                  尝试 {String(point.attempts ?? 0)} · 完成{" "}
+                  {String(point.completedExercises ?? 0)} · 薄弱率{" "}
+                  {typeof point.weaknessRate === "number"
+                    ? `${Math.round(point.weaknessRate * 100)}%`
+                    : String(point.weaknessRate ?? "—")}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+      {errors.length > 0 && (
+        <>
+          <p className="eyebrow">常见错误</p>
+          <ul className="plain-list">
+            {errors.slice(0, 6).map((error, index) => (
+              <li key={index}>
+                <code>{String(error.errorCode ?? "UNKNOWN")}</code>
+                <span>出现 {String(error.count ?? 0)} 次</span>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+    </div>
+  );
+}
+
 function analyticsMetricLabel(value: string) {
   return (
     (

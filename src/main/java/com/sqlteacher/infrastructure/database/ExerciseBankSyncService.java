@@ -33,7 +33,7 @@ import java.util.function.Consumer;
  */
 public final class ExerciseBankSyncService {
     private static final Logger log = LoggerFactory.getLogger(ExerciseBankSyncService.class);
-    private static final String CHANNEL = "network";
+    public static final String DEFAULT_CHANNEL = "network";
 
     private final CloudApiClient cloudApiClient;
     private final String appDatabasePath;
@@ -56,11 +56,16 @@ public final class ExerciseBankSyncService {
     }
 
     public BankUpdateStatus check() {
+        return check(DEFAULT_CHANNEL);
+    }
+
+    /** Checks one distribution channel; failures degrade silently to an up-to-date state. */
+    public BankUpdateStatus check(String channel) {
         try {
-            ExerciseBankManifest manifest = cloudApiClient.fetchExerciseBankManifest();
+            ExerciseBankManifest manifest = cloudApiClient.fetchExerciseBankManifest(channel);
             LocalVersions local = readLocalVersions();
             int pending = countPending(manifest, local);
-            int applied = appliedVersion();
+            int applied = appliedVersion(channel);
             boolean upToDate = pending == 0;
             return new BankUpdateStatus(
                 applied, manifest.bankVersion(), pending, upToDate,
@@ -68,14 +73,18 @@ public final class ExerciseBankSyncService {
             );
         } catch (RuntimeException error) {
             log.info("Exercise bank update check failed: {}", error.getClass().getSimpleName());
-            return new BankUpdateStatus(appliedVersion(), -1, 0, true, "暂时无法连接题库服务器，本地题库不受影响。");
+            return new BankUpdateStatus(appliedVersion(channel), -1, 0, true, "暂时无法连接题库服务器，本地题库不受影响。");
         }
     }
 
     public BankUpdateResult update(Consumer<String> progress) {
-        ExerciseBankManifest manifest = cloudApiClient.fetchExerciseBankManifest();
+        return update(DEFAULT_CHANNEL, progress);
+    }
+
+    public BankUpdateResult update(String channel, Consumer<String> progress) {
+        ExerciseBankManifest manifest = cloudApiClient.fetchExerciseBankManifest(channel);
         LocalVersions local = readLocalVersions();
-        int appliedVersion = appliedVersion();
+        int appliedVersion = appliedVersion(channel);
         if (manifest.bankVersion() <= appliedVersion && countPending(manifest, local) == 0) {
             return new BankUpdateResult(false, appliedVersion, 0, 0, "题库已是最新。");
         }
@@ -84,7 +93,7 @@ public final class ExerciseBankSyncService {
         int total = pendingDatasets.size() + pendingExercises.size();
         if (total == 0) {
             try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + appDatabasePath)) {
-                recordAppliedVersion(connection, manifest.bankVersion());
+                recordAppliedVersion(connection, channel, manifest.bankVersion());
             } catch (SQLException error) {
                 throw new SqlTeacherException("EXERCISE_BANK_APPLY_FAILED", "无法记录题库版本。", error);
             }
@@ -138,7 +147,7 @@ public final class ExerciseBankSyncService {
                         updatedExercises++;
                     }
                 }
-                recordAppliedVersion(connection, manifest.bankVersion());
+                recordAppliedVersion(connection, channel, manifest.bankVersion());
                 connection.commit();
             } catch (SQLException | RuntimeException error) {
                 connection.rollback();
@@ -234,12 +243,12 @@ public final class ExerciseBankSyncService {
         }
     }
 
-    private int appliedVersion() {
+    private int appliedVersion(String channel) {
         try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + appDatabasePath);
              PreparedStatement statement = connection.prepareStatement(
                  "select bank_version from exercise_bank_state where channel = ?"
              )) {
-            statement.setString(1, CHANNEL);
+            statement.setString(1, channel);
             try (ResultSet row = statement.executeQuery()) {
                 return row.next() ? row.getInt(1) : 0;
             }
@@ -248,14 +257,14 @@ public final class ExerciseBankSyncService {
         }
     }
 
-    private void recordAppliedVersion(Connection connection, int bankVersion) throws SQLException {
+    private void recordAppliedVersion(Connection connection, String channel, int bankVersion) throws SQLException {
         try (PreparedStatement statement = connection.prepareStatement(
             "insert into exercise_bank_state(channel, bank_version, manifest_sha256, updated_at)"
                 + " values (?, ?, NULL, ?)"
                 + " on conflict(channel) do update set bank_version = excluded.bank_version,"
                 + " updated_at = excluded.updated_at"
         )) {
-            statement.setString(1, CHANNEL);
+            statement.setString(1, channel);
             statement.setInt(2, bankVersion);
             statement.setString(3, java.time.Instant.now().toString());
             statement.executeUpdate();

@@ -54,6 +54,18 @@ public interface LearningEventService {
     ) {
     }
 
+    /** v3.3 W6.1: recorded when a confirmation token is issued for a risky statement. */
+    default void recordSqlConfirmationIssued(String connectionId, String statementType) {
+    }
+
+    /** v3.3 W6.1: recorded when a confirmation token is consumed by an execution. */
+    default void recordSqlConfirmed(String connectionId, String statementType) {
+    }
+
+    /** v3.3 W6.1: recorded when a token is cancelled, expired, or fails validation. */
+    default void recordSqlConfirmationCancelled(String connectionId, String reason) {
+    }
+
     default void recordExerciseHint(String exerciseId, int hintLevel) {
     }
 
