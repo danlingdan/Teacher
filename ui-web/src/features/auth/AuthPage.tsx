@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useAppVersion } from "../../shared/appVersion";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import { sessionQuery } from "../../app/queries";
@@ -10,6 +11,7 @@ type AuthMode = "login" | "register" | "reset";
 const safeDestinations = new Set(["/today", "/knowledge", "/practice", "/data", "/teaching", "/cloud", "/settings"]);
 
 export default function AuthPage() {
+  const appVersion = useAppVersion();
   const client = useQueryClient();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -54,7 +56,7 @@ export default function AuthPage() {
     <section className="auth-story" aria-label="SQLTeacher 介绍">
       <div className="auth-brand"><span className="brand-mark">S</span><div><strong>SQLTeacher</strong><small>Learning Studio</small></div></div>
       <div className="auth-story-copy"><p className="eyebrow">Learn with clarity</p><h1>把每一次练习<br />变成可见的进步</h1><p>本地优先的计算机科学学习工作台。</p><ul><li><span>01</span>离线可用，无需账号</li><li><span>02</span>SQL 执行受安全边界保护</li><li><span>03</span>登录后同步班级与进度</li></ul></div>
-      <small className="auth-version">SQLTeacher 3.0 · Windows</small>
+      <small className="auth-version">SQLTeacher {appVersion} · Windows</small>
     </section>
     <section className="auth-panel">
       <div className="auth-card">

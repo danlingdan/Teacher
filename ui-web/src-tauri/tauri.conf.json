@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "SQLTeacher 3.0",
+        "title": "SQLTeacher",
         "width": 1280,
         "height": 800,
         "minWidth": 960,

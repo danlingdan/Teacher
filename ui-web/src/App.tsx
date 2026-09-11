@@ -1,4 +1,5 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
+import { useAppVersion } from "./shared/appVersion";
 import {
   NavLink,
   Navigate,
@@ -171,6 +172,7 @@ function AppEffects() {
 }
 
 function Shell() {
+  const appVersion = useAppVersion();
   const health = useQuery(healthQuery);
   const session = useQuery(sessionQuery);
   const location = useLocation();
@@ -446,7 +448,7 @@ function Shell() {
               <span>搜索与跳转</span>
               <kbd>Ctrl K</kbd>
             </button>
-            <div className="stage-badge">3.0</div>
+            <div className="stage-badge">{appVersion}</div>
           </div>
         </header>
         <div className="workspace-content">

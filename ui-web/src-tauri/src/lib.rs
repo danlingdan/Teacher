@@ -558,6 +558,11 @@ pub fn run() {
             app.manage(AppState {
                 sidecar: Arc::new(SidecarManager::new(app.handle().clone())),
             });
+            // 窗口标题跟随包版本（tauri.conf.json 不支持 {{version}} 插值）。
+            if let Some(window) = app.get_webview_window("main") {
+                let version = app.package_info().version.clone();
+                let _ = window.set_title(&format!("SQLTeacher {version}"));
+            }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![local_app_request])
