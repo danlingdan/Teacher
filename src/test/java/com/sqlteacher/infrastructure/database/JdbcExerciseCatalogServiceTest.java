@@ -4,6 +4,7 @@ import com.sqlteacher.application.config.AiConfiguration;
 import com.sqlteacher.application.config.DatabaseConfiguration;
 import com.sqlteacher.application.config.SqlTeacherConfiguration;
 import com.sqlteacher.application.exercise.ExerciseCatalogItem;
+import com.sqlteacher.application.exercise.ExerciseCatalogPage;
 import com.sqlteacher.application.exercise.WrongBookItem;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -75,6 +76,28 @@ class JdbcExerciseCatalogServiceTest {
         assertEquals(first, second);
         assertEquals("query-02", first.exerciseId());
         assertTrue(first.reason().contains("0%") || first.reason().contains("巩固"), first.reason());
+    }
+
+    @Test
+    void shouldReturnEveryExerciseOnTheFirstPaginatedPage() {
+        // 回归：分页路径的过滤占位符必须完整绑定（W4.4 曾漏绑 status 导致首页恒为空）。
+        SqlTeacherConfiguration configuration = configuration();
+        new SqliteAppDatabaseInitializer(configuration).initialize();
+        JdbcConnectionFactory connections = new JdbcConnectionFactory(configuration.database());
+        var management = new JdbcExerciseManagementService(connections);
+        var catalog = new JdbcExerciseCatalogService(connections, management, () -> "guest");
+
+        ExerciseCatalogPage page = catalog.listExercises(0, 50, "", "", "");
+        org.junit.jupiter.api.Assertions.assertEquals(30, page.total());
+        org.junit.jupiter.api.Assertions.assertEquals(30, page.items().size());
+
+        ExerciseCatalogPage filtered = catalog.listExercises(0, 50, "", "", "todo");
+        org.junit.jupiter.api.Assertions.assertEquals(30, filtered.total());
+        org.junit.jupiter.api.Assertions.assertEquals(30, filtered.items().size());
+
+        ExerciseCatalogPage keyword = catalog.listExercises(0, 50, "未选数据库课程", "", "");
+        org.junit.jupiter.api.Assertions.assertTrue(keyword.items().stream()
+            .allMatch(item -> item.title().contains("未选数据库课程")));
     }
 
     private void seedSession(

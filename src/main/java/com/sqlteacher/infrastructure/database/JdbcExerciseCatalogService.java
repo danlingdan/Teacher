@@ -144,7 +144,8 @@ public final class JdbcExerciseCatalogService implements ExerciseCatalogService 
     private static int bindCatalogFilter(
         PreparedStatement statement, String query, String difficulty, String status, String owner
     ) throws SQLException {
-        // Placeholder order matches the shared where clause: q x3, difficulty x2, status x9.
+        // Placeholder order matches the shared where clause: q x3, difficulty x2,
+        // status x4, owner x4 (one owner per status branch).
         int index = 1;
         statement.setString(index++, query);
         statement.setString(index++, query);
@@ -157,6 +158,7 @@ public final class JdbcExerciseCatalogService implements ExerciseCatalogService 
         statement.setString(index++, status);
         statement.setString(index++, owner);
         statement.setString(index++, owner);
+        statement.setString(index++, status);
         statement.setString(index++, owner);
         return index;
     }
