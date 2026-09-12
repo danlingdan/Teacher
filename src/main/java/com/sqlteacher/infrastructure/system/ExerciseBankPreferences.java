@@ -22,7 +22,7 @@ public record ExerciseBankPreferences(
     }
 
     public static ExerciseBankPreferences defaults() {
-        return new ExerciseBankPreferences(false, List.of(DEFAULT_CHANNEL), null);
+        return new ExerciseBankPreferences(true, List.of(DEFAULT_CHANNEL), null);
     }
 
     public record PendingNotice(String channel, int bankVersion, String detectedAt) {

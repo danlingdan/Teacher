@@ -1,4 +1,5 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
+import { UpdateDialog } from "./shared/UpdateDialog";
 import { useAppVersion } from "./shared/appVersion";
 import {
   NavLink,
@@ -72,6 +73,7 @@ export default function App() {
   return (
     <>
       <AppEffects />
+      <UpdateDialog />
       <Routes>
         <Route
           path="login"

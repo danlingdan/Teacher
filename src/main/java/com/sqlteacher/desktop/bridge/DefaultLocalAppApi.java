@@ -75,6 +75,8 @@ import com.sqlteacher.application.system.GeneralSoftwareService;
 import com.sqlteacher.application.system.GeneralSoftwareSettings;
 import com.sqlteacher.application.maintenance.ApplicationBackupService;
 import com.sqlteacher.application.maintenance.DataMaintenanceService;
+import com.sqlteacher.application.update.UpdateCheckResult;
+import com.sqlteacher.application.update.UpdateManifest;
 import com.sqlteacher.application.update.UpdateService;
 import com.sqlteacher.domain.activity.CodeExecutionLimits;
 import com.sqlteacher.domain.activity.CodeActivityArtifact;
@@ -252,6 +254,9 @@ public final class DefaultLocalAppApi implements LocalAppApi {
             case "settings.learning.reset" -> settingsLearningReset(params, cancellation);
             case "settings.cache.clear" -> settingsCacheClear(cancellation);
             case "settings.update.check" -> settingsUpdateCheck(cancellation);
+            case "settings.update.download" -> settingsUpdateDownload(cancellation, events);
+            case "settings.update.install" -> settingsUpdateInstall(cancellation);
+            case "settings.update.skip" -> settingsUpdateSkip(params, cancellation);
             case "settings.notifications.read" -> settingsNotificationsRead(cancellation);
             case "settings.help" -> settingsHelp(params, cancellation);
             case "editor.languages" -> editorLanguages();
@@ -1147,7 +1152,52 @@ public final class DefaultLocalAppApi implements LocalAppApi {
 
     private JsonNode settingsUpdateCheck(CancellationToken cancellation) {
         cancellation.throwIfCancelled();
-        return mapper.valueToTree(context().getBean(UpdateService.class).check(true));
+        var result = context().getBean(UpdateService.class).check(true);
+        lastUpdateCheck = result;
+        return mapper.valueToTree(result);
+    }
+
+    /** 最近一次检查结果，供下载/安装续接使用（W7：应用内更新闭环）。 */
+    private volatile UpdateCheckResult lastUpdateCheck;
+    private volatile java.nio.file.Path downloadedInstaller;
+    private volatile UpdateManifest downloadedManifest;
+
+    private JsonNode settingsUpdateDownload(CancellationToken cancellation, Consumer<LocalAppEvent> events) {
+        cancellation.throwIfCancelled();
+        var manifest = lastUpdateCheck == null ? null : lastUpdateCheck.available();
+        if (manifest == null) throw new IllegalArgumentException("请先检查更新");
+        var service = context().getBean(UpdateService.class);
+        java.nio.file.Path installer = service.download(manifest, fraction -> {
+            ObjectNode progress = mapper.createObjectNode();
+            progress.put("phase", "update.download");
+            progress.put("fraction", fraction);
+            events.accept(new LocalAppEvent("progress", progress));
+        });
+        if (!service.ready(manifest, installer)) {
+            throw new SqlTeacherException("UPDATE_DOWNLOAD_FAILED", "下载的安装包未通过校验，请重试。");
+        }
+        downloadedInstaller = installer;
+        downloadedManifest = manifest;
+        return mapper.createObjectNode().put("ready", true);
+    }
+
+    private JsonNode settingsUpdateInstall(CancellationToken cancellation) {
+        cancellation.throwIfCancelled();
+        var manifest = downloadedManifest;
+        var installer = downloadedInstaller;
+        if (manifest == null || installer == null) {
+            throw new IllegalArgumentException("请先下载更新");
+        }
+        context().getBean(UpdateService.class).launchInstaller(manifest, installer);
+        return mapper.createObjectNode().put("launched", true);
+    }
+
+    private JsonNode settingsUpdateSkip(JsonNode params, CancellationToken cancellation) {
+        cancellation.throwIfCancelled();
+        String version = requiredText(params, "version", 32);
+        context().getBean(UpdateService.class).skip(
+            com.sqlteacher.application.update.SemanticVersion.parse(version));
+        return mapper.createObjectNode().put("skipped", version);
     }
 
     private JsonNode settingsNotificationsRead(CancellationToken cancellation) {
