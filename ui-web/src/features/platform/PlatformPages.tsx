@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
-import { localAppRequest } from "../../shared/ipc";
+import { LocalAppError, localAppRequest } from "../../shared/ipc";
 import type {
   ActiveSession,
   BackupSnapshot,
   CloudAssignment,
+  CloudClassRosterMember,
   CloudCourse,
   CloudCourseContent,
   CoursePackagePreview,
@@ -37,6 +38,18 @@ import {
 const teachingKey = ["teaching", "workspace"] as const;
 const cloudKey = ["cloud", "workspace"] as const;
 const settingsKey = ["settings", "preferences"] as const;
+
+/**
+ * 云端写操作失败的文案映射（issue #21）：Java 桥接层现在透传云端错误的
+ * 结构化 code，这里把常见场景翻译成可行动的提示，其余原样透传。
+ */
+function cloudFailureText(error: Error): string {
+  const code = error instanceof LocalAppError ? error.code : "";
+  if (code === "CLOUD_UNAVAILABLE")
+    return "云端服务暂时不可用，请检查网络后重试";
+  if (code === "UNAUTHORIZED") return "云端登录状态已过期，请重新登录";
+  return error.message;
+}
 type ExerciseDraftUi = {
   id: string;
   title: string;
@@ -525,7 +538,11 @@ export function TeachingPage() {
               />
             )}
           </FormField>
-          <FormField label="参考 SQL">
+          {/* issue #22/#24：参考 SQL 的类型边界和替代写法必须在出题处可见。 */}
+          <FormField
+            label="参考 SQL"
+            hint="查询题必须是单条只读 SELECT；GRANT/REVOKE 等语法考察可写成 SELECT '语句' AS answer；CREATE VIEW 等 DDL 考点请用题库文本导入（TYPE: STATE + ALLOWED: CREATE 或 SCRIPT）。"
+          >
             {(ids) => (
               <textarea
                 {...ids}
@@ -945,6 +962,7 @@ export function CloudPage() {
   const [courses, setCourses] = useState<CloudCourse[]>([]);
   const [courseId, setCourseId] = useState("");
   const [courseContent, setCourseContent] = useState<CloudCourseContent>();
+  const [courseCached, setCourseCached] = useState(false);
   const [courseName, setCourseName] = useState("");
   const [courseDescription, setCourseDescription] = useState("");
   const [sectionName, setSectionName] = useState("");
@@ -1015,6 +1033,20 @@ export function CloudPage() {
       localAppRequest<{ items: ExerciseSummary[] }>("practice.catalog"),
     enabled: Boolean(query.data?.signedIn),
   });
+  // 班级成员名单（issue #26）：仅教师可见；旧版云端服务没有该端点时静默降级。
+  const isTeacherRole =
+    query.data?.role === "TEACHER" || query.data?.role === "ADMINISTRATOR";
+  const roster = useQuery({
+    queryKey: ["cloud", "roster", classroomId],
+    queryFn: () =>
+      localAppRequest<{ members: CloudClassRosterMember[] }>(
+        "cloud.class.roster",
+        { classroomId },
+      ),
+    enabled: Boolean(classroomId) && isTeacherRole,
+    retry: false,
+    staleTime: 30_000,
+  });
   const loadAssignments = useMutation({
     // 请求发出时记下目标班级；响应返回时若已切换班级则丢弃，防止旧响应覆盖新班级。
     mutationFn: async (id: string) => {
@@ -1047,7 +1079,8 @@ export function CloudPage() {
       );
       client.setQueryData(cloudKey, refreshed);
     },
-    onError: (error: Error) => toast("error", `添加成员失败：${error.message}`),
+    onError: (error: Error) =>
+      toast("error", `添加成员失败：${cloudFailureText(error)}`),
   });
   const createAssignment = useMutation<CloudAssignment, Error, boolean>({
     mutationFn: () =>
@@ -1070,7 +1103,8 @@ export function CloudPage() {
         toast("success", `任务「${created.title}」已保存为草稿`);
       }
     },
-    onError: (error: Error) => toast("error", `任务创建失败：${error.message}`),
+    onError: (error: Error) =>
+      toast("error", `任务创建失败：${cloudFailureText(error)}`),
   });
   const changeAssignmentStatus = useMutation({
     mutationFn: (item: CloudAssignment & { next: CloudAssignment["status"] }) =>
@@ -1242,10 +1276,13 @@ export function CloudPage() {
       }),
     onSuccess: (value) => {
       setCourseContent(value);
+      // issue #21：云端不可用时内容来自本地缓存，写操作会失败，必须明示。
+      setCourseCached(value.cached);
       if (!knowledgeSectionId && value.sections[0])
         setKnowledgeSectionId(value.sections[0].id);
     },
-    onError: (error: Error) => toast("error", `打开课程失败：${error.message}`),
+    onError: (error: Error) =>
+      toast("error", `打开课程失败：${cloudFailureText(error)}`),
   });
   const createSection = useMutation({
     mutationFn: () =>
@@ -1259,7 +1296,8 @@ export function CloudPage() {
       setSectionName("");
       loadCourseContent.mutate();
     },
-    onError: (error: Error) => toast("error", `章节添加失败：${error.message}`),
+    onError: (error: Error) =>
+      toast("error", `章节添加失败：${cloudFailureText(error)}`),
   });
   const createKnowledgePoint = useMutation({
     mutationFn: () =>
@@ -1277,7 +1315,7 @@ export function CloudPage() {
       loadCourseContent.mutate();
     },
     onError: (error: Error) =>
-      toast("error", `知识点添加失败：${error.message}`),
+      toast("error", `知识点添加失败：${cloudFailureText(error)}`),
   });
   const publishSharedExercise = useMutation({
     mutationFn: async () => {
@@ -1458,6 +1496,18 @@ export function CloudPage() {
       loadAssignments.mutate(query.data.classes[0].id);
     }
   }, [classroomId, query.data?.classes]);
+  // 首屏云端班级列表为空时自动刷新一次（issue #20/#23）：cloud.workspace 不带
+  // refreshRemote 只回本地状态，班级面板会一直空着，添加成员与发布任务的入口
+  // 也随之不可见。DEGRADED（刷新已失败）与已尝试标记共同避免循环请求。
+  const autoRefreshed = useRef(false);
+  useEffect(() => {
+    if (autoRefreshed.current) return;
+    const value = query.data;
+    if (!value?.signedIn || value.classes.length > 0) return;
+    if (value.state === "DEGRADED") return;
+    autoRefreshed.current = true;
+    refresh.mutate(true);
+  }, [query.data]);
   if (query.isPending) return <Loading label="正在读取账号与同步队列" />;
   if (query.isError)
     return (
@@ -1557,7 +1607,7 @@ export function CloudPage() {
               : "尚无班级，教师将你加入班级后即可在此显示。"}
           </p>
         ) : (
-          <ul className="plain-list">
+          <ul className="plain-list class-list">
             {data.classes.map((item) => (
               <li
                 key={item.id}
@@ -1575,6 +1625,9 @@ export function CloudPage() {
                   <strong>{item.name}</strong>
                 </button>
                 <span>{item.members.length} 名成员</span>
+                {item.id === classroomId && (
+                  <span className="policy-chip">当前班级</span>
+                )}
               </li>
             ))}
           </ul>
@@ -1589,43 +1642,109 @@ export function CloudPage() {
             </h2>
             <span className="policy-chip">{assignments.length} 项</span>
           </div>
-          {(data.role === "TEACHER" || data.role === "ADMINISTRATOR") && (
-            <details>
+          {isTeacherRole && (
+            // issue #26：查看班级具体成员；学情按任务在下方「查看学情」中呈现。
+            <details className="class-roster">
               <summary>
-                <strong>添加成员与创建任务</strong>
+                <strong>成员名单</strong>
+                {roster.data?.members
+                  ? `（${roster.data.members.length} 人）`
+                  : ""}
               </summary>
-              <div className="settings-grid">
-                <FormField label="成员邮箱">
-                  {(ids) => (
-                    <input
-                      {...ids}
-                      type="email"
-                      value={memberEmail}
-                      onChange={(event) => setMemberEmail(event.target.value)}
-                    />
-                  )}
-                </FormField>
-                <FormField label="成员角色">
-                  {(ids) => (
-                    <select
-                      {...ids}
-                      value={memberRole}
-                      onChange={(event) => setMemberRole(event.target.value)}
-                    >
-                      <option value="STUDENT">学生</option>
-                      <option value="TEACHER">教师</option>
-                    </select>
-                  )}
-                </FormField>
-              </div>
-              <Button
-                variant="secondary"
-                disabled={!memberEmail}
-                busy={addMember.isPending}
-                onClick={() => addMember.mutate()}
-              >
-                添加成员
-              </Button>
+              {roster.isPending ? (
+                <p className="muted">正在加载成员名单…</p>
+              ) : roster.isError ? (
+                <p className="muted">
+                  成员名单暂时不可用：需要云端服务更新到最新版本后支持。
+                </p>
+              ) : roster.data?.members.length ? (
+                <ul className="plain-list">
+                  {roster.data.members.map((member) => (
+                    <li key={member.userId}>
+                      <strong>{member.displayName || member.email}</strong>
+                      <span>
+                        {member.role === "TEACHER"
+                          ? "教师"
+                          : member.role === "ADMINISTRATOR"
+                            ? "管理员"
+                            : "学生"}
+                        {member.email ? ` · ${member.email}` : ""}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="muted">
+                  班级暂无成员。展开「添加成员与创建任务」邀请学生加入。
+                </p>
+              )}
+            </details>
+          )}
+          {(data.role === "TEACHER" || data.role === "ADMINISTRATOR") && (
+              <details>
+                <summary>
+                  <strong>添加成员与创建任务</strong>
+                </summary>
+                {/* issue #20：目标班级必须在此显式可选，不能只靠隐式选中的班级。 */}
+                <div className="settings-grid">
+                  <FormField label="目标班级">
+                    {(ids) => (
+                      <select
+                        {...ids}
+                        value={classroomId}
+                        onChange={(event) => {
+                          setClassroomId(event.target.value);
+                          loadAssignments.mutate(event.target.value);
+                        }}
+                      >
+                        {data.classes.map((item) => (
+                          <option key={item.id} value={item.id}>
+                            {item.name}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </FormField>
+                </div>
+                <div className="settings-grid">
+                  <FormField label="成员邮箱">
+                    {(ids) => (
+                      <input
+                        {...ids}
+                        type="email"
+                        value={memberEmail}
+                        onChange={(event) => setMemberEmail(event.target.value)}
+                      />
+                    )}
+                  </FormField>
+                  <FormField label="成员角色">
+                    {(ids) => (
+                      <select
+                        {...ids}
+                        value={memberRole}
+                        onChange={(event) => setMemberRole(event.target.value)}
+                      >
+                        <option value="STUDENT">学生</option>
+                        <option value="TEACHER">教师</option>
+                      </select>
+                    )}
+                  </FormField>
+                </div>
+                <div className="button-row">
+                  <Button
+                    variant="secondary"
+                    disabled={!memberEmail || !classroomId}
+                    busy={addMember.isPending}
+                    onClick={() => addMember.mutate()}
+                  >
+                    添加成员
+                  </Button>
+                  <span className="muted">
+                    {selectedClassName
+                      ? `新成员将加入「${selectedClassName}」`
+                      : "请先选择目标班级"}
+                  </span>
+                </div>
               <div className="settings-grid">
                 <FormField label="任务标题">
                   {(ids) => (
@@ -2074,6 +2193,13 @@ export function CloudPage() {
           </div>
           {courseContent && (
             <>
+              {courseCached && (
+                <Feedback tone="warning" title="当前显示的是离线缓存内容">
+                  <p>
+                    云端暂时不可用，下方是上次同步的课程内容；恢复连接前，添加章节、知识点等写操作可能失败。
+                  </p>
+                </Feedback>
+              )}
               <div className="settings-grid">
                 <FormField label="新章节">
                   {(ids) => (

@@ -10,6 +10,13 @@ public final class CloudApiRequestException extends RuntimeException {
         this.code = code == null || code.isBlank() ? "CLOUD_REQUEST_FAILED" : code;
     }
 
+    /** Variant preserving the network failure cause for diagnostics (v3.3.3). */
+    public CloudApiRequestException(int statusCode, String code, String message, Throwable cause) {
+        super(message, cause);
+        this.statusCode = statusCode;
+        this.code = code == null || code.isBlank() ? "CLOUD_REQUEST_FAILED" : code;
+    }
+
     public int statusCode() { return statusCode; }
 
     public String code() { return code; }

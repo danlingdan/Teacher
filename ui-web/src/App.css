@@ -1833,6 +1833,23 @@ kbd {
   color: var(--teal-deep);
   text-decoration-color: currentColor;
 }
+/* 班级切换项（issue #20）：班级名必须一眼可辨是可点按钮，而不是纯文本。 */
+.class-list li {
+  cursor: pointer;
+}
+.class-list .table-link {
+  text-decoration-color: currentColor;
+}
+.class-roster {
+  margin-top: 4px;
+}
+.class-roster summary {
+  cursor: pointer;
+  padding: 8px 2px;
+}
+.class-roster .plain-list {
+  margin-top: 8px;
+}
 .button-row {
   display: flex;
   flex-wrap: wrap;

@@ -210,6 +210,7 @@ public final class DefaultLocalAppApi implements LocalAppApi {
             case "cloud.sync" -> cloudSync(cancellation, events);
             case "cloud.class.create" -> cloudClassCreate(params, cancellation);
             case "cloud.class.member.add" -> cloudClassMemberAdd(params, cancellation);
+            case "cloud.class.roster" -> cloudClassRoster(params, cancellation);
             case "cloud.assignments" -> cloudAssignments(params, cancellation);
             case "cloud.assignment.create" -> cloudAssignmentCreate(params, cancellation);
             case "cloud.assignment.update" -> cloudAssignmentUpdate(params, cancellation);
@@ -593,6 +594,14 @@ public final class DefaultLocalAppApi implements LocalAppApi {
         return mapper.valueToTree(context().getBean(CloudApiClient.class).addClassMember(session.accessToken(),
             requiredText(params, "classroomId", 128), requiredText(params, "email", 320),
             UserRole.valueOf(requiredText(params, "role", 32))));
+    }
+
+    private JsonNode cloudClassRoster(JsonNode params, CancellationToken cancellation) {
+        requireTeacher();
+        cancellation.throwIfCancelled();
+        var session = requireCloudSession();
+        return mapper.createObjectNode().set("members", mapper.valueToTree(context().getBean(CloudApiClient.class)
+            .listClassRoster(session.accessToken(), requiredText(params, "classroomId", 128))));
     }
 
     private JsonNode cloudAssignments(JsonNode params, CancellationToken cancellation) {

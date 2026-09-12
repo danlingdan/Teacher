@@ -39,6 +39,7 @@ export type LocalAppMethod =
   | "cloud.sync"
   | "cloud.class.create"
   | "cloud.class.member.add"
+  | "cloud.class.roster"
   | "cloud.assignments"
   | "cloud.assignment.create"
   | "cloud.assignment.update"

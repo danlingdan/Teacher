@@ -80,7 +80,11 @@ public final class DeterministicSqlExerciseEvaluationService implements SqlExerc
             return failure(
                 started,
                 "SQL_SAFETY_REJECTED",
-                new EvaluationCriterionResult("safety", false, "只允许提交单条只读 SELECT 查询。")
+                new EvaluationCriterionResult(
+                    "safety", false,
+                    "只允许提交单条只读 SELECT 查询；GRANT/REVOKE 等管理语句不可执行。"
+                        + "若题目考察语句语法，请按题面要求用 SELECT '语句' AS answer 形式作答。"
+                )
             );
         }
 

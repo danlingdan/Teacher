@@ -102,6 +102,7 @@ const ALLOWED_METHODS: &[&str] = &[
     "cloud.sync",
     "cloud.class.create",
     "cloud.class.member.add",
+    "cloud.class.roster",
     "cloud.assignments",
     "cloud.assignment.create",
     "cloud.assignment.update",

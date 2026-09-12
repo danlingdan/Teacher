@@ -318,7 +318,9 @@ public final class JdbcExercisePracticeService implements ExercisePracticeServic
         if (!risk.executable() || risk.multiStatement() || !"SELECT".equals(risk.statementType())) {
             return new SqlExecutionResult(
                 false, List.of(), List.of(), 0, false,
-                "此练习按查询结果评价，只接受单条 SELECT。数据修改请在实验工作区完成并确认风险。",
+                "此练习按查询结果评价，只接受单条 SELECT；数据修改请在实验工作区完成，"
+                    + "GRANT/REVOKE 等管理语句不可执行。若题目考察语句语法，"
+                    + "请按题面要求用 SELECT '语句' AS answer 形式作答。",
                 Duration.ZERO
             );
         }

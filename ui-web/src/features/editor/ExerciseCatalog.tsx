@@ -57,6 +57,12 @@ interface ExerciseCatalogPanelProps {
   filters: ExerciseCatalogFilters;
   onFilterChange: (key: "q" | "difficulty" | "status", value: string) => void;
   onSelect: (exerciseId: string) => void;
+  /**
+   * 搜索框的即时输入值：与 filters.query（防抖后的生效值）解耦，
+   * 受控值逐键跟随输入，才不会打断中文输入法的合成（issue #25）。
+   */
+  queryInput?: string;
+  onQueryInput?: (value: string) => void;
   /** Optional action (e.g. 题库更新) rendered in the panel header. */
   headerAction?: ReactNode;
   /** Server-side pagination (W4.4): total on the server and the page controls. */
@@ -90,6 +96,8 @@ export function ExerciseCatalogPanel({
   filters,
   onFilterChange,
   onSelect,
+  queryInput = filters.query,
+  onQueryInput,
   headerAction,
   total,
   page = 0,
@@ -138,8 +146,12 @@ export function ExerciseCatalogPanel({
       {headerAction && <div className="catalog-toolbar">{headerAction}</div>}
       <input
         aria-label="搜索练习题"
-        value={filters.query}
-        onChange={(event) => onFilterChange("q", event.target.value)}
+        value={queryInput}
+        onChange={(event) =>
+          onQueryInput
+            ? onQueryInput(event.target.value)
+            : onFilterChange("q", event.target.value)
+        }
         placeholder="搜索题目或知识点"
       />
       <div className="catalog-filters">

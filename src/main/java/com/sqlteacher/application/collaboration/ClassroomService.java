@@ -32,4 +32,19 @@ public interface ClassroomService {
             }
         }
     }
+
+    /** Teacher-facing roster entry carrying contact details (v3.3.3). */
+    record RosterMember(String userId, String email, String displayName, UserRole role) {
+        public RosterMember {
+            if (userId == null || userId.isBlank()) {
+                throw new IllegalArgumentException("userId must not be blank");
+            }
+            Objects.requireNonNull(role, "role must not be null");
+            if (role == UserRole.ADMIN) {
+                throw new IllegalArgumentException("ADMIN is not a classroom membership role");
+            }
+            email = email == null ? "" : email;
+            displayName = displayName == null ? "" : displayName;
+        }
+    }
 }

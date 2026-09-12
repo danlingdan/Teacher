@@ -7,9 +7,23 @@ import { CloudPage } from "./PlatformPages";
 import type { CloudAssignment, CloudWorkspace } from "../../shared/types";
 
 const requestMock = vi.fn();
-vi.mock("../../shared/ipc", () => ({
-  localAppRequest: (...args: unknown[]) => requestMock(...args),
-}));
+vi.mock("../../shared/ipc", () => {
+  // 与真实 LocalAppError 同形的轻量替身：cloudFailureText 依赖 instanceof 判定错误码。
+  class LocalAppError extends Error {
+    code: string;
+    retryable: boolean;
+    constructor(code: string, message: string, retryable = false) {
+      super(message);
+      this.name = "LocalAppError";
+      this.code = code;
+      this.retryable = retryable;
+    }
+  }
+  return {
+    localAppRequest: (...args: unknown[]) => requestMock(...args),
+    LocalAppError,
+  };
+});
 
 function teacherWorkspace(classes: CloudWorkspace["classes"]): CloudWorkspace {
   return {
@@ -263,5 +277,125 @@ describe("CloudPage", () => {
 
     expect(screen.getByText("乙班任务")).toBeInTheDocument();
     expect(screen.queryByText("甲班任务")).not.toBeInTheDocument();
+  });
+
+  it("auto-refreshes the workspace once when the first load has no classes", async () => {
+    requestMock.mockImplementation((method: string, params?: Record<string, unknown>) => {
+      if (method === "cloud.workspace") {
+        if (params?.refreshRemote)
+          return Promise.resolve(
+            teacherWorkspace([
+              {
+                id: "class-9",
+                name: "数据2501",
+                createdAt: "2026-09-10T00:00:00Z",
+                members: [],
+              },
+            ]),
+          );
+        return Promise.resolve(teacherWorkspace([]));
+      }
+      if (method === "practice.catalog") return Promise.resolve({ items: [] });
+      if (method === "cloud.assignments") return Promise.resolve({ items: [] });
+      return Promise.reject(new Error(`Unexpected request: ${method}`));
+    });
+    renderCloudPage();
+
+    // 首屏不带 refreshRemote 返回空班级时必须自动刷新一次，让班级面板直接可用。
+    await waitFor(() =>
+      expect(requestMock).toHaveBeenCalledWith(
+        "cloud.workspace",
+        expect.objectContaining({ refreshRemote: true }),
+      ),
+    );
+    expect(
+      await screen.findByRole("heading", { level: 2, name: "班级任务：数据2501" }),
+    ).toBeInTheDocument();
+    // 已尝试过后不得循环刷新：仍然只有一次带 refreshRemote 的调用。
+    await waitFor(() =>
+      expect(
+        requestMock.mock.calls.filter(
+          ([method, params]) =>
+            method === "cloud.workspace" && params?.refreshRemote,
+        ),
+      ).toHaveLength(1),
+    );
+  });
+
+  it("shows the target-class selector and member roster for teachers", async () => {
+    requestMock.mockImplementation((method: string) => {
+      if (method === "cloud.workspace")
+        return Promise.resolve(
+          teacherWorkspace([
+            {
+              id: "class-1",
+              name: "软件2401",
+              createdAt: "2026-09-01T00:00:00Z",
+              members: [{ userId: "u1", role: "TEACHER" }],
+            },
+          ]),
+        );
+      if (method === "practice.catalog") return Promise.resolve({ items: [] });
+      if (method === "cloud.assignments") return Promise.resolve({ items: [] });
+      if (method === "cloud.class.roster")
+        return Promise.resolve({
+          members: [
+            {
+              userId: "u1",
+              email: "wang@example.com",
+              displayName: "王老师",
+              role: "TEACHER",
+            },
+            {
+              userId: "u2",
+              email: "li@example.com",
+              displayName: "李同学",
+              role: "STUDENT",
+            },
+          ],
+        });
+      return Promise.reject(new Error(`Unexpected request: ${method}`));
+    });
+    renderCloudPage();
+
+    // 成员/任务面板里必须显式提供目标班级选择，并预告新成员的去向（issue #20）。
+    fireEvent.click(await screen.findByText("添加成员与创建任务"));
+    expect(
+      await screen.findByLabelText("目标班级"),
+    ).toHaveValue("class-1");
+    expect(screen.getByText(/新成员将加入「软件2401」/)).toBeInTheDocument();
+
+    // 成员名单（issue #26）：展开后展示姓名、角色与邮箱。
+    fireEvent.click(await screen.findByText("成员名单", { exact: true }));
+    await screen.findByText(/学生 · li@example.com/);
+    expect(screen.getAllByText(/教师 · wang@example.com/)).toHaveLength(1);
+    expect(screen.getByText("李同学")).toBeInTheDocument();
+  });
+
+  it("keeps the roster degraded silently when the cloud server lacks the endpoint", async () => {
+    requestMock.mockImplementation((method: string) => {
+      if (method === "cloud.workspace")
+        return Promise.resolve(
+          teacherWorkspace([
+            {
+              id: "class-1",
+              name: "软件2401",
+              createdAt: "2026-09-01T00:00:00Z",
+              members: [],
+            },
+          ]),
+        );
+      if (method === "practice.catalog") return Promise.resolve({ items: [] });
+      if (method === "cloud.assignments") return Promise.resolve({ items: [] });
+      if (method === "cloud.class.roster")
+        return Promise.reject(new Error("Cloud API request failed (HTTP 404)"));
+      return Promise.reject(new Error(`Unexpected request: ${method}`));
+    });
+    renderCloudPage();
+
+    fireEvent.click(await screen.findByText("成员名单", { exact: true }));
+    expect(await screen.findByText(/成员名单暂时不可用/)).toBeInTheDocument();
+    // 旧服务端缺端点属于预期降级，不得弹出错误 toast。
+    expect(document.querySelectorAll(".ui-toaster .ui-toast")).toHaveLength(0);
   });
 });

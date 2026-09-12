@@ -99,6 +99,40 @@ class LocalAppProtocolServerTest {
             && item.path("result").path("cancelled").asBoolean()));
     }
 
+    @Test
+    void shouldSurfaceCloudApiFailuresWithStructuredCodeInsteadOfGenericMessage() throws Exception {
+        // issue #21：云端失败必须透传结构化 code/message/retryable，而非笼统的本地失败文案。
+        String input = request("cloud-1", "cloud.course.section.create", "{}") + "\n"
+            + request("net-1", "cloud.courses", "{}") + "\n"
+            + request("shutdown-1", "system.shutdown", "{}") + "\n";
+        StringWriter output = new StringWriter();
+        LocalAppApi api = (method, params, cancellation, events) -> {
+            if (method.equals("cloud.course.section.create")) {
+                throw new com.sqlteacher.application.collaboration.CloudApiRequestException(
+                    401, "UNAUTHORIZED", "Login is required.");
+            }
+            throw new com.sqlteacher.application.collaboration.CloudApiRequestException(
+                503, "CLOUD_UNAVAILABLE", "Cloud API is unavailable",
+                new java.io.IOException("connect refused"));
+        };
+
+        try (var server = new LocalAppProtocolServer(mapper, api, new StringReader(input), output)) {
+            server.run();
+        }
+
+        List<JsonNode> messages = output.toString().lines().map(this::read).toList();
+        JsonNode unauthorized = messages.stream()
+            .filter(item -> item.path("requestId").asText().equals("cloud-1")).findFirst().orElseThrow();
+        assertEquals("UNAUTHORIZED", unauthorized.path("error").path("code").asText());
+        assertEquals("Login is required.", unauthorized.path("error").path("message").asText());
+        assertFalse(unauthorized.path("error").path("retryable").asBoolean());
+        JsonNode unavailable = messages.stream()
+            .filter(item -> item.path("requestId").asText().equals("net-1")).findFirst().orElseThrow();
+        assertEquals("CLOUD_UNAVAILABLE", unavailable.path("error").path("code").asText());
+        assertEquals("Cloud API is unavailable", unavailable.path("error").path("message").asText());
+        assertTrue(unavailable.path("error").path("retryable").asBoolean());
+    }
+
     private String request(String id, String method, String params) {
         return "{\"requestId\":\"" + id + "\",\"method\":\"" + method
             + "\",\"params\":" + params + ",\"contractVersion\":\""

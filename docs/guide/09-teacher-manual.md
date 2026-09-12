@@ -20,7 +20,7 @@
 
 自 v3.3 起练习支持四类确定性判分题型，DSL 中用 `TYPE:` 声明，缺省等价 `QUERY`（单条只读 SELECT，参考答案结果集比对）：
 
-- **写操作题（`TYPE: STATE`）**：学生提交一条写语句。参考答案（`SQL:`）应为单条写语句，`VERIFY:` 提供单条 SELECT 验证查询；判分时参考答案与学生语句分别在两份相同初始数据的沙盒库上执行，比对验证查询结果。`ALLOWED:` 可声明允许的语句类别（缺省 `INSERT, UPDATE, DELETE`，可选 `SELECT/CREATE/DROP/ALTER`）；`AFFECTED:` 声明期望影响行数（可选项，声明后作为独立判分分项）。
+- **写操作题（`TYPE: STATE`）**：学生提交一条写语句。参考答案（`SQL:`）应为单条写语句，`VERIFY:` 提供单条 SELECT 验证查询；判分时参考答案与学生语句分别在两份相同初始数据的沙盒库上执行，比对验证查询结果。`ALLOWED:` 可声明允许的语句类别（缺省 `INSERT, UPDATE, DELETE`，可选 `SELECT/CREATE/DROP/ALTER`）；`AFFECTED:` 声明期望影响行数（可选项，声明后作为独立判分分项）。数据库原理中常见的视图、索引、表定义类习题（`CREATE VIEW`、`CREATE INDEX` 等 DDL 考点）即用该题型承载：声明 `ALLOWED: CREATE` 后参考答案与学生作答均允许单条 DDL；查询题（QUERY）的参考答案仍必须保持单条只读 SELECT。授权（`GRANT`/`REVOKE`）等用户与角色管理语句在任何题型下都不可执行；若要考察此类语句的语法理解，参考答案与作答应写成 `SELECT 'GRANT ...' AS answer;` 的语句形式参与结果比对。
 - **脚本题（`TYPE: SCRIPT`）**：学生提交多语句脚本（按顺序执行，总超时与评测上限不变）。参考答案为脚本，`TXN:` 可要求事务关键字（如 `BEGIN, COMMIT`，作为独立分项）。文件读写、用户/角色管理等禁止类语句在脚本内同样被拒绝。
 - **触发器题（`TYPE: TRIGGER`）**：学生提交一条 `CREATE TRIGGER` 定义。参考答案必须是单条 `CREATE TRIGGER`；`PROBE:` 提供触发场景语句（INSERT/UPDATE/DELETE/SELECT 或事务控制），系统在学生触发器就位后执行探针，再用 `VERIFY:` 比对最终状态。
 

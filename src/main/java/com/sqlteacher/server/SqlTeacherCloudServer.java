@@ -341,6 +341,10 @@ public final class SqlTeacherCloudServer {
                 respond(exchange, 200, store.addMember(actor, segments[4], userId, role));
                 return;
             }
+            if (segments.length == 6 && "roster".equals(segments[5]) && "GET".equals(exchange.getRequestMethod())) {
+                respond(exchange, 200, Map.of("members", store.classRoster(actor, segments[4])));
+                return;
+            }
             if (segments.length == 6 && "assignments".equals(segments[5])) {
                 if ("GET".equals(exchange.getRequestMethod())) {
                     String requestedStatus = queryValue(exchange.getRequestURI().getRawQuery(), "status");
@@ -2678,6 +2682,26 @@ public final class SqlTeacherCloudServer {
         private SessionData issue(Connection c, AuthenticatedUser user) throws SQLException { String token=Base64.getUrlEncoder().withoutPadding().encodeToString(bytes(TOKEN_BYTES)); String refresh=Base64.getUrlEncoder().withoutPadding().encodeToString(bytes(TOKEN_BYTES)); Instant now=Instant.now(); Instant expiry=now.plus(ACCESS_TOKEN_HOURS, ChronoUnit.HOURS); Instant refreshExpiry=now.plus(REFRESH_TOKEN_DAYS, ChronoUnit.DAYS); try(PreparedStatement access=c.prepareStatement("insert into access_tokens(token_hash,user_id,expires_at,created_at,device_label,last_seen_at) values(?,?,?,?,?,?)");PreparedStatement refreshStatement=c.prepareStatement("insert into refresh_tokens(token_hash,user_id,expires_at,created_at) values(?,?,?,?)")){access.setBytes(1,tokenHash(token));access.setString(2,user.id());access.setString(3,expiry.toString());access.setString(4,now.toString());access.setString(5,"桌面设备");access.setString(6,now.toString());access.executeUpdate();refreshStatement.setBytes(1,tokenHash(refresh));refreshStatement.setString(2,user.id());refreshStatement.setString(3,refreshExpiry.toString());refreshStatement.setString(4,now.toString());refreshStatement.executeUpdate();} return new SessionData(token,expiry,user,refresh); }
         private AuthenticatedUser user(String id) { try(Connection c=open(); PreparedStatement s=c.prepareStatement("select id,email,display_name from users where id=? and disabled=0")){s.setString(1,id);try(ResultSet r=s.executeQuery()){if(!r.next())throw new SecurityException("unknown user");Set<UserRole> roles=new java.util.HashSet<>();try(PreparedStatement rs=c.prepareStatement("select role from user_roles where user_id=?")){rs.setString(1,id);try(ResultSet rr=rs.executeQuery()){while(rr.next())roles.add(UserRole.valueOf(rr.getString(1)));}}return new AuthenticatedUser(r.getString(1),r.getString(2),r.getString(3),roles);}}catch(SQLException e){throw database(e);} }
         private String userIdByEmail(String email){String normalized=validateEmail(email);try(Connection c=open();PreparedStatement s=c.prepareStatement("select id from users where email=? and disabled=0")){s.setString(1,normalized);try(ResultSet r=s.executeQuery()){if(!r.next())throw new IllegalArgumentException("User email was not found");return r.getString(1);}}catch(SQLException e){throw database(e);}}
+        private java.util.List<com.sqlteacher.application.collaboration.ClassroomService.RosterMember> classRoster(AuthenticatedUser actor, String classroomId) {
+            requireTeacher(actor, classroomId);
+            try (Connection connection = open();
+                 PreparedStatement statement = connection.prepareStatement(
+                     "select m.user_id, u.email, u.display_name, m.role from classroom_members m "
+                         + "join users u on u.id = m.user_id where m.classroom_id=? "
+                         + "order by case m.role when 'TEACHER' then 0 else 1 end, u.display_name")) {
+                statement.setString(1, classroomId);
+                List<com.sqlteacher.application.collaboration.ClassroomService.RosterMember> members = new ArrayList<>();
+                try (ResultSet rows = statement.executeQuery()) {
+                    while (rows.next()) {
+                        members.add(new com.sqlteacher.application.collaboration.ClassroomService.RosterMember(
+                            rows.getString(1), rows.getString(2), rows.getString(3), UserRole.valueOf(rows.getString(4))));
+                    }
+                }
+                return members;
+            } catch (SQLException error) {
+                throw database(error);
+            }
+        }
         private Classroom classroom(String id) {
             try (Connection connection = open();
                  PreparedStatement classroomStatement = connection.prepareStatement(

@@ -142,6 +142,12 @@ public final class LocalAppProtocolServer implements AutoCloseable {
         } catch (SecurityException error) {
             log.warn("IPC request rejected: requestId={}, method={}", requestId, method, error);
             writeError(requestId, "SECURITY_REJECTED", safeMessage(error), false);
+        } catch (com.sqlteacher.application.collaboration.CloudApiRequestException error) {
+            // 云端请求失败携带结构化状态：透传 code/message/retryable，前端才能区分
+            // 网络不可达、登录过期等场景，而不是笼统的本地操作失败（issue #21）。
+            log.error("IPC cloud request failed: requestId={}, method={}, status={}, code={}",
+                requestId, method, error.statusCode(), error.code(), error);
+            writeError(requestId, error.code(), safeMessage(error), error.retryable());
         } catch (Exception error) {
             log.error("IPC request failed: requestId={}, method={}", requestId, method, error);
             writeError(requestId, LocalAppErrorCode.LOCAL_APP_FAILURE,

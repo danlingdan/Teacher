@@ -301,6 +301,34 @@ describe("EditorPage CodeEditor shortcuts", () => {
     );
   });
 
+  it("keeps search input responsive and debounces catalog queries (issue #25)", async () => {
+    renderEditorPage();
+    const input = await screen.findByRole("textbox", {
+      name: "搜索练习题",
+    });
+
+    // 输入值必须立即跟随按键（受控值不经过 URL 回写）。
+    fireEvent.change(input, { target: { value: "连接" } });
+    expect(input).toHaveValue("连接");
+
+    // 300ms 防抖窗口内不得按新词触发目录查询。
+    const catalogCallsWithQuery = () =>
+      requestMock.mock.calls.filter(
+        ([method, params]) =>
+          method === "practice.catalog" &&
+          (params as { q?: string } | undefined)?.q === "连接",
+      );
+    expect(catalogCallsWithQuery()).toHaveLength(0);
+
+    // 防抖结束后按最终词只查一次，并重置回第一页。
+    await waitFor(() =>
+      expect(catalogCallsWithQuery()).toHaveLength(1),
+    );
+    expect(catalogCallsWithQuery()[0][1]).toEqual(
+      expect.objectContaining({ q: "连接", page: 0 }),
+    );
+  });
+
   it("stops F1 hints once the hint budget is exhausted", async () => {
     await openSession();
 

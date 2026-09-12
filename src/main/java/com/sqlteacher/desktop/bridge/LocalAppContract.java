@@ -33,7 +33,7 @@ public final class LocalAppContract {
         "teaching.exercise.import", "teaching.exercise.parse", "teaching.exercise.draft",
         "teaching.exercise.export", "teaching.exercise.publish", "teaching.exercise.health", "teaching.analytics",
         "teaching.interventions", "teaching.intervention.update",
-        "cloud.workspace", "cloud.sync", "cloud.class.create", "cloud.class.member.add",
+        "cloud.workspace", "cloud.sync", "cloud.class.create", "cloud.class.member.add", "cloud.class.roster",
         "cloud.assignments", "cloud.assignment.create", "cloud.assignment.update",
         "cloud.assignment.copy", "cloud.assignment.status", "cloud.class.analytics",
         "cloud.class.analytics.export", "cloud.assignment.analytics", "cloud.assignment.analytics.export",

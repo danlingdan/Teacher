@@ -186,6 +186,13 @@ public final class HttpCloudApiClient implements CloudApiClient {
     }
 
     @Override
+    public List<ClassroomService.RosterMember> listClassRoster(String accessToken, String classroomId) {
+        return request("classes/" + classroomId + "/roster", "GET", null, accessToken,
+            new TypeReference<Map<String, List<RosterMemberDto>>>() { }).getOrDefault("members", List.of())
+            .stream().map(RosterMemberDto::toDomain).toList();
+    }
+
+    @Override
     public ClassroomService.Classroom createClass(String accessToken, String name) {
         return request("classes", "POST", Map.of("name", name), accessToken, ClassroomDto.class).toDomain();
     }
@@ -738,7 +745,10 @@ public final class HttpCloudApiClient implements CloudApiClient {
                 throw new CloudApiRequestException(response.statusCode(), code, message);
             }
             return response.body();
-        } catch (IOException error) { throw new IllegalStateException("Cloud API is unavailable", error); }
+        } catch (IOException error) {
+            // 网络不可达单独编码：桌面桥接据此提示“云端不可用”，与 HTTP 失败区分（issue #21）。
+            throw new CloudApiRequestException(503, "CLOUD_UNAVAILABLE", "Cloud API is unavailable", error);
+        }
         catch (InterruptedException error) { Thread.currentThread().interrupt(); throw new IllegalStateException("Cloud API request was interrupted", error); }
     }
 
@@ -753,5 +763,8 @@ public final class HttpCloudApiClient implements CloudApiClient {
     }
     private record MemberDto(String userId, UserRole role) {
         ClassroomService.Member toDomain() { return new ClassroomService.Member(userId, role); }
+    }
+    private record RosterMemberDto(String userId, String email, String displayName, UserRole role) {
+        ClassroomService.RosterMember toDomain() { return new ClassroomService.RosterMember(userId, email, displayName, role); }
     }
 }

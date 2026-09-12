@@ -44,6 +44,7 @@
     "cloud.class.analytics.export",
     "cloud.class.create",
     "cloud.class.member.add",
+    "cloud.class.roster",
     "cloud.course.content",
     "cloud.course.create",
     "cloud.course.exercise.publish",

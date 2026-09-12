@@ -942,15 +942,55 @@ function ExerciseFlow() {
     params.set("exercise", selectedId);
     setSearchParams(params, { replace: true });
   }, [selectedId, searchParams, setSearchParams]);
+  // 搜索输入与 URL 解耦（issue #25）：按键只更新本地 state，300ms 防抖后才写入
+  // URL 并触发目录查询。受控值若逐键经 setSearchParams 回写，会打断中文输入法
+  // 合成导致乱码；解耦后 IPC 也从每键一次降为每次停顿一次。
+  // appliedQueryRef 记录已写入 URL 的词，用于区分自身防抖写入与外部跳转携带的 q。
+  const [queryInput, setQueryInput] = useState(
+    () => searchParams.get("q") ?? "",
+  );
+  const appliedQueryRef = useRef(searchParams.get("q") ?? "");
+  const queryWriteTimer = useRef<number | undefined>(undefined);
+  useEffect(() => () => window.clearTimeout(queryWriteTimer.current), []);
   const setCatalogFilter = (
     key: "q" | "difficulty" | "status",
     value: string,
   ) => {
+    if (key === "q") {
+      setQueryInput(value);
+      window.clearTimeout(queryWriteTimer.current);
+      queryWriteTimer.current = window.setTimeout(() => {
+        appliedQueryRef.current = value;
+        setSearchParams(
+          (current) => {
+            const params = new URLSearchParams(current);
+            if (value) params.set("q", value);
+            else params.delete("q");
+            // 搜索词变化后旧页码可能已越界，回到第一页。
+            params.delete("catPage");
+            return params;
+          },
+          { replace: true },
+        );
+      }, 300);
+      return;
+    }
     const params = new URLSearchParams(searchParams);
     if (value) params.set(key, value);
     else params.delete(key);
+    params.delete("catPage");
     setSearchParams(params, { replace: true });
   };
+  // 外部跳转（分享链接、其他页面带 q 进入）携带 q 时回填输入框；自身防抖
+  // 写入的 q 与 appliedQueryRef 一致，不触碰输入框，避免打断输入。
+  useEffect(() => {
+    const fromUrl = searchParams.get("q") ?? "";
+    if (fromUrl !== appliedQueryRef.current) {
+      appliedQueryRef.current = fromUrl;
+      window.clearTimeout(queryWriteTimer.current);
+      setQueryInput(fromUrl);
+    }
+  }, [searchParams]);
   const close = useMutation({
     mutationFn: (sessionId: string) =>
       localAppRequest("practice.close", { sessionId }),
@@ -995,6 +1035,8 @@ function ExerciseFlow() {
         isPending={catalog.isPending}
         selectedId={selectedId}
         filters={catalogFilters}
+        queryInput={queryInput}
+        onQueryInput={(value) => setCatalogFilter("q", value)}
         onFilterChange={setCatalogFilter}
         onSelect={handleCatalogSelect}
         total={catalog.data?.total}

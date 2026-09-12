@@ -519,6 +519,13 @@ export interface CloudWorkspace {
     members: Array<{ userId: string; role: string }>;
   }>;
 }
+/** Teacher-facing roster entry with contact details (cloud.class.roster). */
+export interface CloudClassRosterMember {
+  userId: string;
+  email: string;
+  displayName: string;
+  role: string;
+}
 export interface CloudAssignment {
   id: string;
   classroomId: string;

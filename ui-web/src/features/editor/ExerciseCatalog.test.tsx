@@ -121,6 +121,27 @@ describe("ExerciseCatalogPanel", () => {
     expect(onSelect).toHaveBeenCalledWith("query-01");
   });
 
+  it("routes search input through onQueryInput when provided", () => {
+    const onQueryInput = vi.fn();
+    render(
+      <ExerciseCatalogPanel
+        items={catalogItems}
+        isPending={false}
+        filters={baseFilters}
+        queryInput="连接"
+        onQueryInput={onQueryInput}
+        onFilterChange={vi.fn()}
+        onSelect={vi.fn()}
+      />,
+    );
+    // 受控值必须跟随 queryInput（即时值），而不是防抖后的 filters.query，
+    // 否则输入法合成期间被重渲染回写会打断输入（issue #25）。
+    const input = screen.getByRole("textbox", { name: "搜索练习题" });
+    expect(input).toHaveValue("连接");
+    fireEvent.change(input, { target: { value: "连接查" } });
+    expect(onQueryInput).toHaveBeenCalledWith("连接查");
+  });
+
   it("shows the loading state instead of the empty hint", () => {
     render(
       <ExerciseCatalogPanel

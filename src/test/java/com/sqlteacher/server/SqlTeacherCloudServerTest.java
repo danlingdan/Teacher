@@ -59,6 +59,34 @@ class SqlTeacherCloudServerTest {
     }
 
     @Test
+    void shouldExposeTeacherOnlyClassRosterWithMemberDetails() throws Exception {
+        Path database = start();
+        JsonNode teacher = register("roster-teacher@example.edu", "Roster Teacher");
+        JsonNode student = register("roster-student@example.edu", "Roster Student");
+        JsonNode outsider = register("roster-outsider@example.edu", "Roster Outsider");
+        promoteTeacher(database, teacher.at("/user/id").asText());
+        String teacherToken = teacher.get("accessToken").asText();
+        String classroomId = post("classes", teacherToken, "{\"name\":\"Roster 101\"}")
+            .get("id").asText();
+        post("classes/" + classroomId + "/members", teacherToken,
+            JSON.writeValueAsString(java.util.Map.of(
+                "email", "roster-student@example.edu", "role", "STUDENT")));
+
+        // 教师可见成员名单：姓名、邮箱、角色齐全，教师排在学生前面。
+        JsonNode roster = JSON.readTree(
+            getText("classes/" + classroomId + "/roster", teacherToken));
+        assertEquals(2, roster.get("members").size());
+        assertEquals("Roster Teacher", roster.get("members").get(0).get("displayName").asText());
+        assertEquals("TEACHER", roster.get("members").get(0).get("role").asText());
+        assertEquals("roster-student@example.edu", roster.get("members").get(1).get("email").asText());
+        assertEquals("Roster Student", roster.get("members").get(1).get("displayName").asText());
+
+        // 名单含联系方式，学生与无关账号一律不可见。
+        assertEquals(403, getStatus("classes/" + classroomId + "/roster", student.get("accessToken").asText()));
+        assertEquals(403, getStatus("classes/" + classroomId + "/roster", outsider.get("accessToken").asText()));
+    }
+
+    @Test
     void shouldEnforceAssignmentLifecycleAndExportClassScopedCsv() throws Exception {
         Path database = start();
         JsonNode teacher = register("teacher@example.edu", "Teacher");
