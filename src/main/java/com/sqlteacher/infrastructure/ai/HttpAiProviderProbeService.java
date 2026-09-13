@@ -6,6 +6,7 @@ import com.sqlteacher.application.ai.*;
 import com.sqlteacher.infrastructure.support.HttpClients;
 
 import java.net.URI;
+import java.io.IOException;
 import java.io.InputStream;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -57,14 +58,21 @@ public final class HttpAiProviderProbeService implements AiProviderProbeService 
                 : new AiProviderProbeResult(true, models, "连接成功，发现 " + models.size() + " 个模型。", null);
         } catch (java.net.http.HttpTimeoutException error) {
             return fail(AiTaskErrorCode.TIMED_OUT, "连接测试超时。");
-        } catch (Exception error) {
+        } catch (com.fasterxml.jackson.core.JsonProcessingException error) {
+            return fail(AiTaskErrorCode.INVALID_REQUEST, "Provider 响应不是有效的模型列表 JSON，请检查接口地址是否正确。");
+        } catch (InterruptedException error) {
+            Thread.currentThread().interrupt();
+            return fail(AiTaskErrorCode.PROVIDER_UNAVAILABLE, "连接测试已取消。");
+        } catch (IOException error) {
             return fail(AiTaskErrorCode.PROVIDER_UNAVAILABLE, "无法连接 Provider，请检查地址、证书和网络。");
+        } catch (RuntimeException error) {
+            return fail(AiTaskErrorCode.INVALID_REQUEST, "探测失败（" + error.getClass().getSimpleName() + "），请检查 Provider 配置。");
         } finally {
             if (credential != null) Arrays.fill(credential, '\0');
         }
     }
 
-    private List<String> parseModels(AiProviderKind kind, String body) throws Exception {
+    private List<String> parseModels(AiProviderKind kind, String body) throws com.fasterxml.jackson.core.JsonProcessingException {
         JsonNode root = mapper.readTree(body);
         JsonNode array = kind == AiProviderKind.OLLAMA ? root.path("models") : root.path("data");
         List<String> result = new ArrayList<>();

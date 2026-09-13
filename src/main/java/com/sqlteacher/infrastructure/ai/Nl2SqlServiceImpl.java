@@ -288,6 +288,7 @@ public final class Nl2SqlServiceImpl implements Nl2SqlService {
         try {
             List<DatabaseTable> tables = databaseMetadataService.listTables(connectionId);
             if (tables == null || tables.isEmpty()) {
+                log.warn("NL2SQL table schema is empty for connection {}, falling back to the built-in sample schema", connectionId);
                 return getDefaultTableSchema();
             }
             StringBuilder sb = new StringBuilder();
@@ -304,6 +305,7 @@ public final class Nl2SqlServiceImpl implements Nl2SqlService {
         } catch (SqlTeacherException error) {
             throw error;
         } catch (Exception ex) {
+            log.warn("NL2SQL table schema introspection failed for connection {}, falling back to the built-in sample schema", connectionId, ex);
             return getDefaultTableSchema();
         }
     }
@@ -321,7 +323,8 @@ public final class Nl2SqlServiceImpl implements Nl2SqlService {
     }
 
     private String getDefaultTableSchema() {
-        return "  - student (id, name, score, class_id)\n  - class (id, name, teacher)";
+        return "# 以下为内置示例表结构：真实数据库结构读取失败，基于它生成的 SQL 可能不准确。\n"
+            + "  - student (id, name, score, class_id)\n  - class (id, name, teacher)";
     }
 
     @Override

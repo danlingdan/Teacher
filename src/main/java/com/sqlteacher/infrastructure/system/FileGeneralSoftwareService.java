@@ -24,6 +24,7 @@ public final class FileGeneralSoftwareService implements GeneralSoftwareService 
     private final Path supportDirectory;
     private final Path settingsFile;
     private final URI cloudBaseUri;
+    private final HttpClient connectivityClient = HttpClients.create(Duration.ofSeconds(4));
     private final List<TaskSnapshot> tasks = new CopyOnWriteArrayList<>();
     private final List<AppNotification> notifications = new CopyOnWriteArrayList<>();
 
@@ -112,9 +113,8 @@ public final class FileGeneralSoftwareService implements GeneralSoftwareService 
 
     @Override public String connectivitySummary() {
         try {
-            HttpClient client = HttpClients.create(Duration.ofSeconds(4));
             HttpRequest request = HttpRequest.newBuilder(cloudBaseUri.resolve("/health")).timeout(Duration.ofSeconds(6)).GET().build();
-            int status = client.send(request, HttpResponse.BodyHandlers.discarding()).statusCode();
+            int status = connectivityClient.send(request, HttpResponse.BodyHandlers.discarding()).statusCode();
             return status == 200 ? "Cloud HTTPS 正常" : "Cloud 返回 HTTP " + status;
         } catch (InterruptedException error) { Thread.currentThread().interrupt(); return "连接检查已取消"; }
         catch (IOException | RuntimeException error) { return "Cloud 不可用：" + error.getClass().getSimpleName(); }

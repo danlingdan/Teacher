@@ -2606,8 +2606,83 @@ public final class SqlTeacherCloudServer {
             for (String parameter : parameters) statement.setString(index++, parameter);
             return index;
         }
-        com.sqlteacher.application.collaboration.ClassLearningSummary classLearningSummary(AuthenticatedUser actor,String classroomId){requireTeacher(actor,classroomId);int students=0;int active=0;int events=0;int success=0;try(Connection c=open();PreparedStatement s=c.prepareStatement("select m.user_id,e.payload_json from classroom_members m left join sync_events e on e.user_id=m.user_id where m.classroom_id=? and m.role='STUDENT'")){s.setString(1,classroomId);java.util.Set<String> seenStudents=new java.util.HashSet<>();java.util.Set<String> activeStudents=new java.util.HashSet<>();try(ResultSet r=s.executeQuery()){while(r.next()){String userId=r.getString(1);seenStudents.add(userId);String payload=r.getString(2);if(payload==null)continue;events++;activeStudents.add(userId);try{if(JSON.readTree(payload).path("successful").asBoolean(false))success++;}catch(IOException ignored){}}}students=seenStudents.size();active=activeStudents.size();}catch(SQLException e){throw database(e);}return new com.sqlteacher.application.collaboration.ClassLearningSummary(classroomId,students,active,events,success,Instant.now());}
-        String exportClassLearningCsv(AuthenticatedUser actor,String classroomId){requireTeacher(actor,classroomId);StringBuilder csv=new StringBuilder("\uFEFFstudent_email,event_type,occurred_at,successful\r\n");int rows=0;try(Connection c=open();PreparedStatement s=c.prepareStatement("select u.email,e.event_type,e.occurred_at,e.payload_json from classroom_members m join users u on u.id=m.user_id join sync_events e on e.user_id=m.user_id where m.classroom_id=? and m.role='STUDENT' order by e.occurred_at")){s.setString(1,classroomId);try(ResultSet r=s.executeQuery()){while(r.next()){boolean successful=false;try{successful=JSON.readTree(r.getString(4)).path("successful").asBoolean(false);}catch(IOException ignored){}csv.append(csvCell(r.getString(1))).append(',').append(csvCell(r.getString(2))).append(',').append(csvCell(r.getString(3))).append(',').append(successful).append("\r\n");rows++;}}try(PreparedStatement audit=c.prepareStatement("insert into export_audit(id,user_id,classroom_id,row_count,created_at) values(?,?,?,?,?)")){audit.setString(1,UUID.randomUUID().toString());audit.setString(2,actor.id());audit.setString(3,classroomId);audit.setInt(4,rows);audit.setString(5,Instant.now().toString());audit.executeUpdate();}}catch(SQLException e){throw database(e);}return csv.toString();}
+        com.sqlteacher.application.collaboration.ClassLearningSummary classLearningSummary(AuthenticatedUser actor, String classroomId) {
+            requireTeacher(actor, classroomId);
+            java.util.Set<String> seenStudents = new java.util.HashSet<>();
+            java.util.Set<String> activeStudents = new java.util.HashSet<>();
+            int events = 0;
+            int success = 0;
+            int unreadablePayloads = 0;
+            try (Connection c = open(); PreparedStatement s = c.prepareStatement(
+                "select m.user_id,e.payload_json from classroom_members m "
+                + "left join sync_events e on e.user_id=m.user_id "
+                + "where m.classroom_id=? and m.role='STUDENT'")) {
+                s.setString(1, classroomId);
+                try (ResultSet r = s.executeQuery()) {
+                    while (r.next()) {
+                        String userId = r.getString(1);
+                        seenStudents.add(userId);
+                        String payload = r.getString(2);
+                        if (payload == null) continue;
+                        events++;
+                        activeStudents.add(userId);
+                        try {
+                            if (JSON.readTree(payload).path("successful").asBoolean(false)) success++;
+                        } catch (IOException error) {
+                            unreadablePayloads++;
+                        }
+                    }
+                }
+            } catch (SQLException e) {
+                throw database(e);
+            }
+            if (unreadablePayloads > 0) {
+                log.warn("class learning summary for {}: skipped {} sync events with unreadable payloads", classroomId, unreadablePayloads);
+            }
+            return new com.sqlteacher.application.collaboration.ClassLearningSummary(
+                classroomId, seenStudents.size(), activeStudents.size(), events, success, Instant.now());
+        }
+
+        String exportClassLearningCsv(AuthenticatedUser actor, String classroomId) {
+            requireTeacher(actor, classroomId);
+            StringBuilder csv = new StringBuilder("\uFEFFstudent_email,event_type,occurred_at,successful\r\n");
+            int rows = 0;
+            int unreadablePayloads = 0;
+            try (Connection c = open(); PreparedStatement s = c.prepareStatement(
+                "select u.email,e.event_type,e.occurred_at,e.payload_json from classroom_members m "
+                + "join users u on u.id=m.user_id join sync_events e on e.user_id=m.user_id "
+                + "where m.classroom_id=? and m.role='STUDENT' order by e.occurred_at")) {
+                s.setString(1, classroomId);
+                try (ResultSet r = s.executeQuery()) {
+                    while (r.next()) {
+                        boolean successful = false;
+                        try {
+                            successful = JSON.readTree(r.getString(4)).path("successful").asBoolean(false);
+                        } catch (IOException error) {
+                            unreadablePayloads++;
+                        }
+                        csv.append(csvCell(r.getString(1))).append(',').append(csvCell(r.getString(2))).append(',')
+                            .append(csvCell(r.getString(3))).append(',').append(successful).append("\r\n");
+                        rows++;
+                    }
+                }
+                try (PreparedStatement audit = c.prepareStatement(
+                    "insert into export_audit(id,user_id,classroom_id,row_count,created_at) values(?,?,?,?,?)")) {
+                    audit.setString(1, UUID.randomUUID().toString());
+                    audit.setString(2, actor.id());
+                    audit.setString(3, classroomId);
+                    audit.setInt(4, rows);
+                    audit.setString(5, Instant.now().toString());
+                    audit.executeUpdate();
+                }
+            } catch (SQLException e) {
+                throw database(e);
+            }
+            if (unreadablePayloads > 0) {
+                log.warn("class learning CSV export for {}: {} of {} rows had unreadable payloads", classroomId, unreadablePayloads, rows);
+            }
+            return csv.toString();
+        }
         private String csvCell(String value){String normalized=value==null?"":value;if(!normalized.isEmpty()&&"=+-@".indexOf(normalized.charAt(0))>=0)normalized="'"+normalized;return "\""+normalized.replace("\"","\"\"")+"\"";}
         private ClassAssignment assignment(Connection connection, String classroomId, String assignmentId)
             throws SQLException {
@@ -2823,7 +2898,16 @@ public final class SqlTeacherCloudServer {
                     + "on retention_jobs(created_at desc)");
             }
         }
-        private void addColumnIfMissing(Statement statement,String table,String definition)throws SQLException{try{statement.executeUpdate("alter table "+table+" add column "+definition);}catch(SQLException error){if(!error.getMessage().toLowerCase(Locale.ROOT).contains("duplicate column"))throw error;}}
+        private void addColumnIfMissing(Statement statement, String table, String definition) throws SQLException {
+            String column = definition.split("\\s+", 2)[0];
+            boolean exists = false;
+            try (ResultSet row = statement.executeQuery("pragma table_info(" + table + ")")) {
+                while (row.next()) {
+                    if (column.equalsIgnoreCase(row.getString("name"))) { exists = true; break; }
+                }
+            }
+            if (!exists) statement.executeUpdate("alter table " + table + " add column " + definition);
+        }
         private byte[] bytes(int count){byte[] value=new byte[count];random.nextBytes(value);return value;} private byte[] hash(char[] password,byte[] salt){try{KeySpec spec=new PBEKeySpec(password,salt,PBKDF2_ITERATIONS,HASH_BITS);return SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256").generateSecret(spec).getEncoded();}catch(GeneralSecurityException e){throw new IllegalStateException("Password hashing unavailable",e);}} private byte[] tokenHash(String token){try{return java.security.MessageDigest.getInstance("SHA-256").digest(token.getBytes(StandardCharsets.UTF_8));}catch(GeneralSecurityException e){throw new IllegalStateException(e);}} private static boolean constantTimeEquals(byte[] a,byte[] b){return java.security.MessageDigest.isEqual(a,b);} private static String validateEmail(String e){if(e==null||!e.matches("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$")||e.length()>254)throw new IllegalArgumentException("email must be valid");return e.trim().toLowerCase(Locale.ROOT);} private static void validateLoginPassword(char[] p){if(p==null||p.length==0||p.length>128)throw new IllegalArgumentException("password must contain 1 to 128 characters");} private static void validatePassword(char[] p){if(p==null||p.length<12||p.length>128)throw new IllegalArgumentException("password must contain 12 to 128 characters");} private static IllegalStateException database(SQLException e){return new IllegalStateException("Cloud database operation failed",e);} private static CloudAuthenticationService.Session toSession(SessionData s){return new CloudAuthenticationService.Session(s.token(),s.expiresAt(),s.user(),s.refreshToken());}
         private record RetentionSpec(RetentionCategory category, String table, String keyColumn,
                                      String timeColumn, List<String> columns) { }
