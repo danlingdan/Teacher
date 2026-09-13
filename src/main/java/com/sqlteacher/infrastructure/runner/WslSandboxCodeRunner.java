@@ -99,14 +99,13 @@ public final class WslSandboxCodeRunner implements CodeRunner {
             Future<byte[]> stderr = readers.submit(() -> readBounded(running.getErrorStream(),
                 request.limits().outputBytes(), outputBytes, outputExceeded));
             try (readers) {
-                while (!process.waitFor(50, TimeUnit.MILLISECONDS)) {
-                    if (cancellation.isCancelled() || outputExceeded.get()) {
+                RunnerCancellation cancellationState = cancellation;
+                int exitCode = ProcessRunner.awaitExit(process,
+                    () -> cancellationState.isCancelled() || outputExceeded.get(),
+                    () -> {
                         stopUnit(unit);
-                        terminateTree(process);
-                        break;
-                    }
-                }
-                int exitCode = process.waitFor();
+                        ProcessRunner.destroyTree(running);
+                    });
                 String out = decode(stdout.get());
                 String error = redact(decode(stderr.get()), workspace);
                 Duration elapsed = Duration.ofNanos(System.nanoTime() - started);
@@ -127,12 +126,12 @@ public final class WslSandboxCodeRunner implements CodeRunner {
             Thread.currentThread().interrupt();
             if (process != null) {
                 stopUnit(unit);
-                terminateTree(process);
+                ProcessRunner.destroyTree(process);
             }
             return failed(RunnerFailureReason.CANCELLED, -1, "", "", Duration.ofNanos(
                 System.nanoTime() - started), 0);
         } catch (ExecutionException error) {
-            if (process != null) terminateTree(process);
+            if (process != null) ProcessRunner.destroyTree(process);
             return failed(RunnerFailureReason.INTERNAL_ERROR, -1, "", "RUNNER_OUTPUT_FAILED",
                 Duration.ofNanos(System.nanoTime() - started), 0);
         } finally {
@@ -241,7 +240,7 @@ public final class WslSandboxCodeRunner implements CodeRunner {
             Process process = builder.start();
             boolean finished = process.waitFor(CONTROL_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS);
             if (!finished) {
-                terminateTree(process);
+                ProcessRunner.destroyTree(process);
                 return new CommandOutput(-1, "", "timeout");
             }
             return new CommandOutput(process.exitValue(), decode(process.getInputStream().readAllBytes()),
@@ -282,15 +281,6 @@ public final class WslSandboxCodeRunner implements CodeRunner {
             int allowed = (int) Math.min(requested, Math.max(0, limit - current));
             if (total.compareAndSet(current, current + allowed)) return allowed;
         }
-    }
-
-    private static void terminateTree(Process process) {
-        process.descendants().forEach(handle -> {
-            handle.destroy();
-            if (handle.isAlive()) handle.destroyForcibly();
-        });
-        process.destroy();
-        if (process.isAlive()) process.destroyForcibly();
     }
 
     private static void minimalWindowsEnvironment(Map<String, String> environment) {

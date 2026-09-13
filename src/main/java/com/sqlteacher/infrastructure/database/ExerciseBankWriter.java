@@ -17,7 +17,6 @@ import java.time.Instant;
  * are content-addressed (a content change requires a new dataset ID).
  */
 final class ExerciseBankWriter {
-    private final ExercisePackageCodec codec = new ExercisePackageCodec();
 
     enum DatasetOutcome {
         INSERTED, IDENTICAL, CONFLICT
@@ -73,38 +72,18 @@ final class ExerciseBankWriter {
         }
         if (storedVersion == null) {
             try (PreparedStatement statement = connection.prepareStatement(
-                "insert into exercises("
-                    + "id, title, description, knowledge_point, difficulty, dataset_id, reference_sql, "
-                    + "evaluation_rule_json, hints_json, version, enabled, created_at, updated_at, "
-                    + "exercise_type, type_config_json"
-                    + ") values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+                ExerciseStatements.INSERT_EXERCISE_SQL
             )) {
-                bindExercise(statement, exercise, exercise.createdAt(), Instant.now());
+                ExerciseStatements.bindInsert(statement, exercise, exercise.createdAt(), Instant.now());
                 statement.executeUpdate();
                 return ExerciseOutcome.INSERTED;
             }
         }
         try (PreparedStatement statement = connection.prepareStatement(
-            "update exercises set title = ?, description = ?, knowledge_point = ?, difficulty = ?, "
-                + "dataset_id = ?, reference_sql = ?, evaluation_rule_json = ?, hints_json = ?, "
-                + "version = ?, enabled = ?, updated_at = ?, exercise_type = ?, type_config_json = ? "
-                + "where id = ? and version = ?"
+            ExerciseStatements.UPDATE_EXERCISE_SQL
         )) {
             Instant now = Instant.now();
-            statement.setString(1, exercise.title());
-            statement.setString(2, exercise.description());
-            statement.setString(3, exercise.knowledgePoint());
-            statement.setString(4, exercise.difficulty().name());
-            statement.setString(5, exercise.datasetId());
-            statement.setString(6, exercise.referenceSql());
-            statement.setString(7, codec.encodeRule(exercise.evaluationRule()));
-            statement.setString(8, codec.encodeHints(exercise.hints()));
-            statement.setInt(9, exercise.version());
-            statement.setBoolean(10, exercise.enabled());
-            statement.setString(11, now.toString());
-            bindTypeConfig(statement, exercise, 12, 13);
-            statement.setString(14, exercise.id());
-            statement.setInt(15, storedVersion);
+            ExerciseStatements.bindOptimisticUpdate(statement, exercise, now, storedVersion);
             if (statement.executeUpdate() != 1) {
                 throw new SqlTeacherException(
                     "EXERCISE_BANK_INVALID", "Exercise " + exercise.id() + " changed during bank application"
@@ -112,36 +91,5 @@ final class ExerciseBankWriter {
             }
             return ExerciseOutcome.UPDATED;
         }
-    }
-
-    private void bindTypeConfig(
-        PreparedStatement statement, ExerciseDefinition exercise, int typeIndex, int configIndex
-    ) throws SQLException {
-        statement.setString(typeIndex, exercise.exerciseType().name());
-        statement.setString(configIndex, codec.encodeTypeConfig(
-            exercise.verificationSql(), exercise.allowedStatementTypes(),
-            exercise.expectedAffectedRows(), exercise.requiredTransactionKeywords(),
-            exercise.triggerProbeSql(), exercise.expectedColumns(),
-            exercise.revealMode().name()
-        ));
-    }
-
-    private void bindExercise(
-        PreparedStatement statement, ExerciseDefinition exercise, Instant createdAt, Instant updatedAt
-    ) throws SQLException {
-        statement.setString(1, exercise.id());
-        statement.setString(2, exercise.title());
-        statement.setString(3, exercise.description());
-        statement.setString(4, exercise.knowledgePoint());
-        statement.setString(5, exercise.difficulty().name());
-        statement.setString(6, exercise.datasetId());
-        statement.setString(7, exercise.referenceSql());
-        statement.setString(8, codec.encodeRule(exercise.evaluationRule()));
-        statement.setString(9, codec.encodeHints(exercise.hints()));
-        statement.setInt(10, exercise.version());
-        statement.setBoolean(11, exercise.enabled());
-        statement.setString(12, createdAt.toString());
-        statement.setString(13, updatedAt.toString());
-        bindTypeConfig(statement, exercise, 14, 15);
     }
 }

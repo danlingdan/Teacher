@@ -40,32 +40,28 @@ public final class OllamaModelSelectionService implements AiModelSelectionServic
 
     @Override
     public synchronized AiModelSelection refresh() {
-        HttpRequest request = HttpRequest.newBuilder(properties.tagsEndpoint())
-            .GET()
-            .timeout(properties.healthTimeout())
-            .build();
-        try {
-            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-            if (response.statusCode() != 200) {
-                current = unavailable("Ollama returned HTTP " + response.statusCode());
-                return current;
-            }
-
-            List<String> models = parseModels(response.body());
-            String selected = chooseSelection(models);
-            String message = models.isEmpty()
-                ? "Ollama is running, but no local model is installed"
-                : "Detected " + models.size() + " local model(s)";
-            current = new AiModelSelection(models, selected, message);
-            return current;
-        } catch (IOException ex) {
-            current = unavailable("Ollama service unavailable: " + ex.getClass().getSimpleName());
-            return current;
-        } catch (InterruptedException ex) {
-            Thread.currentThread().interrupt();
+        OllamaHealthClient.Probe probe = OllamaHealthClient.probe(
+            httpClient, objectMapper, properties.tagsEndpoint(), properties.healthTimeout());
+        if (probe.failure() instanceof InterruptedException) {
             current = unavailable("Ollama model detection interrupted");
             return current;
         }
+        if (probe.failure() != null) {
+            current = unavailable("Ollama service unavailable: " + probe.failure().getClass().getSimpleName());
+            return current;
+        }
+        if (!probe.reachable()) {
+            current = unavailable("Ollama returned HTTP " + probe.statusCode());
+            return current;
+        }
+
+        List<String> models = parseModels(probe.models());
+        String selected = chooseSelection(models);
+        String message = models.isEmpty()
+            ? "Ollama is running, but no local model is installed"
+            : "Detected " + models.size() + " local model(s)";
+        current = new AiModelSelection(models, selected, message);
+        return current;
     }
 
     @Override
@@ -97,10 +93,8 @@ public final class OllamaModelSelectionService implements AiModelSelectionServic
         return current;
     }
 
-    private List<String> parseModels(String responseBody) throws IOException {
-        JsonNode root = objectMapper.readTree(responseBody);
+    private List<String> parseModels(JsonNode models) {
         LinkedHashSet<String> names = new LinkedHashSet<>();
-        JsonNode models = root.path("models");
         if (models.isArray()) {
             for (JsonNode model : models) {
                 String name = model.path("name").asText("").strip();

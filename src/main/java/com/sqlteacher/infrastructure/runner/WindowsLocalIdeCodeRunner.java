@@ -184,24 +184,22 @@ public final class WindowsLocalIdeCodeRunner implements LocalCodeRunner {
             Future<byte[]> stderr = readers.submit(() -> readBounded(process.getErrorStream(),
                 request.limits().outputBytes(), total, exceeded));
             long deadline = System.nanoTime() + timeout.toNanos();
-            boolean timedOut = false;
-            while (!process.waitFor(50, TimeUnit.MILLISECONDS)) {
-                if (cancellation.isCancelled() || exceeded.get() || System.nanoTime() >= deadline) {
-                    timedOut = !cancellation.isCancelled() && !exceeded.get();
-                    terminateTree(process);
-                    break;
-                }
-            }
-            int exitCode = process.waitFor();
+            AtomicBoolean timedOut = new AtomicBoolean();
+            int exitCode = ProcessRunner.awaitExit(process,
+                () -> cancellation.isCancelled() || exceeded.get() || System.nanoTime() >= deadline,
+                () -> {
+                    timedOut.set(!cancellation.isCancelled() && !exceeded.get());
+                    ProcessRunner.destroyTree(process);
+                });
             try {
                 return new Execution(exitCode, decode(stdout.get()), decode(stderr.get()),
-                    timedOut, exceeded.get(), cancellation.isCancelled());
+                    timedOut.get(), exceeded.get(), cancellation.isCancelled());
             } catch (ExecutionException error) {
                 throw new IOException("Local runner output failed", error);
             }
         } catch (InterruptedException error) {
             Thread.currentThread().interrupt();
-            terminateTree(process);
+            ProcessRunner.destroyTree(process);
             return new Execution(-1, "", "", false, false, true);
         }
     }
@@ -225,15 +223,6 @@ public final class WindowsLocalIdeCodeRunner implements LocalCodeRunner {
             int allowed = (int) Math.min(requested, Math.max(0, limit - current));
             if (total.compareAndSet(current, current + allowed)) return allowed;
         }
-    }
-
-    private static void terminateTree(Process process) {
-        process.descendants().forEach(handle -> {
-            handle.destroy();
-            if (handle.isAlive()) handle.destroyForcibly();
-        });
-        process.destroy();
-        if (process.isAlive()) process.destroyForcibly();
     }
 
     private static CodeRunResult result(RunnerFailureReason reason, int exitCode, String stdout, String stderr,
@@ -300,7 +289,7 @@ public final class WindowsLocalIdeCodeRunner implements LocalCodeRunner {
                     .redirectError(ProcessBuilder.Redirect.DISCARD)
                     .start();
                 if (!process.waitFor(10, TimeUnit.SECONDS)) {
-                    terminateTree(process);
+                    ProcessRunner.destroyTree(process);
                     return false;
                 }
                 return process.exitValue() == 0;
@@ -308,7 +297,7 @@ public final class WindowsLocalIdeCodeRunner implements LocalCodeRunner {
                 return false;
             } catch (InterruptedException error) {
                 Thread.currentThread().interrupt();
-                if (process != null) terminateTree(process);
+                if (process != null) ProcessRunner.destroyTree(process);
                 return false;
             }
         }

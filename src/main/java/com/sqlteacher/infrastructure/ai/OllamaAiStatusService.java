@@ -1,6 +1,5 @@
 package com.sqlteacher.infrastructure.ai;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sqlteacher.application.ai.AiStatus;
 import com.sqlteacher.application.ai.AiAvailability;
@@ -8,10 +7,7 @@ import com.sqlteacher.application.ai.AiStatusService;
 import com.sqlteacher.application.config.AiConfiguration;
 import com.sqlteacher.infrastructure.support.HttpClients;
 
-import java.io.IOException;
 import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
 
 public final class OllamaAiStatusService implements AiStatusService {
     private final AiConfiguration properties;
@@ -26,38 +22,28 @@ public final class OllamaAiStatusService implements AiStatusService {
 
     @Override
     public AiStatus checkStatus() {
-        HttpRequest request = HttpRequest.newBuilder(properties.tagsEndpoint())
-            .GET()
-            .timeout(properties.healthTimeout())
-            .build();
-
-        try {
-            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-            if (response.statusCode() != 200) {
-                return new AiStatus(
-                    AiAvailability.UNAVAILABLE,
-                    "ollama",
-                    properties.ollamaBaseUrl().toString(),
-                    0,
-                    "Ollama returned HTTP " + response.statusCode()
-                );
-            }
-
-            JsonNode root = objectMapper.readTree(response.body());
-            int modelCount = root.path("models").isArray() ? root.path("models").size() : 0;
+        OllamaHealthClient.Probe probe = OllamaHealthClient.probe(
+            httpClient, objectMapper, properties.tagsEndpoint(), properties.healthTimeout());
+        if (probe.failure() != null) {
+            return unavailable(probe.failure());
+        }
+        if (!probe.reachable()) {
             return new AiStatus(
-                AiAvailability.AVAILABLE,
+                AiAvailability.UNAVAILABLE,
                 "ollama",
                 properties.ollamaBaseUrl().toString(),
-                modelCount,
-                "Ollama service reachable, models=" + modelCount
+                0,
+                "Ollama returned HTTP " + probe.statusCode()
             );
-        } catch (IOException ex) {
-            return unavailable(ex);
-        } catch (InterruptedException ex) {
-            Thread.currentThread().interrupt();
-            return unavailable(ex);
         }
+        int modelCount = OllamaHealthClient.modelCount(probe.models());
+        return new AiStatus(
+            AiAvailability.AVAILABLE,
+            "ollama",
+            properties.ollamaBaseUrl().toString(),
+            modelCount,
+            "Ollama service reachable, models=" + modelCount
+        );
     }
 
     private AiStatus unavailable(Exception ex) {

@@ -3,6 +3,7 @@ package com.sqlteacher.server;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sqlteacher.domain.SqlTeacherException;
+import com.sqlteacher.infrastructure.support.HttpClients;
 
 import java.net.URI;
 import java.net.URLEncoder;
@@ -27,8 +28,7 @@ public final class QdrantVectorClient implements CloudKnowledgeVectorClient {
         this.baseUri = baseUri;
         this.collection = require(collection, "collection");
         this.apiKey = apiKey == null ? "" : apiKey.trim();
-        this.client = HttpClient.newBuilder().version(HttpClient.Version.HTTP_1_1)
-            .connectTimeout(Duration.ofSeconds(5)).build();
+        this.client = HttpClients.create(Duration.ofSeconds(5));
     }
 
     public boolean enabled() { return baseUri != null; }

@@ -454,74 +454,23 @@ public final class JdbcExerciseManagementService implements ExerciseManagementSe
     }
 
     private void insertExercise(Connection connection, ExerciseDefinition exercise) throws SQLException {
-        String sql = """
-            insert into exercises(
-                id, title, description, knowledge_point, difficulty, dataset_id, reference_sql,
-                evaluation_rule_json, hints_json, version, enabled, created_at, updated_at,
-                exercise_type, type_config_json
-            ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """;
-        try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            bindExercise(statement, exercise);
+        try (PreparedStatement statement = connection.prepareStatement(ExerciseStatements.INSERT_EXERCISE_SQL)) {
+            ExerciseStatements.bindInsert(
+                statement, exercise, exercise.createdAt(), exercise.updatedAt()
+            );
             statement.executeUpdate();
         }
     }
 
     private void updateExercise(Connection connection, ExerciseDefinition exercise, int expectedVersion) throws SQLException {
-        String sql = """
-            update exercises set title = ?, description = ?, knowledge_point = ?, difficulty = ?,
-                dataset_id = ?, reference_sql = ?, evaluation_rule_json = ?, hints_json = ?,
-                version = ?, enabled = ?, updated_at = ?, exercise_type = ?, type_config_json = ?
-            where id = ? and version = ?
-            """;
-        try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setString(1, exercise.title());
-            statement.setString(2, exercise.description());
-            statement.setString(3, exercise.knowledgePoint());
-            statement.setString(4, exercise.difficulty().name());
-            statement.setString(5, exercise.datasetId());
-            statement.setString(6, exercise.referenceSql());
-            statement.setString(7, codec.encodeRule(exercise.evaluationRule()));
-            statement.setString(8, codec.encodeHints(exercise.hints()));
-            statement.setInt(9, exercise.version());
-            statement.setBoolean(10, exercise.enabled());
-            statement.setString(11, exercise.updatedAt().toString());
-            statement.setString(12, exercise.exerciseType().name());
-            statement.setString(13, codec.encodeTypeConfig(
-                exercise.verificationSql(), exercise.allowedStatementTypes(),
-                exercise.expectedAffectedRows(), exercise.requiredTransactionKeywords(),
-                exercise.triggerProbeSql(), exercise.expectedColumns(),
-                exercise.revealMode().name()
-            ));
-            statement.setString(14, exercise.id());
-            statement.setInt(15, expectedVersion);
+        try (PreparedStatement statement = connection.prepareStatement(ExerciseStatements.UPDATE_EXERCISE_SQL)) {
+            ExerciseStatements.bindOptimisticUpdate(
+                statement, exercise, exercise.updatedAt(), expectedVersion
+            );
             if (statement.executeUpdate() != 1) {
                 throw conflict("Exercise was changed by another operation");
             }
         }
-    }
-
-    private void bindExercise(PreparedStatement statement, ExerciseDefinition exercise) throws SQLException {
-        statement.setString(1, exercise.id());
-        statement.setString(2, exercise.title());
-        statement.setString(3, exercise.description());
-        statement.setString(4, exercise.knowledgePoint());
-        statement.setString(5, exercise.difficulty().name());
-        statement.setString(6, exercise.datasetId());
-        statement.setString(7, exercise.referenceSql());
-        statement.setString(8, codec.encodeRule(exercise.evaluationRule()));
-        statement.setString(9, codec.encodeHints(exercise.hints()));
-        statement.setInt(10, exercise.version());
-        statement.setBoolean(11, exercise.enabled());
-        statement.setString(12, exercise.createdAt().toString());
-        statement.setString(13, exercise.updatedAt().toString());
-        statement.setString(14, exercise.exerciseType().name());
-        statement.setString(15, codec.encodeTypeConfig(
-            exercise.verificationSql(), exercise.allowedStatementTypes(),
-            exercise.expectedAffectedRows(), exercise.requiredTransactionKeywords(),
-            exercise.triggerProbeSql(), exercise.expectedColumns(),
-            exercise.revealMode().name()
-        ));
     }
 
     private static void insertDataset(Connection connection, ExerciseDataset dataset) throws SQLException {

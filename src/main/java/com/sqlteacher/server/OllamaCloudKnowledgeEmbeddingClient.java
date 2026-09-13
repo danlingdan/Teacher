@@ -3,6 +3,7 @@ package com.sqlteacher.server;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sqlteacher.domain.SqlTeacherException;
+import com.sqlteacher.infrastructure.support.HttpClients;
 
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -29,8 +30,7 @@ final class OllamaCloudKnowledgeEmbeddingClient implements CloudKnowledgeEmbeddi
 
     OllamaCloudKnowledgeEmbeddingClient(URI baseUri, String model, int expectedDimension, String provider) {
         this(baseUri, model, expectedDimension, provider,
-            HttpClient.newBuilder().version(HttpClient.Version.HTTP_1_1)
-                .connectTimeout(Duration.ofSeconds(5)).build(), new ObjectMapper());
+            HttpClients.create(Duration.ofSeconds(5)), new ObjectMapper());
     }
 
     OllamaCloudKnowledgeEmbeddingClient(URI baseUri, String model, int expectedDimension, String provider,

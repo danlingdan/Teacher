@@ -23,14 +23,13 @@ class HttpClientPinningGuardTest {
     private static final String HTTP1_PIN = "HttpClient.Version.HTTP_1_1";
 
     /**
-     * The factory is the only intended builder call site. The two server clients are owned
-     * by the cloud-server module and build directly; they are tolerated only while they
-     * keep their explicit HTTP/1.1 pin (asserted below).
+     * The factory is the only intended builder call site. Both server clients
+     * (QdrantVectorClient, OllamaCloudKnowledgeEmbeddingClient) were migrated onto the
+     * factory (v3.4.0 REF-7), so they are no longer tolerated as direct builders: any
+     * reintroduced {@code HttpClient.newBuilder} in their sources is a violation.
      */
     private static final Set<String> ALLOWED_DIRECT_BUILDER_FILES = Set.of(
-        "com/sqlteacher/infrastructure/support/HttpClients.java",
-        "com/sqlteacher/server/OllamaCloudKnowledgeEmbeddingClient.java",
-        "com/sqlteacher/server/QdrantVectorClient.java"
+        "com/sqlteacher/infrastructure/support/HttpClients.java"
     );
 
     @Test
