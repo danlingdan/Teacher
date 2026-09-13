@@ -18,7 +18,7 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [features]
-e2e = []
+e2e = ["dep:tauri-plugin-wdio", "dep:tauri-plugin-wdio-webdriver"]
 
 [dependencies]
 tauri = { version = "2", features = [] }
@@ -28,5 +28,10 @@ tauri-plugin-single-instance = "2"
 tauri-plugin-window-state = "2"
 tauri-plugin-notification = "2"
 tauri-plugin-dialog = "2"
-tauri-plugin-wdio = "1"
-tauri-plugin-wdio-webdriver = "1"
+# E2E 专用插件按需编译，release 构建不再链接（v3.4.0 REF-19）。
+tauri-plugin-wdio = { version = "1", optional = true }
+tauri-plugin-wdio-webdriver = { version = "1", optional = true }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+# sidecar 孤儿进程兜底所需的 Job Object API（v3.4.0 BUG-4）。
+windows-sys = { version = "0.60", features = ["Win32_Foundation", "Win32_System_JobObjects", "Win32_System_Threading"] }

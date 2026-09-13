@@ -16,6 +16,135 @@ use std::os::windows::process::CommandExt;
 const CONTRACT_VERSION: &str = "3.0-v1";
 const MAX_REQUEST_BYTES: usize = 1_048_576;
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
+
+/// Per-method timeout budgets (v3.4.0 BUG-5): one uniform 30s deadline misjudged
+/// long-running operations (backups, imports, index rebuilds, downloads, sandbox
+/// runs) as failures while the Java side kept working, and the late response was
+/// dropped on the floor.
+fn request_timeout(method: &str) -> Duration {
+    const MINUTE: u64 = 60;
+    match method {
+        // Downloads and component installs (bundled JDK) run far beyond any RPC budget.
+        "settings.update.download" | "settings.component.install" => {
+            Duration::from_secs(30 * MINUTE)
+        }
+        // Backup/restore, imports, index rebuilds, data resets and sandbox/bank work
+        // do real file and database work bounded only by their own internal limits.
+        "settings.backup.restore"
+        | "settings.backup.create"
+        | "knowledge.index.rebuild"
+        | "knowledge.import.execute"
+        | "cloud.course.package.import"
+        | "settings.learning.reset"
+        | "settings.demo.restore"
+        | "settings.cache.clear"
+        | "runner.run"
+        | "practice.run"
+        | "practice.submit"
+        | "teaching.exercise.health"
+        | "practice.bank.check"
+        | "practice.bank.update"
+        | "settings.bank.update"
+        | "account.export.request" => Duration::from_secs(10 * MINUTE),
+        // Local AI drafts can take minutes on slow models.
+        "ai.knowledge.ask" | "ai.sql.preview" | "ai.sql.generate" | "ai.exercise.explain" => {
+            Duration::from_secs(3 * MINUTE)
+        }
+        "cloud.sync" => Duration::from_secs(5 * MINUTE),
+        "runner.capabilities" | "settings.update.check" => Duration::from_secs(2 * MINUTE),
+        _ => REQUEST_TIMEOUT,
+    }
+}
+
+#[cfg(target_os = "windows")]
+mod sidecar_job {
+    //! Kill-on-close job ownership for the sidecar process tree (v3.4.0 BUG-4).
+    use std::os::windows::io::AsRawHandle;
+    use std::process::Child;
+    use windows_sys::Win32::Foundation::{CloseHandle, HANDLE};
+    use windows_sys::Win32::System::JobObjects::{
+        AssignProcessToJobObject, CreateJobObjectW, JobObjectExtendedLimitInformation,
+        SetInformationJobObject, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
+        JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
+    };
+
+    /// Owns a Windows job object with kill-on-close: when the desktop process exits —
+    /// cleanly or not — the OS closes the handle and terminates the whole sidecar
+    /// tree, so java.exe can no longer outlive a crash holding SQLite handles.
+    pub(crate) struct SidecarJob(HANDLE);
+
+    impl SidecarJob {
+        pub(crate) fn create() -> Option<Self> {
+            unsafe {
+                let job = CreateJobObjectW(std::ptr::null(), std::ptr::null());
+                if job.is_null() {
+                    return None;
+                }
+                let mut limits: JOBOBJECT_EXTENDED_LIMIT_INFORMATION = std::mem::zeroed();
+                limits.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+                if SetInformationJobObject(
+                    job,
+                    JobObjectExtendedLimitInformation,
+                    &limits as *const _ as *const core::ffi::c_void,
+                    std::mem::size_of::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>() as u32,
+                ) == 0
+                {
+                    CloseHandle(job);
+                    return None;
+                }
+                Some(Self(job))
+            }
+        }
+
+        pub(crate) fn assign(&self, child: &Child) -> bool {
+            unsafe { AssignProcessToJobObject(self.0, child.as_raw_handle() as HANDLE) != 0 }
+        }
+    }
+
+    impl Drop for SidecarJob {
+        fn drop(&mut self) {
+            unsafe { CloseHandle(self.0) };
+        }
+    }
+
+    // 内核对象句柄不绑定线程；CloseHandle/AssignProcessToJobObject 可从任意线程调用。
+    unsafe impl Send for SidecarJob {}
+}
+
+#[cfg(target_os = "windows")]
+use sidecar_job::SidecarJob;
+
+/// 与 Java 侧日志同目录（`%LOCALAPPDATA%\SQLTeacher\logs`），便于一并收集诊断。
+fn sidecar_log_path() -> std::io::Result<PathBuf> {
+    let base = std::env::var_os("LOCALAPPDATA")
+        .map(PathBuf::from)
+        .unwrap_or_else(std::env::temp_dir);
+    Ok(base.join("SQLTeacher").join("logs").join("sidecar.log"))
+}
+
+/// 滚动落盘 sidecar stderr：超过 1MB 时整体轮换为 `sidecar.old.log`（尽力而为）。
+fn log_sidecar_stderr(stderr: impl std::io::Read, path: PathBuf) {
+    let rotate = || -> std::io::Result<std::fs::File> {
+        if let Ok(metadata) = std::fs::metadata(&path) {
+            if metadata.len() > 1_000_000 {
+                let _ = std::fs::rename(&path, path.with_extension("old.log"));
+            }
+        }
+        std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&path)
+    };
+    let Ok(mut file) = rotate() else { return };
+    for line in BufReader::new(stderr).lines().map_while(Result::ok) {
+        let stamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or_default();
+        let _ = writeln!(file, "[{stamp}] {line}");
+    }
+}
+
 #[cfg(target_os = "windows")]
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 const ALLOWED_METHODS: &[&str] = &[
@@ -188,6 +317,9 @@ impl BridgeError {
 struct SidecarProcess {
     child: Child,
     stdin: ChildStdin,
+    /// Keeps the kill-on-close job alive as long as the sidecar runs (BUG-4).
+    #[cfg(target_os = "windows")]
+    _job: Option<SidecarJob>,
 }
 
 struct SidecarManager {
@@ -247,7 +379,13 @@ impl SidecarManager {
             if process_guard.is_none() {
                 *process_guard = Some(self.start()?);
             }
-            let process = process_guard.as_mut().expect("sidecar was initialized");
+            let process = process_guard.as_mut().ok_or_else(|| {
+                BridgeError::new(
+                    "BRIDGE_UNAVAILABLE",
+                    "Local sidecar state is unavailable",
+                    true,
+                )
+            })?;
             if writeln!(process.stdin, "{payload}").and_then(|_| process.stdin.flush()).is_ok() {
                 return Ok(());
             }
@@ -267,7 +405,9 @@ impl SidecarManager {
             return Err(error);
         }
 
-        let response = receiver.recv_timeout(REQUEST_TIMEOUT).map_err(|_| {
+        let response = receiver
+            .recv_timeout(request_timeout(&request.method))
+            .map_err(|_| {
             self.remove_pending(&request.request_id);
             BridgeError::new(
                 "SIDECAR_TIMEOUT",
@@ -369,7 +509,7 @@ impl SidecarManager {
             ])
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
-            .stderr(Stdio::null());
+            .stderr(Stdio::piped());
         #[cfg(target_os = "windows")]
         command.creation_flags(CREATE_NO_WINDOW);
         let mut child = command.spawn().map_err(|_| {
@@ -379,6 +519,25 @@ impl SidecarManager {
                 true,
             )
         })?;
+        // Kill-on-close job：桌面进程无论正常退出还是崩溃/被强杀，操作系统都会
+        // 关闭作业句柄并收割整个 sidecar 进程树（v3.4.0 BUG-4）。
+        #[cfg(target_os = "windows")]
+        let job = SidecarJob::create();
+        #[cfg(target_os = "windows")]
+        if let Some(job) = &job {
+            job.assign(&child);
+        }
+        // sidecar stderr 曾被直接丢弃，崩溃堆栈无从诊断；现在滚动落盘（BUG-4）。
+        if let Some(stderr) = child.stderr.take() {
+            if let Ok(path) = sidecar_log_path() {
+                if let Some(directory) = path.parent() {
+                    let _ = std::fs::create_dir_all(directory);
+                }
+                let _ = std::thread::Builder::new()
+                    .name("sqlteacher-sidecar-stderr".to_owned())
+                    .spawn(move || log_sidecar_stderr(stderr, path));
+            }
+        }
         let stdin = child.stdin.take().ok_or_else(|| {
             BridgeError::new(
                 "SIDECAR_START_FAILED",
@@ -445,7 +604,12 @@ impl SidecarManager {
                     true,
                 )
             })?;
-        Ok(SidecarProcess { child, stdin })
+        Ok(SidecarProcess {
+            child,
+            stdin,
+            #[cfg(target_os = "windows")]
+            _job: job,
+        })
     }
 
     fn sidecar_root(&self) -> Result<PathBuf, BridgeError> {
@@ -573,8 +737,15 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![local_app_request])
-        .run(tauri::generate_context!())
-        .expect("error while running SQLTeacher");
+        .build(tauri::generate_context!())
+        .expect("error while building SQLTeacher")
+        .run(|app, event| {
+            // BUG-4：Drop 只在正常析构路径可靠；应用退出事件里显式关停 sidecar，
+            // 覆盖 Tauri 的其余退出路径，避免 java.exe 持有 SQLite 句柄残留。
+            if matches!(event, tauri::RunEvent::Exit) {
+                app.state::<AppState>().sidecar.shutdown();
+            }
+        });
 }
 
 #[cfg(test)]
@@ -624,5 +795,15 @@ mod tests {
     #[test]
     fn java_sidecar_uses_windows_no_console_creation_flag() {
         assert_eq!(CREATE_NO_WINDOW, 0x0800_0000);
+    }
+
+    #[test]
+    fn long_running_methods_get_extended_timeout_budgets() {
+        assert_eq!(request_timeout("system.health"), REQUEST_TIMEOUT);
+        assert_eq!(request_timeout("sql.execute"), REQUEST_TIMEOUT);
+        assert!(request_timeout("settings.backup.restore") > REQUEST_TIMEOUT);
+        assert!(request_timeout("knowledge.import.execute") > REQUEST_TIMEOUT);
+        assert!(request_timeout("ai.knowledge.ask") > REQUEST_TIMEOUT);
+        assert!(request_timeout("settings.update.download") > request_timeout("cloud.sync"));
     }
 }
