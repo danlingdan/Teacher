@@ -17,12 +17,14 @@
 
 ```bash
 apt-get update
-apt-get install -y openjdk-21-jre-headless nginx certbot python3-certbot-nginx sqlite3
+apt-get install -y nginx certbot python3-certbot-nginx sqlite3
 adduser --system --group --home /opt/sqlteacher sqlteacher
 install -d -o sqlteacher -g sqlteacher -m 0750 /opt/sqlteacher/data
 install -d -o root -g sqlteacher -m 0750 /opt/sqlteacher/shared
 install -d -o root -g sqlteacher -m 0750 /etc/sqlteacher
 ```
+
+Java 运行时不使用系统包：将 Temurin JDK 25 JRE（如 `OpenJDK25U-jre_x64_linux_hotspot_25.x.x_x.tar.gz`，可经清华 TUNA 镜像在 ECS 本地下载）解压到该版本的 `runtime/jdk25/` 目录，由 `run-cloud.sh` 以 `runtime/jdk25/bin/java` 绝对路径启动。系统 Java（若存在）不受影响，回滚到旧版本目录即回到旧运行时。
 
 创建 `/etc/sqlteacher/cloud.env`，权限必须为 `0640 root:sqlteacher`：
 
@@ -64,6 +66,15 @@ nginx -t && systemctl reload nginx
 ```
 
 若没有域名，保持 Nginx 配置未启用且 API 仅监听 `127.0.0.1`。不能以裸 IP 暴露登录、同步或令牌接口，也不得将裸 IP HTTP 配置为桌面端云服务地址。
+
+## 知识检索服务（Qdrant + fastembed）
+
+云端课程知识向量检索由两个补充服务承担，单元文件均在 `packaging/cloud/`：
+
+- `sqlteacher-qdrant.service`：Qdrant 向量数据库，仅监听本机 `6333`；配置模板 `qdrant.yaml`，环境样例 `qdrant.env.example` 复制为 `/etc/qdrant/qdrant.env`（权限 `0640 root:qdrant`），API Key 使用至少 32 字节随机值。
+- `sqlteacher-embedding.service`：fastembed 嵌入服务（`fastembed-server.py`，依赖 `requirements-fastembed.txt`），经 `SQLTEACHER_EMBEDDING_URL` 供服务端调用。
+
+备份由 `sqlteacher-qdrant-backup.timer` 定时执行 `backup-qdrant.sh`。桌面/服务端连接变量（`SQLTEACHER_QDRANT_URL`、`SQLTEACHER_QDRANT_COLLECTION`、`SQLTEACHER_QDRANT_VECTOR_SIZE`、`SQLTEACHER_QDRANT_API_KEY`）见 `qdrant.env.example`。部署与验证实例见 [Qdrant 部署运维记录](../operations/2026-08-01-qdrant-deployment.md)。
 
 ## 发布后检查
 

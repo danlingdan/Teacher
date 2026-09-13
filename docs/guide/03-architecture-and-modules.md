@@ -41,4 +41,4 @@ com.sqlteacher.server         -> application/domain/infrastructure
 - 自动化：Java 用 Maven，前端用 Vitest，宿主用 Cargo，桌面主流程用 WebDriver E2E。
 - Windows 交付：`packaging/package-v3.ps1` 生成 NSIS 安装包和便携 ZIP，并输出 Java/Rust 双 SBOM 与校验和。
 
-IPC 方法和错误语义见 [LocalApp IPC v1](local-app-ipc-v1.md)，正式版冻结边界见 [v3 Tauri-only 架构与开发](24-v3-tauri-only.md)。
+IPC 方法和错误语义见 [LocalApp IPC v1](21-local-app-ipc-v1.md)，正式版冻结边界见 [v3 Tauri-only 架构与开发](24-v3-tauri-only.md)。

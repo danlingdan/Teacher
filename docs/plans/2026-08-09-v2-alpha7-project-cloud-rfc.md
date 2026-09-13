@@ -1,6 +1,7 @@
 # v2.0 alpha.7 项目学习与 Cloud 2.0 RFC
 
 > 目标版本：`2.0.0-alpha.7`
+> 状态：已交付（实施记录见 [Stage 15](../history/stages/stage15/2026-08-09-v2-alpha7-project-cloud-implementation.md) 与 [Stage 16](../history/stages/stage16/2026-08-09-v2-beta1-consolidated-implementation.md)）。
 
 ## 决策
 

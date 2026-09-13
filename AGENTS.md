@@ -22,7 +22,7 @@ unless the user requests them.
 
 ## Project Invariants
 
-- Build with Maven and compile for Java 21 (`--release 21`).
+- Build with Maven and compile for Java 25 (`--release 25`, per `pom.xml`).
 - Use Spring Context for dependency injection, SLF4J + Logback for logging, and standard Maven
   source directories.
 - Keep runtime and generated data out of Git: `app-data/`, `target/`, logs, local databases,

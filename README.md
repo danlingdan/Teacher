@@ -56,7 +56,7 @@ flowchart LR
 
 - AI 永远不能直接执行 SQL，也不能直接访问 JDBC `Connection`。
 - AI 输出一律视为不可信输入，必须经过 Java 侧解析与风险分析。
-- 多语句默认禁止；`DROP DATABASE`、`GRANT`、`REVOKE` 等语句默认拦截。
+- 多语句默认禁止；高危语句（如 `DROP DATABASE`、`GRANT`、`REVOKE`）需明确确认后才能执行，用户/角色管理与文件写出操作一律禁止。
 - 更新只信任内置公钥和固定 HTTPS 来源；下载完成后再次校验大小与 SHA-256。
 - 诊断默认不包含数据库、SQL、Prompt、密码、Token、AI Key 或用户附件。
 - 云端与 AI 均为增强能力，失败时不阻断本地 SQL 学习流程。
@@ -67,8 +67,8 @@ flowchart LR
 
 前往 [GitHub Releases](https://github.com/danlingdan/Teacher/releases/latest) 下载：
 
-- `SQLTeacher-3.0.0.exe`：3.0 正式版 Windows 安装器；
-- `SQLTeacher-3.0.0-windows-x64.zip`：3.0 正式版便携包；
+- `SQLTeacher-3.3.4.exe`：最新正式版 Windows 安装器；
+- `SQLTeacher-3.3.4-windows-x64.zip`：最新正式版便携包；
 - `SHA256SUMS.txt`：发布文件完整性校验值。
 
 正式包自带 Java 运行时，无需另装 JDK。用户数据默认保存在 `%LOCALAPPDATA%\SQLTeacher`，升级应用不会覆盖该目录。

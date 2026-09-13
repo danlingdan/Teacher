@@ -24,7 +24,7 @@ infrastructure -> application/domain
 - Keep business rules and orchestration outside React components and Rust commands.
 - Keep JDBC, HTTP, Ollama, files, WebView, and Tauri types out of domain and application contracts.
 - Extend existing contracts and adapters before adding parallel abstractions.
-- Keep Java 21 compatibility and existing dependency versions unless the task requires a coordinated change.
+- Keep Java 25 compatibility (per `pom.xml`) and existing dependency versions unless the task requires a coordinated change.
 - Keep database, file, network, Runner, and AI work asynchronous from the WebView. Represent loading, success, empty, and failure states honestly.
 
 For SQLite or Cloud schema changes, update migration, persistence behavior, and tests together. Cover an empty database, the oldest supported schema, repeated startup, failed migration rollback, and rejection of a future schema. Keep derived learning state recomputable from authoritative events.

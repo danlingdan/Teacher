@@ -4,16 +4,13 @@
 
 ## 当前基线
 
-- 当前代码版本：`3.0.0`（Tauri-only 正式版；v3.1.0 变更已合并 `main`，版本号待发布流程落盘）
-- 当前公开正式版本：[v3.0.0](releases/v3.0.0.md)
-- 上一稳定版本：[v2.3.0](releases/v2.3.0.md)
-- 当前迭代计划：[v3.0 UI 迁移与性能重构计划](plans/2026-08-11-v3-ui-migration-and-performance-plan.md)
-- 未发布候选说明：[v3.1.0](releases/v3.1.0.md)
-- 最新稳定版说明：[v3.0.0](releases/v3.0.0.md)
-- 最近一轮功能计划：[v2.2 组件傻瓜化与数据库扩展计划](plans/2026-08-09-v2.2-managed-components-and-database-expansion-plan.md)
-- 对应实施记录：[v2.0 GA 发布记录](history/stages/stage18/2026-08-09-v2-ga-release.md)
-- 当前实施记录：[v3.0 正式版与无控制台启动](history/stages/stage27/2026-08-12-v3-ga-no-console-release-candidate.md)
-- 当前生产部署记录：[v3.0.0 云端部署记录](operations/2026-09-05-v3.0.0-cloud-deployment.md)
+- 当前代码版本：`3.3.4`（最新 tag）
+- 当前公开正式版本：[v3.3.4](releases/v3.3.4.md)（GitHub Release Latest）
+- 上一稳定版本线：v3.3（[v3.3.3](releases/v3.3.3.md)，已部署生产后被 3.3.4 接替）
+- 当前迭代计划：[v3.4.0 整体优化计划](plans/2026-09-14-v3.4.0-optimization-plan.md)（执行中）
+- 最近一轮功能计划：[v3.3 SQL 教学能力全面提升计划](plans/2026-09-10-v3.3-sql-teaching-capability-plan.md)（已交付，v3.3.0–v3.3.4 均已发布）
+- 当前实施记录：[v3.0 正式版与无控制台启动](history/stages/stage27/2026-08-12-v3-ga-no-console-release-candidate.md)（v3.1 起实施要点内嵌于各发布说明与运维记录）
+- 当前生产部署记录：[v3.3.4 云端部署记录](operations/2026-09-14-v3.3.4-cloud-deployment.md)
 
 > “当前”以 `pom.xml`、Git 标签和实际代码为准。计划文档记录制定时的基线，不应被当作实时状态页。
 
@@ -47,7 +44,7 @@ plans（计划与范围）
 
 ## 历史资料
 
-Stage 0 至 Stage 27 和早期五人协作方案已集中到 [history/](history/README.md)。`desktop/` 仅保留旧 JavaFX 设计证据，
+Stage 0 至 Stage 28 和早期五人协作方案已集中到 [history/](history/README.md)。`desktop/` 仅保留旧 JavaFX 设计证据，
 不再描述当前架构。这些资料用于追溯实现和决策；当前开发和交付规则以仓库根目录的 [AGENTS.md](../AGENTS.md) 与当前代码为准。
 
 ## 维护规则
