@@ -359,7 +359,9 @@ describe("CloudPage", () => {
     renderCloudPage();
 
     // 成员/任务面板里必须显式提供目标班级选择，并预告新成员的去向（issue #20）。
-    fireEvent.click(await screen.findByText("添加成员与创建任务"));
+    fireEvent.click(
+      await screen.findByText("添加成员", { selector: "summary strong" }),
+    );
     expect(
       await screen.findByLabelText("目标班级"),
     ).toHaveValue("class-1");

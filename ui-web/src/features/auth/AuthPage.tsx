@@ -60,7 +60,6 @@ export default function AuthPage() {
     </section>
     <section className="auth-panel">
       <div className="auth-card">
-        <button type="button" className="auth-back" onClick={() => navigate("/today", { replace: true })}>← 继续离线学习</button>
         <header><p className="eyebrow">SQLTeacher Cloud</p><h2>{mode === "login" ? "欢迎回来" : mode === "register" ? "创建你的账号" : "找回密码"}</h2><p>{mode === "login" ? "登录后继续同步课程与班级进度。" : mode === "register" ? "一个账号连接你的班级、任务和学习记录。" : "输入注册邮箱，我们会发送安全的重置指引。"}</p></header>
         <div className="auth-tabs" role="tablist" aria-label="账号操作"><button role="tab" aria-selected={mode === "login"} className={mode === "login" ? "selected" : ""} onClick={() => setMode("login")}>登录</button><button role="tab" aria-selected={mode === "register"} className={mode === "register" ? "selected" : ""} onClick={() => setMode("register")}>注册</button><button role="tab" aria-selected={mode === "reset"} className={mode === "reset" ? "selected" : ""} onClick={() => setMode("reset")}>找回密码</button></div>
         <form className="auth-form" onSubmit={event => { event.preventDefault(); if (!disabled && !busy) submit(); }}>
@@ -71,7 +70,7 @@ export default function AuthPage() {
           {message && <Feedback tone="info" title="请检查邮箱"><p>{message}</p></Feedback>}
           <Button type="submit" busy={busy} disabled={disabled}>{mode === "login" ? "登录" : mode === "register" ? "创建账号并登录" : "发送重置邮件"}</Button>
         </form>
-        <p className="auth-privacy">离线学习无需登录。</p>
+        <p className="auth-privacy">离线学习无需登录。<button type="button" className="auth-back" onClick={() => navigate("/today", { replace: true })}>← 继续离线学习</button></p>
       </div>
     </section>
   </main>;

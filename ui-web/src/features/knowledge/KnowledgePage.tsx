@@ -29,7 +29,10 @@ export default function KnowledgePage() {
         message: string;
       }>("knowledge.index.status"),
   });
-  const [selectedId, setSelectedId] = useState<string>();
+  const [selectedId, setSelectedId] = useState<string | undefined>(() =>
+    // 命令面板等入口通过 ?article= 深链到具体文档。
+    searchParams.get("article") ?? undefined,
+  );
   const [queryInput, setQueryInput] = useState(() => searchParams.get("query") ?? "");
   const [query, setQuery] = useState(queryInput);
   // 搜索输入防抖 300ms：避免每个按键都触发一次 FTS 检索 IPC。
@@ -44,6 +47,11 @@ export default function KnowledgePage() {
       setQueryInput(fromUrl);
       setQuery(fromUrl);
     }
+  }, [searchParams]);
+  // 命令面板深链 ?article=：页面已挂载时参数变化也要切换文档。
+  useEffect(() => {
+    const fromUrl = searchParams.get("article");
+    if (fromUrl) setSelectedId(fromUrl);
   }, [searchParams]);
   const [root, setRoot] = useState("");
   const [preview, setPreview] = useState<ImportPreview>();
@@ -252,6 +260,11 @@ export default function KnowledgePage() {
           <h3>
             知识文档 <small>共 {articles.length} 篇</small>
           </h3>
+          {articles.length === 0 && (
+            <p className="muted">
+              教师发布的知识文档会显示在这里；课程树中的活动仅为安排展示。
+            </p>
+          )}
           {visibleArticles.map((item) => (
             <button
               className={selectedId === item.id ? "selected" : ""}
@@ -310,7 +323,10 @@ export default function KnowledgePage() {
             <div className="knowledge-empty">
               <h2>选择一篇知识文档</h2>
               <p>
-                  </p>
+                {articles.length > 0
+                  ? "从左侧「知识文档」列表选择一篇文档开始阅读；课程树展示章节与活动安排。"
+                  : "这里还没有可阅读的知识文档。上方课程树展示章节与活动安排；练习与测验请前往「练习与实验」。"}
+              </p>
             </div>
           )}
         </section>

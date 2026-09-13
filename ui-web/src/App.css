@@ -693,10 +693,11 @@ button {
 .course-tree ul {
   margin: 0 0 8px;
   padding: 0 0 0 16px;
-  list-style: none;
+  list-style: disc;
 }
 .course-tree li {
   padding: 7px 3px;
+  color: var(--text-body);
 }
 .course-tree li span,
 .course-tree li small,
@@ -711,9 +712,9 @@ button {
   color: var(--muted);
   font-size: 10px;
 }
-.article-list button,
-.selection-panel button,
-.search-results button {
+.article-list button:not(.ui-button),
+.selection-panel button:not(.ui-button),
+.search-results button:not(.ui-button) {
   width: 100%;
   padding: 10px;
   border: 0;
@@ -723,10 +724,10 @@ button {
   text-align: left;
   cursor: pointer;
 }
-.article-list button:hover,
-.article-list button.selected,
-.selection-panel button:hover,
-.selection-panel button.selected {
+.article-list button:not(.ui-button):hover,
+.article-list button:not(.ui-button).selected,
+.selection-panel button:not(.ui-button):hover,
+.selection-panel button:not(.ui-button).selected {
   color: var(--navy);
   background: var(--teal-soft);
 }
@@ -861,12 +862,15 @@ button {
   gap: 18px;
   align-items: start;
 }
+.flow-layout-solo {
+  grid-template-columns: minmax(0, 1fr);
+}
 .selection-panel {
   padding: 18px;
   max-height: calc(100vh - 200px);
   overflow: auto;
 }
-.selection-panel button {
+.selection-panel button:not(.ui-button) {
   margin-top: 5px;
 }
 .flow-main {
@@ -897,6 +901,38 @@ button {
   overflow: auto;
   border-radius: 10px;
   background: var(--surface-3);
+}
+.exercise-prompt {
+  margin: 4px 0;
+  color: var(--text-body);
+  font-weight: 650;
+}
+.coding-card .exercise-prompt,
+.coding-card .schema-brief {
+  margin-left: 16px;
+  margin-right: 16px;
+}
+.schema-brief {
+  margin: 4px 0 12px;
+}
+.schema-brief summary {
+  padding: 5px 0;
+  color: var(--teal-deep);
+  font-size: 13px;
+  cursor: pointer;
+}
+.schema-brief pre {
+  padding: 12px 14px;
+  overflow: auto;
+  border-radius: 10px;
+  background: var(--surface-3);
+  font-size: 12px;
+  line-height: 1.7;
+}
+.state-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
 .coding-card {
   min-width: 0;
@@ -1795,9 +1831,24 @@ kbd {
   cursor: pointer;
 }
 .command-palette button:hover,
-.command-palette button:focus {
+.command-palette button:focus,
+.command-palette button.active {
   background: var(--teal-soft);
   outline: none;
+}
+.palette-group {
+  display: grid;
+  gap: 4px;
+}
+.palette-group + .palette-group {
+  margin-top: 10px;
+}
+.palette-group-label {
+  margin: 0;
+  padding: 0 12px;
+  color: var(--faint);
+  font-size: 11px;
+  letter-spacing: 0.05em;
 }
 .command-palette button small {
   color: var(--muted);
@@ -1905,7 +1956,12 @@ kbd {
   cursor: pointer;
 }
 .setting-toggle input {
+  width: 17px;
+  height: 17px;
+  flex: 0 0 17px;
   margin-top: 3px;
+  padding: 0;
+  border: 0;
   accent-color: var(--teal);
 }
 .setting-toggle span {
@@ -1944,7 +2000,7 @@ kbd {
   max-width: 760px;
 }
 .account-login input,
-.platform-workspace input,
+.platform-workspace input:not([type="checkbox"]):not([type="radio"]),
 .platform-workspace select {
   width: 100%;
   padding: 10px 12px;
@@ -2383,6 +2439,39 @@ kbd {
   margin: 0;
   color: var(--muted);
 }
+.class-analytics-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 0;
+  border-top: 1px solid var(--line-soft);
+}
+.class-analytics-bar .settings-grid {
+  flex: 1 1 420px;
+  gap: 10px;
+}
+.deadline-presets {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 2px 0 10px;
+}
+.preset-chip {
+  padding: 4px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  color: var(--text-body);
+  background: var(--surface);
+  font-size: 12px;
+  cursor: pointer;
+}
+.preset-chip:hover {
+  border-color: var(--teal);
+  color: var(--teal-deep);
+}
 .class-actions {
   margin-top: 16px;
 }
@@ -2634,7 +2723,7 @@ kbd {
   width: min(460px, 100%);
 }
 .auth-back {
-  margin-bottom: 48px;
+  margin-left: 8px;
   padding: 0;
   border: 0;
   color: var(--muted);
@@ -2818,6 +2907,7 @@ kbd {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  padding: 16px 20px;
 }
 .recommend-card strong {
   font-size: 15px;

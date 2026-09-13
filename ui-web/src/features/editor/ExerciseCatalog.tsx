@@ -36,7 +36,7 @@ export function catalogItemStatus(item: ExerciseCatalogItem): CatalogStatus {
   return item.passed ? "passed" : item.attempts > 0 ? "failed" : "todo";
 }
 
-function difficultyLabel(value: string) {
+export function difficultyLabel(value: string) {
   return difficultyNames[value] ?? value;
 }
 
@@ -197,6 +197,7 @@ export function ExerciseCatalogPanel({
                   type="button"
                   className={selectedId === item.id ? "selected" : ""}
                   key={item.id}
+                  aria-label={`${item.title}，${exerciseTypeLabel(item.exerciseType)}，${difficultyLabel(item.difficulty)}，${statusNames[status]}`}
                   onClick={() => onSelect(item.id)}
                 >
                   <span className="catalog-item-title">{item.title}</span>

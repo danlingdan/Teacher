@@ -359,6 +359,9 @@ impl SidecarManager {
         command
             .args([
                 "-Dfile.encoding=UTF-8",
+                // IPv6 路由不完整的网络环境下，Java 默认优先 IPv6 会让云端请求
+                // 全部超时（CLOUD_UNAVAILABLE）；强制 IPv4 栈避免卡死登录与同步。
+                "-Djava.net.preferIPv4Stack=true",
                 "--enable-native-access=ALL-UNNAMED",
                 "-cp",
                 &classpath,

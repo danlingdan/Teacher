@@ -39,8 +39,9 @@ import type {
   SqlPage,
   WrongBookItem,
 } from "../../shared/types";
-import { ExerciseCatalogPanel } from "./ExerciseCatalog";
+import { ExerciseCatalogPanel, difficultyLabel } from "./ExerciseCatalog";
 import { Button, Dialog, EmptyState, Feedback, Stepper, useToast } from "../../shared/ui";
+import { useMonacoEditorTheme } from "../../shared/monacoTheme";
 
 self.MonacoEnvironment = { getWorker: () => new EditorWorker() };
 loader.config({ monaco });
@@ -110,6 +111,20 @@ const typeNames: Record<string, string> = {
 
 function typeLabel(exerciseType: string | undefined) {
   return typeNames[exerciseType ?? "QUERY"] ?? "查询题";
+}
+
+const activityTypeNames: Record<string, string> = {
+  READING: "阅读",
+  QUIZ: "测验",
+  SIMULATION: "模拟实验",
+  TRACE: "追踪实验",
+  CODE: "编程实践",
+  PROJECT: "项目实践",
+  LAB: "实验",
+};
+
+function activityTypeLabel(value: string) {
+  return activityTypeNames[value] ?? value;
 }
 
 function typeGuidance(exerciseType: string | undefined): string | undefined {
@@ -326,7 +341,8 @@ function ActivityFlow() {
         ) : confirmedId !== definition.data.id ? (
           <section className="content-card preview-card">
             <p className="eyebrow">
-              {definition.data.type} · {definition.data.difficulty}
+              {activityTypeLabel(definition.data.type)} ·{" "}
+              {difficultyLabel(definition.data.difficulty)}
             </p>
             <h2>{definition.data.title}</h2>
             <p>{definition.data.description}</p>
@@ -1155,10 +1171,10 @@ function ExerciseFlow() {
               </div>
               <div>
                 <dt>难度</dt>
-                <dd>{preview.data.difficulty}</dd>
+                <dd>{difficultyLabel(preview.data.difficulty)}</dd>
               </div>
             </dl>
-            <pre>{preview.data.schemaSummary}</pre>
+            <pre>{preview.data.schemaSummary.replace(/；/g, "；\n")}</pre>
             <Button disabled={start.isPending} onClick={() => start.mutate()}>
               确认并开始作答
             </Button>
@@ -1180,6 +1196,18 @@ function ExerciseFlow() {
             {typeGuidance(session.exercise.exerciseType) && (
               <p className="muted">{typeGuidance(session.exercise.exerciseType)}</p>
             )}
+            <p className="exercise-prompt">{session.exercise.description}</p>
+            {session.exercise.expectedColumns.length > 0 && (
+              <p className="muted">
+                期望列：{session.exercise.expectedColumns.join("、")}
+              </p>
+            )}
+            <details className="schema-brief">
+              <summary>数据表结构</summary>
+              <pre>
+                {session.exercise.schemaSummary.replace(/；/g, "；\n")}
+              </pre>
+            </details>
             <CodeEditor
               language="SQL"
               value={answer}
@@ -1390,7 +1418,8 @@ function WrongBookFlow() {
   };
   const items = wrongBook.data?.items ?? [];
   return (
-    <div className="flow-layout">
+    // 错题本没有目录侧栏，必须单列布局；复用双列 flow-layout 会把内容压进 280px 首列。
+    <div className="flow-layout flow-layout-solo">
       <main className="flow-main">
         <Stepper steps={["错题回顾", "重新作答", "对比反馈"]} current={0} />
         {wrongBook.isPending && (
@@ -1412,8 +1441,8 @@ function WrongBookFlow() {
             <header className="editor-toolbar">
               <div>
                 <p className="eyebrow">
-                  {item.knowledgePoint} · {item.difficulty} ·{" "}
-                  {item.exerciseType}
+                  {item.knowledgePoint} · {difficultyLabel(item.difficulty)} ·{" "}
+                  {typeLabel(item.exerciseType)}
                 </p>
                 <h2>{item.title}</h2>
               </div>
@@ -1680,7 +1709,7 @@ function RunnerFlow() {
       <section className="content-card output-panel" aria-live="polite">
         <div className="section-heading">
           <h2>运行反馈</h2>
-          <span className="policy-chip">{phase || "idle"}</span>
+          <span className="policy-chip">{phase || "待运行"}</span>
         </div>
         {!result && !run.isError ? (
           <EmptyState title="等待运行" />
@@ -1754,6 +1783,7 @@ function CodeEditor({
   useEffect(() => {
     practiceEditorSchema = schema;
   }, [schema]);
+  const [editorTheme, syncEditorTheme] = useMonacoEditorTheme();
   // 快捷键命令只在挂载时注册一次；用 ref 持有最新回调，命令触发时再解引用。
   // 否则 Ctrl+Enter 提交的是挂载帧的旧代码，F1 也会绕过提示按钮当前的禁用状态。
   const callbacks = useRef({ onRun, onSubmit, onHint });
@@ -1794,7 +1824,9 @@ function CodeEditor({
     <div className="editor-frame">
       <Editor
         onMount={mount}
+        beforeMount={syncEditorTheme}
         height="100%"
+        theme={editorTheme}
         language={monacoLanguage[language]}
         path={`sqlteacher://${language.toLowerCase()}/workspace`}
         value={value}

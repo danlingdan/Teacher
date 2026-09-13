@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { LocalAppError, localAppRequest } from "../../shared/ipc";
+import { formatInstant } from "../../shared/instant";
 import type {
   ActiveSession,
   BackupSnapshot,
@@ -118,7 +119,11 @@ export function TeachingPage() {
   }, [detail.data]);
   // 选中题目或点“新建题目”时展开编辑器并滚动到位。
   useEffect(() => {
-    if (selectedId) setEditorOpen(true);
+    if (!selectedId) return;
+    setEditorOpen(true);
+    requestAnimationFrame(() =>
+      editorRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }),
+    );
   }, [selectedId]);
   const openEditorForNew = (datasetId?: string) => {
     setSelectedId("");
@@ -306,7 +311,7 @@ export function TeachingPage() {
       .toLowerCase()
       .includes(exerciseQuery.trim().toLowerCase()),
   );
-  const exercisePageSize = 8;
+  const exercisePageSize = 50;
   const exercisePages = Math.max(
     1,
     Math.ceil(filteredExercises.length / exercisePageSize),
@@ -316,7 +321,7 @@ export function TeachingPage() {
     visibleExercisePage * exercisePageSize,
     (visibleExercisePage + 1) * exercisePageSize,
   );
-  const progressPageSize = 8;
+  const progressPageSize = 50;
   const progressPages = Math.max(
     1,
     Math.ceil(data.progressItems.length / progressPageSize),
@@ -344,6 +349,9 @@ export function TeachingPage() {
           value={data.progressOverview.passedSubmissions}
         />
       </section>
+      <p className="muted">
+        以下统计与学情均为本机作答记录（学生练习发生在各自的电脑上）；班级维度的提交与学情请前往「班级与云端」。
+      </p>
       <section className="content-card teaching-bank">
         <div className="section-heading">
           <div>
@@ -400,13 +408,18 @@ export function TeachingPage() {
               key: "state",
               title: "状态",
               render: (row) => (
-                <Button
-                  variant="secondary"
-                  busy={toggle.isPending}
-                  onClick={() => toggle.mutate(row)}
-                >
-                  {row.enabled ? "停用" : "启用"}
-                </Button>
+                <span className="state-cell">
+                  <span className={`policy-chip ${row.enabled ? "" : "muted"}`}>
+                    {row.enabled ? "已启用" : "已停用"}
+                  </span>
+                  <Button
+                    variant="secondary"
+                    busy={toggle.isPending}
+                    onClick={() => toggle.mutate(row)}
+                  >
+                    {row.enabled ? "停用" : "启用"}
+                  </Button>
+                </span>
               ),
             },
           ]}
@@ -810,7 +823,9 @@ export function TeachingPage() {
         <summary>
           <strong>完整学情分析</strong>
         </summary>
-        {analytics && (
+        {loadAnalytics.isPending ? (
+          <p className="muted">正在生成本地学情分析…</p>
+        ) : analytics ? (
           <>
             <p>生成时间：{formatAccountDate(analytics.generatedAt)}</p>
             <div className="metric-row">
@@ -828,6 +843,10 @@ export function TeachingPage() {
               {analytics.commonErrors.length} 项。
             </p>
           </>
+        ) : (
+          <p className="muted">
+            暂无学情数据：此处统计的是本机作答记录，学生完成练习后即可看到分析。
+          </p>
         )}
       </details>
       <details
@@ -933,9 +952,13 @@ function definitionToDraft(value: ExerciseDefinition): ExerciseDraftUi {
 export function CloudPage() {
   const client = useQueryClient();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const toast = useToast();
   const [className, setClassName] = useState("");
-  const [classroomId, setClassroomId] = useState("");
+  // 命令面板等入口通过 ?class= 深链到指定班级。
+  const [classroomId, setClassroomId] = useState(
+    () => searchParams.get("class") ?? "",
+  );
   const [memberEmail, setMemberEmail] = useState("");
   const [memberRole, setMemberRole] = useState("STUDENT");
   const [assignments, setAssignments] = useState<CloudAssignment[]>([]);
@@ -1496,6 +1519,14 @@ export function CloudPage() {
       loadAssignments.mutate(query.data.classes[0].id);
     }
   }, [classroomId, query.data?.classes]);
+  // 命令面板深链 ?class=：页面已挂载时参数变化也要切换班级并加载其任务。
+  useEffect(() => {
+    const fromUrl = searchParams.get("class");
+    if (fromUrl && fromUrl !== classroomId && query.data?.classes.some(item => item.id === fromUrl)) {
+      setClassroomId(fromUrl);
+      loadAssignments.mutate(fromUrl);
+    }
+  }, [searchParams, classroomId, query.data?.classes]);
   // 首屏云端班级列表为空时自动刷新一次（issue #20/#23）：cloud.workspace 不带
   // refreshRemote 只回本地状态，班级面板会一直空着，添加成员与发布任务的入口
   // 也随之不可见。DEGRADED（刷新已失败）与已尝试标记共同避免循环请求。
@@ -1604,7 +1635,7 @@ export function CloudPage() {
           <p className="muted">
             {data.role === "TEACHER" || data.role === "ADMINISTRATOR"
               ? "尚无班级。输入班级名称点击「创建班级」，或点击「刷新班级」同步云端班级。"
-              : "尚无班级，教师将你加入班级后即可在此显示。"}
+              : "尚无班级。教师可在班级里通过成员邮箱添加你，你点击「立即同步」后即可在此显示。"}
           </p>
         ) : (
           <ul className="plain-list class-list">
@@ -1675,76 +1706,87 @@ export function CloudPage() {
                 </ul>
               ) : (
                 <p className="muted">
-                  班级暂无成员。展开「添加成员与创建任务」邀请学生加入。
+                  班级暂无成员。展开「添加成员」通过邮箱邀请学生加入。
                 </p>
               )}
             </details>
           )}
           {(data.role === "TEACHER" || data.role === "ADMINISTRATOR") && (
-              <details>
-                <summary>
-                  <strong>添加成员与创建任务</strong>
-                </summary>
-                {/* issue #20：目标班级必须在此显式可选，不能只靠隐式选中的班级。 */}
-                <div className="settings-grid">
-                  <FormField label="目标班级">
-                    {(ids) => (
-                      <select
-                        {...ids}
-                        value={classroomId}
-                        onChange={(event) => {
-                          setClassroomId(event.target.value);
-                          loadAssignments.mutate(event.target.value);
-                        }}
-                      >
-                        {data.classes.map((item) => (
-                          <option key={item.id} value={item.id}>
-                            {item.name}
-                          </option>
-                        ))}
-                      </select>
-                    )}
-                  </FormField>
-                </div>
-                <div className="settings-grid">
-                  <FormField label="成员邮箱">
-                    {(ids) => (
-                      <input
-                        {...ids}
-                        type="email"
-                        value={memberEmail}
-                        onChange={(event) => setMemberEmail(event.target.value)}
-                      />
-                    )}
-                  </FormField>
-                  <FormField label="成员角色">
-                    {(ids) => (
-                      <select
-                        {...ids}
-                        value={memberRole}
-                        onChange={(event) => setMemberRole(event.target.value)}
-                      >
-                        <option value="STUDENT">学生</option>
-                        <option value="TEACHER">教师</option>
-                      </select>
-                    )}
-                  </FormField>
-                </div>
-                <div className="button-row">
-                  <Button
-                    variant="secondary"
-                    disabled={!memberEmail || !classroomId}
-                    busy={addMember.isPending}
-                    onClick={() => addMember.mutate()}
-                  >
-                    添加成员
-                  </Button>
-                  <span className="muted">
-                    {selectedClassName
-                      ? `新成员将加入「${selectedClassName}」`
-                      : "请先选择目标班级"}
-                  </span>
-                </div>
+            <details className="class-members">
+              <summary>
+                <strong>添加成员</strong>
+                {memberEmail ? <span className="policy-chip">待提交</span> : null}
+              </summary>
+              {/* issue #20：目标班级必须在此显式可选，不能只靠隐式选中的班级。 */}
+              <div className="settings-grid">
+                <FormField label="目标班级">
+                  {(ids) => (
+                    <select
+                      {...ids}
+                      value={classroomId}
+                      onChange={(event) => {
+                        setClassroomId(event.target.value);
+                        loadAssignments.mutate(event.target.value);
+                      }}
+                    >
+                      {data.classes.map((item) => (
+                        <option key={item.id} value={item.id}>
+                          {item.name}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </FormField>
+              </div>
+              <div className="settings-grid">
+                <FormField label="成员邮箱">
+                  {(ids) => (
+                    <input
+                      {...ids}
+                      type="email"
+                      value={memberEmail}
+                      onChange={(event) => setMemberEmail(event.target.value)}
+                    />
+                  )}
+                </FormField>
+                <FormField label="成员角色">
+                  {(ids) => (
+                    <select
+                      {...ids}
+                      value={memberRole}
+                      onChange={(event) => setMemberRole(event.target.value)}
+                    >
+                      <option value="STUDENT">学生</option>
+                      <option value="TEACHER">教师</option>
+                    </select>
+                  )}
+                </FormField>
+              </div>
+              <div className="button-row">
+                <Button
+                  variant="secondary"
+                  disabled={!memberEmail || !classroomId}
+                  busy={addMember.isPending}
+                  onClick={() => addMember.mutate()}
+                >
+                  添加成员
+                </Button>
+                <span className="muted">
+                  {selectedClassName
+                    ? `新成员将加入「${selectedClassName}」`
+                    : "请先选择目标班级"}
+                </span>
+              </div>
+            </details>
+          )}
+          {(data.role === "TEACHER" || data.role === "ADMINISTRATOR") && (
+            <details className="class-assignment-create">
+              <summary>
+                <strong>新建任务</strong>
+                {assignmentTitle ? (
+                  <span className="policy-chip">草稿未保存</span>
+                ) : null}
+              </summary>
               <div className="settings-grid">
                 <FormField label="任务标题">
                   {(ids) => (
@@ -1801,6 +1843,28 @@ export function CloudPage() {
                   )}
                 </FormField>
               </div>
+              <div className="deadline-presets">
+                <span className="muted">截止快捷：</span>
+                {deadlinePresetLabels.map((preset) => (
+                  <button
+                    type="button"
+                    key={preset.label}
+                    className="preset-chip"
+                    onClick={() => setAssignmentDueAt(preset.value())}
+                  >
+                    {preset.label}
+                  </button>
+                ))}
+                {assignmentDueAt ? (
+                  <button
+                    type="button"
+                    className="preset-chip"
+                    onClick={() => setAssignmentDueAt("")}
+                  >
+                    清除截止时间
+                  </button>
+                ) : null}
+              </div>
               <div className="button-row">
                 <Button
                   disabled={!assignmentTitle || !assignmentExerciseId}
@@ -1824,60 +1888,60 @@ export function CloudPage() {
             </details>
           )}
           {(data.role === "TEACHER" || data.role === "ADMINISTRATOR") && (
-            <div className="button-row class-actions">
-              <Button
-                variant="secondary"
-                busy={classAnalytics.isPending}
-                onClick={() => classAnalytics.mutate()}
-              >
-                班级学情
-              </Button>
-              <Button
-                variant="secondary"
-                busy={exportClassAnalytics.isPending}
-                onClick={() => exportClassAnalytics.mutate()}
-              >
-                导出班级学情
-              </Button>
-            </div>
-          )}
-          {(data.role === "TEACHER" || data.role === "ADMINISTRATOR") && (
-            <div className="settings-grid analytics-filters">
-              <FormField label="提交状态">
-                {(ids) => (
-                  <select
-                    {...ids}
-                    value={analyticsStatus}
-                    onChange={(event) => setAnalyticsStatus(event.target.value)}
-                  >
-                    <option value="">全部</option>
-                    <option value="NOT_SUBMITTED">未提交</option>
-                    <option value="SUBMITTED">已提交</option>
-                    <option value="PASSED">已通过</option>
-                    <option value="FAILED">未通过</option>
-                  </select>
-                )}
-              </FormField>
-              <FormField label="开始时间">
-                {(ids) => (
-                  <input
-                    {...ids}
-                    type="datetime-local"
-                    value={analyticsFrom}
-                    onChange={(event) => setAnalyticsFrom(event.target.value)}
-                  />
-                )}
-              </FormField>
-              <FormField label="结束时间">
-                {(ids) => (
-                  <input
-                    {...ids}
-                    type="datetime-local"
-                    value={analyticsTo}
-                    onChange={(event) => setAnalyticsTo(event.target.value)}
-                  />
-                )}
-              </FormField>
+            <div className="class-analytics-bar">
+              <div className="settings-grid analytics-filters">
+                <FormField label="提交状态">
+                  {(ids) => (
+                    <select
+                      {...ids}
+                      value={analyticsStatus}
+                      onChange={(event) => setAnalyticsStatus(event.target.value)}
+                    >
+                      <option value="">全部</option>
+                      <option value="NOT_SUBMITTED">未提交</option>
+                      <option value="SUBMITTED">已提交</option>
+                      <option value="PASSED">已通过</option>
+                      <option value="FAILED">未通过</option>
+                    </select>
+                  )}
+                </FormField>
+                <FormField label="开始时间">
+                  {(ids) => (
+                    <input
+                      {...ids}
+                      type="datetime-local"
+                      value={analyticsFrom}
+                      onChange={(event) => setAnalyticsFrom(event.target.value)}
+                    />
+                  )}
+                </FormField>
+                <FormField label="结束时间">
+                  {(ids) => (
+                    <input
+                      {...ids}
+                      type="datetime-local"
+                      value={analyticsTo}
+                      onChange={(event) => setAnalyticsTo(event.target.value)}
+                    />
+                  )}
+                </FormField>
+              </div>
+              <div className="button-row">
+                <Button
+                  variant="secondary"
+                  busy={classAnalytics.isPending}
+                  onClick={() => classAnalytics.mutate()}
+                >
+                  查看学情
+                </Button>
+                <Button
+                  variant="secondary"
+                  busy={exportClassAnalytics.isPending}
+                  onClick={() => exportClassAnalytics.mutate()}
+                >
+                  导出学情
+                </Button>
+              </div>
             </div>
           )}
           <ul className="plain-list">
@@ -2871,7 +2935,7 @@ export function SettingsPage() {
             </>
           )}
           <Button busy={save.isPending} onClick={() => save.mutate(draft)}>
-            保存更改
+            保存偏好设置
           </Button>
         </div>
       </section>
@@ -3187,7 +3251,7 @@ export function SettingsPage() {
               <ul className="plain-list">
                 {backups.map((item) => (
                   <li key={item.id}>
-                    <strong>{new Date(item.createdAt).toLocaleString()}</strong>
+                    <strong>{formatInstant(item.createdAt)}</strong>
                     <span>
                       {formatBytes(item.sizeBytes)}
                       {item.automatic ? " · 自动" : ""}
@@ -3304,10 +3368,7 @@ export function SettingsPage() {
       >
         <p>
           恢复会覆盖当前应用数据库。确认恢复{" "}
-          {restoreTarget
-            ? new Date(restoreTarget.createdAt).toLocaleString()
-            : ""}{" "}
-          的备份？
+          {restoreTarget ? formatInstant(restoreTarget.createdAt) : ""} 的备份？
         </p>
         <div className="button-row">
           <Button
@@ -3421,10 +3482,7 @@ function feedbackStatusLabel(value: SubmissionFeedback["status"]) {
   )[value];
 }
 function formatAccountDate(value: string) {
-  const timestamp = Date.parse(value);
-  if (!Number.isFinite(timestamp) || timestamp < Date.UTC(2000, 0, 1))
-    return "时间未知";
-  return new Date(timestamp).toLocaleString("zh-CN", { hour12: false });
+  return formatInstant(value);
 }
 function helpTopicLabel(value: string) {
   return (
@@ -3531,6 +3589,21 @@ function analyticsMetricLabel(value: string) {
     )[value] ?? value
   );
 }
+/** 截止时间快捷项；datetime-local 需要本地时间格式的字符串。 */
+function datetimeLocalAt(offsetDays: number, hour: number): string {
+  const date = new Date();
+  date.setDate(date.getDate() + offsetDays);
+  date.setHours(hour, 0, 0, 0);
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+const deadlinePresetLabels: Array<{ label: string; value: () => string }> = [
+  { label: "今天 18:00", value: () => datetimeLocalAt(0, 18) },
+  { label: "明天 18:00", value: () => datetimeLocalAt(1, 18) },
+  { label: "7 天后 18:00", value: () => datetimeLocalAt(7, 18) },
+];
+
 function roleLabel(value: string) {
   return (
     (

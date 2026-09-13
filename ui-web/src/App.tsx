@@ -25,6 +25,13 @@ import type {
 } from "./shared/types";
 import { deliverNativeNotifications } from "./shared/nativeNotifications";
 import { installEnglishUi } from "./shared/uiI18n";
+import {
+  buildPaletteSections,
+  usePaletteClasses,
+  usePaletteConnections,
+  usePaletteExercises,
+  usePaletteKnowledge,
+} from "./shared/paletteSearch";
 
 const KnowledgePage = lazy(() => import("./features/knowledge/KnowledgePage"));
 const EditorPage = lazy(() => import("./features/editor/EditorPage"));
@@ -490,16 +497,49 @@ function CommandPalette({
   onClose: () => void;
   onNavigate: (path: string) => void;
 }) {
-  const matches = useMemo(
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [deferredQuery, setDeferredQuery] = useState("");
+  // 实体搜索走 IPC，逐键请求太密：200ms 防抖后再触发查询组。
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDeferredQuery(query), 200);
+    return () => window.clearTimeout(timer);
+  }, [query]);
+  useEffect(() => setActiveIndex(0), [deferredQuery]);
+
+  const exercises = usePaletteExercises(open, deferredQuery);
+  const knowledge = usePaletteKnowledge(open, deferredQuery);
+  const classes = usePaletteClasses(open, deferredQuery);
+  const connections = usePaletteConnections(open, deferredQuery);
+
+  const sections = useMemo(
     () =>
-      items.filter((item) =>
-        `${item.label} ${item.detail} ${item.to}`
-          .toLowerCase()
-          .includes(query.trim().toLowerCase()),
-      ),
-    [items, query],
+      buildPaletteSections({
+        query: deferredQuery,
+        pages: items,
+        exercises: exercises.data?.items,
+        knowledge: knowledge.data?.items,
+        classes: classes.data?.signedIn ? classes.data.classes : undefined,
+        connections: connections.data?.items,
+      }),
+    [
+      items,
+      deferredQuery,
+      exercises.data,
+      knowledge.data,
+      classes.data,
+      connections.data,
+    ],
   );
+  const flatEntries = useMemo(
+    () => sections.flatMap((section) => section.entries),
+    [sections],
+  );
+  useEffect(() => {
+    if (activeIndex >= flatEntries.length) setActiveIndex(0);
+  }, [activeIndex, flatEntries.length]);
+
   if (!open) return null;
+  const activeEntry = flatEntries[activeIndex];
   return (
     <div
       className="palette-backdrop"
@@ -512,32 +552,63 @@ function CommandPalette({
         className="command-palette"
         role="dialog"
         aria-modal="true"
-        aria-label="快速导航"
+        aria-label="搜索与跳转"
       >
         <input
           autoFocus
-          aria-label="搜索页面"
-          placeholder="输入页面名称或功能"
+          aria-label="搜索页面、题目、知识文档、班级与连接"
+          placeholder="搜索页面、题目、知识文档、班级或连接"
           value={query}
           onChange={(event) => onQuery(event.target.value)}
           onKeyDown={(event) => {
-            if (event.key === "Enter" && matches[0]) onNavigate(matches[0].to);
+            if (event.key === "ArrowDown" && flatEntries.length > 0) {
+              event.preventDefault();
+              setActiveIndex(
+                (index) => (index + 1) % flatEntries.length,
+              );
+            } else if (event.key === "ArrowUp" && flatEntries.length > 0) {
+              event.preventDefault();
+              setActiveIndex(
+                (index) =>
+                  (index - 1 + flatEntries.length) % flatEntries.length,
+              );
+            } else if (event.key === "Enter" && activeEntry) {
+              onNavigate(activeEntry.path);
+            }
           }}
         />
         <div>
-          {matches.map((item, index) => (
-            <button
-              type="button"
-              key={item.to}
-              onClick={() => onNavigate(item.to)}
-            >
-              <span>{item.label}</span>
-              <small>{item.detail}</small>
-              <kbd>Ctrl {index + 1}</kbd>
-            </button>
+          {sections.map((section) => (
+            <div key={section.group} className="palette-group">
+              <p className="palette-group-label">{section.label}</p>
+              {section.entries.map((entry) => {
+                const active = activeEntry?.key === entry.key;
+                return (
+                  <button
+                    type="button"
+                    key={entry.key}
+                    className={active ? "active" : ""}
+                    onMouseEnter={() =>
+                      setActiveIndex(flatEntries.indexOf(entry))
+                    }
+                    onClick={() => onNavigate(entry.path)}
+                  >
+                    <span>{entry.title}</span>
+                    <small>{entry.detail}</small>
+                    {entry.shortcut && <kbd>{entry.shortcut}</kbd>}
+                  </button>
+                );
+              })}
+            </div>
           ))}
+          {flatEntries.length === 0 && (
+            <p className="muted">
+              {deferredQuery.trim().length >= 2
+                ? "没有匹配结果"
+                : "输入页面名称，或至少 2 个字符搜索题目与知识文档"}
+            </p>
+          )}
         </div>
-        {matches.length === 0 && <p className="muted">没有匹配页面</p>}
       </section>
     </div>
   );
@@ -600,6 +671,9 @@ function TodayPage() {
               继续学习
             </Button>
           )}
+          {!data.actions[0] && (
+            <Button onClick={() => navigate("/practice")}>去练习一题</Button>
+          )}
           <Button
             variant="secondary"
             onClick={() =>
@@ -629,7 +703,12 @@ function TodayPage() {
           </span>
         </div>
         {data.actions.length === 0 ? (
-          <p className="muted">暂无待办动作</p>
+          <div>
+            <p className="muted">暂无待办动作。可以先去「练习与实验」练一题，或完成一道推荐题。</p>
+            <div className="button-row">
+              <Button onClick={() => navigate("/practice")}>去练习一题</Button>
+            </div>
+          </div>
         ) : (
           <ol>
             {data.actions.map((action) => (

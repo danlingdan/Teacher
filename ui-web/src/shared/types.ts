@@ -741,7 +741,8 @@ export interface SettingsWorkspace
   extends SettingsPreferences, SettingsEnvironment, SettingsStorage {}
 export interface BackupSnapshot {
   id: string;
-  createdAt: string;
+  /** Java Instant：Jackson 默认序列化为秒级数值，旧实现可能仍是 ISO 字符串。 */
+  createdAt: string | number;
   sizeBytes: number;
   automatic: boolean;
 }

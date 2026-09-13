@@ -127,7 +127,7 @@ public final class FileGeneralSoftwareService implements GeneralSoftwareService 
             case "updates" -> "在设置的“更新与支持”中手动检查。只有签名清单、大小和 SHA-256 全部通过后才能启动安装器。";
             case "feedback" -> "反馈发送前可预览诊断字段。数据库、SQL、Prompt、密码、Token 和 AI Key 不会默认上传。";
             case "privacy" -> "SQLTeacher 默认不收集使用遥测。问题反馈和诊断包仅在用户明确操作后生成或发送。";
-            case "shortcuts" -> "Ctrl+1 首页，Ctrl+2 我的练习，Ctrl+3 课程知识，Ctrl+, 设置，F1 帮助。";
+            case "shortcuts" -> "Ctrl+K 搜索与跳转；Ctrl+1~7 按侧栏顺序切换工作区；Ctrl+, 打开设置；练习编辑器内 Ctrl+Enter 运行、Ctrl+Shift+Enter 提交、F1 获取提示。";
             case "troubleshooting" -> "先检查数据目录空间、Cloud HTTPS 和 Ollama 状态；仍失败时导出诊断包并附上错误码。";
             default -> throw new IllegalArgumentException("help topic does not exist");
         };
