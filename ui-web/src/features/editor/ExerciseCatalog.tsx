@@ -1,5 +1,11 @@
 import { useMemo, type ReactNode } from "react";
 import type { ExerciseCatalogItem } from "../../shared/types";
+import {
+  difficultyLabel,
+  exerciseStatusLabel,
+  exerciseTypeLabel,
+  knowledgePointLabel,
+} from "../../shared/labels";
 
 const difficultyOrder: Record<string, number> = {
   BEGINNER: 0,
@@ -7,41 +13,10 @@ const difficultyOrder: Record<string, number> = {
   ADVANCED: 2,
 };
 
-const difficultyNames: Record<string, string> = {
-  BEGINNER: "入门",
-  INTERMEDIATE: "进阶",
-  ADVANCED: "高级",
-};
-
-const statusNames = {
-  passed: "已通过",
-  failed: "未通过",
-  todo: "未做",
-} as const;
-
-const typeNames: Record<string, string> = {
-  QUERY: "查询",
-  STATE: "写操作",
-  SCRIPT: "脚本",
-  TRIGGER: "触发器",
-};
-
-export function exerciseTypeLabel(value: string) {
-  return typeNames[value] ?? "查询";
-}
-
-export type CatalogStatus = keyof typeof statusNames;
+export type CatalogStatus = "passed" | "failed" | "todo";
 
 export function catalogItemStatus(item: ExerciseCatalogItem): CatalogStatus {
   return item.passed ? "passed" : item.attempts > 0 ? "failed" : "todo";
-}
-
-export function difficultyLabel(value: string) {
-  return difficultyNames[value] ?? value;
-}
-
-function knowledgePointLabel(value: string) {
-  return !value || value === "NOT EXISTS" ? "未设置知识点" : value;
 }
 
 export interface ExerciseCatalogFilters {
@@ -197,7 +172,7 @@ export function ExerciseCatalogPanel({
                   type="button"
                   className={selectedId === item.id ? "selected" : ""}
                   key={item.id}
-                  aria-label={`${item.title}，${exerciseTypeLabel(item.exerciseType)}，${difficultyLabel(item.difficulty)}，${statusNames[status]}`}
+                  aria-label={`${item.title}，${exerciseTypeLabel(item.exerciseType)}，${difficultyLabel(item.difficulty)}，${exerciseStatusLabel(status)}`}
                   onClick={() => onSelect(item.id)}
                 >
                   <span className="catalog-item-title">{item.title}</span>
@@ -207,7 +182,7 @@ export function ExerciseCatalogPanel({
                     {difficultyLabel(item.difficulty)}
                     {item.bestScore != null ? ` · ${item.bestScore} 分` : ""}
                     <span className={`catalog-badge ${status}`}>
-                      {statusNames[status]}
+                      {exerciseStatusLabel(status)}
                     </span>
                   </small>
                 </button>
