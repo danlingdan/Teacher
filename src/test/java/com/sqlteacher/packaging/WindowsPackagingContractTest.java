@@ -47,7 +47,11 @@ class WindowsPackagingContractTest {
         assertTrue(rustMain.contains("windows_subsystem = \"windows\""));
         assertTrue(rustHost.contains("CREATE_NO_WINDOW"));
         assertTrue(rustHost.contains("command.creation_flags(CREATE_NO_WINDOW)"));
-        assertTrue(rustHost.contains(".stderr(Stdio::null())"));
+        // BUG-4 (v3.4.0): sidecar stderr 滚动落盘而非丢弃，且由 kill-on-close 作业对象兜底。
+        assertTrue(rustHost.contains(".stderr(Stdio::piped())"));
+        assertTrue(rustHost.contains("log_sidecar_stderr"));
+        assertTrue(rustHost.contains("SidecarJob::create"));
+        assertTrue(rustHost.contains("RunEvent::Exit"));
         assertTrue(rustHost.contains("tauri_plugin_single_instance::init"));
         assertTrue(rustHost.contains("tauri_plugin_window_state::Builder"));
         assertTrue(rustHost.contains("SQLTEACHER_E2E_DATA_DIR"));
