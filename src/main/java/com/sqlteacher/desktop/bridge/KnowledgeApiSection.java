@@ -1,0 +1,171 @@
+package com.sqlteacher.desktop.bridge;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.sqlteacher.application.knowledge.CourseKnowledgeSearchFilter;
+import com.sqlteacher.application.knowledge.CourseKnowledgeService;
+import com.sqlteacher.application.knowledge.KnowledgeDocumentService;
+import com.sqlteacher.application.knowledge.KnowledgeIndexService;
+import com.sqlteacher.application.knowledge.KnowledgeReadStateService;
+import com.sqlteacher.application.knowledge.KnowledgeVisibility;
+import com.sqlteacher.application.knowledge.ObsidianVaultImportService;
+
+import java.nio.file.Path;
+import java.util.Map;
+import java.util.Set;
+import java.util.function.Consumer;
+import java.util.stream.Collectors;
+
+/** v3.4.0 REF-8: knowledge articles, local search, read state, and Obsidian vault import. */
+final class KnowledgeApiSection extends ApiSection {
+
+    KnowledgeApiSection(ApiSectionHost host) {
+        super(host);
+    }
+
+    @Override
+    public Set<String> supportedMethods() {
+        return Set.of(
+            "knowledge.article", "knowledge.search", "knowledge.read.mark",
+            "knowledge.index.status", "knowledge.index.rebuild",
+            "knowledge.article.import", "knowledge.article.revise",
+            "knowledge.article.visibility", "knowledge.article.delete",
+            "knowledge.import.preview", "knowledge.import.execute"
+        );
+    }
+
+    @Override
+    public JsonNode handle(String method, JsonNode params, CancellationToken cancellation,
+                           Consumer<LocalAppEvent> events) throws Exception {
+        return switch (method) {
+            case "knowledge.article" -> knowledgeArticle(params, cancellation);
+            case "knowledge.search" -> knowledgeSearch(params, cancellation);
+            case "knowledge.read.mark" -> knowledgeReadMark(params, cancellation);
+            case "knowledge.index.status" -> knowledgeIndexStatus(cancellation);
+            case "knowledge.index.rebuild" -> knowledgeIndexRebuild(cancellation);
+            case "knowledge.article.import" -> knowledgeArticleImport(params, cancellation);
+            case "knowledge.article.revise" -> knowledgeArticleRevise(params, cancellation);
+            case "knowledge.article.visibility" -> knowledgeArticleVisibility(params, cancellation);
+            case "knowledge.article.delete" -> knowledgeArticleDelete(params, cancellation);
+            case "knowledge.import.preview" -> knowledgeImportPreview(params, cancellation);
+            case "knowledge.import.execute" -> knowledgeImportExecute(params, cancellation, events);
+            default -> throw new IllegalStateException("Method whitelist and dispatcher are inconsistent");
+        };
+    }
+
+    private JsonNode knowledgeArticle(JsonNode params, CancellationToken cancellation) {
+        cancellation.throwIfCancelled();
+        var detail = context().getBean(CourseKnowledgeService.class)
+            .getArticle(requiredText(params, "articleId", 128));
+        ObjectNode result = mapper.createObjectNode();
+        result.set("article", mapper.valueToTree(detail.article()));
+        result.put("markdown", detail.revision().content());
+        result.put("sourceName", detail.revision().sourceName());
+        result.put("revision", detail.revision().revision());
+        result.put("trustedHtml", false);
+        result.put("externalResourcesAllowed", false);
+        return result;
+    }
+
+    private JsonNode knowledgeSearch(JsonNode params, CancellationToken cancellation) {
+        cancellation.throwIfCancelled();
+        String query = requiredText(params, "query", 500);
+        int limit = Math.clamp(params.path("limit").asInt(30), 1, 100);
+        CourseKnowledgeService service = context().getBean(CourseKnowledgeService.class);
+        Map<String, String> articleIds = service.listArticles().stream()
+            .collect(Collectors.toMap(item -> item.documentId(), item -> item.id(), (left, right) -> left));
+        ArrayNode items = mapper.createArrayNode();
+        service.search(query, CourseKnowledgeSearchFilter.allLocal(), limit).forEach(item -> {
+            ObjectNode result = items.addObject();
+            result.put("articleId", articleIds.getOrDefault(item.documentId(), ""));
+            result.put("documentId", item.documentId());
+            result.put("title", item.title());
+            result.put("sourceName", item.sourceName());
+            result.put("chunkIndex", item.chunkIndex());
+            result.put("snippet", item.snippet());
+            result.put("relevance", item.relevance());
+        });
+        return mapper.createObjectNode().set("items", items);
+    }
+
+    private JsonNode knowledgeReadMark(JsonNode params, CancellationToken cancellation) {
+        cancellation.throwIfCancelled();
+        return mapper.valueToTree(context().getBean(KnowledgeReadStateService.class).save(
+            requiredText(params, "articleId", 128), Math.max(1, params.path("revision").asInt(1)),
+            Math.clamp(params.path("progressPercent").asInt(100), 0, 100)));
+    }
+
+    private JsonNode knowledgeIndexStatus(CancellationToken cancellation) {
+        cancellation.throwIfCancelled();
+        return mapper.valueToTree(context().getBean(KnowledgeIndexService.class).status());
+    }
+
+    private JsonNode knowledgeIndexRebuild(CancellationToken cancellation) {
+        cancellation.throwIfCancelled();
+        requireTeacher();
+        return mapper.valueToTree(context().getBean(KnowledgeIndexService.class).rebuildAll());
+    }
+
+    private JsonNode knowledgeArticleImport(JsonNode params, CancellationToken cancellation) {
+        cancellation.throwIfCancelled();
+        requireTeacher();
+        var article = context().getBean(CourseKnowledgeService.class).importArticle(
+            Path.of(requiredText(params, "path", 32_768)), requiredText(params, "courseTitle", 240),
+            requiredText(params, "sectionTitle", 240), textList(params.path("knowledgePoints"), 100, 240));
+        context().getBean(KnowledgeIndexService.class).rebuildPending();
+        return mapper.valueToTree(article);
+    }
+
+    private JsonNode knowledgeArticleRevise(JsonNode params, CancellationToken cancellation) {
+        cancellation.throwIfCancelled();
+        requireTeacher();
+        var article = context().getBean(CourseKnowledgeService.class).reviseArticle(
+            requiredText(params, "articleId", 128), Path.of(requiredText(params, "path", 32_768)),
+            textList(params.path("knowledgePoints"), 100, 240));
+        context().getBean(KnowledgeIndexService.class).rebuildPending();
+        return mapper.valueToTree(article);
+    }
+
+    private JsonNode knowledgeArticleVisibility(JsonNode params, CancellationToken cancellation) {
+        cancellation.throwIfCancelled();
+        requireTeacher();
+        var article = context().getBean(CourseKnowledgeService.class).changeVisibility(
+            requiredText(params, "articleId", 128), KnowledgeVisibility.valueOf(requiredText(params, "visibility", 32)));
+        context().getBean(KnowledgeIndexService.class).rebuildPending();
+        return mapper.valueToTree(article);
+    }
+
+    private JsonNode knowledgeArticleDelete(JsonNode params, CancellationToken cancellation) {
+        cancellation.throwIfCancelled();
+        requireTeacher();
+        String articleId = requiredText(params, "articleId", 128);
+        var service = context().getBean(CourseKnowledgeService.class);
+        var article = service.listArticles().stream().filter(item -> item.id().equals(articleId)).findFirst()
+            .orElseThrow(() -> new IllegalArgumentException("Knowledge article was not found"));
+        context().getBean(KnowledgeDocumentService.class).deleteDocument(article.documentId());
+        return mapper.createObjectNode().put("deleted", true).put("articleId", articleId);
+    }
+
+    private JsonNode knowledgeImportPreview(JsonNode params, CancellationToken cancellation) {
+        cancellation.throwIfCancelled();
+        String root = requiredText(params, "root", 32_768);
+        var mapping = new ObsidianVaultImportService.ImportMapping(
+            params.path("courseTitle").asText("Obsidian 知识库"),
+            params.path("sectionDepth").asInt(1),
+            params.path("includeAttachments").asBoolean(true));
+        var preview = context().getBean(ObsidianVaultImportService.class).preview(Path.of(root), mapping);
+        return mapper.valueToTree(preview);
+    }
+
+    private JsonNode knowledgeImportExecute(JsonNode params, CancellationToken cancellation,
+                                            Consumer<LocalAppEvent> events) {
+        cancellation.throwIfCancelled();
+        emit(events, "import.progress", "phase", "verifying");
+        var report = context().getBean(ObsidianVaultImportService.class)
+            .execute(requiredText(params, "previewToken", 128));
+        cancellation.throwIfCancelled();
+        emit(events, "import.progress", "phase", "completed");
+        return mapper.valueToTree(report);
+    }
+}
