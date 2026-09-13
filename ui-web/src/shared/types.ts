@@ -113,6 +113,22 @@ export interface ActivitySubmission {
     criteria: Array<{ criterion: string; passed: boolean; feedback: string }>;
   };
 }
+export interface ActivityOption {
+  id: string;
+  text?: string;
+  label?: string;
+  title?: string;
+  prompt?: string;
+  instruction?: string;
+  observationKey?: string;
+  acceptanceCriterion?: string;
+  fromStateId?: string;
+  toStateId?: string;
+  description?: string;
+}
+export interface ActivityQuestion extends ActivityOption {
+  options?: ActivityOption[];
+}
 export interface KnowledgeArticleDetail {
   article: KnowledgeArticle;
   markdown: string;

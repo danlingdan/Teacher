@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   localAppRequest,
   localAppRequestWithId,
   subscribeLocalAppEvents,
 } from "./ipc";
-import type { SettingsPreferences } from "./types";
+import { settingsPreferencesQuery } from "../app/queries";
 import { Button, Dialog } from "./ui";
 
 type UpdateManifestView = {
@@ -36,18 +36,14 @@ let startupCheckStarted = false;
  */
 export function UpdateDialog() {
   const queryClient = useQueryClient();
-  const [preferences, setPreferences] = useState<SettingsPreferences>();
+  // 走共享 react-query 缓存：偏好更新（如"跳过此版本"）后弹窗状态同步刷新。
+  const preferencesQuery = useQuery(settingsPreferencesQuery);
+  const preferences = preferencesQuery.data;
   const [open, setOpen] = useState(false);
   const [available, setAvailable] = useState<UpdateManifestView>();
   const [phase, setPhase] = useState<UpdatePhase>("idle");
   const [fraction, setFraction] = useState(0);
   const [error, setError] = useState("");
-
-  useEffect(() => {
-    void localAppRequest<SettingsPreferences>("settings.preferences").then(
-      setPreferences,
-    );
-  }, []);
 
   useEffect(() => {
     const general = preferences?.general;
@@ -119,7 +115,9 @@ export function UpdateDialog() {
       version: formatVersion(available.version),
     })
       .then(() =>
-        queryClient.invalidateQueries({ queryKey: ["settings", "preferences"] }),
+        queryClient.invalidateQueries({
+          queryKey: settingsPreferencesQuery.queryKey,
+        }),
       )
       .finally(() => setOpen(false));
   }, [available, queryClient]);

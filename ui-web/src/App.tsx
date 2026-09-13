@@ -12,7 +12,7 @@ import {
 } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import "./App.css";
-import { healthQuery, homeQuery, sessionQuery } from "./app/queries";
+import { healthQuery, homeQuery, sessionQuery, settingsPreferencesQuery } from "./app/queries";
 import { ErrorBoundary } from "./app/ErrorBoundary";
 import { RoleGuard } from "./app/RoleGuard";
 import { Button, EmptyState, Feedback } from "./shared/ui";
@@ -21,7 +21,6 @@ import { localAppRequest } from "./shared/ipc";
 import type {
   CloudNotification,
   LearningActionSummary,
-  SettingsPreferences,
 } from "./shared/types";
 import { deliverNativeNotifications } from "./shared/nativeNotifications";
 import { installEnglishUi } from "./shared/uiI18n";
@@ -117,11 +116,7 @@ export default function App() {
 
 function AppEffects() {
   const queryClient = useQueryClient();
-  const appearance = useQuery({
-    queryKey: ["settings", "preferences"],
-    queryFn: () => localAppRequest<SettingsPreferences>("settings.preferences"),
-    staleTime: 30_000,
-  });
+  const appearance = useQuery(settingsPreferencesQuery);
   useEffect(() => {
     const general = appearance.data?.general;
     if (!general) return;
@@ -172,7 +167,7 @@ function AppEffects() {
         void localAppRequest("settings.notifications.read").then(() =>
           // 已读状态在后端偏好里，必须失效缓存让通知徽标与列表立即更新。
           void queryClient.invalidateQueries({
-            queryKey: ["settings", "preferences"],
+            queryKey: settingsPreferencesQuery.queryKey,
           }),
         );
     });
@@ -189,11 +184,7 @@ function Shell() {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [paletteQuery, setPaletteQuery] = useState("");
   const [notificationsOpen, setNotificationsOpen] = useState(false);
-  const preferences = useQuery({
-    queryKey: ["settings", "preferences"],
-    queryFn: () => localAppRequest<SettingsPreferences>("settings.preferences"),
-    staleTime: 30_000,
-  });
+  const preferences = useQuery(settingsPreferencesQuery);
   const cloudNotifications = useQuery({
     queryKey: ["cloud", "notifications"],
     queryFn: () =>
@@ -245,7 +236,7 @@ function Shell() {
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({
-        queryKey: ["settings", "preferences"],
+        queryKey: settingsPreferencesQuery.queryKey,
       });
       await queryClient.invalidateQueries({
         queryKey: ["cloud", "notifications"],

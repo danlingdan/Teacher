@@ -8,6 +8,7 @@ import { useSearchParams } from "react-router-dom";
 import { Button, Dialog, Feedback, FormField, useToast } from "../../shared/ui";
 import { cancelLocalAppRequest, localAppRequest, localAppRequestWithId } from "../../shared/ipc";
 import { useMonacoEditorTheme } from "../../shared/monacoTheme";
+import { settingsPreferencesQuery } from "../../app/queries";
 import type { AiContextPreview, ConnectionDialectOption, ConnectionSummary, ConnectionTestResult, DatabaseTable, Nl2SqlSafetyResult, SettingsPreferences, SqlHistoryItem, SqlPage, SqlRisk } from "../../shared/types";
 
 self.MonacoEnvironment = { getWorker: () => new EditorWorker() };
@@ -58,16 +59,16 @@ export default function DataSqlPage() {
   const schema = useQuery({ queryKey: ["data", "schema", connectionId], queryFn: () => localAppRequest<{ tables: DatabaseTable[] }>("data.schema", { connectionId }), enabled: Boolean(connectionId) });
   // 首次运行选择 SQL 安全模式：后端明确返回 developerModeExplicit=false 时弹一次选择框。
   // 旧版后端没有该字段（undefined），视为已选择，不弹框，保持向前兼容。
-  const settings = useQuery({ queryKey: ["settings", "preferences"], queryFn: () => localAppRequest<SettingsPreferences>("settings.preferences"), staleTime: 30_000 });
+  const settings = useQuery(settingsPreferencesQuery);
   const [modeDialogDismissed, setModeDialogDismissed] = useState(false);
   const sqlModeOpen = Boolean(settings.data) && settings.data?.developerModeExplicit === false && !modeDialogDismissed;
   const chooseSqlMode = useMutation({
     mutationFn: (developerMode: boolean) => localAppRequest("settings.update", { ...settings.data?.general, developerMode }),
     onSuccess: (_value, chosenDeveloperMode) => {
       // 立即写回缓存，后端尚未上线 developerModeExplicit 时也不会重复弹框。
-      if (settings.data) client.setQueryData<SettingsPreferences>(["settings", "preferences"], { ...settings.data, developerMode: chosenDeveloperMode, developerModeExplicit: true });
+      if (settings.data) client.setQueryData<SettingsPreferences>(settingsPreferencesQuery.queryKey, { ...settings.data, developerMode: chosenDeveloperMode, developerModeExplicit: true });
       setModeDialogDismissed(true);
-      void client.invalidateQueries({ queryKey: ["settings", "preferences"] });
+      void client.invalidateQueries({ queryKey: settingsPreferencesQuery.queryKey });
     },
   });
   return <div className="data-workspace">
