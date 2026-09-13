@@ -71,6 +71,103 @@ class V31ExerciseBankStoreTest {
         assertEquals(0, store.manifest().get("bankVersion"));
     }
 
+    @Test
+    void shouldMigrateLegacySingleChannelDatabaseIntoNetworkChannel() throws Exception {
+        Path db = tempDir.resolve("legacy.db");
+        try (var connection = java.sql.DriverManager.getConnection("jdbc:sqlite:" + db);
+             var statement = connection.createStatement()) {
+            statement.executeUpdate("""
+                create table exercise_bank_blocks (
+                    block_type text not null, block_id text not null, version integer not null,
+                    content text not null, sha256 text not null, bank_version integer not null,
+                    primary key(block_type, block_id))
+                """);
+            statement.executeUpdate("""
+                create table exercise_bank_state (
+                    id integer primary key check (id = 1), bank_version integer not null, updated_at text not null)
+                """);
+            statement.executeUpdate(
+                "insert into exercise_bank_blocks values ('EXERCISE','legacy-ex',3,'legacy content','sha-legacy',19)");
+            statement.executeUpdate("insert into exercise_bank_state values (1,19,'2026-09-01T00:00:00Z')");
+        }
+
+        V31ExerciseBankStore store = new V31ExerciseBankStore(db);
+
+        assertEquals(19, store.manifest().get("bankVersion"));
+        Map<String, Object> block = store.block("EXERCISE", "legacy-ex");
+        assertNotNull(block);
+        assertEquals("legacy content", block.get("content"));
+        assertEquals(0, v1TableCount(db));
+    }
+
+    @Test
+    void shouldResumeMigrationFromParkedResidueAfterCrash() throws Exception {
+        Path db = tempDir.resolve("residue.db");
+        try (var connection = java.sql.DriverManager.getConnection("jdbc:sqlite:" + db);
+             var statement = connection.createStatement()) {
+            // Simulates the crashed-migration state from the 2026-09-12 production incident:
+            // legacy tables were renamed to *_v1 but the backfill never ran, and the
+            // current-schema tables do not exist yet.
+            statement.executeUpdate("""
+                create table exercise_bank_blocks_v1 (
+                    block_type text not null, block_id text not null, version integer not null,
+                    content text not null, sha256 text not null, bank_version integer not null,
+                    primary key(block_type, block_id))
+                """);
+            statement.executeUpdate("""
+                create table exercise_bank_state_v1 (
+                    id integer primary key check (id = 1), bank_version integer not null, updated_at text not null)
+                """);
+            statement.executeUpdate(
+                "insert into exercise_bank_blocks_v1 values ('DATASET','legacy-ds',1,'dataset content','sha-ds',19)");
+            statement.executeUpdate("insert into exercise_bank_state_v1 values (1,19,'2026-09-01T00:00:00Z')");
+            statement.executeUpdate("pragma user_version = 1");
+        }
+
+        V31ExerciseBankStore store = new V31ExerciseBankStore(db);
+
+        assertEquals(19, store.manifest().get("bankVersion"));
+        assertNotNull(store.block("DATASET", "legacy-ds"));
+        assertEquals(0, v1TableCount(db));
+    }
+
+    @Test
+    void shouldNotResurrectObservationResidueWhenSchemaAlreadyCurrent() throws Exception {
+        V31ExerciseBankStore store = store();
+        store.publish(admin(), validPackage("现网数据", "select id, name from t order by id", 1));
+        Path db = tempDir.resolve("cloud.db");
+        try (var connection = java.sql.DriverManager.getConnection("jdbc:sqlite:" + db);
+             var statement = connection.createStatement()) {
+            // Post-incident production state: *_v1 copies kept for observation while the
+            // stamped database already runs the channel schema — a reopen must not
+            // backfill stale blocks into the live channel.
+            statement.executeUpdate("""
+                create table exercise_bank_blocks_v1 (
+                    block_type text not null, block_id text not null, version integer not null,
+                    content text not null, sha256 text not null, bank_version integer not null,
+                    primary key(block_type, block_id))
+                """);
+            statement.executeUpdate(
+                "insert into exercise_bank_blocks_v1 values ('EXERCISE','stale-ex',1,'stale content','sha-stale',19)");
+        }
+
+        V31ExerciseBankStore reopened = new V31ExerciseBankStore(db);
+
+        assertEquals(1, reopened.manifest().get("bankVersion"));
+        assertNull(reopened.block("EXERCISE", "stale-ex"));
+        assertEquals(1, v1TableCount(db));
+    }
+
+    private int v1TableCount(Path db) throws Exception {
+        try (var connection = java.sql.DriverManager.getConnection("jdbc:sqlite:" + db);
+             var statement = connection.createStatement();
+             var rows = statement.executeQuery(
+                 "select count(*) from sqlite_master where type = 'table' and name like '%_v1'")) {
+            rows.next();
+            return rows.getInt(1);
+        }
+    }
+
     private V31ExerciseBankStore store() {
         try {
             return new V31ExerciseBankStore(tempDir.resolve("cloud.db"));

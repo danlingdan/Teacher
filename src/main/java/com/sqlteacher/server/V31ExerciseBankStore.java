@@ -347,91 +347,110 @@ final class V31ExerciseBankStore {
     private void initialize() throws SQLException {
         try (Connection connection = open(); Statement statement = connection.createStatement()) {
             int schemaVersion = statement.executeQuery("pragma user_version").getInt(1);
-            if (schemaVersion < EXPECTED_SCHEMA) {
-                migrateFromLegacySchema(statement);
+            boolean needsMigration = schemaVersion < EXPECTED_SCHEMA;
+            if (needsMigration) {
+                // Order is crash-safe: park the legacy tables, create the channel-schema
+                // target tables, backfill idempotently, and stamp the version last. A crash
+                // at any point leaves a state the next startup can resume instead of
+                // stranding legacy data in the *_v1 tables (the 2026-09-12 production
+                // incident: the old code renamed first, inserted into a table that did not
+                // exist yet, and stamped user_version before the tables were created).
+                parkLegacyTables(statement);
+            }
+            createCurrentSchemaTables(statement);
+            if (needsMigration) {
+                backfillParkedLegacyTables(statement);
             }
             statement.executeUpdate("pragma user_version = " + EXPECTED_SCHEMA);
-            statement.executeUpdate("""
-                create table if not exists exercise_bank_blocks (
-                    channel text not null,
-                    block_type text not null,
-                    block_id text not null,
-                    version integer not null,
-                    content text not null,
-                    sha256 text not null,
-                    bank_version integer not null,
-                    primary key(channel, block_type, block_id)
-                )
-                """);
-            statement.executeUpdate("""
-                create table if not exists exercise_bank_state (
-                    channel text primary key,
-                    bank_version integer not null,
-                    updated_at text not null
-                )
-                """);
-            statement.executeUpdate("""
-                create table if not exists exercise_bank_history (
-                    channel text not null,
-                    bank_version integer not null,
-                    created_at text not null,
-                    primary key(channel, bank_version)
-                )
-                """);
-            statement.executeUpdate("""
-                create table if not exists exercise_bank_history_blocks (
-                    channel text not null,
-                    bank_version integer not null,
-                    block_type text not null,
-                    block_id text not null,
-                    version integer not null,
-                    content text not null,
-                    sha256 text not null,
-                    primary key(channel, bank_version, block_type, block_id)
-                )
-                """);
-            // Publish/rollback audit rows land in the shared admin_audit table; the DDL
-            // matches the server's own so either initializer can run first.
-            statement.executeUpdate("""
-                create table if not exists admin_audit(id text primary key,
-                    actor_user_id text references users(id),action text not null,target_type text not null,
-                    target_id text,result text not null,reason_code text,correlation_id text not null,
-                    created_at text not null)
-                """);
+        }
+    }
+
+    private static void createCurrentSchemaTables(Statement statement) throws SQLException {
+        statement.executeUpdate("""
+            create table if not exists exercise_bank_blocks (
+                channel text not null,
+                block_type text not null,
+                block_id text not null,
+                version integer not null,
+                content text not null,
+                sha256 text not null,
+                bank_version integer not null,
+                primary key(channel, block_type, block_id)
+            )
+            """);
+        statement.executeUpdate("""
+            create table if not exists exercise_bank_state (
+                channel text primary key,
+                bank_version integer not null,
+                updated_at text not null
+            )
+            """);
+        statement.executeUpdate("""
+            create table if not exists exercise_bank_history (
+                channel text not null,
+                bank_version integer not null,
+                created_at text not null,
+                primary key(channel, bank_version)
+            )
+            """);
+        statement.executeUpdate("""
+            create table if not exists exercise_bank_history_blocks (
+                channel text not null,
+                bank_version integer not null,
+                block_type text not null,
+                block_id text not null,
+                version integer not null,
+                content text not null,
+                sha256 text not null,
+                primary key(channel, bank_version, block_type, block_id)
+            )
+            """);
+        // Publish/rollback audit rows land in the shared admin_audit table; the DDL
+        // matches the server's own so either initializer can run first.
+        statement.executeUpdate("""
+            create table if not exists admin_audit(id text primary key,
+                actor_user_id text references users(id),action text not null,target_type text not null,
+                target_id text,result text not null,reason_code text,correlation_id text not null,
+                created_at text not null)
+            """);
+    }
+
+    /** Renames channel-less v1 tables out of the way so the current-schema tables can take their names. */
+    private static void parkLegacyTables(Statement statement) throws SQLException {
+        if (tableExists(statement, "exercise_bank_blocks")
+            && !columnExists(statement, "exercise_bank_blocks", "channel")) {
+            statement.executeUpdate("alter table exercise_bank_blocks rename to exercise_bank_blocks_v1");
+        }
+        if (tableExists(statement, "exercise_bank_state")
+            && !columnExists(statement, "exercise_bank_state", "channel")) {
+            statement.executeUpdate("alter table exercise_bank_state rename to exercise_bank_state_v1");
         }
     }
 
     /**
-     * Carries the v1 single-channel tables (channel-less blocks, single-row state) into the
-     * channel schema under the default "network" channel, preserving the applied version.
+     * Carries the parked v1 single-channel tables (channel-less blocks, single-row state) into the
+     * channel schema under the default "network" channel, preserving the applied version. Idempotent:
+     * a run that crashed mid-backfill resumes via insert-or-ignore, and the parked tables are dropped
+     * only after a fully successful backfill. Residue in an already-stamped database is left untouched
+     * so post-incident observation copies can never resurrect stale blocks into a live channel.
      */
-    private static void migrateFromLegacySchema(Statement statement) throws SQLException {
-        boolean legacyBlocks = tableExists(statement, "exercise_bank_blocks")
-            && !columnExists(statement, "exercise_bank_blocks", "channel");
-        if (legacyBlocks) {
-            statement.executeUpdate("alter table exercise_bank_blocks rename to exercise_bank_blocks_v1");
-        }
-        boolean legacyState = tableExists(statement, "exercise_bank_state")
-            && !columnExists(statement, "exercise_bank_state", "channel");
-        int legacyVersion = 0;
-        if (legacyState) {
-            try (ResultSet row = statement.executeQuery(
-                "select bank_version from exercise_bank_state where id = 1")) {
-                legacyVersion = row.next() ? row.getInt(1) : 0;
-            }
-            statement.executeUpdate("alter table exercise_bank_state rename to exercise_bank_state_v1");
-        }
-        if (legacyBlocks) {
+    private static void backfillParkedLegacyTables(Statement statement) throws SQLException {
+        if (tableExists(statement, "exercise_bank_blocks_v1")) {
             statement.executeUpdate("""
-                insert into exercise_bank_blocks(channel, block_type, block_id, version, content, sha256, bank_version)
+                insert or ignore into exercise_bank_blocks(channel, block_type, block_id, version, content, sha256, bank_version)
                 select 'network', block_type, block_id, version, content, sha256, bank_version
                 from exercise_bank_blocks_v1
                 """);
             statement.executeUpdate("drop table exercise_bank_blocks_v1");
         }
-        if (legacyState) {
+        if (tableExists(statement, "exercise_bank_state_v1")) {
+            int legacyVersion = 0;
+            try (ResultSet row = statement.executeQuery(
+                "select bank_version from exercise_bank_state_v1 where id = 1")) {
+                legacyVersion = row.next() ? row.getInt(1) : 0;
+            }
             statement.executeUpdate(
-                "insert into exercise_bank_state(channel, bank_version, updated_at)"
+                "insert or ignore into exercise_bank_state(channel, bank_version, updated_at)"
                     + " values ('network', " + legacyVersion + ", '" + Instant.now() + "')"
             );
             statement.executeUpdate("drop table exercise_bank_state_v1");
