@@ -316,6 +316,11 @@ export default function KnowledgePage() {
                 {markRead.isSuccess && (
                   <span className="policy-chip">阅读进度已保存</span>
                 )}
+                {markRead.isError && (
+                  <span className="policy-chip" role="status">
+                    进度保存失败：{markRead.error?.message}
+                  </span>
+                )}
               </div>
               <KnowledgeRenderer markdown={currentMarkdown} />
             </>

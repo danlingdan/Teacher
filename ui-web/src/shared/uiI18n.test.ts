@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { installEnglishUi, translateUiText } from "./uiI18n";
+import { installEnglishUi, translateUiText, translations } from "./uiI18n";
 
 describe("English UI compatibility layer", () => {
   it("translates complete workflow phrases before generic labels", () => {
@@ -19,5 +19,17 @@ describe("English UI compatibility layer", () => {
     expect(span.textContent).toBe("Settings saved");
     expect(document.querySelector("article")?.textContent).toBe("课程正文");
     stop();
+  });
+});
+
+describe("translation table integrity", () => {
+  it("has no duplicate source strings (later entries used to silently override earlier ones)", () => {
+    const sources = translations.map(([source]) => source);
+    expect(new Set(sources).size).toBe(sources.length);
+  });
+
+  it("maps previously conflicting labels to their canonical translations", () => {
+    expect(translateUiText("复制")).toBe("Duplicate");
+    expect(translateUiText("待处理")).toBe("Pending");
   });
 });
