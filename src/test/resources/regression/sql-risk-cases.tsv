@@ -33,3 +33,10 @@ cte-select	WITH ranked AS (SELECT id, score FROM student) SELECT * FROM ranked	L
 cte-recursive	WITH RECURSIVE seq(n) AS (VALUES (1) UNION ALL SELECT n+1 FROM seq WHERE n < 10) SELECT * FROM seq	LOW	true	false	false
 compound-select-parenthesized	(SELECT 1) UNION (SELECT 2) ORDER BY 1	LOW	true	false	false
 cte-mutation	WITH staged AS (SELECT id FROM student) DELETE FROM student WHERE id IN (SELECT id FROM staged)	HIGH	true	true	false
+explain-query-plan	EXPLAIN QUERY PLAN SELECT * FROM student	LOW	true	false	false
+explain-insert	EXPLAIN INSERT INTO student (id, name, score) VALUES (9, 'Demo', 80)	LOW	true	false	false
+pragma-statement	PRAGMA foreign_keys = ON	FORBIDDEN	false	false	false
+attach-database	ATTACH DATABASE 'aux.db' AS aux	FORBIDDEN	false	false	false
+create-user-admin	CREATE USER demo_user IDENTIFIED BY 'placeholder'	FORBIDDEN	false	false	false
+drop-role-admin	DROP ROLE demo_role	FORBIDDEN	false	false	false
+select-into-outfile	SELECT * FROM student INTO OUTFILE '/tmp/demo.csv'	FORBIDDEN	false	false	false

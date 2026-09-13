@@ -69,6 +69,26 @@ class JdbcSqlExecutionServiceTest {
     }
 
     @Test
+    void shouldBlockForbiddenAndMultiStatementSqlAtExecutionLayer(@TempDir Path tempDirectory) throws Exception {
+        JdbcConnectionFactory connectionFactory = createInitializedFactory(tempDirectory);
+        JdbcSqlExecutionService service = createService(connectionFactory);
+
+        // Even with riskConfirmed=true the execution service must refuse the FORBIDDEN
+        // class (user administration) and multi-statement requests.
+        SqlTeacherException forbidden = assertThrows(SqlTeacherException.class,
+            () -> service.execute(new SqlExecutionRequest(
+                "demo", "CREATE USER demo_user IDENTIFIED BY 'placeholder'", 100, Duration.ofSeconds(5), true
+            )));
+        assertEquals("SQL_BLOCKED", forbidden.errorCode());
+
+        SqlTeacherException multiStatement = assertThrows(SqlTeacherException.class,
+            () -> service.execute(new SqlExecutionRequest(
+                "demo", "SELECT 1;\nDELETE FROM student", 100, Duration.ofSeconds(5), true
+            )));
+        assertEquals("SQL_BLOCKED", multiStatement.errorCode());
+    }
+
+    @Test
     void developerModeShouldStillRequireConfirmationForDestructiveSql(@TempDir Path tempDirectory) throws Exception {
         JdbcConnectionFactory connectionFactory = createInitializedFactory(tempDirectory);
         JdbcSqlExecutionService service = new JdbcSqlExecutionService(
