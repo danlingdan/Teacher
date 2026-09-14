@@ -6,7 +6,7 @@
 
 | 版本/主题 | 计划 | 对应实施记录 |
 | --- | --- | --- |
-| v3.4.0 | [整体优化计划](2026-09-14-v3.4.0-optimization-plan.md) | [执行完成（2026-09-14）](../acceptance/2026-09-14-v3.4.0-quality-gate.md)（质量版本：bug 修复/代码质量/兼容清理/文档规范，任务编号 BUG/REF/CMP/TST/DOC） |
+| v3.4.0 | [整体优化计划](2026-09-14-v3.4.0-optimization-plan.md) | [已发布（v3.4.0）](../releases/v3.4.0.md)（质量版本，门禁记录见 [acceptance](../acceptance/2026-09-14-v3.4.0-quality-gate.md)） |
 | v3.3.0 | [SQL 教学能力全面提升计划](2026-09-10-v3.3-sql-teaching-capability-plan.md) | 已发布（v3.3.0–v3.3.4 均已公开并部署，见 [releases 索引](../releases/README.md)） |
 | v3.2.0 | [审计修复计划](2026-09-09-v3.2.0-audit-remediation-plan.md) | 已发布（发布说明见 [v3.2.0](../releases/v3.2.0.md)，部署记录见 [云端部署](../operations/2026-09-09-v3.2.0-cloud-deployment.md)） |
 | v3.1.0 | [练习题目体系增强计划](2026-09-08-v3.1.0-exercise-enhancement-plan.md) | [Stage 28 实施记录](../history/stages/stage28/2026-09-08-v3.1.0-exercise-enhancement-implementation.md)（已发布，发布说明见 [v3.1.0](../releases/v3.1.0.md)） |
