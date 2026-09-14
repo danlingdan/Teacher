@@ -73,7 +73,6 @@ try {
     $requiredNsisContracts = @(
         '!define MANUFACTURER "SQLTeacher Project"',
         '!define INSTALLMODE "perMachine"',
-        'installer-hooks.nsh"',
         'StrCpy $INSTDIR "$PROGRAMFILES64\${PRODUCTNAME}"',
         'StrCmp "$R0$R1" "${PRODUCTNAME}${MANUFACTURER}" 0 wix_loop',
         'ExecWait ''$R1'' $0'
@@ -82,6 +81,11 @@ try {
         if (-not $nsisContent.Contains($contract)) {
             throw "Generated NSIS installer is missing the upgrade contract: $contract"
         }
+    }
+    # CMP-0 (v3.4.0): the pre-3.x current-user uninstall hook was removed; the generated
+    # script must never reference it again.
+    if ($nsisContent.Contains('SQLTEACHER_REMOVE_CURRENT_USER')) {
+        throw "Generated NSIS installer unexpectedly references the removed legacy uninstall hook."
     }
     if (Test-Path -LiteralPath $portableStage) {
         Assert-ChildPath -Candidate $portableStage -Parent $targetRoot

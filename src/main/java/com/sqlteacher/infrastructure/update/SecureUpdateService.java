@@ -260,11 +260,13 @@ public final class SecureUpdateService implements UpdateService {
             verifier.update(payload);
             if (!verifier.verify(signatureBytes)) throw new IllegalArgumentException("update signature is invalid");
             JsonNode node = JSON.readTree(payload);
-            Rollout rollout = null;
+            // CMP-1.8 (v3.4.0)：rollout 为必填——CI 签发清单始终携带；缺失即拒收，
+            // 防止旧式无灰度字段的清单绕过分批发布控制。
             JsonNode rolloutNode = node.path("rollout");
-            if (!rolloutNode.isMissingNode() && !rolloutNode.isNull()) {
-                rollout = new Rollout(rolloutNode.path("percentage").asInt(100), rolloutNode.path("paused").asBoolean(false));
+            if (rolloutNode.isMissingNode() || rolloutNode.isNull() || !rolloutNode.path("percentage").isNumber()) {
+                throw new IllegalArgumentException("update manifest is missing a valid rollout policy");
             }
+            Rollout rollout = new Rollout(rolloutNode.path("percentage").asInt(100), rolloutNode.path("paused").asBoolean(false));
             return new UpdateManifest(node.path("schemaVersion").asInt(), text(node, "product", 40), text(node, "channel", 20),
                 SemanticVersion.parse(text(node, "version", 128)), text(node, "platform", 30), text(node, "architecture", 30),
                 Instant.parse(text(node, "publishedAt", 64)), URI.create(text(node, "releaseNotesUrl", 2048)),

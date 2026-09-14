@@ -45,6 +45,9 @@ public final class SqliteAppDatabaseInitializer implements DatabaseInitializatio
             return new DatabaseInitializationResult(appDatabase, demoDatabase, appCreated, demoCreated);
         } catch (IOException | SQLException ex) {
             throw new SqlTeacherException("SQLITE_INIT_FAILED", "Failed to initialize SQLite databases", ex);
+        } catch (IllegalStateException ex) {
+            // v1.x 无版本表旧库的明确拒绝（CMP-0）：类型化透出，提示"仅支持 v3.x 升级、原文件未动"。
+            throw new SqlTeacherException("SQLITE_INIT_FAILED", ex.getMessage(), ex);
         }
     }
 

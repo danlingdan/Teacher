@@ -11,6 +11,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 final class SqliteSchemaMigrator {
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(SqliteSchemaMigrator.class);
     private static final List<Migration> DEFAULT_MIGRATIONS = List.of(
         new Migration(
             1,
@@ -1489,14 +1490,25 @@ final class SqliteSchemaMigrator {
                 legacy.add(new LegacyTimestamp(rows.getLong(1), rows.getString(2)));
             }
         }
+        int normalized = 0;
+        int unreadable = 0;
         try (PreparedStatement update = connection.prepareStatement(
             "update learning_events set occurred_at = ? where id = ?")) {
             for (LegacyTimestamp item : legacy) {
-                update.setString(1, java.sql.Timestamp.valueOf(item.value()).toInstant().toString());
-                update.setLong(2, item.id());
-                update.addBatch();
+                try {
+                    update.setString(1, java.sql.Timestamp.valueOf(item.value()).toInstant().toString());
+                    update.setLong(2, item.id());
+                    update.addBatch();
+                    normalized++;
+                } catch (IllegalArgumentException unreadableRow) {
+                    // 本就不可读的脏行保持原样（读取端仍会按原样失败），不阻断升级。
+                    unreadable++;
+                }
             }
             update.executeBatch();
+        }
+        if (unreadable > 0) {
+            log.warn("Migration 23 normalized {} legacy event timestamps; left {} unreadable rows untouched", normalized, unreadable);
         }
     }
 

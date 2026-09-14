@@ -32,14 +32,17 @@ class SecureUpdateServiceTest {
             () -> SecureUpdateService.verifyAndParse(envelope("unknown", payload(), sign(pair.getPrivate(), payload())), keys));
     }
 
-    @Test void parsesOptionalRolloutFieldAndDefaultsToFullyVisible() throws Exception {
+    @Test void requiresRolloutFieldAndHonorsItsPolicy() throws Exception {
         var pair = KeyPairGenerator.getInstance("Ed25519").generateKeyPair();
         Properties keys = new Properties();
         keys.setProperty("test-key", Base64.getEncoder().encodeToString(pair.getPublic().getEncoded()));
 
-        UpdateManifest noRollout = SecureUpdateService.verifyAndParse(envelope("test-key", payload(), sign(pair.getPrivate(), payload())), keys);
-        assertNull(noRollout.rollout());
-        assertFalse(noRollout.rolloutRestrictsVisibility());
+        // CMP-1.8: 缺 rollout 字段的清单必须被拒收，不得回退为"完全可见"。
+        Map<String, Object> noRollout = payloadMap();
+        noRollout.remove("rollout");
+        byte[] missing = JSON.writeValueAsBytes(noRollout);
+        assertThrows(IllegalArgumentException.class,
+            () -> SecureUpdateService.verifyAndParse(envelope("test-key", missing, sign(pair.getPrivate(), missing)), keys));
 
         Map<String, Object> value = payloadMap();
         value.put("rollout", Map.of("percentage", 20, "paused", false));
@@ -102,6 +105,7 @@ class SecureUpdateServiceTest {
         value.put("installerSize", 10); value.put("installerSha256", "a".repeat(64));
         value.put("portableUrl", "https://github.com/danlingdan/Teacher/releases/download/v1.10.0/SQLTeacher-1.10.0-windows-x64.zip");
         value.put("portableSize", 10); value.put("portableSha256", "b".repeat(64)); value.put("minimumSupportedVersion", "1.9.0");
+        value.put("rollout", Map.of("percentage", 100, "paused", false));
         return value;
     }
     private static byte[] sign(java.security.PrivateKey key, byte[] payload) throws Exception {
