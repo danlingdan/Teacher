@@ -1233,6 +1233,17 @@ final class SqliteSchemaMigrator {
             List.of(
                 "alter table exercise_attempts add column score integer"
             )
+        ),
+        new Migration(
+            23,
+            "Track event ownership and normalize legacy event timestamps",
+            List.of(
+                "alter table learning_events add column owner text",
+                "update learning_events set owner = json_extract(attributes, '$._desktop_owner_id') "
+                    + "where owner is null and attributes is not null and json_valid(attributes)",
+                "create index if not exists learning_events_owner_occurred on learning_events(owner, occurred_at desc)"
+            ),
+            SqliteSchemaMigrator::normalizeLegacyEventTimestamps
         )
     );
 
@@ -1355,6 +1366,7 @@ final class SqliteSchemaMigrator {
         try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + databasePath)) {
             connection.setAutoCommit(false);
             try {
+                refuseUnversionedLegacyDatabase(connection, databasePath);
                 createVersionTable(connection);
                 List<Integer> appliedVersions = readAppliedVersions(connection);
                 validateAppliedVersions(appliedVersions);
@@ -1432,11 +1444,70 @@ final class SqliteSchemaMigrator {
         }
     }
 
+    /**
+     * CMP-0（v3.4.0）：最低支持升级起点上抬后，v1.x 时代的无版本表数据库不再被静默收编，
+     * 而是明确拒绝并保留原文件，避免在旧数据旁静默生成一份新库造成数据"消失"的错觉。
+     */
+    private static void refuseUnversionedLegacyDatabase(Connection connection, Path databasePath) throws SQLException {
+        int userTables;
+        try (Statement statement = connection.createStatement();
+             ResultSet rows = statement.executeQuery(
+                 "select count(*) from sqlite_master where type = 'table' and name not like 'sqlite_%'")) {
+            rows.next();
+            userTables = rows.getInt(1);
+        }
+        if (userTables == 0) {
+            return;
+        }
+        boolean hasVersionTable;
+        try (Statement statement = connection.createStatement();
+             ResultSet rows = statement.executeQuery(
+                 "select count(*) from sqlite_master where type = 'table' and name = 'schema_version'")) {
+            rows.next();
+            hasVersionTable = rows.getInt(1) > 0;
+        }
+        if (!hasVersionTable) {
+            throw new IllegalStateException(
+                "Unsupported legacy database without a schema version table: " + databasePath
+                    + ". SQLTeacher 3.4 only upgrades databases created by v3.x or later; "
+                    + "the legacy file was left untouched.");
+        }
+    }
+
+    /**
+     * v1.x 时代的 learning_events.occurred_at 用 Timestamp.toString() 的本地时区格式写入；
+     * 迁移 23 按当前 JVM 默认时区统一归一为 ISO-8601，取值与旧读取路径（Timestamp 回退解析）
+     * 完全一致，归一完成后读取端即可只接受 ISO。
+     */
+    static void normalizeLegacyEventTimestamps(Connection connection) throws SQLException {
+        record LegacyTimestamp(long id, String value) { }
+        List<LegacyTimestamp> legacy = new ArrayList<>();
+        try (Statement statement = connection.createStatement();
+             ResultSet rows = statement.executeQuery(
+                 "select id, occurred_at from learning_events where occurred_at not like '%T%'")) {
+            while (rows.next()) {
+                legacy.add(new LegacyTimestamp(rows.getLong(1), rows.getString(2)));
+            }
+        }
+        try (PreparedStatement update = connection.prepareStatement(
+            "update learning_events set occurred_at = ? where id = ?")) {
+            for (LegacyTimestamp item : legacy) {
+                update.setString(1, java.sql.Timestamp.valueOf(item.value()).toInstant().toString());
+                update.setLong(2, item.id());
+                update.addBatch();
+            }
+            update.executeBatch();
+        }
+    }
+
     private static void applyMigration(Connection connection, Migration migration) throws SQLException {
         for (String sql : migration.statements()) {
             try (Statement statement = connection.createStatement()) {
                 statement.executeUpdate(sql);
             }
+        }
+        if (migration.step() != null) {
+            migration.step().apply(connection);
         }
         try (PreparedStatement statement = connection.prepareStatement(
             "insert into schema_version(version, description) values (?, ?)"
@@ -1471,7 +1542,16 @@ final class SqliteSchemaMigrator {
         return copy;
     }
 
-    record Migration(int version, String description, List<String> statements) {
+    @FunctionalInterface
+    interface JavaMigrationStep {
+        void apply(Connection connection) throws SQLException;
+    }
+
+    record Migration(int version, String description, List<String> statements, JavaMigrationStep step) {
+        Migration(int version, String description, List<String> statements) {
+            this(version, description, statements, null);
+        }
+
         Migration {
             if (version < 1) {
                 throw new IllegalArgumentException("Migration version must be positive");
@@ -1479,7 +1559,7 @@ final class SqliteSchemaMigrator {
             if (description == null || description.isBlank()) {
                 throw new IllegalArgumentException("Migration description must not be blank");
             }
-            if (statements == null || statements.isEmpty()) {
+            if (statements == null || (statements.isEmpty() && step == null)) {
                 throw new IllegalArgumentException("Migration statements must not be empty");
             }
             statements = List.copyOf(statements);

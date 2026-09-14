@@ -41,7 +41,7 @@ class SqliteAppDatabaseInitializerTest {
         assertTrue(result.demoDatabaseCreated());
         assertTrue(Files.exists(appDb));
         assertTrue(Files.exists(demoDb));
-        assertEquals(22, readSchemaVersion(appDb));
+        assertEquals(23, readSchemaVersion(appDb));
         assertEquals(30, countExercises(appDb));
         assertEquals(20, countExercisesWithThreeHints(appDb));
         assertEquals(7, countDemoRows(demoDb, "Student"));
@@ -179,22 +179,6 @@ class SqliteAppDatabaseInitializerTest {
             resultSet.next();
             return resultSet.getInt(1);
         }
-    }
-
-    @Test
-    void shouldPreserveFilesCreatedDuringLegacyDataMigration() throws Exception {
-        Path legacy = tempDir.resolve("legacy");
-        Path target = tempDir.resolve("target");
-        Files.createDirectories(legacy.resolve("logs"));
-        Files.createDirectories(target.resolve("logs"));
-        Files.writeString(legacy.resolve("app.db"), "legacy-database");
-        Files.writeString(legacy.resolve("logs/sqlteacher.log"), "legacy-log");
-        Files.writeString(target.resolve("logs/sqlteacher.log"), "active-log");
-
-        SqliteAppDatabaseInitializer.copyMissingLegacyFiles(legacy, target);
-
-        assertEquals("legacy-database", Files.readString(target.resolve("app.db")));
-        assertEquals("active-log", Files.readString(target.resolve("logs/sqlteacher.log")));
     }
 
     private static int countExercisesWithThreeHints(Path appDb) throws Exception {

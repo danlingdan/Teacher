@@ -49,12 +49,13 @@ public final class JdbcLearningEventRecorder implements LearningEventRecorder {
                 connection_id, 
                 successful, 
                 attributes,
+                owner,
                 activity_id,
                 activity_type,
                 evaluator_version,
                 evidence_version,
                 reason_code
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """;
         
         try (Connection connection = connectionFactory.open("app");
@@ -66,11 +67,12 @@ public final class JdbcLearningEventRecorder implements LearningEventRecorder {
             statement.setString(3, event.connectionId());
             statement.setBoolean(4, event.successful());
             statement.setString(5, LearningEventAttributesCodec.serialize(event.attributes()));
-            statement.setString(6, event.attributes().get("activityId"));
-            statement.setString(7, event.attributes().get("activityType"));
-            statement.setString(8, event.attributes().get("evaluatorVersion"));
-            statement.setString(9, event.attributes().get("evidenceVersion"));
-            statement.setString(10, event.attributes().get("reasonCode"));
+            statement.setString(6, event.attributes().get(com.sqlteacher.application.event.LearningEventOwnerProvider.OWNER_ATTRIBUTE));
+            statement.setString(7, event.attributes().get("activityId"));
+            statement.setString(8, event.attributes().get("activityType"));
+            statement.setString(9, event.attributes().get("evaluatorVersion"));
+            statement.setString(10, event.attributes().get("evidenceVersion"));
+            statement.setString(11, event.attributes().get("reasonCode"));
             
             statement.executeUpdate();
         }

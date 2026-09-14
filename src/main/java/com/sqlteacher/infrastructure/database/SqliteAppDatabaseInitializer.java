@@ -31,7 +31,6 @@ public final class SqliteAppDatabaseInitializer implements DatabaseInitializatio
         Path demoDatabase = properties.database().demoDatabasePath();
 
         try {
-            migrateLegacyDataDirectory(dataDirectory);
             Files.createDirectories(dataDirectory);
             Files.createDirectories(appDatabase.toAbsolutePath().getParent());
             Files.createDirectories(demoDatabase.toAbsolutePath().getParent());
@@ -99,10 +98,8 @@ public final class SqliteAppDatabaseInitializer implements DatabaseInitializatio
         try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + databasePath);
              Statement statement = connection.createStatement()) {
 
-            // Always drop old tables first: SQLite is case-insensitive, so legacy "student"
-            // would collide with the new "Student" table otherwise.
+            // Demo restore is idempotent: drop the current-shape tables before recreating.
             String[] dropTables = {
-                "DROP TABLE IF EXISTS student",
                 "DROP TABLE IF EXISTS Student",
                 "DROP TABLE IF EXISTS Course",
                 "DROP TABLE IF EXISTS SC",
@@ -252,42 +249,6 @@ public final class SqliteAppDatabaseInitializer implements DatabaseInitializatio
             statement.executeUpdate("INSERT INTO SPJ VALUES ('S5', 'P3', 'J1', 200)");
             statement.executeUpdate("INSERT INTO SPJ VALUES ('S5', 'P6', 'J2', 200)");
             statement.executeUpdate("INSERT INTO SPJ VALUES ('S5', 'P6', 'J4', 500)");
-        }
-    }
-
-    private static void migrateLegacyDataDirectory(Path dataDirectory) throws IOException {
-        String localAppData = System.getenv("LOCALAPPDATA");
-        if (localAppData == null || localAppData.isBlank()) {
-            return;
-        }
-        Path expected = Path.of(localAppData, "SQLTeacher").toAbsolutePath().normalize();
-        Path target = dataDirectory.toAbsolutePath().normalize();
-        Path legacy = Path.of("app-data").toAbsolutePath().normalize();
-        if (!target.equals(expected) || target.equals(legacy) || Files.notExists(legacy)
-            || Files.exists(target.resolve("app.db"))) {
-            return;
-        }
-        copyMissingLegacyFiles(legacy, target);
-        log.info("Migrated legacy SQLTeacher data directory from {} to {}", legacy, target);
-    }
-
-    static void copyMissingLegacyFiles(Path legacy, Path target) throws IOException {
-        Path normalizedLegacy = legacy.toAbsolutePath().normalize();
-        Path normalizedTarget = target.toAbsolutePath().normalize();
-        Files.createDirectories(normalizedTarget);
-        try (var paths = Files.walk(normalizedLegacy)) {
-            for (Path source : paths.toList()) {
-                Path relative = normalizedLegacy.relativize(source);
-                Path destination = normalizedTarget.resolve(relative).normalize();
-                if (!destination.startsWith(normalizedTarget)) {
-                    throw new IOException("Legacy data path escaped target directory");
-                }
-                if (Files.isDirectory(source)) {
-                    Files.createDirectories(destination);
-                } else if (Files.notExists(destination)) {
-                    Files.copy(source, destination, java.nio.file.StandardCopyOption.COPY_ATTRIBUTES);
-                }
-            }
         }
     }
 }

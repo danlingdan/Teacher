@@ -14,7 +14,6 @@ class WindowsPackagingContractTest {
         Path script = Path.of("packaging", "package-v3.ps1");
         String content = Files.readString(script);
         String tauriConfig = Files.readString(Path.of("ui-web", "src-tauri", "tauri.conf.json"));
-        String installerHooks = Files.readString(Path.of("ui-web", "src-tauri", "windows", "installer-hooks.nsh"));
         String sidecarBuild = Files.readString(Path.of("packaging", "build-v3-sidecar.ps1"));
         String rustHost = Files.readString(Path.of("ui-web", "src-tauri", "src", "lib.rs"));
         String rustMain = Files.readString(Path.of("ui-web", "src-tauri", "src", "main.rs"));
@@ -33,15 +32,9 @@ class WindowsPackagingContractTest {
         assertTrue(content.contains("requiredNsisContracts"));
         assertTrue(tauriConfig.contains("\"publisher\": \"SQLTeacher Project\""));
         assertTrue(tauriConfig.contains("\"installMode\": \"perMachine\""));
-        assertTrue(tauriConfig.contains("\"installerHooks\": \"windows/installer-hooks.nsh\""));
-        assertTrue(installerHooks.contains("SQLTEACHER_REMOVE_CURRENT_USER \"SQLTeacher 3 Alpha\""));
-        assertTrue(installerHooks.contains("SQLTEACHER_REMOVE_CURRENT_USER \"SQLTeacher 3 Beta\""));
-        assertTrue(installerHooks.contains("SQLTEACHER_REMOVE_CURRENT_USER \"SQLTeacher\""));
-        assertTrue(installerHooks.contains("ExecWait '$R9 /S'"));
-        assertTrue(installerHooks.contains("$R8 == \"sqlteacher\""));
-        assertTrue(installerHooks.contains("$R8 == \"SQLTeacher Project\""));
-        assertFalse(installerHooks.contains("RmDir"));
-        assertFalse(installerHooks.contains("DeleteRegKey"));
+        // CMP-0（v3.4.0）：v1.0–v2.3 WiX 与 3.0 Alpha/Beta 旧版卸载钩子已移除，
+        // 最低支持起点上抬至 v3.x；Tauri 内置的 WiX→NSIS 迁移保持不变。
+        assertFalse(tauriConfig.contains("installerHooks"));
         assertTrue(sidecarBuild.contains("clean package dependency:copy-dependencies"));
         assertTrue(sidecarBuild.contains("Java sidecar contains removed desktop or test entries"));
         assertTrue(rustMain.contains("windows_subsystem = \"windows\""));

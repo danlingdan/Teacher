@@ -31,8 +31,7 @@
     "resources": ["sidecar/**/*"],
     "windows": {
       "nsis": {
-        "installMode": "perMachine",
-        "installerHooks": "windows/installer-hooks.nsh"
+        "installMode": "perMachine"
       },
       "webviewInstallMode": {
         "type": "downloadBootstrapper"

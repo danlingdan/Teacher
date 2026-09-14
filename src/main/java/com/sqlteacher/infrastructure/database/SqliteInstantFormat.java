@@ -5,9 +5,11 @@ import java.time.Instant;
 import java.time.format.DateTimeParseException;
 
 /**
- * learning_events 表的历史行把 occurred_at 存成了 {@link Timestamp#toString()} 的本地时区格式
- * （"yyyy-MM-dd HH:mm:ss.fff"），而其余表使用 {@link Instant#toString()} 的 ISO-8601。读取时
- * 统一走这里的容错解析：先按 ISO 解析，失败再按 Timestamp 本地格式回退，保证旧数据可读。
+ * 时间戳容错解析：新行写 {@link Instant#toString()} 的 ISO-8601，但两类历史值仍是旧格式——
+ * learning_events.created_at 由 SQLite {@code current_timestamp} 默认值生成（"yyyy-MM-dd HH:mm:ss"
+ * UTC 无 T 分隔），v1.x 时代的 occurred_at 则是 {@link Timestamp#toString()} 本地时区格式
+ * （occurred_at 已由迁移 23 归一，created_at 因无法在 SQL 中还原本地时区而保留原样）。先按
+ * ISO 解析，失败再按空格分隔格式回退，保证新旧数据都可读。
  */
 final class SqliteInstantFormat {
     private SqliteInstantFormat() {

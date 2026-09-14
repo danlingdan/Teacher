@@ -26,8 +26,10 @@ class SqliteSchemaMigratorTest {
 
         int version = new SqliteSchemaMigrator().migrate(database);
 
-        assertEquals(22, version);
+        assertEquals(23, version);
         assertTrue(tableExists(database, "schema_version"));
+        assertTrue(columnExists(database, "learning_events", "owner"));
+        assertTrue(indexExists(database, "learning_events_owner_occurred"));
         assertTrue(tableExists(database, "app_event"));
         assertTrue(tableExists(database, "learning_events"));
         assertTrue(tableExists(database, "connection_profiles"));
@@ -66,11 +68,11 @@ class SqliteSchemaMigratorTest {
         assertTrue(tableExists(database, "activity_feedback"));
         assertTrue(tableExists(database, "course_content_provenance"));
         assertTrue(tableExists(database, "cross_course_knowledge_relation"));
-        assertEquals(List.of(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22), appliedVersions(database));
+        assertEquals(List.of(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23), appliedVersions(database));
     }
 
     @Test
-    void shouldAdoptTheUnversionedDemoBaselineWithoutLosingData() throws Exception {
+    void shouldRefuseAnUnversionedLegacyDatabaseInsteadOfAdoptingIt() throws Exception {
         Path database = tempDir.resolve("legacy.db");
         execute(database, """
             create table app_event (
@@ -82,11 +84,50 @@ class SqliteSchemaMigratorTest {
             """);
         execute(database, "insert into app_event(event_type, message) values ('BASELINE', 'keep me')");
 
-        new SqliteSchemaMigrator().migrate(database);
+        IllegalStateException error = assertThrows(
+            IllegalStateException.class,
+            () -> new SqliteSchemaMigrator().migrate(database)
+        );
 
-        assertEquals(List.of(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22), appliedVersions(database));
+        assertTrue(error.getMessage().contains("Unsupported legacy database"));
+        // 拒绝后不得留下半初始化产物，原文件保持可被用户手工处理。
+        assertFalse(tableExists(database, "schema_version"));
+        assertFalse(tableExists(database, "learning_events"));
         assertEquals(1, countRows(database, "app_event"));
-        assertTrue(tableExists(database, "learning_events"));
+    }
+
+    @Test
+    void shouldNormalizeLegacyEventTimestampsAndKeepOwnerBackfill() throws Exception {
+        Path database = tempDir.resolve("normalize.db");
+        new SqliteSchemaMigrator().migrate(database);
+        execute(database, """
+            insert into learning_events(event_type, occurred_at, connection_id, successful, attributes)
+            values ('SQL_EXECUTED', '2026-01-01 10:00:00.000', 'conn', 1, '{"_desktop_owner_id":"owner-1"}')
+            """);
+        execute(database, """
+            insert into learning_events(event_type, occurred_at, connection_id, successful, attributes)
+            values ('SQL_EXECUTED', '2026-01-02T09:00:00Z', 'conn', 1, '{"_desktop_owner_id":"owner-1"}')
+            """);
+
+        try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + database)) {
+            // 模拟迁移期数据：owner 回填与时间戳归一都在迁移 23 内执行，此处对迁移后
+            // 新插入的行重放同一条回填语句再调用归一化，验证两条路径的最终状态一致。
+            try (Statement statement = connection.createStatement()) {
+                statement.executeUpdate("update learning_events set owner = json_extract(attributes, "
+                    + "'$._desktop_owner_id') where owner is null and attributes is not null and json_valid(attributes)");
+            }
+            SqliteSchemaMigrator.normalizeLegacyEventTimestamps(connection);
+        }
+
+        try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + database);
+             Statement statement = connection.createStatement();
+             var rows = statement.executeQuery("select occurred_at, owner from learning_events order by id")) {
+            rows.next();
+            assertTrue(rows.getString(1).contains("T"), rows.getString(1));
+            assertEquals("owner-1", rows.getString(2));
+            rows.next();
+            assertTrue(rows.getString(1).contains("T"));
+        }
     }
 
     @Test
@@ -98,8 +139,8 @@ class SqliteSchemaMigratorTest {
         execute(database, "insert into app_event(event_type, message) values ('FIRST_RUN', 'keep me')");
         int version = migrator.migrate(database);
 
-        assertEquals(22, version);
-        assertEquals(List.of(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22), appliedVersions(database));
+        assertEquals(23, version);
+        assertEquals(List.of(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23), appliedVersions(database));
         assertEquals(1, countRows(database, "app_event"));
     }
 
@@ -153,7 +194,8 @@ class SqliteSchemaMigratorTest {
         execute(database, "insert into schema_version(version, description) values (20, 'exercise bank state')");
         execute(database, "insert into schema_version(version, description) values (21, 'exercise types')");
         execute(database, "insert into schema_version(version, description) values (22, 'attempt scores')");
-        execute(database, "insert into schema_version(version, description) values (23, 'future version')");
+        execute(database, "insert into schema_version(version, description) values (23, 'event ownership')");
+        execute(database, "insert into schema_version(version, description) values (24, 'future version')");
 
         SQLException error = assertThrows(
             SQLException.class,
@@ -161,7 +203,7 @@ class SqliteSchemaMigratorTest {
         );
 
         assertTrue(error.getMessage().contains("newer"));
-        assertEquals(List.of(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23), appliedVersions(database));
+        assertEquals(List.of(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24), appliedVersions(database));
     }
 
     @Test
@@ -222,6 +264,25 @@ class SqliteSchemaMigratorTest {
                 resultSet.next();
                 return resultSet.getInt(1) == 1;
             }
+        }
+    }
+
+    private static boolean columnExists(Path database, String table, String column) throws Exception {
+        try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + database);
+             ResultSet rows = connection.createStatement().executeQuery("pragma table_info(" + table + ")")) {
+            while (rows.next()) {
+                if (column.equals(rows.getString("name"))) return true;
+            }
+            return false;
+        }
+    }
+
+    private static boolean indexExists(Path database, String name) throws Exception {
+        try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + database);
+             ResultSet rows = connection.createStatement().executeQuery(
+                 "select count(*) from sqlite_master where type = 'index' and name = '" + name + "'")) {
+            rows.next();
+            return rows.getInt(1) > 0;
         }
     }
 
