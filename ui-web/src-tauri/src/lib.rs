@@ -52,6 +52,11 @@ fn request_timeout(method: &str) -> Duration {
         }
         "cloud.sync" => Duration::from_secs(5 * MINUTE),
         "runner.capabilities" | "settings.update.check" => Duration::from_secs(2 * MINUTE),
+        // Problem reports (v3.4.2 LEG-10): submit travels to the cloud endpoint and can retry on
+        // slow links; preview stays local and the rest are small request/response exchanges.
+        "support.report.submit" => Duration::from_secs(2 * MINUTE),
+        "support.report.preview" | "support.report.status" | "support.report.withdraw"
+        | "support.report.export" => Duration::from_secs(MINUTE),
         _ => REQUEST_TIMEOUT,
     }
 }
@@ -232,6 +237,9 @@ const ALLOWED_METHODS: &[&str] = &[
     "cloud.class.create",
     "cloud.class.member.add",
     "cloud.class.roster",
+    "cloud.class.join",
+    "cloud.class.join-code",
+    "cloud.class.join-code.rotate",
     "cloud.assignments",
     "cloud.assignment.create",
     "cloud.assignment.update",
@@ -282,6 +290,11 @@ const ALLOWED_METHODS: &[&str] = &[
     "settings.notifications.read",
     "settings.help",
     "editor.languages",
+    "support.report.preview",
+    "support.report.submit",
+    "support.report.status",
+    "support.report.withdraw",
+    "support.report.export",
     "system.cancel",
     "system.shutdown",
 ];

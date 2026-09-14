@@ -218,6 +218,23 @@ public final class HttpCloudApiClient implements CloudCapabilityApi, CloudAuthAp
         return request("classes/"+classroomId+"/members","POST",Map.of("email",email,"role",role.name()),accessToken,ClassroomDto.class).toDomain();
     }
 
+    @Override
+    public ClassroomService.Classroom joinClassByCode(String accessToken, String code) {
+        return request("classes/join", "POST", Map.of("code", code), accessToken, ClassroomDto.class).toDomain();
+    }
+
+    @Override
+    public String classJoinCode(String accessToken, String classroomId) {
+        return request("classes/" + classroomId + "/join-code", "GET", null, accessToken,
+            new TypeReference<Map<String, String>>() { }).get("joinCode");
+    }
+
+    @Override
+    public String rotateClassJoinCode(String accessToken, String classroomId) {
+        return request("classes/" + classroomId + "/join-code/rotate", "POST", Map.of(), accessToken,
+            new TypeReference<Map<String, String>>() { }).get("joinCode");
+    }
+
     @Override public ClassAssignment createAssignment(String token,String classroomId,String exerciseId,String title){return createAssignment(token,classroomId,exerciseId,title,null);}
     @Override public ClassAssignment createAssignment(String token,String classroomId,String exerciseId,String title,Instant dueAt){Map<String,String> body=assignmentBody(exerciseId,title,"",dueAt);body.put("status",AssignmentStatus.PUBLISHED.name());return request("classes/"+classroomId+"/assignments","POST",body,token,ClassAssignment.class);}
     @Override public ClassAssignment createAssignmentDraft(String token,String classroomId,String exerciseId,String title,String description,Instant dueAt){Map<String,String> body=assignmentBody(exerciseId,title,description,dueAt);body.put("status",AssignmentStatus.DRAFT.name());return request("classes/"+classroomId+"/assignments","POST",body,token,ClassAssignment.class);}

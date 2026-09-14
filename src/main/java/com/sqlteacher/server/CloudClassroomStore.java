@@ -35,9 +35,12 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
+
+import java.security.SecureRandom;
 
 /**
  * Cloud classroom, assignment, submission, learning-event sync, and learning-record export
@@ -55,6 +58,10 @@ final class CloudClassroomStore extends CloudStoreBase implements ClassroomServi
     private static final String SUBMISSION_COLUMNS = "id,operation_id,classroom_id,assignment_id,user_id,"
         + "attempt_number,status,result_hash,error_code,client_completed_at,submitted_at";
     private static final int MAX_SYNC_ITEM_PAYLOAD_BYTES = 16_384;
+    /** 班级码字符集：去除 0/O/1/I/L 等易混字符，便于课堂口头/板书传递（v3.4.1 CLS-1）。 */
+    private static final String JOIN_CODE_ALPHABET = "23456789ABCDEFGHJKMNPQRSTUVWXYZ";
+    private static final int JOIN_CODE_LENGTH = 8;
+    private static final SecureRandom JOIN_CODE_RANDOM = new SecureRandom();
 
     private final Clock clock;
 
@@ -66,6 +73,7 @@ final class CloudClassroomStore extends CloudStoreBase implements ClassroomServi
     CloudClassroomStore(Path database, Clock clock) throws SQLException, IOException {
         super(database);
         this.clock = Objects.requireNonNull(clock, "clock must not be null");
+        backfillJoinCodes();
     }
 
     /** Rejects one sync item whose payloadJson exceeds the advertised per-item limit. */
@@ -81,12 +89,13 @@ final class CloudClassroomStore extends CloudStoreBase implements ClassroomServi
         String id = UUID.randomUUID().toString();
         Instant now = clock.instant();
         try (Connection connection = open();
-             PreparedStatement classroom = connection.prepareStatement("insert into classrooms(id,name,created_at) values(?,?,?)");
+             PreparedStatement classroom = connection.prepareStatement("insert into classrooms(id,name,created_at,join_code) values(?,?,?,?)");
              PreparedStatement member = connection.prepareStatement("insert into classroom_members(classroom_id,user_id,role) values(?,?,?)")) {
             connection.setAutoCommit(false);
             classroom.setString(1, id);
             classroom.setString(2, name.trim());
             classroom.setString(3, now.toString());
+            classroom.setString(4, newJoinCode(connection));
             classroom.executeUpdate();
             member.setString(1, id);
             member.setString(2, actor.id());
@@ -132,6 +141,109 @@ final class CloudClassroomStore extends CloudStoreBase implements ClassroomServi
             }
         } catch (SQLException error) { throw database(error); }
         return List.copyOf(classrooms);
+    }
+
+    // ── v3.4.1 CLS-1：班级码。码为课堂公开物，明文存储；加入者固定授予 STUDENT 角色，
+    // 教师成员仍走 addMember 的教师邮箱通道，重置后旧码立即失效。──
+
+    /** 登录用户凭班级码以 STUDENT 身份加入班级；已是成员时幂等返回，不改既有角色。 */
+    Classroom joinByCode(AuthenticatedUser actor, String code) {
+        if (code == null || code.isBlank() || code.trim().length() > JOIN_CODE_LENGTH) {
+            throw new IllegalArgumentException("join code must be 1 to " + JOIN_CODE_LENGTH + " characters");
+        }
+        String normalized = code.trim().toUpperCase(Locale.ROOT);
+        String classroomId = classroomIdByCode(normalized);
+        try (Connection connection = open(); PreparedStatement statement = connection.prepareStatement(
+            "insert into classroom_members(classroom_id,user_id,role) values(?,?,'STUDENT') "
+                + "on conflict(classroom_id,user_id) do nothing")) {
+            statement.setString(1, classroomId);
+            statement.setString(2, actor.id());
+            statement.executeUpdate();
+        } catch (SQLException error) { throw database(error); }
+        return classroom(classroomId);
+    }
+
+    /** 班级教师读取当前班级码。 */
+    String joinCode(AuthenticatedUser actor, String classroomId) {
+        requireTeacher(actor, classroomId);
+        try (Connection connection = open(); PreparedStatement statement = connection.prepareStatement(
+            "select join_code from classrooms where id=?")) {
+            statement.setString(1, classroomId);
+            try (ResultSet row = statement.executeQuery()) {
+                if (!row.next() || row.getString(1) == null) throw new IllegalArgumentException("Classroom not found");
+                return row.getString(1);
+            }
+        } catch (SQLException error) { throw database(error); }
+    }
+
+    /** 班级教师重置班级码，旧码立即失效，返回新码。 */
+    String rotateJoinCode(AuthenticatedUser actor, String classroomId) {
+        requireTeacher(actor, classroomId);
+        try (Connection connection = open(); PreparedStatement statement = connection.prepareStatement(
+            "update classrooms set join_code=? where id=?")) {
+            connection.setAutoCommit(false);
+            String code = newJoinCode(connection);
+            statement.setString(1, code);
+            statement.setString(2, classroomId);
+            statement.executeUpdate();
+            connection.commit();
+            return code;
+        } catch (SQLException error) { throw database(error); }
+    }
+
+    private String classroomIdByCode(String normalizedCode) {
+        try (Connection connection = open(); PreparedStatement statement = connection.prepareStatement(
+            "select id from classrooms where join_code=?")) {
+            statement.setString(1, normalizedCode);
+            try (ResultSet found = statement.executeQuery()) {
+                if (!found.next()) throw new IllegalArgumentException("Unknown join code");
+                return found.getString(1);
+            }
+        } catch (SQLException error) { throw database(error); }
+    }
+
+    /** 启动回填：Migration 9 加列后，存量班级在 store 构造时补齐短码（幂等）。 */
+    private void backfillJoinCodes() {
+        List<String> unassigned = new ArrayList<>();
+        try (Connection connection = open();
+             PreparedStatement missing = connection.prepareStatement(
+                 "select id from classrooms where join_code is null");
+             PreparedStatement assign = connection.prepareStatement(
+                 "update classrooms set join_code=? where id=? and join_code is null")) {
+            try (ResultSet rows = missing.executeQuery()) {
+                while (rows.next()) unassigned.add(rows.getString(1));
+            }
+            connection.setAutoCommit(false);
+            for (String id : unassigned) {
+                assign.setString(1, newJoinCode(connection));
+                assign.setString(2, id);
+                assign.executeUpdate();
+            }
+            connection.commit();
+        } catch (SQLException error) { throw database(error); }
+        if (!unassigned.isEmpty()) {
+            log.info("Backfilled join codes for {} existing classroom(s)", unassigned.size());
+        }
+    }
+
+    private static String newJoinCode(Connection connection) throws SQLException {
+        while (true) {
+            String code = randomJoinCode();
+            try (PreparedStatement probe = connection.prepareStatement("select 1 from classrooms where join_code=?")) {
+                probe.setString(1, code);
+                try (ResultSet found = probe.executeQuery()) {
+                    if (!found.next()) return code;
+                }
+            }
+        }
+    }
+
+    private static String randomJoinCode() {
+        StringBuilder code = new StringBuilder(JOIN_CODE_LENGTH);
+        for (int index = 0; index < JOIN_CODE_LENGTH; index++) {
+            code.append(JOIN_CODE_ALPHABET.charAt(JOIN_CODE_RANDOM.nextInt(JOIN_CODE_ALPHABET.length())));
+        }
+        return code.toString();
     }
 
     int upload(AuthenticatedUser actor, List<CloudSyncItem> items) {

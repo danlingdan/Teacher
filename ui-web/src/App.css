@@ -692,8 +692,8 @@ button {
 }
 .course-tree ul {
   margin: 0 0 8px;
-  padding: 0 0 0 16px;
-  list-style: disc;
+  padding: 0 0 0 8px;
+  list-style: none;
 }
 .course-tree li {
   padding: 7px 3px;
@@ -712,6 +712,7 @@ button {
   color: var(--muted);
   font-size: 10px;
 }
+.course-tree li button:not(.ui-button),
 .article-list button:not(.ui-button),
 .selection-panel button:not(.ui-button),
 .search-results button:not(.ui-button) {
@@ -724,6 +725,7 @@ button {
   text-align: left;
   cursor: pointer;
 }
+.course-tree li button:not(.ui-button):hover,
 .article-list button:not(.ui-button):hover,
 .article-list button:not(.ui-button).selected,
 .selection-panel button:not(.ui-button):hover,
@@ -997,8 +999,36 @@ button {
   overflow: auto;
   padding: 18px;
 }
-.schema-tree {
+.schema-browser-head {
   margin-top: 15px;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+.schema-browser-head strong {
+  color: var(--navy);
+  font-size: 12px;
+  font-weight: 800;
+}
+.schema-count {
+  color: var(--muted);
+  font-size: 11px;
+}
+.schema-filter {
+  margin-top: 8px;
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  color: var(--navy);
+  background: var(--surface);
+}
+.schema-tree {
+  margin-top: 10px;
+  min-height: 96px;
+  max-height: 44vh;
+  overflow: auto;
 }
 .schema-tree details {
   border-top: 1px solid var(--line);
@@ -1430,27 +1460,6 @@ body {
   color: var(--muted);
   font-size: 13px;
 }
-.settings-card {
-  padding: 0;
-  overflow: hidden;
-}
-.settings-section-title {
-  padding: 20px 22px 17px;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  border-bottom: 1px solid var(--surface-3);
-}
-.settings-section-title h3 {
-  margin: 0;
-  color: var(--navy);
-  font-size: 16px;
-}
-.settings-section-title p {
-  margin: 3px 0 0;
-  color: var(--muted);
-  font-size: 11px;
-}
 .settings-symbol {
   width: 35px;
   height: 35px;
@@ -1462,9 +1471,6 @@ body {
   background: var(--teal-wash);
   font-size: 12px;
   font-weight: 850;
-}
-.settings-card > .settings-grid {
-  padding: 20px 22px 22px;
 }
 .settings-grid {
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -1757,7 +1763,6 @@ body {
 .theme-dark .brand strong,
 .theme-dark .topbar h1,
 .theme-dark .settings-intro h2,
-.theme-dark .settings-section-title h3,
 .theme-dark .settings-panel > summary strong {
   color: var(--navy);
 }
@@ -1771,7 +1776,7 @@ body {
   background: rgba(8, 24, 33, 0.55);
 }
 .theme-dark .settings-panel > summary:hover,
-.theme-dark .settings-card .setting-toggle,
+.theme-dark .settings-panel .setting-toggle,
 .theme-dark .settings-panel .subtle-card {
   background: var(--surface-2);
   border-color: var(--line);
@@ -2054,12 +2059,11 @@ kbd {
 }
 
 /* Keep the refreshed settings and shell rules above legacy workspace defaults. */
-.settings-card > .settings-grid {
+.settings-panel .settings-grid {
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 12px;
-  padding: 20px 22px 22px;
 }
-.settings-card .setting-toggle {
+.settings-panel .setting-toggle {
   min-height: 66px;
   padding: 13px 14px;
   align-items: center;
@@ -2067,7 +2071,7 @@ kbd {
   border-radius: 12px;
   background: var(--surface-2);
 }
-.settings-card .setting-toggle input {
+.settings-panel .setting-toggle input {
   width: 17px;
   height: 17px;
   flex: 0 0 17px;
@@ -2104,14 +2108,13 @@ kbd {
   color: #092421;
   background: #61d9c8;
 }
-.theme-dark .settings-section-title,
 .theme-dark .settings-panel-body {
   border-color: #2d4755;
 }
-.theme-dark .settings-card .setting-toggle strong {
+.theme-dark .settings-panel .setting-toggle strong {
   color: #e7f2f7;
 }
-.theme-dark .settings-card .setting-toggle small {
+.theme-dark .settings-panel .setting-toggle small {
   color: #b5c7d0;
 }
 .theme-dark .settings-symbol {
@@ -2946,4 +2949,42 @@ kbd {
   background: rgba(220, 38, 38, 0.14);
   color: var(--danger, #b91c1c);
   font-weight: 600;
+}
+
+/* v3.4.2 LEG-1：设置页"关于"面板的制作团队名单。 */
+.about-credits {
+  list-style: none;
+  margin: 4px 0 12px;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+  color: var(--text-body);
+}
+.about-credits li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.about-credits li::before {
+  content: "";
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--teal-line);
+}
+
+/* v3.4.2 LEG-10：问题反馈表单的诊断勾选分组，弱化边框避免与卡片层级打架。 */
+.report-diagnostics {
+  border: 1px solid var(--border-subtle, rgba(128, 128, 128, 0.25));
+  border-radius: 10px;
+  margin: 8px 0;
+  padding: 8px 12px 12px;
+}
+.report-diagnostics legend {
+  font-size: 0.9em;
+  padding: 0 6px;
+  color: var(--text-body);
+}
+.report-diagnostics .setting-toggle small {
+  display: block;
 }

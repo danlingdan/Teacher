@@ -42,6 +42,7 @@ export function useCourseAuthoring({
   const [sharedKnowledgePointId, setSharedKnowledgePointId] = useState("");
   const [coursePackage, setCoursePackage] = useState("");
   const [packagePreview, setPackagePreview] = useState<CoursePackagePreview>();
+  const [courseJson, setCourseJson] = useState("");
   const courses = useQuery({
     queryKey: coursesKey,
     queryFn: () =>
@@ -187,6 +188,24 @@ export function useCourseAuthoring({
     },
     onError: (error: Error) => toast("error", `课程包导入失败：${error.message}`),
   });
+  // v3.4.2 LEG-13：单课程 JSON 导入——与安全课程包互补：单个课程文件直接导入，
+  // 无整包的预览/许可证确认流程；格式或版本不兼容时后端报错原样透出。
+  const importCourseJson = useMutation({
+    mutationFn: (content: string) =>
+      localAppRequest<{ courseId: string; sections: number; knowledgePoints: number; exercises: number }>(
+        "cloud.course.import",
+        { content },
+      ),
+    onSuccess: (imported) => {
+      setCourseJson("");
+      toast(
+        "success",
+        `课程 JSON 已导入：${imported.sections} 个章节、${imported.knowledgePoints} 个知识点、${imported.exercises} 个练习`,
+      );
+      void client.invalidateQueries({ queryKey: coursesKey });
+    },
+    onError: (error: Error) => toast("error", `课程 JSON 导入失败：${cloudFailureText(error)}`),
+  });
   /** 展开课程面板：首次打开且课程列表为空时触发一次刷新。 */
   const openCourses = () => {
     setCoursesOpen(true);
@@ -229,6 +248,8 @@ export function useCourseAuthoring({
     setCoursePackage,
     packagePreview,
     setPackagePreview,
+    courseJson,
+    setCourseJson,
     courses,
     createCourse,
     courseContent,
@@ -239,6 +260,7 @@ export function useCourseAuthoring({
     exportCourse,
     previewCoursePackage,
     importCoursePackage,
+    importCourseJson,
     openCourses,
     refreshCourses,
     openCourseContent,

@@ -1,6 +1,7 @@
 SQLTeacher third-party software notices
-Reviewed for SQLTeacher 3.0.0. The CycloneDX component SBOM is distributed
-separately as sqlteacher-sbom.json and is the machine-readable component list.
+Reviewed for SQLTeacher 3.4.2. The CycloneDX component SBOMs are distributed
+separately as sqlteacher-sbom.json (Java runtime) and sqlteacher-ui-sbom.json
+(desktop UI) and are the machine-readable component lists.
 
 DIRECT RUNTIME COMPONENTS
 
@@ -34,11 +35,12 @@ Microsoft JDBC Driver for SQL Server 13.4.0
   https://github.com/microsoft/mssql-jdbc
 
 Oracle JDBC Driver ojdbc11 23.26.2.0.0
-  Universal Permissive License 1.0
+  Oracle Free Use Terms and Conditions (FUTC)
   https://www.oracle.com/database/technologies/appdev/jdbc.html
 
 IBM Db2 JCC 12.1.4.0
-  IBM license terms distributed with the component
+  IBM International Program License Agreement (IPLA) distributed with the
+  component
   https://www.ibm.com/support/pages/db2-jdbc-driver-versions-and-downloads
 
 Dameng DmJdbcDriver8 8.1.5.45
@@ -84,6 +86,54 @@ Micrometer Commons and Observation 1.15.12
 Protocol Buffers Java 4.31.1
   BSD-3-Clause
 
+DESKTOP UI RUNTIME COMPONENTS
+
+The Tauri/React desktop shell bundles the following direct components. The
+complete UI component list is the sqlteacher-ui-sbom.json SBOM.
+
+React 19.2.8 (react and react-dom)
+  MIT
+  https://react.dev/
+
+React Router 7.18.3
+  MIT
+  https://reactrouter.com/
+
+TanStack Query 5.102.8
+  MIT
+  https://tanstack.com/query
+
+Monaco Editor 0.56.0 (monaco-editor and @monaco-editor/react 4.7.0)
+  MIT
+  https://microsoft.github.io/monaco-editor/
+
+Mermaid 11.17.2
+  MIT
+  https://mermaid.js.org/
+
+KaTeX 0.18.7
+  MIT
+  https://katex.org/
+
+react-markdown 10.1.0 with remark-frontmatter 5.0.0, remark-gfm 4.0.1,
+remark-math 6.0.0, rehype-katex 7.0.1, rehype-sanitize 6.0.0,
+hast-util-sanitize 5.0.2 and unist-util-visit 5.1.0
+  MIT
+  https://github.com/remarkjs/react-markdown
+
+Tauri 2.11.5 with @tauri-apps/api 2.11.1 and the single-instance 2.4.3,
+window-state 2.4.1, notification 2.3.3 and dialog 2.7.3 plugins
+  MIT OR Apache-2.0
+  https://tauri.app/
+
+serde 1.0.229 and serde_json 1.0.151
+  MIT OR Apache-2.0
+  https://serde.rs/
+
+windows-sys 0.60.2 (Windows target only)
+  MIT OR Apache-2.0
+  https://github.com/microsoft/windows-rs
+
 BUILD AND TEST TOOLS (NOT APPLICATION RUNTIME LIBRARIES)
 
 Apache Maven
@@ -95,8 +145,9 @@ JUnit 5
 CycloneDX Maven Plugin 2.9.2
   Apache-2.0
 
-WiX Toolset 3.14.1
-  Microsoft Reciprocal License (MS-RL)
+NSIS (Nullsoft Scriptable Install System), used by the Tauri bundler to
+produce the Windows installer
+  zlib/libpng license
 
 OPTIONAL EXTERNAL SOFTWARE AND SERVICES
 

@@ -5,8 +5,10 @@ import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { localAppRequest } from "../../shared/ipc";
 import { formatInstant } from "../../shared/instant";
+import { useAppVersion } from "../../shared/appVersion";
 import { settingsPreferencesQuery } from "../../app/queries";
 import type {
+  AppRole,
   BackupSnapshot,
   SettingsEnvironment,
   SettingsPreferences,
@@ -15,6 +17,7 @@ import type {
 } from "../../shared/types";
 import { Button, Dialog, Feedback, FormField, useToast } from "../../shared/ui";
 import { Loading, Toggle } from "./shared";
+import { ProblemReportDialog, ReportStatusDialog } from "./ProblemReportDialogs";
 
 type SettingsDraft = SettingsPreferences["general"] & {
   developerMode: boolean;
@@ -31,8 +34,14 @@ type BankChannelInfo = {
   updatedAt: string;
 };
 
-/** 题库更新设置（W4.2/W4.3）：订阅频道 + 定时检查 opt-in（默认关闭）。 */
-function BankUpdateSettings({ preferences }: { preferences?: BankPreferencesView }) {
+/** 题库更新设置（W4.2/W4.3）：订阅频道 + 定时检查 opt-in（默认关闭）；v3.4.1 起为可折叠面板，默认收起。 */
+function BankUpdateSettings({
+  preferences,
+  role,
+}: {
+  preferences?: BankPreferencesView;
+  role: AppRole;
+}) {
   const client = useQueryClient();
   const toast = useToast();
   const channels = useQuery({
@@ -74,70 +83,208 @@ function BankUpdateSettings({ preferences }: { preferences?: BankPreferencesView
     (selected !== undefined &&
       JSON.stringify([...(selected ?? [])].sort()) !== JSON.stringify([...subscribed].sort()));
   return (
-    <section className="content-card settings-panel">
-      <div className="section-heading">
-        <div>
-          <p className="eyebrow">题库分发</p>
-          <h2>题库更新</h2>
-        </div>
-      </div>
-      <label className="setting-toggle">
-        <input
-          type="checkbox"
-          checked={autoChecked}
-          onChange={(event) => setAutoCheck(event.target.checked)}
-        />
+    <details className="content-card settings-panel">
+      <summary>
+        <span className="settings-symbol">⇩</span>
         <span>
-          <strong>定时检查题库更新</strong>
-          <small>
-            开启后每 6 小时在后台检查一次；发现更新仅提示，不会自动应用，也绝不打断练习。
-          </small>
+          <strong>题库更新</strong>
+          <small>订阅频道与定时检查</small>
         </span>
-      </label>
-      <p className="muted">订阅的题库频道（未订阅的频道不会拉取）：</p>
-      {options.map((channel) => (
-        <label className="setting-toggle" key={channel}>
+        <span className="settings-chevron">›</span>
+      </summary>
+      <div className="settings-panel-body">
+        <label className="setting-toggle">
           <input
             type="checkbox"
-            checked={(selected ?? subscribed).includes(channel)}
-            onChange={() => toggleChannel(channel)}
+            checked={autoChecked}
+            onChange={(event) => setAutoCheck(event.target.checked)}
           />
           <span>
-            <strong>{channel}</strong>
-            {(() => {
-              const info = channels.data?.items.find((item) => item.channel === channel);
-              return info ? <small>服务器版本 {info.bankVersion}</small> : null;
-            })()}
+            <strong>定时检查题库更新</strong>
+            <small>
+              开启后每 6 小时在后台检查一次；发现更新仅提示，不会自动应用，也绝不打断练习。
+            </small>
           </span>
         </label>
-      ))}
-      {channels.isError && <p className="muted">无法获取服务器频道列表，仅显示已订阅频道。</p>}
-      <div className="button-row">
-        <Button
-          disabled={!dirty || save.isPending}
-          busy={save.isPending}
-          onClick={() =>
-            save.mutate({
-              autoCheckEnabled: autoChecked,
-              channels: selected ?? subscribed,
-            })
-          }
-        >
-          保存题库设置
-        </Button>
-        {selected && (
-          <Button
-            variant="secondary"
-            onClick={() => {
-              setSelected(undefined);
-              setAutoCheck(undefined);
-            }}
-          >
-            放弃修改
-          </Button>
+        <p className="muted">订阅的题库频道（未订阅的频道不会拉取）：</p>
+        {options.map((channel) => (
+          <label className="setting-toggle" key={channel}>
+            <input
+              type="checkbox"
+              checked={(selected ?? subscribed).includes(channel)}
+              onChange={() => toggleChannel(channel)}
+            />
+            <span>
+              <strong>{channel}</strong>
+              {(() => {
+                const info = channels.data?.items.find((item) => item.channel === channel);
+                return info ? <small>服务器版本 {info.bankVersion}</small> : null;
+              })()}
+            </span>
+          </label>
+        ))}
+        {channels.isError && <p className="muted">无法获取服务器频道列表，仅显示已订阅频道。</p>}
+        {role === "ADMINISTRATOR" && (
+          <BankRollbackControl channels={channels.data?.items ?? []} />
         )}
+        <div className="button-row">
+          <Button
+            disabled={!dirty || save.isPending}
+            busy={save.isPending}
+            onClick={() =>
+              save.mutate({
+                autoCheckEnabled: autoChecked,
+                channels: selected ?? subscribed,
+              })
+            }
+          >
+            保存题库设置
+          </Button>
+          {selected && (
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setSelected(undefined);
+                setAutoCheck(undefined);
+              }}
+            >
+              放弃修改
+            </Button>
+          )}
+        </div>
       </div>
-    </section>
+    </details>
+  );
+}
+
+/** v3.4.2 LEG-14：题库回滚（服务端仅管理员可执行）——破坏性操作，确认后回滚到上一版本。 */
+function BankRollbackControl({ channels }: { channels: BankChannelInfo[] }) {
+  const client = useQueryClient();
+  const toast = useToast();
+  const [channel, setChannel] = useState("");
+  const [rollbackTarget, setRollbackTarget] = useState<{ channel: string; from: number }>();
+  const activeChannel = channel || channels[0]?.channel || "";
+  const currentVersion = channels.find((item) => item.channel === activeChannel)?.bankVersion ?? 0;
+  const hasPrevious = currentVersion > 1;
+  const rollback = useMutation({
+    mutationFn: (target: { channel: string; to: number }) =>
+      localAppRequest<{ bankVersion: number }>("teaching.bank.rollback", {
+        channel: target.channel,
+        bankVersion: target.to,
+      }),
+    onSuccess: (value, target) => {
+      setRollbackTarget(undefined);
+      void client.invalidateQueries({ queryKey: ["practice", "bank", "channels"] });
+      void client.invalidateQueries({ queryKey: ["practice"] });
+      toast("success", `题库「${target.channel}」已回滚到版本 ${value.bankVersion}`);
+    },
+    onError: (error: Error) => toast("error", `题库回滚失败：${error.message}`),
+  });
+  if (channels.length === 0) return null;
+  return (
+    <>
+      <div className="button-row">
+        <select
+          aria-label="回滚频道"
+          value={activeChannel}
+          onChange={(event) => setChannel(event.target.value)}
+        >
+          {channels.map((item) => (
+            <option key={item.channel} value={item.channel}>
+              {item.channel}
+            </option>
+          ))}
+        </select>
+        <Button
+          variant="danger"
+          disabled={!hasPrevious}
+          onClick={() => setRollbackTarget({ channel: activeChannel, from: currentVersion })}
+        >
+          回滚上一版本
+        </Button>
+        {!hasPrevious && <span className="muted">当前频道没有可回滚的历史版本。</span>}
+      </div>
+      <Dialog
+        open={Boolean(rollbackTarget)}
+        title="确认回滚题库"
+        onClose={() => setRollbackTarget(undefined)}
+      >
+        <p>
+          将把题库频道「{rollbackTarget?.channel}」从版本 {rollbackTarget?.from} 回滚到版本{" "}
+          {(rollbackTarget?.from ?? 1) - 1}。回滚立即生效：学生端之后拉取到的都是旧版本题目，
+          正在进行的练习不受影响，但后续提交会按旧版本评判。需要已登录的云端管理员账号。
+        </p>
+        <div className="button-row">
+          <Button variant="secondary" onClick={() => setRollbackTarget(undefined)}>
+            取消
+          </Button>
+          <Button
+            variant="danger"
+            busy={rollback.isPending}
+            onClick={() =>
+              rollbackTarget &&
+              rollback.mutate({ channel: rollbackTarget.channel, to: rollbackTarget.from - 1 })
+            }
+          >
+            确认回滚
+          </Button>
+        </div>
+      </Dialog>
+    </>
+  );
+}
+
+/** 关于（v3.4.2 LEG-1）：版本、制作团队与法律信息。名单与权属为用户确认的静态事实；隐私正文保持 Java 单一事实源，经 settings.help 拉取后在本面板内渲染。 */
+function AboutPanel({ onCheckUpdate, checkingUpdate, onOpenReport }: { onCheckUpdate: () => void; checkingUpdate: boolean; onOpenReport: () => void }) {
+  const version = useAppVersion();
+  const [privacy, setPrivacy] = useState("");
+  const loadPrivacy = () => {
+    localAppRequest<{ content: string }>("settings.help", { topicId: "privacy" })
+      .then((value) => setPrivacy(value.content))
+      .catch(() => setPrivacy("无法加载隐私说明，请稍后重试。"));
+  };
+  return (
+    <details className="content-card settings-panel">
+      <summary>
+        <span className="settings-symbol">©</span>
+        <span>
+          <strong>关于</strong>
+          <small>版本、制作团队与法律信息</small>
+        </span>
+        <span className="settings-chevron">›</span>
+      </summary>
+      <div className="settings-panel-body">
+        <p>
+          <strong>SQLTeacher</strong> <span className="policy-chip">{version}</span>
+        </p>
+        <p>制作团队：</p>
+        <ul className="about-credits">
+          <li>杨春蕾老师</li>
+          <li>王红艺老师</li>
+          <li>华佳浩（学生、主要负责人）</li>
+          <li>董晓佟（学生）</li>
+          <li>刘浩武（学生）</li>
+          <li>刘馨潞（学生）</li>
+          <li>邵思瀚（老学长）</li>
+        </ul>
+        <p>软件著作权归河南科技大学所有（软著申请中，登记号：待登记）。</p>
+        <p className="muted">
+          本项目以 Apache License 2.0 发布；第三方组件许可见安装目录 legal 文件夹中的 THIRD-PARTY-LICENSES 文件。
+        </p>
+        <div className="button-row">
+          <Button variant="secondary" onClick={loadPrivacy}>
+            隐私与数据
+          </Button>
+          <Button variant="secondary" busy={checkingUpdate} onClick={onCheckUpdate}>
+            检查更新
+          </Button>
+          <Button variant="secondary" onClick={onOpenReport}>
+            问题反馈
+          </Button>
+        </div>
+        {privacy && <pre className="help-content">{privacy}</pre>}
+      </div>
+    </details>
   );
 }
 
@@ -163,6 +310,8 @@ export function SettingsPage() {
   const [restoreTarget, setRestoreTarget] = useState<BackupSnapshot>();
   const [helpContent, setHelpContent] = useState("");
   const [updateResult, setUpdateResult] = useState<UpdateCheck>();
+  const [reportOpen, setReportOpen] = useState(false);
+  const [reportStatusOpen, setReportStatusOpen] = useState(false);
   useEffect(() => {
     if (!query.data) return;
     // 上次离开时有未保存的更改会暂存在 sessionStorage，优先恢复，避免静默丢失。
@@ -308,178 +457,181 @@ export function SettingsPage() {
         </div>
       </section>
       {save.isSuccess && <Feedback tone="success" title="设置已保存" />}
-      <section className="content-card settings-card">
-        <div className="settings-section-title">
+      <details className="content-card settings-panel" open>
+        <summary>
           <span className="settings-symbol">Aa</span>
-          <div>
-            <h3>外观与使用体验</h3>
-            <p>语言、主题和辅助功能</p>
+          <span>
+            <strong>外观与使用体验</strong>
+            <small>语言、主题和辅助功能</small>
+          </span>
+          <span className="settings-chevron">›</span>
+        </summary>
+        <div className="settings-panel-body">
+          <div className="settings-grid">
+            <FormField label="界面语言">
+              {(ids) => (
+                <select
+                  {...ids}
+                  value={draft.language}
+                  onChange={(event) =>
+                    setDraft({
+                      ...draft,
+                      language: event.target.value as SettingsDraft["language"],
+                    })
+                  }
+                >
+                  <option value="zh">简体中文</option>
+                  <option value="en">English</option>
+                </select>
+              )}
+            </FormField>
+            <FormField label="主题">
+              {(ids) => (
+                <select
+                  {...ids}
+                  value={draft.theme}
+                  onChange={(event) =>
+                    setDraft({
+                      ...draft,
+                      theme: event.target.value as SettingsDraft["theme"],
+                    })
+                  }
+                >
+                  <option value="system">跟随系统</option>
+                  <option value="light">浅色</option>
+                  <option value="dark">深色</option>
+                </select>
+              )}
+            </FormField>
+            <FormField label="界面字体">
+              {(ids) => (
+                <select
+                  {...ids}
+                  value={draft.font}
+                  onChange={(event) =>
+                    setDraft({
+                      ...draft,
+                      font: event.target.value as SettingsDraft["font"],
+                    })
+                  }
+                >
+                  <option value="modern">现代中文</option>
+                  <option value="system">系统默认</option>
+                  <option value="classic">经典清晰</option>
+                </select>
+              )}
+            </FormField>
+            <FormField label="界面密度">
+              {(ids) => (
+                <select
+                  {...ids}
+                  value={draft.density}
+                  onChange={(event) =>
+                    setDraft({
+                      ...draft,
+                      density: event.target.value as SettingsDraft["density"],
+                    })
+                  }
+                >
+                  <option value="comfortable">舒适</option>
+                  <option value="compact">紧凑</option>
+                </select>
+              )}
+            </FormField>
+            <FormField label="代理模式">
+              {(ids) => (
+                <select
+                  {...ids}
+                  value={draft.proxyMode}
+                  onChange={(event) =>
+                    setDraft({
+                      ...draft,
+                      proxyMode: event.target.value as SettingsDraft["proxyMode"],
+                    })
+                  }
+                >
+                  <option value="SYSTEM">跟随系统</option>
+                  <option value="DIRECT">直接连接</option>
+                  <option value="MANUAL">手动代理</option>
+                </select>
+              )}
+            </FormField>
+            {draft.proxyMode === "MANUAL" && (
+              <>
+                <FormField label="代理主机">
+                  {(ids) => (
+                    <input
+                      {...ids}
+                      value={draft.proxyHost}
+                      onChange={(event) => setDraft({ ...draft, proxyHost: event.target.value })}
+                    />
+                  )}
+                </FormField>
+                <FormField label="代理端口">
+                  {(ids) => (
+                    <input
+                      {...ids}
+                      type="number"
+                      min={1}
+                      max={65535}
+                      value={draft.proxyPort || ""}
+                      onChange={(event) =>
+                        setDraft({
+                          ...draft,
+                          proxyPort: Number(event.target.value),
+                        })
+                      }
+                    />
+                  )}
+                </FormField>
+              </>
+            )}
+            <Toggle
+              label="自动检查更新"
+              checked={draft.automaticUpdateChecks}
+              onChange={() => toggle("automaticUpdateChecks")}
+            />
+            <Toggle
+              label="减少动态效果"
+              checked={draft.reducedMotion}
+              onChange={() => toggle("reducedMotion")}
+            />
+            <Toggle
+              label="高对比度"
+              checked={draft.highContrast}
+              onChange={() => toggle("highContrast")}
+            />
+            <Toggle
+              label="原生通知"
+              checked={draft.nativeNotificationsEnabled}
+              onChange={() => toggle("nativeNotificationsEnabled")}
+            />
+            <Toggle
+              label="按流量计费网络"
+              checked={draft.meteredNetwork}
+              onChange={() => toggle("meteredNetwork")}
+            />
+            <Toggle
+              label="临时支持日志"
+              checked={draft.supportLogging}
+              onChange={() => toggle("supportLogging")}
+              hint="开启后 24 小时自动关闭"
+            />
+            <Toggle
+              label="允许可信更新镜像"
+              checked={draft.updateMirrorsEnabled}
+              onChange={() => toggle("updateMirrorsEnabled")}
+            />
+            <Toggle
+              label="SQL 开发者模式"
+              checked={draft.developerMode}
+              onChange={() => toggle("developerMode")}
+              hint="减少常规确认，安全边界不变"
+            />
           </div>
         </div>
-        <div className="settings-grid">
-          <FormField label="界面语言">
-            {(ids) => (
-              <select
-                {...ids}
-                value={draft.language}
-                onChange={(event) =>
-                  setDraft({
-                    ...draft,
-                    language: event.target.value as SettingsDraft["language"],
-                  })
-                }
-              >
-                <option value="zh">简体中文</option>
-                <option value="en">English</option>
-              </select>
-            )}
-          </FormField>
-          <FormField label="主题">
-            {(ids) => (
-              <select
-                {...ids}
-                value={draft.theme}
-                onChange={(event) =>
-                  setDraft({
-                    ...draft,
-                    theme: event.target.value as SettingsDraft["theme"],
-                  })
-                }
-              >
-                <option value="system">跟随系统</option>
-                <option value="light">浅色</option>
-                <option value="dark">深色</option>
-              </select>
-            )}
-          </FormField>
-          <FormField label="界面字体">
-            {(ids) => (
-              <select
-                {...ids}
-                value={draft.font}
-                onChange={(event) =>
-                  setDraft({
-                    ...draft,
-                    font: event.target.value as SettingsDraft["font"],
-                  })
-                }
-              >
-                <option value="modern">现代中文</option>
-                <option value="system">系统默认</option>
-                <option value="classic">经典清晰</option>
-              </select>
-            )}
-          </FormField>
-          <FormField label="界面密度">
-            {(ids) => (
-              <select
-                {...ids}
-                value={draft.density}
-                onChange={(event) =>
-                  setDraft({
-                    ...draft,
-                    density: event.target.value as SettingsDraft["density"],
-                  })
-                }
-              >
-                <option value="comfortable">舒适</option>
-                <option value="compact">紧凑</option>
-              </select>
-            )}
-          </FormField>
-          <FormField label="代理模式">
-            {(ids) => (
-              <select
-                {...ids}
-                value={draft.proxyMode}
-                onChange={(event) =>
-                  setDraft({
-                    ...draft,
-                    proxyMode: event.target.value as SettingsDraft["proxyMode"],
-                  })
-                }
-              >
-                <option value="SYSTEM">跟随系统</option>
-                <option value="DIRECT">直接连接</option>
-                <option value="MANUAL">手动代理</option>
-              </select>
-            )}
-          </FormField>
-          {draft.proxyMode === "MANUAL" && (
-            <>
-              <FormField label="代理主机">
-                {(ids) => (
-                  <input
-                    {...ids}
-                    value={draft.proxyHost}
-                    onChange={(event) => setDraft({ ...draft, proxyHost: event.target.value })}
-                  />
-                )}
-              </FormField>
-              <FormField label="代理端口">
-                {(ids) => (
-                  <input
-                    {...ids}
-                    type="number"
-                    min={1}
-                    max={65535}
-                    value={draft.proxyPort || ""}
-                    onChange={(event) =>
-                      setDraft({
-                        ...draft,
-                        proxyPort: Number(event.target.value),
-                      })
-                    }
-                  />
-                )}
-              </FormField>
-            </>
-          )}
-          <Toggle
-            label="自动检查更新"
-            checked={draft.automaticUpdateChecks}
-            onChange={() => toggle("automaticUpdateChecks")}
-          />
-          <Toggle
-            label="减少动态效果"
-            checked={draft.reducedMotion}
-            onChange={() => toggle("reducedMotion")}
-          />
-          <Toggle
-            label="高对比度"
-            checked={draft.highContrast}
-            onChange={() => toggle("highContrast")}
-          />
-          <Toggle
-            label="原生通知"
-            checked={draft.nativeNotificationsEnabled}
-            onChange={() => toggle("nativeNotificationsEnabled")}
-          />
-          <Toggle
-            label="按流量计费网络"
-            checked={draft.meteredNetwork}
-            onChange={() => toggle("meteredNetwork")}
-          />
-          <Toggle
-            label="临时支持日志"
-            checked={draft.supportLogging}
-            onChange={() => toggle("supportLogging")}
-            hint="开启后 24 小时自动关闭"
-          />
-          <Toggle
-            label="允许可信更新镜像"
-            checked={draft.updateMirrorsEnabled}
-            onChange={() => toggle("updateMirrorsEnabled")}
-          />
-          <Toggle
-            label="SQL 开发者模式"
-            checked={draft.developerMode}
-            onChange={() => toggle("developerMode")}
-            hint="减少常规确认，安全边界不变"
-          />
-        </div>
-      </section>
-      <BankUpdateSettings preferences={query.data?.bank} />
+      </details>
+      <BankUpdateSettings preferences={query.data?.bank} role={query.data?.role} />
       <details className="content-card settings-panel">
         <summary>
           <span className="settings-symbol">⌘</span>
@@ -658,6 +810,12 @@ export function SettingsPage() {
             <Button busy={checkUpdate.isPending} onClick={() => checkUpdate.mutate()}>
               检查更新
             </Button>
+            <Button variant="secondary" onClick={() => setReportOpen(true)}>
+              问题反馈
+            </Button>
+            <Button variant="secondary" onClick={() => setReportStatusOpen(true)}>
+              查询反馈进度
+            </Button>
             {data.notifications.some((item) => !item.read) && (
               <Button
                 variant="secondary"
@@ -706,6 +864,13 @@ export function SettingsPage() {
           {helpContent && <pre className="help-content">{helpContent}</pre>}
         </div>
       </details>
+      <AboutPanel
+        onCheckUpdate={() => checkUpdate.mutate()}
+        checkingUpdate={checkUpdate.isPending}
+        onOpenReport={() => setReportOpen(true)}
+      />
+      <ProblemReportDialog open={reportOpen} onClose={() => setReportOpen(false)} />
+      <ReportStatusDialog open={reportStatusOpen} onClose={() => setReportStatusOpen(false)} />
       <Dialog
         open={Boolean(restoreTarget)}
         title="恢复应用备份"

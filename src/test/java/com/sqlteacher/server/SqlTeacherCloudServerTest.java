@@ -62,6 +62,48 @@ class SqlTeacherCloudServerTest {
     }
 
     @Test
+    void shouldLetStudentsJoinByClassCodeAndTeachersRotateIt() throws Exception {
+        Path database = start();
+        JsonNode teacher = register("code-teacher@example.edu", "Code Teacher");
+        JsonNode student = register("code-student@example.edu", "Code Student");
+        promoteTeacher(database, teacher.at("/user/id").asText());
+        String teacherToken = teacher.get("accessToken").asText();
+        String studentToken = student.get("accessToken").asText();
+        String classroomId = post("classes", teacherToken, "{\"name\":\"Join code 101\"}")
+            .get("id").asText();
+
+        // 教师读取班级码：8 位、无易混字符的大写字母数字。
+        String joinCode = JSON.readTree(getText("classes/" + classroomId + "/join-code", teacherToken))
+            .get("joinCode").asText();
+        assertTrue(joinCode.matches("[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{8}"), joinCode);
+
+        // 学生凭码加入为 STUDENT 并可见该班级；大小写不敏感，重复加入幂等。
+        JsonNode joined = post("classes/join", studentToken,
+            JSON.writeValueAsString(java.util.Map.of("code", joinCode.toLowerCase(java.util.Locale.ROOT))));
+        assertEquals(classroomId, joined.get("id").asText());
+        assertEquals(200, postStatus("classes/join", studentToken,
+            JSON.writeValueAsString(java.util.Map.of("code", joinCode))));
+        JsonNode roster = JSON.readTree(getText("classes/" + classroomId + "/roster", teacherToken));
+        assertEquals(2, roster.get("members").size());
+        assertEquals("STUDENT", roster.get("members").get(1).get("role").asText());
+
+        // 未知码统一 404 不泄露存在性；学生不可读取或重置班级码。
+        assertEquals(404, postStatus("classes/join", studentToken,
+            JSON.writeValueAsString(java.util.Map.of("code", "ZZZZZZZZ"))));
+        assertEquals(403, getStatus("classes/" + classroomId + "/join-code", studentToken));
+        assertEquals(403, postStatus("classes/" + classroomId + "/join-code/rotate", studentToken, "{}"));
+
+        // 教师重置后旧码立即失效，新码生效。
+        String rotated = JSON.readTree(post("classes/" + classroomId + "/join-code/rotate",
+            teacherToken, "{}").toString()).get("joinCode").asText();
+        assertNotEquals(joinCode, rotated);
+        assertEquals(404, postStatus("classes/join", studentToken,
+            JSON.writeValueAsString(java.util.Map.of("code", joinCode))));
+        assertEquals(200, postStatus("classes/join", studentToken,
+            JSON.writeValueAsString(java.util.Map.of("code", rotated))));
+    }
+
+    @Test
     void shouldExposeTeacherOnlyClassRosterWithMemberDetails() throws Exception {
         Path database = start();
         JsonNode teacher = register("roster-teacher@example.edu", "Roster Teacher");

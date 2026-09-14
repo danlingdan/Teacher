@@ -44,6 +44,9 @@ class HttpCloudApiClientTest {
         {"id":"user-1","email":"student@example.com","displayName":"Student",\
         "roles":["STUDENT"],"disabled":true,"createdAt":"2026-07-28T00:00:00Z"}
         """;
+    private static final String CLASSROOM_JSON = """
+        {"id":"class-9","name":"Join code 101","createdAt":"2026-09-15T00:00:00Z","members":[]}
+        """;
 
     private HttpServer server;
     private HttpCloudApiClient client;
@@ -57,6 +60,8 @@ class HttpCloudApiClientTest {
     void startServer() throws IOException {
         server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         server.createContext("/api/v1/classes/class-1/assignments", this::assignments);
+        server.createContext("/api/v1/classes/class-1/join-code", this::joinCode);
+        server.createContext("/api/v1/classes/join", this::joinCode);
         server.createContext("/api/v1/admin", this::admin);
         server.start();
         client = new HttpCloudApiClient(URI.create("http://127.0.0.1:" + server.getAddress().getPort()));
@@ -65,6 +70,30 @@ class HttpCloudApiClientTest {
     @AfterEach
     void stopServer() {
         server.stop(0);
+    }
+
+    @Test
+    void shouldJoinClassByCodeAndExchangeJoinCodes() {
+        var joined = client.joinClassByCode("student-token", "AB234567");
+
+        assertEquals("POST", requestMethod);
+        assertEquals("/api/v1/classes/join", requestPath);
+        assertEquals("Bearer student-token", authorization);
+        assertEquals("AB234567", requestBody.get("code").asText());
+        assertEquals("class-9", joined.id());
+
+        String code = client.classJoinCode("teacher-token", "class-1");
+
+        assertEquals("GET", requestMethod);
+        assertEquals("/api/v1/classes/class-1/join-code", requestPath);
+        assertEquals("Bearer teacher-token", authorization);
+        assertEquals("AB234567", code);
+
+        String rotated = client.rotateClassJoinCode("teacher-token", "class-1");
+
+        assertEquals("POST", requestMethod);
+        assertEquals("/api/v1/classes/class-1/join-code/rotate", requestPath);
+        assertEquals("CD345678", rotated);
     }
 
     @Test
@@ -224,6 +253,21 @@ class HttpCloudApiClientTest {
             ? ("GET".equals(requestMethod) ? "{\"submissions\":[" + SUBMISSION_JSON + "]}" : SUBMISSION_JSON)
             : ("GET".equals(requestMethod) ? "{\"assignments\":[" + ASSIGNMENT_JSON + "]}" : ASSIGNMENT_JSON);
         byte[] responseBytes = response.getBytes(StandardCharsets.UTF_8);
+        exchange.getResponseHeaders().set("Content-Type", "application/json; charset=utf-8");
+        exchange.sendResponseHeaders(200, responseBytes.length);
+        exchange.getResponseBody().write(responseBytes);
+        exchange.close();
+    }
+
+    private void joinCode(HttpExchange exchange) throws IOException {
+        requestMethod = exchange.getRequestMethod();
+        requestPath = exchange.getRequestURI().getPath();
+        authorization = exchange.getRequestHeaders().getFirst("Authorization");
+        byte[] requestBytes = exchange.getRequestBody().readAllBytes();
+        requestBody = requestBytes.length == 0 ? JSON.nullNode() : JSON.readTree(requestBytes);
+        String body = requestPath.endsWith("/join") ? CLASSROOM_JSON
+            : "{\"joinCode\":\"" + (requestPath.endsWith("/rotate") ? "CD345678" : "AB234567") + "\"}";
+        byte[] responseBytes = body.getBytes(StandardCharsets.UTF_8);
         exchange.getResponseHeaders().set("Content-Type", "application/json; charset=utf-8");
         exchange.sendResponseHeaders(200, responseBytes.length);
         exchange.getResponseBody().write(responseBytes);

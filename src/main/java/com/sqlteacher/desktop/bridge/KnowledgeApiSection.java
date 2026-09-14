@@ -17,8 +17,13 @@ import java.util.Set;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 /** v3.4.0 REF-8: knowledge articles, local search, read state, and Obsidian vault import. */
 final class KnowledgeApiSection extends ApiSection {
+
+    private static final Logger log = LoggerFactory.getLogger(KnowledgeApiSection.class);
 
     KnowledgeApiSection(ApiSectionHost host) {
         super(host);
@@ -76,16 +81,27 @@ final class KnowledgeApiSection extends ApiSection {
         Map<String, String> articleIds = service.listArticles().stream()
             .collect(Collectors.toMap(item -> item.documentId(), item -> item.id(), (left, right) -> left));
         ArrayNode items = mapper.createArrayNode();
-        service.search(query, CourseKnowledgeSearchFilter.allLocal(), limit).forEach(item -> {
+        int unmapped = 0;
+        for (var item : service.search(query, CourseKnowledgeSearchFilter.allLocal(), limit)) {
+            // v3.4.1 KNW-2：映射不到课程知识文章的命中直接跳过。前端把每条检索结果都渲染
+            // 为可打开按钮，过去 articleId 为空串的命中会变成永远点不动的禁用项。
+            String articleId = articleIds.get(item.documentId());
+            if (articleId == null || articleId.isBlank()) {
+                unmapped++;
+                continue;
+            }
             ObjectNode result = items.addObject();
-            result.put("articleId", articleIds.getOrDefault(item.documentId(), ""));
+            result.put("articleId", articleId);
             result.put("documentId", item.documentId());
             result.put("title", item.title());
             result.put("sourceName", item.sourceName());
             result.put("chunkIndex", item.chunkIndex());
             result.put("snippet", item.snippet());
             result.put("relevance", item.relevance());
-        });
+        }
+        if (unmapped > 0) {
+            log.debug("knowledge.search skipped {} hit(s) without a course article mapping", unmapped);
+        }
         return mapper.createObjectNode().set("items", items);
     }
 

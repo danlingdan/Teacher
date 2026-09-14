@@ -96,12 +96,12 @@ class KnowledgeApiSectionTest {
                 .put("limit", 5_000), () -> false, ignored -> { });
 
             JsonNode items = result.path("items");
-            assertEquals(2, items.size());
+            // v3.4.1 KNW-2：映射不到本地文章的命中直接跳过——前端把每条检索结果都渲染为
+            // 可打开按钮，不允许出现 articleId 为空、永远点不动的禁用项。
+            assertEquals(1, items.size());
             assertEquals("a-1", items.get(0).path("articleId").asText());
             assertEquals("d-1", items.get(0).path("documentId").asText());
             assertEquals(0.91, items.get(0).path("relevance").asDouble(), 1e-9);
-            // 未匹配到本地文章的命中仍然返回，但 articleId 保持空串而不是猜测。
-            assertEquals("", items.get(1).path("articleId").asText());
         }
         assertEquals(1, searches.size());
         assertEquals("索引", searches.get(0)[0]);

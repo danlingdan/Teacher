@@ -23,7 +23,9 @@ import java.util.Optional;
 
 public final class JdbcConnectionManagementService implements ConnectionManagementService {
     private static final String APP_CONNECTION_ID = "app";
-    private static final String DEMO_CONNECTION_ID = "demo";
+
+    /** 内置演示库连接 ID（保留 ID，用户连接不可占用）；JdbcConnectionFactory 以此识别 demo 库。 */
+    public static final String DEMO_CONNECTION_ID = "demo";
 
     private final JdbcConnectionFactory connectionFactory;
     private final DatabaseConfiguration configuration;

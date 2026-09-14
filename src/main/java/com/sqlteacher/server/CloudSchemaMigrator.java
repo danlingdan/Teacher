@@ -279,6 +279,12 @@ final class CloudSchemaMigrator {
             CloudSchemaStep.addColumnIfMissing("access_tokens", "device_label text"),
             CloudSchemaStep.addColumnIfMissing("access_tokens", "last_seen_at text"),
             CloudSchemaStep.addColumnIfMissing("users", "email_verified integer not null default 0")
+        )),
+        new CloudMigration(9, "v3.4.1 classroom join codes", List.of(
+            CloudSchemaStep.addColumnIfMissing("classrooms", "join_code text"),
+            // 唯一索引允许多个 NULL：存量班级先加列，由 CloudClassroomStore 构造时回填短码。
+            CloudSchemaStep.sql("create unique index if not exists idx_classrooms_join_code "
+                + "on classrooms(join_code)")
         ))
     ));
 

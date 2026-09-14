@@ -76,8 +76,16 @@ export function CloudPage() {
     setMemberEmail,
     memberRole,
     setMemberRole,
+    joinCode,
+    setJoinCode,
+    joinCodeQuery,
+    rotateJoinCode,
+    joinByCode,
     pendingTransition,
     setPendingTransition,
+    editingAssignment,
+    startAssignmentEdit,
+    cancelAssignmentEdit,
     assignmentTitle,
     setAssignmentTitle,
     assignmentExerciseId,
@@ -102,6 +110,7 @@ export function CloudPage() {
     createClass,
     addMember,
     createAssignment,
+    updateAssignment,
     changeAssignmentStatus,
     copyAssignment,
     classAnalytics,
@@ -111,6 +120,7 @@ export function CloudPage() {
     feedbackQuery,
     patchFeedbackItem,
     saveFeedback,
+    draftFeedback,
     mastery,
     openMastery,
     openFeedback,
@@ -143,6 +153,8 @@ export function CloudPage() {
     setCoursePackage,
     packagePreview,
     setPackagePreview,
+    courseJson,
+    setCourseJson,
     courses,
     createCourse,
     courseContent,
@@ -153,6 +165,7 @@ export function CloudPage() {
     exportCourse,
     previewCoursePackage,
     importCoursePackage,
+    importCourseJson,
     openCourses,
     refreshCourses,
     openCourseContent,
@@ -180,6 +193,8 @@ export function CloudPage() {
     deletionStatus,
   } = useAccountSecurity();
   const [portfolioOpen, setPortfolioOpen] = useState(false);
+  // v3.4.2 LEG-12：作业卡片点「编辑」时自动展开任务表单。
+  const [assignmentFormOpen, setAssignmentFormOpen] = useState(false);
   const portfolio = useQuery({
     queryKey: portfolioKey,
     queryFn: () => localAppRequest<{ items: PortfolioEntry[] }>("learning.portfolio"),
@@ -301,11 +316,32 @@ export function CloudPage() {
             </div>
           )}
         </div>
+        {!(data.role === "TEACHER" || data.role === "ADMINISTRATOR") && (
+          // v3.4.1 CLS-5：学生凭班级码自助加入，不再只能等教师按邮箱添加。
+          <div className="button-row">
+            <input
+              aria-label="班级码"
+              value={joinCode}
+              onChange={(event) => setJoinCode(event.target.value.toUpperCase())}
+              placeholder="输入教师提供的班级码"
+              maxLength={8}
+              style={{ maxWidth: 220 }}
+            />
+            <Button
+              variant="secondary"
+              busy={joinByCode.isPending}
+              disabled={joinCode.trim().length < 4}
+              onClick={() => joinByCode.mutate()}
+            >
+              凭班级码加入
+            </Button>
+          </div>
+        )}
         {data.classes.length === 0 ? (
           <p className="muted">
             {data.role === "TEACHER" || data.role === "ADMINISTRATOR"
               ? "尚无班级。输入班级名称点击「创建班级」，或点击「刷新班级」同步云端班级。"
-              : "尚无班级。教师可在班级里通过成员邮箱添加你，你点击「立即同步」后即可在此显示。"}
+              : "尚无班级。向教师索取班级码，在上方输入后即可加入；教师也可在班级里通过成员邮箱添加你。"}
           </p>
         ) : (
           <ul className="plain-list class-list">
@@ -344,6 +380,41 @@ export function CloudPage() {
                 <strong>成员名单</strong>
                 {roster.data?.members ? `（${roster.data.members.length} 人）` : ""}
               </summary>
+              {isTeacherRole && (
+                // v3.4.1 CLS-4：班级码供学生自助加入；教师可复制或重置（旧码立即失效）。
+                <div className="button-row">
+                  <span className="policy-chip" aria-label="当前班级码">
+                    班级码：{joinCodeQuery.data?.joinCode ?? "…"}
+                  </span>
+                  <Button
+                    variant="secondary"
+                    disabled={!joinCodeQuery.data?.joinCode}
+                    onClick={() => {
+                      void navigator.clipboard
+                        ?.writeText(joinCodeQuery.data?.joinCode ?? "")
+                        .then(() => toast("success", "班级码已复制"))
+                        .catch(() => toast("error", "复制失败，请手动记录班级码"));
+                    }}
+                  >
+                    复制
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    busy={rotateJoinCode.isPending}
+                    onClick={() => {
+                      if (
+                        window.confirm(
+                          "重置后旧班级码立即失效，已用它加入的成员不受影响。确定重置？",
+                        )
+                      ) {
+                        rotateJoinCode.mutate();
+                      }
+                    }}
+                  >
+                    重置班级码
+                  </Button>
+                </div>
+              )}
               {roster.isPending ? (
                 <p className="muted">正在加载成员名单…</p>
               ) : roster.isError ? (
@@ -435,10 +506,18 @@ export function CloudPage() {
             </details>
           )}
           {(data.role === "TEACHER" || data.role === "ADMINISTRATOR") && (
-            <details className="class-assignment-create">
+            <details
+              className="class-assignment-create"
+              open={assignmentFormOpen}
+              onToggle={(event) => setAssignmentFormOpen(event.currentTarget.open)}
+            >
               <summary>
-                <strong>新建任务</strong>
-                {assignmentTitle ? <span className="policy-chip">草稿未保存</span> : null}
+                <strong>{editingAssignment ? "编辑任务" : "新建任务"}</strong>
+                {editingAssignment ? (
+                  <span className="policy-chip">编辑中：{editingAssignment.title}</span>
+                ) : assignmentTitle ? (
+                  <span className="policy-chip">草稿未保存</span>
+                ) : null}
               </summary>
               <div className="settings-grid">
                 <FormField label="任务标题">
@@ -450,11 +529,15 @@ export function CloudPage() {
                     />
                   )}
                 </FormField>
-                <FormField label="练习">
+                <FormField
+                  label="练习"
+                  hint={editingAssignment ? "编辑时练习不可更换" : undefined}
+                >
                   {(ids) => (
                     <select
                       {...ids}
-                      value={assignmentExerciseId}
+                      value={editingAssignment?.exerciseId ?? assignmentExerciseId}
+                      disabled={Boolean(editingAssignment)}
                       onChange={(event) => setAssignmentExerciseId(event.target.value)}
                     >
                       <option value="">选择练习</option>
@@ -511,20 +594,37 @@ export function CloudPage() {
                 ) : null}
               </div>
               <div className="button-row">
-                <Button
-                  disabled={!assignmentTitle || !assignmentExerciseId}
-                  busy={createAssignment.isPending}
-                  onClick={() => createAssignment.mutate(true)}
-                >
-                  创建并发布
-                </Button>
-                <Button
-                  variant="secondary"
-                  disabled={!assignmentTitle || !assignmentExerciseId || createAssignment.isPending}
-                  onClick={() => createAssignment.mutate(false)}
-                >
-                  存为草稿
-                </Button>
+                {editingAssignment ? (
+                  <>
+                    <Button
+                      disabled={!assignmentTitle || updateAssignment.isPending}
+                      busy={updateAssignment.isPending}
+                      onClick={() => updateAssignment.mutate()}
+                    >
+                      保存修改
+                    </Button>
+                    <Button variant="secondary" onClick={cancelAssignmentEdit}>
+                      取消编辑
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <Button
+                      disabled={!assignmentTitle || !assignmentExerciseId}
+                      busy={createAssignment.isPending}
+                      onClick={() => createAssignment.mutate(true)}
+                    >
+                      创建并发布
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      disabled={!assignmentTitle || !assignmentExerciseId || createAssignment.isPending}
+                      onClick={() => createAssignment.mutate(false)}
+                    >
+                      存为草稿
+                    </Button>
+                  </>
+                )}
               </div>
             </details>
           )}
@@ -622,6 +722,18 @@ export function CloudPage() {
                     <Button variant="secondary" onClick={() => openFeedback(item.id)}>
                       批阅反馈
                     </Button>
+                    {/* v3.4.2 LEG-12：归档任务云端拒绝编辑，入口直接隐藏。 */}
+                    {item.status !== "ARCHIVED" && (
+                      <Button
+                        variant="secondary"
+                        onClick={() => {
+                          startAssignmentEdit(item);
+                          setAssignmentFormOpen(true);
+                        }}
+                      >
+                        编辑
+                      </Button>
+                    )}
                     <Button variant="secondary" onClick={() => copyAssignment.mutate(item)}>
                       复制
                     </Button>
@@ -749,6 +861,23 @@ export function CloudPage() {
                               );
                             }}
                           />
+                          <Button
+                            variant="secondary"
+                            busy={
+                              draftFeedback.isPending &&
+                              draftFeedback.variables?.submissionId === item.submissionId
+                            }
+                            onClick={() => {
+                              if (
+                                item.comment &&
+                                !window.confirm("AI 起草会覆盖当前评语，确定继续？")
+                              )
+                                return;
+                              draftFeedback.mutate(item);
+                            }}
+                          >
+                            AI 起草
+                          </Button>
                           <Button
                             busy={saveFeedback.isPending}
                             onClick={() => saveFeedback.mutate(item)}
@@ -1037,6 +1166,31 @@ export function CloudPage() {
                 </p>
               </Feedback>
             )}
+          </section>
+          {/* v3.4.2 LEG-13：单课程 JSON 导入——与整包导入互补，单文件直接导入、无预览流程。 */}
+          <section className="account-section">
+            <h3>导入课程 JSON</h3>
+            <FormField
+              label="课程 JSON"
+              hint="单个课程导出文件，粘贴后直接导入；整包分发请用上方「安全课程包导入」。"
+            >
+              {(ids) => (
+                <textarea
+                  {...ids}
+                  value={courseJson}
+                  onChange={(event) => setCourseJson(event.target.value)}
+                />
+              )}
+            </FormField>
+            <div className="button-row">
+              <Button
+                disabled={!courseJson.trim()}
+                busy={importCourseJson.isPending}
+                onClick={() => importCourseJson.mutate(courseJson)}
+              >
+                导入课程 JSON
+              </Button>
+            </div>
           </section>
         </details>
       )}

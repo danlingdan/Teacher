@@ -38,6 +38,19 @@ function teacherWorkspace(classes: CloudWorkspace["classes"]): CloudWorkspace {
   };
 }
 
+function studentWorkspace(): CloudWorkspace {
+  return {
+    signedIn: true,
+    state: "READY",
+    message: "云端就绪",
+    displayName: "李学生",
+    role: "STUDENT",
+    recoverable: true,
+    sync: { state: "SYNCED", pending: 0, attempt: 0 },
+    classes: [],
+  };
+}
+
 function renderCloudPage() {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
@@ -390,5 +403,278 @@ describe("CloudPage", () => {
     expect(await screen.findByText(/成员名单暂时不可用/)).toBeInTheDocument();
     // 旧服务端缺端点属于预期降级，不得弹出错误 toast。
     expect(document.querySelectorAll(".ui-toaster .ui-toast")).toHaveLength(0);
+  });
+
+  it("shows the class join code to teachers and rotates it after confirmation", async () => {
+    requestMock.mockImplementation((method: string) => {
+      if (method === "cloud.workspace")
+        return Promise.resolve(
+          teacherWorkspace([
+            { id: "class-1", name: "软件2401", createdAt: "2026-09-01T00:00:00Z", members: [] },
+          ]),
+        );
+      if (method === "practice.catalog") return Promise.resolve({ items: [] });
+      if (method === "cloud.assignments") return Promise.resolve({ items: [] });
+      if (method === "cloud.class.roster") return Promise.resolve({ members: [] });
+      if (method === "cloud.class.join-code") return Promise.resolve({ joinCode: "AB234567" });
+      if (method === "cloud.class.join-code.rotate")
+        return Promise.resolve({ joinCode: "CD345678" });
+      return Promise.reject(new Error(`Unexpected request: ${method}`));
+    });
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    renderCloudPage();
+
+    // v3.4.1 CLS-4：教师在成员名单里可见班级码。
+    fireEvent.click(await screen.findByText("成员名单", { exact: true }));
+    expect(await screen.findByText("班级码：AB234567")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "重置班级码" }));
+
+    await waitFor(() =>
+      expect(requestMock).toHaveBeenCalledWith("cloud.class.join-code.rotate", {
+        classroomId: "class-1",
+      }),
+    );
+    expect(await screen.findByText("班级码：CD345678")).toBeInTheDocument();
+    expect(await screen.findByText(/班级码已重置/)).toBeInTheDocument();
+    expect(confirmSpy).toHaveBeenCalled();
+  });
+
+  it("lets students join a class by code and shows the joined class", async () => {
+    requestMock.mockImplementation((method: string, params?: Record<string, unknown>) => {
+      if (method === "cloud.class.join") {
+        return Promise.resolve({
+          id: "class-9",
+          name: "数据结构 1 班",
+          createdAt: "2026-09-01T00:00:00Z",
+          members: [],
+        });
+      }
+      if (params?.refreshRemote) {
+        return Promise.resolve({
+          signedIn: true,
+          state: "READY",
+          message: "云端就绪",
+          displayName: "李学生",
+          role: "STUDENT",
+          recoverable: true,
+          sync: { state: "SYNCED", pending: 0, attempt: 0 },
+          classes: [
+            {
+              id: "class-9",
+              name: "数据结构 1 班",
+              createdAt: "2026-09-01T00:00:00Z",
+              members: [{ userId: "s-1", role: "STUDENT" }],
+            },
+          ],
+        } satisfies CloudWorkspace);
+      }
+      return Promise.resolve(studentWorkspace());
+    });
+    renderCloudPage();
+
+    // v3.4.1 CLS-5：学生凭码加入入口；输入统一转大写。
+    const codeInput = await screen.findByLabelText("班级码");
+    fireEvent.change(codeInput, { target: { value: "ab234567" } });
+    expect(codeInput).toHaveValue("AB234567");
+    fireEvent.click(screen.getByRole("button", { name: "凭班级码加入" }));
+
+    await waitFor(() =>
+      expect(requestMock).toHaveBeenCalledWith("cloud.class.join", { code: "AB234567" }),
+    );
+    expect(await screen.findByText("数据结构 1 班")).toBeInTheDocument();
+    expect(await screen.findByText(/已加入班级/)).toBeInTheDocument();
+  });
+
+  const teacherClass = [
+    { id: "class-1", name: "数据结构 1 班", createdAt: "2026-09-01T00:00:00Z", members: [] },
+  ];
+
+  const publishedAssignment: CloudAssignment = {
+    id: "asg-1",
+    classroomId: "class-1",
+    exerciseId: "ex-1",
+    title: "SELECT 查询练习",
+    description: "完成基础查询",
+    status: "PUBLISHED",
+    createdAt: "2026-09-01T00:00:00Z",
+    updatedAt: "2026-09-01T00:00:00Z",
+    version: 3,
+  };
+
+  const feedbackItem = {
+    submissionId: "sub-1",
+    assignmentId: "asg-1",
+    studentUserId: "student-1",
+    status: "NEEDS_WORK",
+    comment: "",
+    knowledgePointIds: [],
+    version: 1,
+    authorUserId: "teacher-1",
+    updatedAt: "2026-09-10T00:00:00Z",
+  };
+
+  it("fills the editable comment with the AI draft and still saves through cloud.feedback.save", async () => {
+    requestMock.mockImplementation((method: string) => {
+      if (method === "cloud.workspace")
+        return Promise.resolve(teacherWorkspace(teacherClass));
+      if (method === "practice.catalog") return Promise.resolve({ items: [] });
+      if (method === "cloud.assignments")
+        return Promise.resolve({ items: [publishedAssignment] });
+      if (method === "cloud.feedback.list")
+        return Promise.resolve({ items: [feedbackItem], cached: false });
+      if (method === "cloud.feedback.draft")
+        return Promise.resolve({ text: "该生查询思路正确，注意 WHERE 条件。", evidence: ["sub-1"], aiGenerated: true });
+      if (method === "cloud.feedback.save") return Promise.resolve({ ...feedbackItem, status: "REVIEWED", version: 2 });
+      return Promise.reject(new Error(`Unexpected request: ${method}`));
+    });
+    renderCloudPage();
+
+    fireEvent.click(await screen.findByRole("button", { name: "批阅反馈" }));
+    fireEvent.click(await screen.findByRole("button", { name: "AI 起草" }));
+
+    const comment = await screen.findByLabelText("反馈内容");
+    await waitFor(() => expect(comment).toHaveValue("该生查询思路正确，注意 WHERE 条件。"));
+    expect(screen.getByRole("button", { name: "保存反馈 ·" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "保存反馈 ·" }));
+    await waitFor(() =>
+      expect(requestMock).toHaveBeenCalledWith(
+        "cloud.feedback.save",
+        expect.objectContaining({
+          submissionId: "sub-1",
+          comment: "该生查询思路正确，注意 WHERE 条件。",
+          expectedVersion: 1,
+        }),
+      ),
+    );
+  });
+
+  it("keeps the manual feedback path usable when the AI draft fails", async () => {
+    requestMock.mockImplementation((method: string) => {
+      if (method === "cloud.workspace")
+        return Promise.resolve(teacherWorkspace(teacherClass));
+      if (method === "practice.catalog") return Promise.resolve({ items: [] });
+      if (method === "cloud.assignments")
+        return Promise.resolve({ items: [publishedAssignment] });
+      if (method === "cloud.feedback.list")
+        return Promise.resolve({ items: [{ ...feedbackItem, comment: "手写评语" }], cached: false });
+      if (method === "cloud.feedback.draft")
+        return Promise.reject(new Error("AI 服务不可用"));
+      return Promise.reject(new Error(`Unexpected request: ${method}`));
+    });
+    renderCloudPage();
+
+    fireEvent.click(await screen.findByRole("button", { name: "批阅反馈" }));
+    fireEvent.click(await screen.findByRole("button", { name: "AI 起草" }));
+
+    expect(await screen.findByText(/AI 起草失败，可直接手写评语/)).toBeInTheDocument();
+    expect(screen.getByLabelText("反馈内容")).toHaveValue("手写评语");
+    expect(requestMock).not.toHaveBeenCalledWith("cloud.feedback.save", expect.anything());
+  });
+
+  it("updates a published assignment through the edit form with an optimistic version", async () => {
+    requestMock.mockImplementation((method: string) => {
+      if (method === "cloud.workspace")
+        return Promise.resolve(teacherWorkspace(teacherClass));
+      if (method === "practice.catalog") return Promise.resolve({ items: [] });
+      if (method === "cloud.assignments")
+        return Promise.resolve({ items: [publishedAssignment] });
+      if (method === "cloud.assignment.update")
+        return Promise.resolve({ ...publishedAssignment, title: "SELECT 进阶练习", version: 4 });
+      return Promise.reject(new Error(`Unexpected request: ${method}`));
+    });
+    renderCloudPage();
+
+    expect(await screen.findByText("SELECT 查询练习")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "编辑" }));
+
+    const title = await screen.findByLabelText("任务标题");
+    await waitFor(() => expect(title).toHaveValue("SELECT 查询练习"));
+    expect(screen.getByText(/编辑中：SELECT 查询练习/)).toBeInTheDocument();
+    expect(screen.getByLabelText("练习")).toBeDisabled();
+
+    fireEvent.change(title, { target: { value: "SELECT 进阶练习" } });
+    fireEvent.click(screen.getByRole("button", { name: "保存修改" }));
+
+    await waitFor(() =>
+      expect(requestMock).toHaveBeenCalledWith(
+        "cloud.assignment.update",
+        expect.objectContaining({
+          classroomId: "class-1",
+          assignmentId: "asg-1",
+          title: "SELECT 进阶练习",
+          expectedVersion: 3,
+        }),
+      ),
+    );
+    expect(await screen.findByText(/任务「SELECT 进阶练习」已更新/)).toBeInTheDocument();
+  });
+
+  it("hides the edit entry for archived assignments", async () => {
+    requestMock.mockImplementation((method: string) => {
+      if (method === "cloud.workspace")
+        return Promise.resolve(teacherWorkspace(teacherClass));
+      if (method === "practice.catalog") return Promise.resolve({ items: [] });
+      if (method === "cloud.assignments")
+        return Promise.resolve({
+          items: [
+            publishedAssignment,
+            { ...publishedAssignment, id: "asg-archived", title: "归档任务", status: "ARCHIVED" },
+          ],
+        });
+      return Promise.reject(new Error(`Unexpected request: ${method}`));
+    });
+    renderCloudPage();
+
+    expect(await screen.findByText("归档任务")).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "编辑" })).toHaveLength(1);
+  });
+
+  it("imports a single course JSON and refreshes the course list", async () => {
+    requestMock.mockImplementation((method: string) => {
+      if (method === "cloud.workspace")
+        return Promise.resolve(teacherWorkspace(teacherClass));
+      if (method === "practice.catalog") return Promise.resolve({ items: [] });
+      if (method === "cloud.courses") return Promise.resolve({ items: [], cached: false });
+      if (method === "cloud.course.import")
+        return Promise.resolve({ courseId: "course-9", sections: 2, knowledgePoints: 5, exercises: 3 });
+      return Promise.reject(new Error(`Unexpected request: ${method}`));
+    });
+    renderCloudPage();
+
+    fireEvent.click(await screen.findByText("共享课程、知识点与版本化任务"));
+    fireEvent.change(await screen.findByLabelText(/课程 JSON/), {
+      target: { value: '{"course":{"name":"数据库基础"}}' },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "导入课程 JSON" }));
+
+    await waitFor(() =>
+      expect(requestMock).toHaveBeenCalledWith("cloud.course.import", {
+        content: '{"course":{"name":"数据库基础"}}',
+      }),
+    );
+    expect(await screen.findByText(/课程 JSON 已导入：2 个章节/)).toBeInTheDocument();
+  });
+
+  it("surfaces a readable error when the course JSON import is rejected", async () => {
+    requestMock.mockImplementation((method: string) => {
+      if (method === "cloud.workspace")
+        return Promise.resolve(teacherWorkspace(teacherClass));
+      if (method === "practice.catalog") return Promise.resolve({ items: [] });
+      if (method === "cloud.courses") return Promise.resolve({ items: [], cached: false });
+      if (method === "cloud.course.import")
+        return Promise.reject(new Error("课程文件格式不正确或版本不兼容"));
+      return Promise.reject(new Error(`Unexpected request: ${method}`));
+    });
+    renderCloudPage();
+
+    fireEvent.click(await screen.findByText("共享课程、知识点与版本化任务"));
+    fireEvent.change(await screen.findByLabelText(/课程 JSON/), {
+      target: { value: "{broken}" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "导入课程 JSON" }));
+
+    expect(await screen.findByText(/课程 JSON 导入失败：课程文件格式不正确或版本不兼容/)).toBeInTheDocument();
   });
 });

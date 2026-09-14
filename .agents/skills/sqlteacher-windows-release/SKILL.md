@@ -25,6 +25,7 @@ When publication is authorized, use the repository's solo workflow on `main`; do
 4. Confirm checksum entries match the intended release artifacts and stale versioned EXE/ZIP files are absent from `target/installer`.
 5. Verify the packaged sidecar contract/runtime and smoke-start the portable Tauri executable when the environment supports it.
 6. Inspect ZIP entries for `.secrets`, `.env`, `app-data`, databases, logs, credentials, private course material, and unexpected `target` content. Do not print secret values.
+7. LEG-15 (v3.4.2+) verification receipt: after all local gates pass and the release content is committed, run `./packaging/write-verification-receipt.ps1 -MvnTests <n> -NpmTests <n>` (it requires a clean worktree and binds the receipt to HEAD), commit `verification-receipt.json`, then tag that commit. The release workflow skips its own `mvn test`/`npm test` only when the receipt binds to the tag commit (or its parent when the sole diff is the receipt) and records zero failures; `npm ci`, `npm audit`, packaging, and contract checks always run. When the receipt is accepted, the local full `mvn test` + `npm test` are the only test execution for the release and must never be omitted; when it is missing or rejected, CI falls back to full tests. Release notes must state the mode ("测试执行：本地全量（CI 凭据跳过）" or "CI 全量").
 
 ## Publish and verify
 

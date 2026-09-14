@@ -102,6 +102,10 @@ public final class SqliteAppDatabaseInitializer implements DatabaseInitializatio
              Statement statement = connection.createStatement()) {
 
             // Demo restore is idempotent: drop the current-shape tables before recreating.
+            // v3.4.1 DB-1：演示库补全参照完整性（Course 自引用、SC/SPJ 外键）。DROP/CREATE
+            // 阶段先关闭外键——自引用 Course 在外键开启时会被隐式 DELETE 卡住；建表完成后
+            // 再开启，让种子数据同样经过外键校验。
+            statement.executeUpdate("PRAGMA foreign_keys = OFF");
             String[] dropTables = {
                 "DROP TABLE IF EXISTS Student",
                 "DROP TABLE IF EXISTS Course",
@@ -130,7 +134,8 @@ public final class SqliteAppDatabaseInitializer implements DatabaseInitializatio
                     Cno     INTEGER PRIMARY KEY,
                     Cname   TEXT    NOT NULL,
                     Ccredit INTEGER,
-                    Cpno    INTEGER
+                    Cpno    INTEGER,
+                    FOREIGN KEY (Cpno) REFERENCES Course(Cno)
                 )
                 """);
             statement.executeUpdate("""
@@ -140,7 +145,10 @@ public final class SqliteAppDatabaseInitializer implements DatabaseInitializatio
                     Grade         INTEGER,
                     Semester      INTEGER,
                     Teachingclass TEXT,
-                    PRIMARY KEY (Sno, Cno)
+                    PRIMARY KEY (Sno, Cno),
+                    FOREIGN KEY (Sno) REFERENCES Student(Sno),
+                    FOREIGN KEY (Cno) REFERENCES Course(Cno),
+                    CHECK (Grade BETWEEN 0 AND 100)
                 )
                 """);
             statement.executeUpdate("""
@@ -172,9 +180,15 @@ public final class SqliteAppDatabaseInitializer implements DatabaseInitializatio
                     PNO TEXT    NOT NULL,
                     JNO TEXT    NOT NULL,
                     QTY INTEGER,
-                    PRIMARY KEY (SNO, PNO, JNO)
+                    PRIMARY KEY (SNO, PNO, JNO),
+                    FOREIGN KEY (SNO) REFERENCES S(SNO),
+                    FOREIGN KEY (PNO) REFERENCES P(PNO),
+                    FOREIGN KEY (JNO) REFERENCES J(JNO)
                 )
                 """);
+
+            // Seeds must satisfy the constraints above, so enforcement is on from here on.
+            statement.executeUpdate("PRAGMA foreign_keys = ON");
 
             // ── Student data (7 rows) ──
             statement.executeUpdate("INSERT INTO Student VALUES (20180001, '李勇',   '男', '2000-03-08', '信息安全')");

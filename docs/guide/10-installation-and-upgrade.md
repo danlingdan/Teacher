@@ -12,6 +12,22 @@ SQLTeacher 3 只提供 Tauri/React 桌面端。以管理员身份运行对应版
 只从项目 GitHub Release 下载文件，并使用同一 Release 的 `SHA256SUMS.txt` 核对 EXE 和 ZIP。用户数据保存在
 `%LOCALAPPDATA%\SQLTeacher`；NSIS 程序安装在 `%ProgramFiles%\SQLTeacher`，两者严格分离。
 
+## 许可协议页与法律文件
+
+v3.4.2 起安装器在正常（交互式）安装时，会在选择安装位置之前多出一页可滚动的许可协议页，内容为
+Apache License 2.0 全文（项目根 `LICENSE`），同意后才能继续安装；passive 与静默安装自动跳过该页，
+既有升级脚本与无人值守流程不受影响。安装器的文件属性（LegalCopyright）标注
+`Copyright 2026 河南科技大学`。
+
+安装目录携带 `legal\` 子目录（`%ProgramFiles%\SQLTeacher\legal\`），内含三份法律文件：
+
+- `LICENSE.txt`：Apache License 2.0 全文；
+- `THIRD-PARTY-LICENSES.txt`：第三方组件许可清单；
+- `PRIVACY.md`：隐私说明（应用内“关于”面板与帮助主题“隐私”展示的即同一文本）。
+
+便携 ZIP 同样携带 `legal\` 目录，除上述三份文件外还包含 `sqlteacher-sbom.json` 与
+`sqlteacher-ui-sbom.json` 两份 CycloneDX SBOM 依赖清单。卸载会随安装目录一并移除 `legal\`。
+
 ## 升级和数据兼容
 
 关闭旧版后以管理员身份运行新版安装器。安装器会按旧版统一使用的产品名 `SQLTeacher` 和发布者

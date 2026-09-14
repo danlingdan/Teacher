@@ -55,6 +55,11 @@ public final class JdbcConnectionFactory {
         SQLiteConfig sqliteConfig = new SQLiteConfig();
         sqliteConfig.setBusyTimeout(5_000);
         sqliteConfig.setJournalMode(SQLiteConfig.JournalMode.WAL);
+        // v3.4.1 DB-2：demo 演示库开启外键强制——演示库 DDL 已声明参照完整性约束，
+        // 控制台/NL2SQL 的违规写入必须真实报错才是教学要演示的数据库行为；app 库维持默认。
+        if ("demo".equals(connectionId.toLowerCase())) {
+            sqliteConfig.enforceForeignKeys(true);
+        }
         return DriverManager.getConnection(url, sqliteConfig.toProperties());
     }
 
@@ -78,6 +83,11 @@ public final class JdbcConnectionFactory {
             SQLiteConfig sqliteConfig = new SQLiteConfig();
             sqliteConfig.setReadOnly(profile.readOnly());
             sqliteConfig.setBusyTimeout(toTimeoutMillis(timeout));
+            // v3.4.1 DB-2：SQL 工作台等用户路径经 profile 打开连接；内置 demo 连接
+            // 同样开启外键强制，与 open(connectionId) 的 demo 分支保持一致。
+            if (JdbcConnectionManagementService.DEMO_CONNECTION_ID.equals(profile.id())) {
+                sqliteConfig.enforceForeignKeys(true);
+            }
             connection = DriverManager.getConnection(
                 "jdbc:sqlite:" + target.databasePath(),
                 sqliteConfig.toProperties()

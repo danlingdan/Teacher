@@ -57,6 +57,31 @@ try {
     & (Join-Path $PSScriptRoot "build-v3-sidecar.ps1") -JavaHome $JavaHome
     if ($LASTEXITCODE -ne 0) { throw "Unable to build the Java sidecar." }
 
+    # v3.4.2 LEG-5/LEG-6: the installer must ship the legal trio and the confirmed
+    # copyright/license metadata. Single source of truth stays the root LICENSE and
+    # src/main/resources/legal; the Tauri-side copy is build staging only (git-ignored).
+    $tauriConfig = Get-Content -LiteralPath (Join-Path $projectRoot "ui-web\src-tauri\tauri.conf.json") -Raw | ConvertFrom-Json
+    if ($tauriConfig.bundle.resources -notcontains "legal/**/*") {
+        throw "tauri.conf.json bundle.resources must include 'legal/**/*' so the installer ships the legal files."
+    }
+    $expectedCopyright = [string]$tauriConfig.bundle.copyright
+    if ([string]::IsNullOrWhiteSpace($expectedCopyright)) {
+        throw "tauri.conf.json bundle.copyright must carry the confirmed copyright line."
+    }
+    if ([string]::IsNullOrWhiteSpace($tauriConfig.bundle.licenseFile)) {
+        throw "tauri.conf.json bundle.licenseFile must point at the root LICENSE for the NSIS license page."
+    }
+    $tauriLegalRoot = Join-Path $projectRoot "ui-web\src-tauri\legal"
+    New-Item -ItemType Directory -Force -Path $tauriLegalRoot | Out-Null
+    Copy-Item -LiteralPath (Join-Path $projectRoot "LICENSE") -Destination (Join-Path $tauriLegalRoot "LICENSE.txt") -Force
+    Copy-Item -LiteralPath (Join-Path $projectRoot "src\main\resources\legal\THIRD-PARTY-LICENSES.txt") -Destination $tauriLegalRoot -Force
+    Copy-Item -LiteralPath (Join-Path $projectRoot "src\main\resources\legal\PRIVACY.md") -Destination $tauriLegalRoot -Force
+    foreach ($stagedLegal in @("LICENSE.txt", "THIRD-PARTY-LICENSES.txt", "PRIVACY.md")) {
+        if (-not (Test-Path -LiteralPath (Join-Path $tauriLegalRoot $stagedLegal))) {
+            throw "Legal staging for the Tauri bundle is incomplete: $stagedLegal"
+        }
+    }
+
     Push-Location (Join-Path $projectRoot "ui-web")
     try {
         npm run tauri build -- --bundles nsis
@@ -86,6 +111,21 @@ try {
     # script must never reference it again.
     if ($nsisContent.Contains('SQLTEACHER_REMOVE_CURRENT_USER')) {
         throw "Generated NSIS installer unexpectedly references the removed legacy uninstall hook."
+    }
+    # v3.4.2 LEG-6: the license agreement page and copyright metadata must reach the
+    # generated installer; an empty LICENSE define silently drops the page.
+    if ($nsisContent.Contains('!define LICENSE ""')) {
+        throw "Generated NSIS installer has an empty LICENSE define; the license agreement page would be skipped."
+    }
+    if (-not $nsisContent.Contains('MUI_PAGE_LICENSE')) {
+        throw "Generated NSIS installer is missing the license agreement page (MUI_PAGE_LICENSE)."
+    }
+    if (-not $nsisContent.Contains("!define COPYRIGHT `"$expectedCopyright`"")) {
+        throw "Generated NSIS installer is missing the confirmed COPYRIGHT define: $expectedCopyright"
+    }
+    # v3.4.2 LEG-5: bundled resources must place the legal trio into <install dir>\legal.
+    if (-not $nsisContent.Contains('CreateDirectory "$INSTDIR\legal"')) {
+        throw "Generated NSIS installer does not create the legal resource directory."
     }
     if (Test-Path -LiteralPath $portableStage) {
         Assert-ChildPath -Candidate $portableStage -Parent $targetRoot

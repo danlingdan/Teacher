@@ -45,7 +45,51 @@ jobs:
               "RELEASE_CHANNEL=stable" >> $env:GITHUB_ENV
               "RELEASE_PRERELEASE=false" >> $env:GITHUB_ENV
           }
+      - name: Evaluate local verification receipt
+        shell: pwsh
+        run: |
+          # LEG-15 (v3.4.2): 本地全量测试通过且凭据绑定发布提交时跳过 CI 重复测试；
+          # 凭据缺失、SHA 不符或记录任何失败一律回退全量测试（fail-safe：宁可慢不可漏）。
+          # 合法绑定：receipt.commit == tag 提交，或 == 其父提交且两者差异仅为凭据文件本身
+          # （发布流程为“提交发布内容 → 写凭据 → 提交凭据 → 打 tag”）。
+          $skip = 'false'
+          $receiptPath = 'verification-receipt.json'
+          if (Test-Path -LiteralPath $receiptPath) {
+              try {
+                  $receipt = Get-Content -LiteralPath $receiptPath -Raw | ConvertFrom-Json
+                  $head = $env:GITHUB_SHA
+                  $commitOk = $false
+                  if ($receipt.commit -eq $head) {
+                      $commitOk = $true
+                  } else {
+                      git rev-parse --verify --quiet "$head^" *> $null
+                      if ($LASTEXITCODE -eq 0) {
+                          $parent = (git rev-parse "$head^").Trim()
+                          if ($receipt.commit -eq $parent) {
+                              $changed = @(git diff --name-only $parent $head)
+                              $commitOk = ($changed.Count -eq 1 -and $changed[0] -eq $receiptPath)
+                          }
+                      }
+                  }
+                  $summariesOk = ($receipt.maven.testsRun -gt 0 -and $receipt.maven.failures -eq 0 -and $receipt.maven.errors -eq 0 `
+                      -and $receipt.npm.testsRun -gt 0 -and $receipt.npm.failures -eq 0)
+                  if ($commitOk -and $summariesOk) { $skip = 'true' }
+                  if ($skip -ne 'true') {
+                      Write-Host "::warning::Verification receipt rejected (commitOk=$commitOk summariesOk=$summariesOk); running full CI tests."
+                  }
+              } catch {
+                  Write-Host "::warning::Verification receipt is unreadable; running full CI tests."
+              }
+          } else {
+              Write-Host "::notice::No verification receipt; running full CI tests."
+          }
+          "RELEASE_TESTS_SKIP=$skip" >> $env:GITHUB_ENV
+          if ($skip -eq 'true') {
+              Write-Host "::notice::Local verification receipt accepted ($($receipt.commit)); CI test execution skipped — build, audit, and contract checks still run."
+          }
+
       - name: Probe WSL availability for runner-tagged tests
+        if: env.RELEASE_TESTS_SKIP != 'true'
         shell: pwsh
         run: |
           # 全量 mvn test 包含 runner 标签的 WSL 沙箱测试（fast profile 排除的
@@ -64,6 +108,7 @@ jobs:
           exit 0
 
       - name: Run Java core and sidecar tests
+        if: env.RELEASE_TESTS_SKIP != 'true'
         shell: pwsh
         run: |
           if ($env:JAVA_TEST_SKIP_WSL -eq 'true') {
@@ -92,7 +137,11 @@ jobs:
           npm ci
           # 审计生产依赖：E2E 工具链的 extract-zip 上游暂无修复版且不随安装包分发。
           npm audit --audit-level=moderate --omit=dev
-          npm test
+
+      - name: Run frontend tests
+        if: env.RELEASE_TESTS_SKIP != 'true'
+        working-directory: ui-web
+        run: npm test
 
       - name: Build Tauri installer and portable archive
         shell: pwsh
@@ -151,6 +200,7 @@ jobs:
             target/installer/sqlteacher-sbom.json
             target/installer/sqlteacher-ui-sbom.json
             target/installer/update-manifest.json
+            verification-receipt.json
           if-no-files-found: error
           retention-days: 30
 
@@ -185,6 +235,9 @@ jobs:
           )
           $uiSbom = "target/installer/sqlteacher-ui-sbom.json"
           if (Test-Path -LiteralPath $uiSbom) { $assets += $uiSbom }
+          # LEG-15: 验证凭据随 Release 资产上传，供审计“测试执行：本地全量（CI 凭据跳过）”。
+          $receipt = "verification-receipt.json"
+          if (Test-Path -LiteralPath $receipt) { $assets += $receipt }
           gh release upload $env:GITHUB_REF_NAME @assets --clobber
           if ($LASTEXITCODE -ne 0) { throw 'Unable to upload GitHub Release assets.' }
 

@@ -94,6 +94,15 @@ mvn -q test -Pfast
 mvn test
 ```
 
+### 3.2 发布 CI 与本地验证凭据（v3.4.2 起）
+
+发布 workflow（`.github/workflows/release.yml`，tag 触发）默认全量重跑 `mvn test` 与 `npm test`，与本地发布门禁重复；且 GitHub 托管 runner 无 WSL 时 Java 测试本就降级 `-Pfast`，弱于本地全量。v3.4.2 起引入验证凭据机制（LEG-15）：
+
+- 发布顺序：本地全量 `mvn test` + `npm test` 通过 → 提交发布内容 → 运行 `./packaging/write-verification-receipt.ps1 -MvnTests <用例数> -NpmTests <用例数>`（要求工作区干净，凭据绑定当前 HEAD）→ 提交 `verification-receipt.json` → 打 tag → 推送。
+- CI 在测试步骤前读取凭据：仅当凭据 `commit` 等于 tag 提交（或等于其父提交且两者差异仅为凭据文件本身）且 Maven/npm 摘要均为 0 失败时，跳过 `mvn test` 与 `npm test`；`npm ci`、`npm audit`、打包、SBOM、签名与合同校验始终执行。
+- fail-safe：凭据缺失、SHA 不符、不可读或记录任何失败时，一律回退现状全量测试，宁可慢不可漏。
+- 凭据被接受时，**本地全量测试是该版本测试执行的唯一门禁，不可省略**；凭据文件随 Release 资产上传供审计，发布说明状态行标注"测试执行：本地全量（CI 凭据跳过）"或"CI 全量"。
+
 ## 4. AI 回归测试
 
 至少准备 100 条样例，分阶段完成：

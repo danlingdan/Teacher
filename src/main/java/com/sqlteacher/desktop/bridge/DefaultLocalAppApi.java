@@ -46,7 +46,8 @@ public final class DefaultLocalAppApi implements LocalAppApi, ApiSectionHost {
             new AccountApiSection(this),
             new TeachingApiSection(this),
             new CloudApiSection(this),
-            new SettingsApiSection(this)
+            new SettingsApiSection(this),
+            new SupportApiSection(this)
         );
         this.sectionsByMethod = buildRegistry(sections);
     }

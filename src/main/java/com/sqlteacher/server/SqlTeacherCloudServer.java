@@ -388,6 +388,18 @@ public final class SqlTeacherCloudServer {
                 return;
             }
             String[] segments = path.split("/");
+            // v3.4.1 CLS-2：学生凭班级码自助加入。字面量 join 必须先于 {id} 段匹配；
+            // 未知码与其他非法请求统一 404，不泄露班级码存在性；限流防短码枚举。
+            if (segments.length == 5 && "join".equals(segments[4]) && "POST".equals(exchange.getRequestMethod())) {
+                Map<String, String> body = request(exchange);
+                enforceQuota("class-join:" + actor.id(), 10, Duration.ofMinutes(1));
+                try {
+                    respond(exchange, 200, classroomStore.joinByCode(actor, body.get("code")));
+                } catch (IllegalArgumentException invalidCode) {
+                    respond(exchange, 404, errorResponse("JOIN_CODE_INVALID", "班级码无效"));
+                }
+                return;
+            }
             if (segments.length == 6 && "members".equals(segments[5]) && "POST".equals(exchange.getRequestMethod())) {
                 Map<String, String> body = request(exchange);
                 UserRole role = UserRole.valueOf(body.get("role").toUpperCase(Locale.ROOT));
@@ -398,6 +410,15 @@ public final class SqlTeacherCloudServer {
             }
             if (segments.length == 6 && "roster".equals(segments[5]) && "GET".equals(exchange.getRequestMethod())) {
                 respond(exchange, 200, Map.of("members", classroomStore.classRoster(actor, segments[4])));
+                return;
+            }
+            if (segments.length == 6 && "join-code".equals(segments[5]) && "GET".equals(exchange.getRequestMethod())) {
+                respond(exchange, 200, Map.of("joinCode", classroomStore.joinCode(actor, segments[4])));
+                return;
+            }
+            if (segments.length == 7 && "join-code".equals(segments[5]) && "rotate".equals(segments[6])
+                && "POST".equals(exchange.getRequestMethod())) {
+                respond(exchange, 200, Map.of("joinCode", classroomStore.rotateJoinCode(actor, segments[4])));
                 return;
             }
             if (segments.length == 6 && "assignments".equals(segments[5])) {

@@ -16,6 +16,7 @@ import com.sqlteacher.domain.exercise.ExerciseRevealMode;
 import com.sqlteacher.domain.exercise.ExerciseType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.sqlite.SQLiteConfig;
 
 import java.io.IOException;
 import java.math.BigDecimal;
@@ -287,7 +288,11 @@ public final class DeterministicSqlExerciseEvaluationService implements SqlExerc
     private static ScriptOutcome executeScript(Path databasePath, List<String> statements) throws SQLException {
         long deadline = System.nanoTime() + QUERY_TIMEOUT_SECONDS * 1_000_000_000L;
         int affectedRows = 0;
-        try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + databasePath);
+        // v3.4.1 DB-4：评测脚本在开启外键强制的隔离库上运行，与练习沙箱行为一致。
+        SQLiteConfig sandboxConfig = new SQLiteConfig();
+        sandboxConfig.enforceForeignKeys(true);
+        try (Connection connection = DriverManager.getConnection(
+                "jdbc:sqlite:" + databasePath, sandboxConfig.toProperties());
              Statement statement = connection.createStatement()) {
             for (int index = 0; index < statements.size(); index++) {
                 long remaining = deadline - System.nanoTime();
@@ -541,7 +546,11 @@ public final class DeterministicSqlExerciseEvaluationService implements SqlExerc
     private static void initializeDataset(Path databasePath, ExerciseDataset dataset) throws SQLException {
         ExerciseDatasetSqlPolicy.validate(dataset.setupSql());
         SqliteDriver.ensureLoaded();
-        try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + databasePath)) {
+        // v3.4.1 DB-4：初始化阶段同样校验参照完整性——数据集种子必须满足自身外键。
+        SQLiteConfig initConfig = new SQLiteConfig();
+        initConfig.enforceForeignKeys(true);
+        try (Connection connection = DriverManager.getConnection(
+                "jdbc:sqlite:" + databasePath, initConfig.toProperties())) {
             connection.setAutoCommit(false);
             try (Statement statement = connection.createStatement()) {
                 for (String sql : SqlScriptSplitter.split(dataset.setupSql())) {

@@ -40,4 +40,14 @@ class FileGeneralSoftwareServiceTest {
         assertTrue(Files.isRegularFile(directory.resolve("student.db")));
         assertFalse(Files.exists(directory.resolve("cache/item")));
     }
+
+    @Test void servesBundledPrivacyStatementAndCurrentPanelNames() {
+        FileGeneralSoftwareService service = new FileGeneralSoftwareService(directory, URI.create("https://api.sqlteacher.tech"));
+        String privacy = service.help("privacy");
+        assertTrue(privacy.startsWith("# SQLTeacher 隐私说明"), "privacy help must serve the bundled PRIVACY.md, not the fallback summary");
+        assertTrue(privacy.contains("不收集"));
+        assertTrue(privacy.contains("数据去向"));
+        assertFalse(privacy.contains("更新与支持"), "stale settings panel names must not survive in legal copy");
+        assertTrue(service.help("updates").contains("更新、通知与帮助"));
+    }
 }

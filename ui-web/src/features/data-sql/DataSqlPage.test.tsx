@@ -16,8 +16,7 @@ vi.mock("monaco-editor/editor/editor.api", () => {
     registerCompletionItemProvider: vi.fn(),
     CompletionItemKind: { Field: 0 },
   };
-  class Range {
-  }
+  class Range {}
   return { languages, Range, default: { languages, Range } };
 });
 vi.mock("monaco-editor/editor/editor.worker?worker", () => ({ default: class {} }));
@@ -31,7 +30,13 @@ const dialectItems = {
   items: [
     { name: "SQLITE", displayName: "SQLite", defaultPort: 0, fileBased: true, generic: false },
     { name: "MYSQL", displayName: "MySQL", defaultPort: 3306, fileBased: false, generic: false },
-    { name: "DAMENG", displayName: "达梦 DM8", defaultPort: 5236, fileBased: false, generic: false },
+    {
+      name: "DAMENG",
+      displayName: "达梦 DM8",
+      defaultPort: 5236,
+      fileBased: false,
+      generic: false,
+    },
   ],
 };
 
@@ -41,12 +46,26 @@ const preferences = {
   canMaintainLocalData: true,
   secretsExposed: false,
   general: {
-    automaticUpdateChecks: true, skippedVersion: "", proxyMode: "SYSTEM", proxyHost: "", proxyPort: 0,
-    reducedMotion: false, highContrast: false, supportLogging: false, supportLoggingExpiresAt: 0,
-    updateMirrorsEnabled: false, language: "zh", nativeNotificationsEnabled: true, meteredNetwork: false,
-    theme: "system", font: "modern", density: "comfortable",
+    automaticUpdateChecks: true,
+    skippedVersion: "",
+    proxyMode: "SYSTEM",
+    proxyHost: "",
+    proxyPort: 0,
+    reducedMotion: false,
+    highContrast: false,
+    supportLogging: false,
+    supportLoggingExpiresAt: 0,
+    updateMirrorsEnabled: false,
+    language: "zh",
+    nativeNotificationsEnabled: true,
+    meteredNetwork: false,
+    theme: "system",
+    font: "modern",
+    density: "comfortable",
   },
-  notifications: [], tasks: [], helpTopics: [],
+  notifications: [],
+  tasks: [],
+  helpTopics: [],
 };
 
 function renderPage() {
@@ -54,7 +73,7 @@ function renderPage() {
   return render(
     <QueryClientProvider client={client}>
       <MemoryRouter>
-      <DataSqlPage />
+        <DataSqlPage />
       </MemoryRouter>
     </QueryClientProvider>,
   );
@@ -86,12 +105,24 @@ describe("DataSqlPage connection manager", () => {
       if (method === "data.connections") return Promise.resolve({ items: [] });
       if (method === "data.connection.dialects") return Promise.resolve(dialectItems);
       if (method === "data.connection.test") {
-        return Promise.resolve({ successful: true, message: "连接成功。", databaseProduct: "SQLite", databaseVersion: "3.45", elapsed: 1 });
+        return Promise.resolve({
+          successful: true,
+          message: "连接成功。",
+          databaseProduct: "SQLite",
+          databaseVersion: "3.45",
+          elapsed: 1,
+        });
       }
       if (method === "data.connection.save") {
         return Promise.resolve({
-          id: "sqlite-school-ab12", displayName: "SQLite school.db", dialect: "SQLITE", readOnly: false,
-          enabled: true, builtIn: false, selected: true, databasePath: "C:\\data\\school.db",
+          id: "sqlite-school-ab12",
+          displayName: "SQLite school.db",
+          dialect: "SQLITE",
+          readOnly: false,
+          enabled: true,
+          builtIn: false,
+          selected: true,
+          databasePath: "C:\\data\\school.db",
         });
       }
       throw new Error(`Unexpected request: ${method}`);
@@ -103,16 +134,22 @@ describe("DataSqlPage connection manager", () => {
     fireEvent.click(screen.getByRole("button", { name: "测试并保存" }));
 
     await screen.findByText("连接成功");
-    await waitFor(() => expect(requestMock).toHaveBeenCalledWith(
-      "data.connection.save",
-      expect.objectContaining({
-        id: expect.stringMatching(/^[a-z0-9][a-z0-9._-]{0,63}$/),
-        displayName: "SQLite school.db",
-        port: 0,
-      }),
-    ));
-    const testIndex = requestMock.mock.calls.findIndex(call => call[0] === "data.connection.test");
-    const saveIndex = requestMock.mock.calls.findIndex(call => call[0] === "data.connection.save");
+    await waitFor(() =>
+      expect(requestMock).toHaveBeenCalledWith(
+        "data.connection.save",
+        expect.objectContaining({
+          id: expect.stringMatching(/^[a-z0-9][a-z0-9._-]{0,63}$/),
+          displayName: "SQLite school.db",
+          port: 0,
+        }),
+      ),
+    );
+    const testIndex = requestMock.mock.calls.findIndex(
+      (call) => call[0] === "data.connection.test",
+    );
+    const saveIndex = requestMock.mock.calls.findIndex(
+      (call) => call[0] === "data.connection.save",
+    );
     expect(testIndex).toBeGreaterThanOrEqual(0);
     expect(saveIndex).toBeGreaterThan(testIndex);
   });
@@ -123,10 +160,17 @@ describe("DataSqlPage connection manager", () => {
       if (method === "data.connection.dialects") return Promise.resolve(dialectItems);
       if (method === "sql.history") {
         return Promise.resolve({
-          items: [{
-            connectionId: "demo", connectionName: "SQLite 演示数据库", sql: "select name from student",
-            successful: true, rowCount: 7, durationMillis: 12, createdAt: "2026-09-07T01:00:00Z",
-          }],
+          items: [
+            {
+              connectionId: "demo",
+              connectionName: "SQLite 演示数据库",
+              sql: "select name from student",
+              successful: true,
+              rowCount: 7,
+              durationMillis: 12,
+              createdAt: "2026-09-07T01:00:00Z",
+            },
+          ],
         });
       }
       throw new Error(`Unexpected request: ${method}`);
@@ -143,11 +187,21 @@ describe("DataSqlPage connection manager", () => {
     requestMock.mockImplementation((method: string) => {
       if (method === "data.connections") {
         return Promise.resolve({
-          items: [{
-            id: "mysql.course", displayName: "MySQL 课程库", dialect: "MYSQL", readOnly: false,
-            enabled: true, builtIn: false, selected: true, host: "db.school.edu", port: 3306,
-            databaseName: "course", username: "teacher",
-          }],
+          items: [
+            {
+              id: "mysql.course",
+              displayName: "MySQL 课程库",
+              dialect: "MYSQL",
+              readOnly: false,
+              enabled: true,
+              builtIn: false,
+              selected: true,
+              host: "db.school.edu",
+              port: 3306,
+              databaseName: "course",
+              username: "teacher",
+            },
+          ],
         });
       }
       if (method === "data.connection.dialects") return Promise.resolve(dialectItems);
@@ -169,7 +223,13 @@ describe("DataSqlPage connection manager", () => {
       if (method === "data.connections") return Promise.resolve({ items: [] });
       if (method === "data.connection.dialects") return Promise.resolve(dialectItems);
       if (method === "data.connection.test") {
-        return Promise.resolve({ successful: false, message: "连接失败，请检查数据库地址、凭据和服务状态。", databaseProduct: "", databaseVersion: "", elapsed: 1 });
+        return Promise.resolve({
+          successful: false,
+          message: "连接失败，请检查数据库地址、凭据和服务状态。",
+          databaseProduct: "",
+          databaseVersion: "",
+          elapsed: 1,
+        });
       }
       throw new Error(`Unexpected request: ${method}`);
     });
@@ -196,25 +256,50 @@ describe("DataSqlPage connection manager", () => {
     requestMock.mockImplementation((method: string) => {
       if (method === "data.connections") {
         return Promise.resolve({
-          items: [{
-            id: "sqlite-demo", displayName: "SQLite 演示数据库", dialect: "SQLITE", readOnly: true,
-            enabled: true, builtIn: true, selected: true, databasePath: "C:\\data\\school.db",
-          }],
+          items: [
+            {
+              id: "sqlite-demo",
+              displayName: "SQLite 演示数据库",
+              dialect: "SQLITE",
+              readOnly: true,
+              enabled: true,
+              builtIn: true,
+              selected: true,
+              databasePath: "C:\\data\\school.db",
+            },
+          ],
         });
       }
       if (method === "data.connection.dialects") return Promise.resolve(dialectItems);
       if (method === "data.schema") return Promise.resolve({ tables: [] });
       if (method === "sql.analyze") {
         return Promise.resolve({
-          level: "LOW", executable: true, confirmationRequired: false, multiStatement: false,
-          statementType: "SELECT", reasons: [], enforcedBy: "java", maxRows: 500, timeoutSeconds: 10,
+          level: "LOW",
+          executable: true,
+          confirmationRequired: false,
+          multiStatement: false,
+          statementType: "SELECT",
+          reasons: [],
+          enforcedBy: "java",
+          maxRows: 500,
+          timeoutSeconds: 10,
         });
       }
       if (method === "sql.execute") {
         return Promise.resolve({
-          resultId: "r1", success: true, columns: ["detail"], rows: [{ detail: "SCAN student" }],
-          page: 0, pageSize: 50, totalRows: 1, hasMore: false, truncated: false, affectedRows: 0,
-          message: "", durationMillis: 3, auditRecorded: true,
+          resultId: "r1",
+          success: true,
+          columns: ["detail"],
+          rows: [{ detail: "SCAN student" }],
+          page: 0,
+          pageSize: 50,
+          totalRows: 1,
+          hasMore: false,
+          truncated: false,
+          affectedRows: 0,
+          message: "",
+          durationMillis: 3,
+          auditRecorded: true,
         });
       }
       throw new Error(`Unexpected request: ${method}`);
@@ -226,19 +311,80 @@ describe("DataSqlPage connection manager", () => {
     fireEvent.click(explainButton);
 
     // BUG-6：执行计划必须先经 sql.analyze 统一风险门禁，且分析的是包裹后的语句。
-    await waitFor(() => expect(requestMock).toHaveBeenCalledWith(
-      "sql.analyze",
-      expect.objectContaining({ sql: expect.stringContaining("EXPLAIN QUERY PLAN") }),
-    ));
-    await waitFor(() => expect(requestMock).toHaveBeenCalledWith(
-      "sql.execute",
-      expect.objectContaining({ sql: expect.stringContaining("EXPLAIN QUERY PLAN") }),
-    ));
-    const analyzeIndex = requestMock.mock.calls.findIndex(call => call[0] === "sql.analyze");
-    const executeIndex = requestMock.mock.calls.findIndex(call => call[0] === "sql.execute");
+    await waitFor(() =>
+      expect(requestMock).toHaveBeenCalledWith(
+        "sql.analyze",
+        expect.objectContaining({ sql: expect.stringContaining("EXPLAIN QUERY PLAN") }),
+      ),
+    );
+    await waitFor(() =>
+      expect(requestMock).toHaveBeenCalledWith(
+        "sql.execute",
+        expect.objectContaining({ sql: expect.stringContaining("EXPLAIN QUERY PLAN") }),
+      ),
+    );
+    const analyzeIndex = requestMock.mock.calls.findIndex((call) => call[0] === "sql.analyze");
+    const executeIndex = requestMock.mock.calls.findIndex((call) => call[0] === "sql.execute");
     expect(analyzeIndex).toBeGreaterThanOrEqual(0);
     expect(executeIndex).toBeGreaterThan(analyzeIndex);
     expect(await screen.findByText("SCAN student")).toBeInTheDocument();
+  });
+
+  it("renders collapsed schema tables with a working filter and table count", async () => {
+    requestMock.mockImplementation((method: string) => {
+      if (method === "data.connections") {
+        return Promise.resolve({
+          items: [
+            {
+              id: "sqlite-demo",
+              displayName: "SQLite 演示数据库",
+              dialect: "SQLITE",
+              readOnly: true,
+              enabled: true,
+              builtIn: true,
+              selected: true,
+              databasePath: "C:\\data\\school.db",
+            },
+          ],
+        });
+      }
+      if (method === "data.connection.dialects") return Promise.resolve(dialectItems);
+      if (method === "data.schema") {
+        return Promise.resolve({
+          tables: [
+            {
+              name: "S",
+              columns: [
+                { name: "SNO", typeName: "TEXT", primaryKey: true, nullable: false },
+                { name: "SNAME", typeName: "TEXT", primaryKey: false, nullable: false },
+              ],
+            },
+            {
+              name: "SPJ",
+              columns: [
+                { name: "SNO", typeName: "TEXT", primaryKey: true, nullable: false },
+                { name: "QTY", typeName: "INTEGER", primaryKey: false, nullable: true },
+              ],
+            },
+          ],
+        });
+      }
+      throw new Error(`Unexpected request: ${method}`);
+    });
+    renderPage();
+
+    await screen.findByText("共 2 张表");
+    // v3.4.1 SQL-1：表默认收起，不再 <details open> 全量展开。
+    expect(screen.getByText("S").closest("details")).not.toHaveAttribute("open");
+    expect(screen.getByText("SPJ").closest("details")).not.toHaveAttribute("open");
+
+    const filter = screen.getByLabelText("筛选表或列");
+    fireEvent.change(filter, { target: { value: "qty" } });
+    expect(screen.getByText("SPJ")).toBeInTheDocument();
+    expect(screen.queryByText("S")).not.toBeInTheDocument();
+
+    fireEvent.change(filter, { target: { value: "不存在" } });
+    expect(screen.getByText(/没有匹配/)).toBeInTheDocument();
   });
 
   it("prompts first-run users to choose an SQL safety mode and persists the choice", async () => {
@@ -265,11 +411,7 @@ describe("DataSqlPage connection manager", () => {
       ),
     );
     // 选择完成后选择框关闭，且不会因刷新回来的旧载荷再次弹出。
-    await waitFor(() =>
-      expect(screen.queryByText("选择 SQL 安全模式")).not.toBeInTheDocument(),
-    );
-    expect(
-      screen.queryByRole("button", { name: /教学模式（推荐）/ }),
-    ).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByText("选择 SQL 安全模式")).not.toBeInTheDocument());
+    expect(screen.queryByRole("button", { name: /教学模式（推荐）/ })).not.toBeInTheDocument();
   });
 });

@@ -32,7 +32,8 @@ final class CloudApiSection extends ApiSection {
     public Set<String> supportedMethods() {
         return Set.of(
             "cloud.workspace", "cloud.sync", "cloud.class.create", "cloud.class.member.add",
-            "cloud.class.roster", "cloud.assignments", "cloud.assignment.create", "cloud.assignment.update",
+            "cloud.class.roster", "cloud.class.join", "cloud.class.join-code", "cloud.class.join-code.rotate",
+            "cloud.assignments", "cloud.assignment.create", "cloud.assignment.update",
             "cloud.assignment.copy", "cloud.assignment.status", "cloud.class.analytics",
             "cloud.class.analytics.export", "cloud.assignment.analytics", "cloud.assignment.analytics.export",
             "cloud.assignment.snapshot", "cloud.assignment.submit", "cloud.feedback.list",
@@ -54,6 +55,9 @@ final class CloudApiSection extends ApiSection {
             case "cloud.class.create" -> cloudClassCreate(params, cancellation);
             case "cloud.class.member.add" -> cloudClassMemberAdd(params, cancellation);
             case "cloud.class.roster" -> cloudClassRoster(params, cancellation);
+            case "cloud.class.join" -> cloudClassJoin(params, cancellation);
+            case "cloud.class.join-code" -> cloudClassJoinCode(params, cancellation);
+            case "cloud.class.join-code.rotate" -> cloudClassJoinCodeRotate(params, cancellation);
             case "cloud.assignments" -> cloudAssignments(params, cancellation);
             case "cloud.assignment.create" -> cloudAssignmentCreate(params, cancellation);
             case "cloud.assignment.update" -> cloudAssignmentUpdate(params, cancellation);
@@ -165,6 +169,31 @@ final class CloudApiSection extends ApiSection {
         var session = requireCloudSession();
         return mapper.createObjectNode().set("members", mapper.valueToTree(context().getBean(CloudClassroomApi.class)
             .listClassRoster(session.accessToken(), requiredText(params, "classroomId", 128))));
+    }
+
+    // v3.4.1 CLS-3：学生凭班级码自助加入——只要求云会话，不得套 requireTeacher() 门禁。
+    private JsonNode cloudClassJoin(JsonNode params, CancellationToken cancellation) {
+        cancellation.throwIfCancelled();
+        var session = requireCloudSession();
+        var classroom = context().getBean(CloudClassroomApi.class).joinClassByCode(
+            session.accessToken(), requiredText(params, "code", 32));
+        return mapper.valueToTree(classroom);
+    }
+
+    private JsonNode cloudClassJoinCode(JsonNode params, CancellationToken cancellation) {
+        requireTeacher();
+        cancellation.throwIfCancelled();
+        var session = requireCloudSession();
+        return mapper.createObjectNode().put("joinCode", context().getBean(CloudClassroomApi.class)
+            .classJoinCode(session.accessToken(), requiredText(params, "classroomId", 128)));
+    }
+
+    private JsonNode cloudClassJoinCodeRotate(JsonNode params, CancellationToken cancellation) {
+        requireTeacher();
+        cancellation.throwIfCancelled();
+        var session = requireCloudSession();
+        return mapper.createObjectNode().put("joinCode", context().getBean(CloudClassroomApi.class)
+            .rotateClassJoinCode(session.accessToken(), requiredText(params, "classroomId", 128)));
     }
 
     private JsonNode cloudAssignments(JsonNode params, CancellationToken cancellation) {

@@ -22,6 +22,8 @@ import com.sqlteacher.domain.exercise.ExerciseDataset;
 import com.sqlteacher.domain.exercise.ExerciseDefinition;
 import com.sqlteacher.domain.exercise.ExerciseType;
 
+import org.sqlite.SQLiteConfig;
+
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -258,7 +260,11 @@ public final class JdbcExercisePracticeService implements ExercisePracticeServic
         int affectedRows = 0;
         try {
             SqliteDriver.ensureLoaded();
-            try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + sessionDatabase(sessionId));
+            // v3.4.1 DB-4：沙箱可写连接开启外键强制，让数据集的参照完整性约束对学生 DML 真实生效。
+            SQLiteConfig sandboxConfig = new SQLiteConfig();
+            sandboxConfig.enforceForeignKeys(true);
+            try (Connection connection = DriverManager.getConnection(
+                    "jdbc:sqlite:" + sessionDatabase(sessionId), sandboxConfig.toProperties());
                  Statement statement = connection.createStatement()) {
                 statement.setMaxRows(MAX_RESULT_ROWS + 1);
                 SqlExecutionResult lastQueryResult = null;
@@ -488,7 +494,11 @@ public final class JdbcExercisePracticeService implements ExercisePracticeServic
         ExerciseDatasetSqlPolicy.validate(dataset.setupSql());
         Files.createDirectories(sessionDirectory);
         SqliteDriver.ensureLoaded();
-        try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + databasePath)) {
+        // v3.4.1 DB-4：初始化阶段同样校验参照完整性——数据集种子必须满足自身外键。
+        SQLiteConfig initConfig = new SQLiteConfig();
+        initConfig.enforceForeignKeys(true);
+        try (Connection connection = DriverManager.getConnection(
+                "jdbc:sqlite:" + databasePath, initConfig.toProperties())) {
             connection.setAutoCommit(false);
             try (Statement statement = connection.createStatement()) {
                 for (String sql : SqlScriptSplitter.split(dataset.setupSql())) {

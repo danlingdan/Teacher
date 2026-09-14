@@ -34,6 +34,7 @@ export function useClassroom({
   const [classroomId, setClassroomId] = useState(() => searchParams.get("class") ?? "");
   const [memberEmail, setMemberEmail] = useState("");
   const [memberRole, setMemberRole] = useState("STUDENT");
+  const [joinCode, setJoinCode] = useState("");
   const [pendingTransition, setPendingTransition] = useState<{
     item: CloudAssignment;
     next: CloudAssignment["status"];
@@ -44,6 +45,7 @@ export function useClassroom({
   const [assignmentDueAt, setAssignmentDueAt] = useState("");
   const [feedbackAssignmentId, setFeedbackAssignmentId] = useState("");
   const [feedbackDirtyIds, setFeedbackDirtyIds] = useState<string[]>([]);
+  const [editingAssignment, setEditingAssignment] = useState<CloudAssignment>();
   const [analyticsResult, setAnalyticsResult] = useState<Record<string, unknown>>();
   const [masteryOpen, setMasteryOpen] = useState(false);
   const [analyticsStatus, setAnalyticsStatus] = useState("");
@@ -99,6 +101,41 @@ export function useClassroom({
     },
     onError: (error: Error) => toast("error", `添加成员失败：${cloudFailureText(error)}`),
   });
+  // v3.4.1 CLS-4：班级码——教师查看当前码并可重置（旧码立即失效）。
+  const joinCodeQuery = useQuery({
+    queryKey: ["cloud", "join-code", classroomId],
+    queryFn: () => localAppRequest<{ joinCode: string }>("cloud.class.join-code", { classroomId }),
+    enabled: Boolean(classroomId) && isTeacherRole,
+    retry: false,
+    staleTime: 60_000,
+  });
+  const rotateJoinCode = useMutation({
+    mutationFn: () =>
+      localAppRequest<{ joinCode: string }>("cloud.class.join-code.rotate", { classroomId }),
+    onSuccess: (value) => {
+      client.setQueryData(["cloud", "join-code", classroomId], value);
+      toast("success", "班级码已重置，旧码立即失效");
+    },
+    onError: (error: Error) => toast("error", `班级码重置失败：${cloudFailureText(error)}`),
+  });
+  // v3.4.1 CLS-5：学生凭班级码自助加入；成功后强制刷新 workspace 让新班级立即可见。
+  const joinByCode = useMutation({
+    mutationFn: () => localAppRequest("cloud.class.join", { code: joinCode }),
+    onSuccess: async () => {
+      setJoinCode("");
+      toast("success", "已加入班级");
+      const refreshed = await localAppRequest<CloudWorkspace>("cloud.workspace", {
+        refreshRemote: true,
+      });
+      client.setQueryData(cloudKey, refreshed);
+    },
+    // 旧版云端与无效码都返回 404，无法区分，统一给出可行动的文案。
+    onError: (error: Error) =>
+      toast(
+        "error",
+        `加入班级失败：班级码无效，或云端服务版本过旧暂不支持（${cloudFailureText(error)}）`,
+      ),
+  });
   const createAssignment = useMutation<CloudAssignment, Error, boolean>({
     mutationFn: () =>
       localAppRequest<CloudAssignment>("cloud.assignment.create", {
@@ -148,6 +185,38 @@ export function useClassroom({
       toast("success", "已复制任务草稿");
     },
     onError: (error: Error) => toast("error", `复制失败：${error.message}`),
+  });
+  // v3.4.2 LEG-12：编辑已发布作业——标题/说明/截止时间回填进“新建任务”表单；练习不可换，
+  // 云端按 expectedVersion 乐观锁保护，归档任务由后端拒绝（UI 侧隐藏入口）。
+  const startAssignmentEdit = (item: CloudAssignment) => {
+    setEditingAssignment(item);
+    setAssignmentTitle(item.title);
+    setAssignmentDescription(item.description ?? "");
+    setAssignmentDueAt(toDatetimeLocal(item.dueAt));
+  };
+  const cancelAssignmentEdit = () => {
+    setEditingAssignment(undefined);
+    setAssignmentTitle("");
+    setAssignmentDescription("");
+    setAssignmentDueAt("");
+  };
+  const updateAssignment = useMutation({
+    mutationFn: () =>
+      localAppRequest<CloudAssignment>("cloud.assignment.update", {
+        classroomId,
+        assignmentId: editingAssignment?.id,
+        title: assignmentTitle,
+        description: assignmentDescription,
+        dueAt: assignmentDueAt ? new Date(assignmentDueAt).toISOString() : "",
+        expectedVersion: editingAssignment?.version ?? 0,
+      }),
+    onSuccess: (updated) => {
+      cancelAssignmentEdit();
+      void client.invalidateQueries({ queryKey: assignmentsKey });
+      toast("success", `任务「${updated.title}」已更新`);
+    },
+    onError: (error: Error) =>
+      toast("error", `任务更新失败：${cloudFailureText(error)}`),
   });
   const classAnalytics = useMutation({
     mutationFn: () =>
@@ -221,6 +290,31 @@ export function useClassroom({
     },
     onError: (error: Error) => toast("error", `反馈保存失败：${error.message}`),
   });
+  // v3.4.2 LEG-11：AI 起草课堂反馈——AI 只产出草稿文本，填入可编辑评语后仍由教师走
+  // cloud.feedback.save 保存；起草失败时保持手写路径原样可用（AI fail-safe）。
+  const draftFeedback = useMutation({
+    mutationFn: (item: SubmissionFeedback) =>
+      localAppRequest<{ text: string; evidence: string[]; aiGenerated: boolean }>(
+        "cloud.feedback.draft",
+        {
+          classroomId,
+          assignmentId: item.assignmentId,
+          submissionId: item.submissionId,
+        },
+      ),
+    onSuccess: (draft, item) => {
+      patchFeedbackItem(item.submissionId, (candidate) => ({
+        ...candidate,
+        comment: draft.text,
+      }));
+      setFeedbackDirtyIds((ids) =>
+        ids.includes(item.submissionId) ? ids : [...ids, item.submissionId],
+      );
+      toast("success", "AI 草稿已填入评语，请核对修改后再保存");
+    },
+    onError: (error: Error) =>
+      toast("error", `AI 起草失败，可直接手写评语：${cloudFailureText(error)}`),
+  });
   const mastery = useQuery({
     queryKey: [...masteryKey, classroomId],
     queryFn: () =>
@@ -292,8 +386,16 @@ export function useClassroom({
     setMemberEmail,
     memberRole,
     setMemberRole,
+    joinCode,
+    setJoinCode,
+    joinCodeQuery,
+    rotateJoinCode,
+    joinByCode,
     pendingTransition,
     setPendingTransition,
+    editingAssignment,
+    startAssignmentEdit,
+    cancelAssignmentEdit,
     assignmentTitle,
     setAssignmentTitle,
     assignmentExerciseId,
@@ -318,6 +420,7 @@ export function useClassroom({
     createClass,
     addMember,
     createAssignment,
+    updateAssignment,
     changeAssignmentStatus,
     copyAssignment,
     classAnalytics,
@@ -327,8 +430,18 @@ export function useClassroom({
     feedbackQuery,
     patchFeedbackItem,
     saveFeedback,
+    draftFeedback,
     mastery,
     openMastery,
     openFeedback,
   };
+}
+
+/** ISO 时间 → datetime-local 输入值（本地时区）；空值或无法解析时返回空串。 */
+function toDatetimeLocal(iso?: string) {
+  if (!iso) return "";
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }

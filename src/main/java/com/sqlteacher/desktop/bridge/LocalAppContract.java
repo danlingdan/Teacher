@@ -34,6 +34,7 @@ public final class LocalAppContract {
         "teaching.exercise.export", "teaching.exercise.publish", "teaching.exercise.health", "teaching.analytics",
         "teaching.interventions", "teaching.intervention.update",
         "cloud.workspace", "cloud.sync", "cloud.class.create", "cloud.class.member.add", "cloud.class.roster",
+        "cloud.class.join", "cloud.class.join-code", "cloud.class.join-code.rotate",
         "cloud.assignments", "cloud.assignment.create", "cloud.assignment.update",
         "cloud.assignment.copy", "cloud.assignment.status", "cloud.class.analytics",
         "cloud.class.analytics.export", "cloud.assignment.analytics", "cloud.assignment.analytics.export",
@@ -47,7 +48,9 @@ public final class LocalAppContract {
         "settings.update", "settings.component.install", "settings.component.cancel",
         "settings.backups", "settings.backup.create", "settings.backup.restore", "settings.demo.restore",
         "settings.learning.reset", "settings.cache.clear", "settings.update.check", "settings.notifications.read",
-        "settings.help", "editor.languages"
+        "settings.help", "editor.languages",
+        "support.report.preview", "support.report.submit", "support.report.status",
+        "support.report.withdraw", "support.report.export"
     );
     public static final Set<String> RESERVED_METHODS = Set.of("system.cancel", "system.shutdown");
     public static final Set<String> EVENT_TYPES = Set.of("progress", "import.progress", "runner.progress", "ai.delta");

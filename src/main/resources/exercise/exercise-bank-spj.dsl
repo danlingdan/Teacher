@@ -3,7 +3,7 @@
 ===[DATASET]===
 ID: spj-demo-v1
 NAME: 供应商-零件-工程数据集
-VERSION: 1
+VERSION: 2
 SQL:
 create table s(sno text primary key, sname text not null, status integer, city text);
 insert into s values
@@ -19,7 +19,10 @@ insert into j values
     ('J4', '造船厂', '天津'), ('J5', '机车厂', '唐山'), ('J6', '无线电厂', '常州'),
     ('J7', '半导体厂', '南京');
 create table spj(sno text not null, pno text not null, jno text not null, qty integer,
-    primary key(sno, pno, jno));
+    primary key(sno, pno, jno),
+    foreign key(sno) references s(sno),
+    foreign key(pno) references p(pno),
+    foreign key(jno) references j(jno));
 insert into spj values
     ('S1', 'P1', 'J1', 200), ('S1', 'P1', 'J3', 100), ('S1', 'P1', 'J4', 700), ('S1', 'P2', 'J2', 100),
     ('S2', 'P3', 'J1', 400), ('S2', 'P3', 'J2', 200), ('S2', 'P3', 'J4', 500), ('S2', 'P3', 'J5', 400),

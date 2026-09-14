@@ -15,6 +15,21 @@ public interface CloudClassroomApi {
 
     ClassroomService.Classroom addClassMember(String accessToken, String classroomId, String email, UserRole role);
 
+    /** v3.4.1 CLS：登录用户凭班级码以 STUDENT 身份加入班级（服务端限流，未知码报 404）。 */
+    default ClassroomService.Classroom joinClassByCode(String accessToken, String code) {
+        throw new UnsupportedOperationException("Classroom join codes are unavailable");
+    }
+
+    /** v3.4.1 CLS：班级教师读取当前班级码。 */
+    default String classJoinCode(String accessToken, String classroomId) {
+        throw new UnsupportedOperationException("Classroom join codes are unavailable");
+    }
+
+    /** v3.4.1 CLS：班级教师重置班级码，旧码立即失效，返回新码。 */
+    default String rotateClassJoinCode(String accessToken, String classroomId) {
+        throw new UnsupportedOperationException("Classroom join codes are unavailable");
+    }
+
     ClassAssignment createAssignment(String accessToken, String classroomId, String exerciseId, String title);
 
     default ClassAssignment createAssignment(String accessToken, String classroomId, String exerciseId, String title,

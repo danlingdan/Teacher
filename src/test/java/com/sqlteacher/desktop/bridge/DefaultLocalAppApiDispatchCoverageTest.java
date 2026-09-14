@@ -77,7 +77,8 @@ class DefaultLocalAppApiDispatchCoverageTest {
             new AccountApiSection(host),
             new TeachingApiSection(host),
             new CloudApiSection(host),
-            new SettingsApiSection(host)
+            new SettingsApiSection(host),
+            new SupportApiSection(host)
         );
     }
 }

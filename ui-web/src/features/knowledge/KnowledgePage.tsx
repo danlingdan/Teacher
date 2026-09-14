@@ -29,9 +29,10 @@ export default function KnowledgePage() {
         message: string;
       }>("knowledge.index.status"),
   });
-  const [selectedId, setSelectedId] = useState<string | undefined>(() =>
-    // 命令面板等入口通过 ?article= 深链到具体文档。
-    searchParams.get("article") ?? undefined,
+  const [selectedId, setSelectedId] = useState<string | undefined>(
+    () =>
+      // 命令面板等入口通过 ?article= 深链到具体文档。
+      searchParams.get("article") ?? undefined,
   );
   const [queryInput, setQueryInput] = useState(() => searchParams.get("query") ?? "");
   const [query, setQuery] = useState(queryInput);
@@ -149,8 +150,7 @@ export default function KnowledgePage() {
     onSuccess: refresh,
   });
   const remove = useMutation({
-    mutationFn: () =>
-      localAppRequest("knowledge.article.delete", { articleId: selectedId }),
+    mutationFn: () => localAppRequest("knowledge.article.delete", { articleId: selectedId }),
     onSuccess: () => {
       setSelectedId(undefined);
       refresh();
@@ -171,22 +171,15 @@ export default function KnowledgePage() {
     onSuccess: setAnswer,
   });
   const currentMarkdown = article.data?.markdown;
-  const grouped = useMemo(
-    () => workspace.data?.courses ?? [],
-    [workspace.data],
-  );
+  const grouped = useMemo(() => workspace.data?.courses ?? [], [workspace.data]);
   const articles = workspace.data?.articles ?? [];
   const pageSize = 8;
   const articlePageCount = Math.max(1, Math.ceil(articles.length / pageSize));
-  const visibleArticles = articles.slice(
-    articlePage * pageSize,
-    (articlePage + 1) * pageSize,
-  );
+  const visibleArticles = articles.slice(articlePage * pageSize, (articlePage + 1) * pageSize);
   useEffect(() => {
     if (articlePage >= articlePageCount) setArticlePage(articlePageCount - 1);
   }, [articlePage, articlePageCount]);
-  const canManage =
-    session.data?.role === "TEACHER" || session.data?.role === "ADMINISTRATOR";
+  const canManage = session.data?.role === "TEACHER" || session.data?.role === "ADMINISTRATOR";
 
   if (workspace.isPending)
     return <section className="page-skeleton">正在读取课程与知识索引…</section>;
@@ -223,7 +216,6 @@ export default function KnowledgePage() {
               search.data.items.map((item) => (
                 <button
                   type="button"
-                  disabled={!item.articleId}
                   key={`${item.documentId}-${item.chunkIndex}`}
                   onClick={() => setSelectedId(item.articleId)}
                 >
@@ -238,21 +230,35 @@ export default function KnowledgePage() {
           {grouped.map((course) => (
             <section key={course.id}>
               <h3>{course.title}</h3>
-              {course.sections.map((section) => (
-                <details key={section.id}>
-                  <summary>{section.title}</summary>
-                  <ul>
-                    {section.activities.map((activity) => (
-                      <li key={activity.id}>
-                        <span>{activity.title}</span>
-                        <small>
-                          {activity.type} · {activity.estimatedMinutes} 分钟
-                        </small>
-                      </li>
-                    ))}
-                  </ul>
-                </details>
-              ))}
+              {course.sections.map((section) => {
+                // v3.4.1 KNW-1：课程树只承载知识——展开章节直接列出该节的知识文档，
+                // 不再平铺活动条目（活动的入口在「练习与实验」等页面）。
+                const sectionArticles = articles.filter(
+                  (item) => item.sectionTitle === section.title,
+                );
+                return (
+                  <details key={section.id}>
+                    <summary>
+                      {section.title}
+                      <small> · {sectionArticles.length} 篇文档</small>
+                    </summary>
+                    <ul>
+                      {sectionArticles.map((item) => (
+                        <li key={item.id}>
+                          <button type="button" onClick={() => setSelectedId(item.id)}>
+                            {item.title}
+                          </button>
+                        </li>
+                      ))}
+                      {sectionArticles.length === 0 && (
+                        <li>
+                          <small className="muted">本节暂无知识文档</small>
+                        </li>
+                      )}
+                    </ul>
+                  </details>
+                );
+              })}
             </section>
           ))}
         </div>
@@ -262,7 +268,7 @@ export default function KnowledgePage() {
           </h3>
           {articles.length === 0 && (
             <p className="muted">
-              教师发布的知识文档会显示在这里；课程树中的活动仅为安排展示。
+              教师发布的知识文档会显示在这里；也可以展开上方课程树按章节浏览。
             </p>
           )}
           {visibleArticles.map((item) => (
@@ -313,9 +319,7 @@ export default function KnowledgePage() {
                 >
                   标记为已读
                 </Button>
-                {markRead.isSuccess && (
-                  <span className="policy-chip">阅读进度已保存</span>
-                )}
+                {markRead.isSuccess && <span className="policy-chip">阅读进度已保存</span>}
                 {markRead.isError && (
                   <span className="policy-chip" role="status">
                     进度保存失败：{markRead.error?.message}
@@ -329,8 +333,8 @@ export default function KnowledgePage() {
               <h2>选择一篇知识文档</h2>
               <p>
                 {articles.length > 0
-                  ? "从左侧「知识文档」列表选择一篇文档开始阅读；课程树展示章节与活动安排。"
-                  : "这里还没有可阅读的知识文档。上方课程树展示章节与活动安排；练习与测验请前往「练习与实验」。"}
+                  ? "从左侧「知识文档」列表或课程树中选择一篇文档开始阅读。"
+                  : "这里还没有可阅读的知识文档；练习与测验请前往「练习与实验」。"}
               </p>
             </div>
           )}
@@ -343,10 +347,7 @@ export default function KnowledgePage() {
             </div>
             <span className="policy-chip">仅使用本地课程资料</span>
           </div>
-          <FormField
-            label="针对课程资料提问"
-            hint="回答附引用来源"
-          >
+          <FormField label="针对课程资料提问" hint="回答附引用来源">
             {(ids) => (
               <textarea
                 {...ids}
@@ -397,10 +398,7 @@ export default function KnowledgePage() {
                 current={report ? 2 : preview ? 1 : 0}
               />
             </div>
-            <FormField
-              label="知识库根目录"
-              hint="仅支持 Markdown 与附件引用"
-            >
+            <FormField label="知识库根目录" hint="仅支持 Markdown 与附件引用">
               {(ids) => (
                 <input
                   {...ids}
@@ -442,9 +440,7 @@ export default function KnowledgePage() {
                 <div className="preview-list">
                   {preview.items.slice(0, 100).map((item) => (
                     <div key={item.relativePath}>
-                      <span className={`action-${item.action.toLowerCase()}`}>
-                        {item.action}
-                      </span>
+                      <span className={`action-${item.action.toLowerCase()}`}>{item.action}</span>
                       <strong>{item.relativePath}</strong>
                       <small>
                         {item.wikiLinks} 链接 · {item.attachments} 附件
@@ -455,12 +451,9 @@ export default function KnowledgePage() {
               </div>
             )}
             {report && (
-              <Feedback
-                tone={report.failed ? "warning" : "success"}
-                title="增量导入完成"
-              >
-                新增 {report.imported}，修订 {report.revised}，跳过{" "}
-                {report.skipped}，失败 {report.failed}。
+              <Feedback tone={report.failed ? "warning" : "success"} title="增量导入完成">
+                新增 {report.imported}，修订 {report.revised}，跳过 {report.skipped}，失败{" "}
+                {report.failed}。
               </Feedback>
             )}
           </section>
@@ -473,9 +466,7 @@ export default function KnowledgePage() {
                 <h2>单篇文档与索引</h2>
               </div>
               <span className="policy-chip">
-                {index.data
-                  ? `${index.data.mode} · ${index.data.indexedChunks} 块`
-                  : "读取索引"}
+                {index.data ? `${index.data.mode} · ${index.data.indexedChunks} 块` : "读取索引"}
               </span>
             </div>
             <FormField label="文档路径" hint="导入新文档或修订当前文档">
@@ -518,21 +509,14 @@ export default function KnowledgePage() {
             </FormField>
             <div className="button-row">
               <Button
-                disabled={
-                  !articlePath ||
-                  !courseTitle ||
-                  !sectionTitle ||
-                  importArticle.isPending
-                }
+                disabled={!articlePath || !courseTitle || !sectionTitle || importArticle.isPending}
                 onClick={() => importArticle.mutate()}
               >
                 导入单篇
               </Button>
               <Button
                 variant="secondary"
-                disabled={
-                  !selectedId || !articlePath || reviseArticle.isPending
-                }
+                disabled={!selectedId || !articlePath || reviseArticle.isPending}
                 onClick={() => reviseArticle.mutate()}
               >
                 修订当前文档
@@ -547,29 +531,19 @@ export default function KnowledgePage() {
             </div>
             {selectedId && (
               <div className="button-row">
-                <Button
-                  variant="secondary"
-                  onClick={() => visibility.mutate("PUBLISHED")}
-                >
+                <Button variant="secondary" onClick={() => visibility.mutate("PUBLISHED")}>
                   发布
                 </Button>
-                <Button
-                  variant="secondary"
-                  onClick={() => visibility.mutate("PRIVATE")}
-                >
+                <Button variant="secondary" onClick={() => visibility.mutate("PRIVATE")}>
                   设为私有
                 </Button>
-                <Button
-                  variant="secondary"
-                  onClick={() => visibility.mutate("INACTIVE")}
-                >
+                <Button variant="secondary" onClick={() => visibility.mutate("INACTIVE")}>
                   停用
                 </Button>
                 <Button
                   variant="danger"
                   onClick={() => {
-                    if (window.confirm("确定删除当前知识文档及其索引吗？"))
-                      remove.mutate();
+                    if (window.confirm("确定删除当前知识文档及其索引吗？")) remove.mutate();
                   }}
                 >
                   删除
