@@ -59,6 +59,9 @@ jobs:
           } else {
               "JAVA_TEST_SKIP_WSL=false" >> $env:GITHUB_ENV
           }
+          # Actions 的 pwsh 包装器以最后一个原生命令的 $LASTEXITCODE 作为步骤退出码；
+          # wsl.exe 探测失败属预期降级路径，必须显式 exit 0，否则降级成功仍被判失败。
+          exit 0
 
       - name: Run Java core and sidecar tests
         shell: pwsh
