@@ -192,6 +192,55 @@ describe("DataSqlPage connection manager", () => {
     expect(requestMock).not.toHaveBeenCalledWith("settings.update", expect.anything());
   });
 
+  it("analyzes the wrapped EXPLAIN statement before executing the execution plan", async () => {
+    requestMock.mockImplementation((method: string) => {
+      if (method === "data.connections") {
+        return Promise.resolve({
+          items: [{
+            id: "sqlite-demo", displayName: "SQLite 演示数据库", dialect: "SQLITE", readOnly: true,
+            enabled: true, builtIn: true, selected: true, databasePath: "C:\\data\\school.db",
+          }],
+        });
+      }
+      if (method === "data.connection.dialects") return Promise.resolve(dialectItems);
+      if (method === "data.schema") return Promise.resolve({ tables: [] });
+      if (method === "sql.analyze") {
+        return Promise.resolve({
+          level: "LOW", executable: true, confirmationRequired: false, multiStatement: false,
+          statementType: "SELECT", reasons: [], enforcedBy: "java", maxRows: 500, timeoutSeconds: 10,
+        });
+      }
+      if (method === "sql.execute") {
+        return Promise.resolve({
+          resultId: "r1", success: true, columns: ["detail"], rows: [{ detail: "SCAN student" }],
+          page: 0, pageSize: 50, totalRows: 1, hasMore: false, truncated: false, affectedRows: 0,
+          message: "", durationMillis: 3, auditRecorded: true,
+        });
+      }
+      throw new Error(`Unexpected request: ${method}`);
+    });
+    renderPage();
+
+    const explainButton = await screen.findByRole("button", { name: "执行计划" });
+    await waitFor(() => expect(explainButton).toBeEnabled());
+    fireEvent.click(explainButton);
+
+    // BUG-6：执行计划必须先经 sql.analyze 统一风险门禁，且分析的是包裹后的语句。
+    await waitFor(() => expect(requestMock).toHaveBeenCalledWith(
+      "sql.analyze",
+      expect.objectContaining({ sql: expect.stringContaining("EXPLAIN QUERY PLAN") }),
+    ));
+    await waitFor(() => expect(requestMock).toHaveBeenCalledWith(
+      "sql.execute",
+      expect.objectContaining({ sql: expect.stringContaining("EXPLAIN QUERY PLAN") }),
+    ));
+    const analyzeIndex = requestMock.mock.calls.findIndex(call => call[0] === "sql.analyze");
+    const executeIndex = requestMock.mock.calls.findIndex(call => call[0] === "sql.execute");
+    expect(analyzeIndex).toBeGreaterThanOrEqual(0);
+    expect(executeIndex).toBeGreaterThan(analyzeIndex);
+    expect(await screen.findByText("SCAN student")).toBeInTheDocument();
+  });
+
   it("prompts first-run users to choose an SQL safety mode and persists the choice", async () => {
     requestMock.mockImplementation((method: string) => {
       if (method === "data.connections") return Promise.resolve({ items: [] });

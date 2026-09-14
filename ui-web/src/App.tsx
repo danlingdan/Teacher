@@ -18,6 +18,7 @@ import { RoleGuard } from "./app/RoleGuard";
 import { Button, EmptyState, Feedback } from "./shared/ui";
 import { measure } from "./shared/telemetry";
 import { localAppRequest } from "./shared/ipc";
+import { formatInstant } from "./shared/instant";
 import type {
   CloudNotification,
   LearningActionSummary,
@@ -412,7 +413,7 @@ function Shell() {
                         <li className={item.read ? "" : "unread"} key={item.id}>
                           <strong>{item.title}</strong>
                           <p>{item.message}</p>
-                          <small>{formatUiDate(item.createdAt)}</small>
+                          <small>{formatInstant(item.createdAt)}</small>
                           {item.target && (
                             <Button
                               variant="secondary"
@@ -750,12 +751,6 @@ function Metric({
       <strong>{value}</strong>
     </article>
   );
-}
-function formatUiDate(value: string) {
-  const timestamp = Date.parse(value);
-  return !Number.isFinite(timestamp) || timestamp < Date.UTC(2000, 0, 1)
-    ? "时间未知"
-    : new Date(timestamp).toLocaleString("zh-CN", { hour12: false });
 }
 function PageSkeleton({ label }: { label: string }) {
   return (

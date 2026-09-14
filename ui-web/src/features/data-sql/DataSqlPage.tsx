@@ -8,6 +8,7 @@ import { useSearchParams } from "react-router-dom";
 import { Button, Dialog, Feedback, FormField, useToast } from "../../shared/ui";
 import { cancelLocalAppRequest, localAppRequest, localAppRequestWithId } from "../../shared/ipc";
 import { useMonacoEditorTheme } from "../../shared/monacoTheme";
+import { formatInstant } from "../../shared/instant";
 import { settingsPreferencesQuery } from "../../app/queries";
 import type { AiContextPreview, ConnectionDialectOption, ConnectionSummary, ConnectionTestResult, DatabaseTable, Nl2SqlSafetyResult, SettingsPreferences, SqlHistoryItem, SqlPage, SqlRisk } from "../../shared/types";
 
@@ -239,12 +240,31 @@ function SqlWorkbench({ connectionId, dialect, tables, sql, onSqlChange }: { con
   const [page, setPage] = useState<SqlPage>();
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
-  const execute = useMutation<SqlPage, Error, string>({ mutationFn: confirmationToken => localAppRequest<SqlPage>("sql.execute", { connectionId, sql, confirmationToken, maxRows: 500, pageSize: 50 }), onSuccess: value => { setPage(value); setConfirmOpen(false); void client.invalidateQueries({ queryKey: ["sql", "history"] }); } });
+  // 待确认执行的语句：常规流程是编辑器里的 sql；执行计划兜底确认时为 explain 包裹语句。
+  const [confirmStatement, setConfirmStatement] = useState<string>();
+  const execute = useMutation<SqlPage, Error, { statement: string; confirmationToken: string }>({ mutationFn: ({ statement, confirmationToken }) => localAppRequest<SqlPage>("sql.execute", { connectionId, sql: statement, confirmationToken, maxRows: 500, pageSize: 50 }), onSuccess: value => { setPage(value); setConfirmOpen(false); void client.invalidateQueries({ queryKey: ["sql", "history"] }); } });
   // 执行计划（W3.1）：对当前语句自动包裹 EXPLAIN QUERY PLAN，只读展示计划行。
   // 该语法仅 SQLite 方言有效（其余连接必然报错），非 SQLite 连接禁用按钮并给出提示。
+  // BUG-6：explain 语句同样先经 sql.analyze 统一风险门禁，再按分析结果执行，
+  // 不再以空确认令牌直连 sql.execute；被阻断时抛错走既有“SQL 未执行”反馈。
   const explainSupported = dialect === "SQLITE";
-  const explainPlan = useMutation<SqlPage, Error, void>({ mutationFn: () => localAppRequest<SqlPage>("sql.execute", { connectionId, sql: `EXPLAIN QUERY PLAN ${sql}`, confirmationToken: "", maxRows: 500, pageSize: 50 }), onSuccess: value => { setPage(value); void client.invalidateQueries({ queryKey: ["sql", "history"] }); } });
-  const analyze = useMutation<SqlRisk, Error, void>({ mutationFn: () => localAppRequest<SqlRisk>("sql.analyze", { connectionId, sql }), onSuccess: value => { setRisk(value); if (value.executable && value.confirmationRequired) setConfirmOpen(true); else if (value.executable) execute.mutate(""); } });
+  const explainPlan = useMutation<SqlPage | undefined, Error, void>({
+    mutationFn: async () => {
+      const statement = `EXPLAIN QUERY PLAN ${sql}`;
+      const analysis = await localAppRequest<SqlRisk>("sql.analyze", { connectionId, sql: statement });
+      setRisk(analysis);
+      if (!analysis.executable) throw new Error(analysis.reasons.join("；") || "风险分析已阻止该执行计划");
+      if (analysis.confirmationRequired) {
+        // EXPLAIN QUERY PLAN 正常应判为 LOW；兜底复用既有确认对话框，确认后才执行。
+        setConfirmStatement(statement);
+        setConfirmOpen(true);
+        return undefined;
+      }
+      return localAppRequest<SqlPage>("sql.execute", { connectionId, sql: statement, confirmationToken: analysis.confirmationToken ?? "", maxRows: 500, pageSize: 50 });
+    },
+    onSuccess: value => { if (!value) return; setPage(value); void client.invalidateQueries({ queryKey: ["sql", "history"] }); },
+  });
+  const analyze = useMutation<SqlRisk, Error, void>({ mutationFn: () => localAppRequest<SqlRisk>("sql.analyze", { connectionId, sql }), onSuccess: value => { setRisk(value); if (value.executable && value.confirmationRequired) { setConfirmStatement(sql); setConfirmOpen(true); } else if (value.executable) execute.mutate({ statement: sql, confirmationToken: "" }); } });
   const nextPage = useMutation<SqlPage, Error, number>({ mutationFn: next => localAppRequest<SqlPage>("sql.result.page", { resultId: page?.resultId, page: next, pageSize: 50 }), onSuccess: setPage });
   const history = useQuery({ queryKey: ["sql", "history"], queryFn: () => localAppRequest<{ items: SqlHistoryItem[] }>("sql.history", { limit: 30 }), enabled: historyOpen });
   const clearHistory = useMutation({ mutationFn: () => localAppRequest("sql.history.clear", {}), onSuccess: () => { void client.invalidateQueries({ queryKey: ["sql", "history"] }); toast("success", "执行历史已清空"); }, onError: (error: Error) => toast("error", `清空失败：${error.message}`) });
@@ -265,14 +285,14 @@ function SqlWorkbench({ connectionId, dialect, tables, sql, onSqlChange }: { con
           <li key={`${item.createdAt}-${item.connectionId}`}>
             <button type="button" onClick={() => { onSqlChange(item.sql); toast("success", "语句已填入编辑器"); }}>
               <span className={`history-dot ${item.successful ? "ok" : "bad"}`} aria-hidden="true" />
-              <span className="history-meta">{new Date(item.createdAt).toLocaleString()} · {item.connectionName || item.connectionId} · {item.successful ? `${item.rowCount} 行` : "失败"} · {item.durationMillis} ms</span>
+              <span className="history-meta">{formatInstant(item.createdAt)} · {item.connectionName || item.connectionId} · {item.successful ? `${item.rowCount} 行` : "失败"} · {item.durationMillis} ms</span>
               <code>{item.sql.length > 160 ? `${item.sql.slice(0, 160)}…` : item.sql}</code>
             </button>
           </li>
         ))}
       </ul>
     </details>
-    <Dialog open={confirmOpen} title="确认高风险 SQL" onClose={() => setConfirmOpen(false)}><p>以下风险由 Java 分析器判定；令牌将在五分钟后过期且只能使用一次。</p><ul>{risk?.reasons.map(reason => <li key={reason}>{reason}</li>)}</ul><div className="button-row"><Button variant="secondary" onClick={() => setConfirmOpen(false)}>取消</Button><Button variant="danger" onClick={() => execute.mutate(risk?.confirmationToken ?? "")}>确认执行</Button></div></Dialog>
+    <Dialog open={confirmOpen} title="确认高风险 SQL" onClose={() => { setConfirmOpen(false); setConfirmStatement(undefined); }}><p>以下风险由 Java 分析器判定；令牌将在五分钟后过期且只能使用一次。</p><ul>{risk?.reasons.map(reason => <li key={reason}>{reason}</li>)}</ul><div className="button-row"><Button variant="secondary" onClick={() => { setConfirmOpen(false); setConfirmStatement(undefined); }}>取消</Button><Button variant="danger" onClick={() => execute.mutate({ statement: confirmStatement ?? sql, confirmationToken: risk?.confirmationToken ?? "" })}>确认执行</Button></div></Dialog>
   </section>;
 }
 

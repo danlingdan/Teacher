@@ -1,91 +1,34 @@
-// Cloud workspace page (v3.4.0 REF-13): extracted from PlatformPages.tsx.
-// Read-only loads use useQuery; all write/action mutations stay mutations.
+// Cloud workspace page (v3.4.0 REF-13): extracted from PlatformPages.tsx, then
+// split into domain hooks under ./hooks (useClassroom / useCourseAuthoring /
+// useAccountSecurity). This component keeps the workspace query, sync/refresh/
+// logout actions, the portfolio panel, and rendering; all domain state and
+// mutation/query logic lives in the hooks. Read-only loads use useQuery; all
+// write/action mutations stay mutations.
 import { useEffect, useRef, useState } from "react";
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useNavigate, useSearchParams } from "react-router-dom";
-import { LocalAppError, localAppRequest } from "../../shared/ipc";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
+import { localAppRequest } from "../../shared/ipc";
 import { assignmentStatusLabel, syncStateLabel } from "../../shared/labels";
-import { downloadJson, downloadText } from "../../shared/download";
+import { downloadText } from "../../shared/download";
+import { formatInstant } from "../../shared/instant";
 import type {
-  ActiveSession,
   CloudAssignment,
-  CloudClassRosterMember,
-  CloudCourse,
-  CloudCourseContent,
-  CoursePackagePreview,
   CloudWorkspace,
-  ExerciseDefinition,
   ExerciseSummary,
-  KnowledgeMastery,
   PortfolioEntry,
   SubmissionFeedback,
 } from "../../shared/types";
 import { Button, Dialog, Feedback, FormField, useToast } from "../../shared/ui";
 import { Loading, Metric, analyticsMetricLabel, formatAccountDate } from "./shared";
-
-const cloudKey = ["cloud", "workspace"] as const;
-const assignmentsKey = ["cloud", "assignments"] as const;
-const coursesKey = ["cloud", "courses"] as const;
-const courseContentKey = ["cloud", "course-content"] as const;
-const masteryKey = ["cloud", "mastery"] as const;
-const portfolioKey = ["learning", "portfolio"] as const;
-const sessionsKey = ["account", "sessions"] as const;
-
-/**
- * 云端写操作失败的文案映射（issue #21）：Java 桥接层现在透传云端错误的
- * 结构化 code，这里把常见场景翻译成可行动的提示，其余原样透传。
- */
-function cloudFailureText(error: Error): string {
-  const code = error instanceof LocalAppError ? error.code : "";
-  if (code === "CLOUD_UNAVAILABLE") return "云端服务暂时不可用，请检查网络后重试";
-  if (code === "UNAUTHORIZED") return "云端登录状态已过期，请重新登录";
-  return error.message;
-}
+import { cloudKey, portfolioKey } from "./hooks/cloudShared";
+import { useClassroom } from "./hooks/useClassroom";
+import { useCourseAuthoring } from "./hooks/useCourseAuthoring";
+import { useAccountSecurity } from "./hooks/useAccountSecurity";
 
 export function CloudPage() {
   const client = useQueryClient();
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
   const toast = useToast();
-  const [className, setClassName] = useState("");
-  // 命令面板等入口通过 ?class= 深链到指定班级。
-  const [classroomId, setClassroomId] = useState(() => searchParams.get("class") ?? "");
-  const [memberEmail, setMemberEmail] = useState("");
-  const [memberRole, setMemberRole] = useState("STUDENT");
-  const [pendingTransition, setPendingTransition] = useState<{
-    item: CloudAssignment;
-    next: CloudAssignment["status"];
-  }>();
-  const [assignmentTitle, setAssignmentTitle] = useState("");
-  const [assignmentExerciseId, setAssignmentExerciseId] = useState("");
-  const [assignmentDescription, setAssignmentDescription] = useState("");
-  const [assignmentDueAt, setAssignmentDueAt] = useState("");
-  const [feedbackAssignmentId, setFeedbackAssignmentId] = useState("");
-  const [feedbackDirtyIds, setFeedbackDirtyIds] = useState<string[]>([]);
-  const [currentPassword, setCurrentPassword] = useState("");
-  const [newPassword, setNewPassword] = useState("");
-  const [accountMessage, setAccountMessage] = useState("");
-  const [exportTaskId, setExportTaskId] = useState("");
-  const [analyticsResult, setAnalyticsResult] = useState<Record<string, unknown>>();
-  const [masteryOpen, setMasteryOpen] = useState(false);
-  const [portfolioOpen, setPortfolioOpen] = useState(false);
-  const [coursesOpen, setCoursesOpen] = useState(false);
-  const [courseId, setCourseId] = useState("");
-  const [contentOpen, setContentOpen] = useState(false);
-  const [courseName, setCourseName] = useState("");
-  const [courseDescription, setCourseDescription] = useState("");
-  const [sectionName, setSectionName] = useState("");
-  const [knowledgeName, setKnowledgeName] = useState("");
-  const [knowledgeDescription, setKnowledgeDescription] = useState("");
-  const [knowledgeSectionId, setKnowledgeSectionId] = useState("");
-  const [sharedLocalExerciseId, setSharedLocalExerciseId] = useState("");
-  const [sharedKnowledgePointId, setSharedKnowledgePointId] = useState("");
-  const [coursePackage, setCoursePackage] = useState("");
-  const [packagePreview, setPackagePreview] = useState<CoursePackagePreview>();
-  const [analyticsStatus, setAnalyticsStatus] = useState("");
-  const [analyticsFrom, setAnalyticsFrom] = useState("");
-  const [analyticsTo, setAnalyticsTo] = useState("");
-  const [accountOpen, setAccountOpen] = useState(false);
   const query = useQuery({
     queryKey: cloudKey,
     queryFn: () => localAppRequest<CloudWorkspace>("cloud.workspace"),
@@ -119,196 +62,124 @@ export function CloudPage() {
     },
     onError: (error: Error) => toast("error", `退出登录失败：${error.message}`),
   });
-  const createClass = useMutation({
-    mutationFn: () =>
-      localAppRequest<{ classroom: { id: string } }>("cloud.class.create", {
-        name: className,
-      }),
-    onSuccess: (value) => {
-      setClassName("");
-      setClassroomId(value.classroom.id);
-      toast("success", `班级「${className}」已创建，已自动选中，可在下方添加成员与任务`);
-      refresh.mutate(true);
-    },
-    onError: (error: Error) => toast("error", `班级创建失败：${error.message}`),
-  });
   const exercises = useQuery({
     queryKey: ["cloud", "exercise-catalog"],
     queryFn: () => localAppRequest<{ items: ExerciseSummary[] }>("practice.catalog"),
     enabled: Boolean(query.data?.signedIn),
   });
-  // 班级成员名单（issue #26）：仅教师可见。
-  const isTeacherRole = query.data?.role === "TEACHER" || query.data?.role === "ADMINISTRATOR";
-  const roster = useQuery({
-    queryKey: ["cloud", "roster", classroomId],
-    queryFn: () =>
-      localAppRequest<{ members: CloudClassRosterMember[] }>("cloud.class.roster", { classroomId }),
-    enabled: Boolean(classroomId) && isTeacherRole,
-    retry: false,
-    staleTime: 30_000,
+  const {
+    className,
+    setClassName,
+    classroomId,
+    setClassroomId,
+    memberEmail,
+    setMemberEmail,
+    memberRole,
+    setMemberRole,
+    pendingTransition,
+    setPendingTransition,
+    assignmentTitle,
+    setAssignmentTitle,
+    assignmentExerciseId,
+    setAssignmentExerciseId,
+    assignmentDescription,
+    setAssignmentDescription,
+    assignmentDueAt,
+    setAssignmentDueAt,
+    feedbackAssignmentId,
+    feedbackDirtyIds,
+    setFeedbackDirtyIds,
+    analyticsResult,
+    analyticsStatus,
+    setAnalyticsStatus,
+    analyticsFrom,
+    setAnalyticsFrom,
+    analyticsTo,
+    setAnalyticsTo,
+    isTeacherRole,
+    roster,
+    assignments,
+    createClass,
+    addMember,
+    createAssignment,
+    changeAssignmentStatus,
+    copyAssignment,
+    classAnalytics,
+    assignmentAnalytics,
+    exportClassAnalytics,
+    exportAssignmentAnalytics,
+    feedbackQuery,
+    patchFeedbackItem,
+    saveFeedback,
+    mastery,
+    openMastery,
+    openFeedback,
+  } = useClassroom({
+    workspace: query.data,
+    refreshWorkspace: (silent) => refresh.mutate(silent),
   });
-  // 班级任务按班级缓存：切换班级即取对应任务，过期响应只会写回各自的缓存键。
-  const assignments = useQuery({
-    queryKey: [...assignmentsKey, classroomId],
-    queryFn: () =>
-      localAppRequest<{ items: CloudAssignment[] }>("cloud.assignments", {
-        classroomId,
-      }),
-    enabled: Boolean(classroomId),
-    retry: false,
+  const {
+    courseId,
+    setCourseId,
+    contentOpen,
+    setContentOpen,
+    courseName,
+    setCourseName,
+    courseDescription,
+    setCourseDescription,
+    sectionName,
+    setSectionName,
+    knowledgeName,
+    setKnowledgeName,
+    knowledgeDescription,
+    setKnowledgeDescription,
+    knowledgeSectionId,
+    setKnowledgeSectionId,
+    sharedLocalExerciseId,
+    setSharedLocalExerciseId,
+    sharedKnowledgePointId,
+    setSharedKnowledgePointId,
+    coursePackage,
+    setCoursePackage,
+    packagePreview,
+    setPackagePreview,
+    courses,
+    createCourse,
+    courseContent,
+    createSection,
+    createKnowledgePoint,
+    publishSharedExercise,
+    createVersionedAssignment,
+    exportCourse,
+    previewCoursePackage,
+    importCoursePackage,
+    openCourses,
+    refreshCourses,
+    openCourseContent,
+  } = useCourseAuthoring({
+    classroomId,
+    assignmentTitle,
+    assignmentDescription,
+    assignmentDueAt,
   });
-  const addMember = useMutation({
-    mutationFn: () =>
-      localAppRequest("cloud.class.member.add", {
-        classroomId,
-        email: memberEmail,
-        role: memberRole,
-      }),
-    onSuccess: async () => {
-      setMemberEmail("");
-      toast("success", "成员已添加");
-      const refreshed = await localAppRequest<CloudWorkspace>("cloud.workspace", {
-        refreshRemote: true,
-      });
-      client.setQueryData(cloudKey, refreshed);
-    },
-    onError: (error: Error) => toast("error", `添加成员失败：${cloudFailureText(error)}`),
-  });
-  const createAssignment = useMutation<CloudAssignment, Error, boolean>({
-    mutationFn: () =>
-      localAppRequest<CloudAssignment>("cloud.assignment.create", {
-        classroomId,
-        exerciseId: assignmentExerciseId,
-        title: assignmentTitle,
-        description: assignmentDescription,
-        dueAt: assignmentDueAt ? new Date(assignmentDueAt).toISOString() : "",
-      }),
-    onSuccess: (created, publish) => {
-      setAssignmentTitle("");
-      setAssignmentDescription("");
-      setAssignmentDueAt("");
-      void client.invalidateQueries({ queryKey: assignmentsKey });
-      if (publish) {
-        changeAssignmentStatus.mutate({ ...created, next: "PUBLISHED" });
-        toast("success", `任务「${created.title}」已创建并发布，学生端立即可见`);
-      } else {
-        toast("success", `任务「${created.title}」已保存为草稿`);
-      }
-    },
-    onError: (error: Error) => toast("error", `任务创建失败：${cloudFailureText(error)}`),
-  });
-  const changeAssignmentStatus = useMutation({
-    mutationFn: (item: CloudAssignment & { next: CloudAssignment["status"] }) =>
-      localAppRequest("cloud.assignment.status", {
-        classroomId,
-        assignmentId: item.id,
-        status: item.next,
-        expectedVersion: item.version,
-      }),
-    onSuccess: (_value, item) => {
-      void client.invalidateQueries({ queryKey: assignmentsKey });
-      toast("success", `任务「${item.title}」状态已更新为「${assignmentStatusLabel(item.next)}」`);
-    },
-    onError: (error: Error) => toast("error", `状态变更失败：${error.message}`),
-  });
-  const copyAssignment = useMutation({
-    mutationFn: (item: CloudAssignment) =>
-      localAppRequest("cloud.assignment.copy", {
-        classroomId,
-        assignmentId: item.id,
-        title: `${item.title} - 副本`,
-      }),
-    onSuccess: () => {
-      void client.invalidateQueries({ queryKey: assignmentsKey });
-      toast("success", "已复制任务草稿");
-    },
-    onError: (error: Error) => toast("error", `复制失败：${error.message}`),
-  });
-  const classAnalytics = useMutation({
-    mutationFn: () =>
-      localAppRequest<Record<string, unknown>>("cloud.class.analytics", {
-        classroomId,
-      }),
-    onSuccess: setAnalyticsResult,
-    onError: (error: Error) => toast("error", `班级分析失败：${error.message}`),
-  });
-  const assignmentAnalytics = useMutation({
-    mutationFn: (assignmentId: string) =>
-      localAppRequest<Record<string, unknown>>("cloud.assignment.analytics", {
-        classroomId,
-        assignmentId,
-        status: analyticsStatus,
-        from: analyticsFrom ? new Date(analyticsFrom).toISOString() : "",
-        to: analyticsTo ? new Date(analyticsTo).toISOString() : "",
-      }),
-    onSuccess: setAnalyticsResult,
-    onError: (error: Error) => toast("error", `作业分析失败：${error.message}`),
-  });
-  // 提交反馈按“班级 + 任务”缓存：切换目标即取对应反馈，保存后原地补丁缓存。
-  const feedbackQuery = useQuery({
-    queryKey: ["cloud", "feedback", classroomId, feedbackAssignmentId],
-    queryFn: () =>
-      localAppRequest<{ items: SubmissionFeedback[]; cached: boolean }>("cloud.feedback.list", {
-        classroomId,
-        assignmentId: feedbackAssignmentId,
-        refreshRemote: true,
-      }),
-    enabled: Boolean(classroomId) && Boolean(feedbackAssignmentId),
-    placeholderData: keepPreviousData,
-    retry: false,
-  });
-  useEffect(() => {
-    if (feedbackQuery.isError)
-      toast("error", `加载提交反馈失败：${feedbackQuery.error?.message ?? ""}`);
-  }, [feedbackQuery.isError, feedbackQuery.error, toast]);
-  const patchFeedbackItem = (
-    submissionId: string,
-    patch: (item: SubmissionFeedback) => SubmissionFeedback,
-  ) => {
-    client.setQueryData<{ items: SubmissionFeedback[]; cached: boolean }>(
-      ["cloud", "feedback", classroomId, feedbackAssignmentId],
-      (current) =>
-        current
-          ? {
-              ...current,
-              items: current.items.map((candidate) =>
-                candidate.submissionId === submissionId ? patch(candidate) : candidate,
-              ),
-            }
-          : current,
-    );
-  };
-  const saveFeedback = useMutation({
-    mutationFn: (item: SubmissionFeedback) =>
-      localAppRequest<SubmissionFeedback>("cloud.feedback.save", {
-        classroomId,
-        assignmentId: item.assignmentId,
-        submissionId: item.submissionId,
-        status: item.status,
-        comment: item.comment,
-        knowledgePointIds: item.knowledgePointIds,
-        expectedVersion: item.version,
-      }),
-    onSuccess: (saved) => {
-      patchFeedbackItem(saved.submissionId, () => saved);
-      setFeedbackDirtyIds((ids) => ids.filter((id) => id !== saved.submissionId));
-      toast("success", "反馈已保存，学生端可见");
-    },
-    onError: (error: Error) => toast("error", `反馈保存失败：${error.message}`),
-  });
-  const mastery = useQuery({
-    queryKey: [...masteryKey, classroomId],
-    queryFn: () =>
-      localAppRequest<{ items: KnowledgeMastery[]; cached: boolean }>("cloud.mastery", {
-        classroomId,
-        refreshRemote: true,
-      }),
-    enabled: masteryOpen && Boolean(classroomId),
-    retry: false,
-  });
-  useEffect(() => {
-    if (mastery.isError) toast("error", `加载掌握度失败：${mastery.error?.message ?? ""}`);
-  }, [mastery.isError, mastery.error, toast]);
+  const {
+    currentPassword,
+    setCurrentPassword,
+    newPassword,
+    setNewPassword,
+    accountMessage,
+    exportTaskId,
+    sessions,
+    openAccount,
+    revokeSession,
+    changePassword,
+    requestExport,
+    getExport,
+    requestDeletion,
+    cancelDeletion,
+    deletionStatus,
+  } = useAccountSecurity();
+  const [portfolioOpen, setPortfolioOpen] = useState(false);
   const portfolio = useQuery({
     queryKey: portfolioKey,
     queryFn: () => localAppRequest<{ items: PortfolioEntry[] }>("learning.portfolio"),
@@ -326,252 +197,6 @@ export function CloudPage() {
     onSuccess: (value) => downloadText("sqlteacher-portfolio.json", value.content),
     onError: (error: Error) => toast("error", `导出作品集失败：${error.message}`),
   });
-  const courses = useQuery({
-    queryKey: coursesKey,
-    queryFn: () =>
-      localAppRequest<{ items: CloudCourse[]; cached: boolean }>("cloud.courses", {
-        refreshRemote: true,
-      }),
-    enabled: coursesOpen,
-    retry: false,
-  });
-  useEffect(() => {
-    if (courses.isError) toast("error", `刷新课程失败：${courses.error?.message ?? ""}`);
-  }, [courses.isError, courses.error, toast]);
-  const createCourse = useMutation({
-    mutationFn: () =>
-      localAppRequest<CloudCourse>("cloud.course.create", {
-        name: courseName,
-        description: courseDescription,
-      }),
-    onSuccess: (value) => {
-      setCourseName("");
-      setCourseDescription("");
-      setCourseId(value.id);
-      toast("success", `课程「${value.name}」已创建`);
-      void client.invalidateQueries({ queryKey: coursesKey });
-    },
-    onError: (error: Error) => toast("error", `课程创建失败：${error.message}`),
-  });
-  const courseContent = useQuery({
-    queryKey: [...courseContentKey, courseId],
-    queryFn: () =>
-      localAppRequest<CloudCourseContent>("cloud.course.content", {
-        courseId,
-        refreshRemote: true,
-      }),
-    enabled: contentOpen && Boolean(courseId),
-    retry: false,
-  });
-  useEffect(() => {
-    if (courseContent.isError)
-      toast("error", `打开课程失败：${cloudFailureText(courseContent.error ?? new Error())}`);
-  }, [courseContent.isError, courseContent.error, toast]);
-  useEffect(() => {
-    if (!courseId && courses.data?.items[0]) setCourseId(courses.data.items[0].id);
-  }, [courses.data, courseId]);
-  useEffect(() => {
-    if (!knowledgeSectionId && courseContent.data?.sections[0])
-      setKnowledgeSectionId(courseContent.data.sections[0].id);
-  }, [courseContent.data, knowledgeSectionId]);
-  const createSection = useMutation({
-    mutationFn: () =>
-      localAppRequest("cloud.course.section.create", {
-        courseId,
-        name: sectionName,
-        sortOrder: courseContent.data?.sections.length ?? 0,
-      }),
-    onSuccess: () => {
-      toast("success", `章节「${sectionName}」已添加`);
-      setSectionName("");
-      void client.invalidateQueries({ queryKey: courseContentKey });
-    },
-    onError: (error: Error) => toast("error", `章节添加失败：${cloudFailureText(error)}`),
-  });
-  const createKnowledgePoint = useMutation({
-    mutationFn: () =>
-      localAppRequest("cloud.course.knowledge.create", {
-        courseId,
-        sectionId: knowledgeSectionId,
-        name: knowledgeName,
-        description: knowledgeDescription,
-        sortOrder: courseContent.data?.knowledgePoints.length ?? 0,
-      }),
-    onSuccess: () => {
-      toast("success", `知识点「${knowledgeName}」已添加`);
-      setKnowledgeName("");
-      setKnowledgeDescription("");
-      void client.invalidateQueries({ queryKey: courseContentKey });
-    },
-    onError: (error: Error) => toast("error", `知识点添加失败：${cloudFailureText(error)}`),
-  });
-  const publishSharedExercise = useMutation({
-    mutationFn: async () => {
-      const exercise = await localAppRequest<ExerciseDefinition>("teaching.exercise.detail", {
-        exerciseId: sharedLocalExerciseId,
-      });
-      return localAppRequest("cloud.course.exercise.publish", {
-        courseId,
-        exerciseId: exercise.id,
-        title: exercise.title,
-        prompt: exercise.description,
-        datasetVersion: `${exercise.datasetId}@${exercise.version}`,
-        evaluationRule: JSON.stringify(exercise.evaluationRule),
-        knowledgePointIds: sharedKnowledgePointId ? [sharedKnowledgePointId] : [],
-      });
-    },
-    onSuccess: () => {
-      toast("success", "本地题目已发布到共享课程");
-      void client.invalidateQueries({ queryKey: courseContentKey });
-    },
-    onError: (error: Error) => toast("error", `题目发布失败：${error.message}`),
-  });
-  const createVersionedAssignment = useMutation({
-    mutationFn: (exerciseVersionId: string) =>
-      localAppRequest("cloud.assignment.create-versioned", {
-        classroomId,
-        exerciseVersionId,
-        title:
-          assignmentTitle ||
-          courseContent.data?.exercises.find((item) => item.id === exerciseVersionId)?.title,
-        description: assignmentDescription,
-        dueAt: assignmentDueAt ? new Date(assignmentDueAt).toISOString() : "",
-      }),
-    onSuccess: () => {
-      void client.invalidateQueries({ queryKey: assignmentsKey });
-      toast("success", "版本化任务已创建");
-    },
-    onError: (error: Error) => toast("error", `任务创建失败：${error.message}`),
-  });
-  const exportCourse = useMutation({
-    mutationFn: () => localAppRequest<{ content: string }>("cloud.course.export", { courseId }),
-    onSuccess: (value) => downloadText(`sqlteacher-course-${courseId}.json`, value.content),
-    onError: (error: Error) => toast("error", `课程导出失败：${error.message}`),
-  });
-  const previewCoursePackage = useMutation({
-    mutationFn: () =>
-      localAppRequest<CoursePackagePreview>("cloud.course.package.preview", {
-        content: coursePackage,
-      }),
-    onSuccess: setPackagePreview,
-    onError: (error: Error) => toast("error", `课程包解析失败：${error.message}`),
-  });
-  const importCoursePackage = useMutation({
-    mutationFn: () =>
-      localAppRequest("cloud.course.package.import", {
-        content: coursePackage,
-        expectedSha256: packagePreview?.contentSha256,
-        licenseConfirmed: true,
-      }),
-    onSuccess: () => {
-      setCoursePackage("");
-      setPackagePreview(undefined);
-      toast("success", "课程包已导入");
-      void client.invalidateQueries({ queryKey: coursesKey });
-    },
-    onError: (error: Error) => toast("error", `课程包导入失败：${error.message}`),
-  });
-  const exportClassAnalytics = useMutation({
-    mutationFn: () =>
-      localAppRequest<{ csv: string }>("cloud.class.analytics.export", {
-        classroomId,
-      }),
-    onSuccess: (value) => downloadText(`class-${classroomId}-analytics.csv`, value.csv),
-    onError: (error: Error) => toast("error", `班级分析导出失败：${error.message}`),
-  });
-  const exportAssignmentAnalytics = useMutation({
-    mutationFn: (assignmentId: string) =>
-      localAppRequest<{ csv: string }>("cloud.assignment.analytics.export", {
-        classroomId,
-        assignmentId,
-        status: analyticsStatus,
-        from: analyticsFrom ? new Date(analyticsFrom).toISOString() : "",
-        to: analyticsTo ? new Date(analyticsTo).toISOString() : "",
-      }),
-    onSuccess: (value, assignmentId) =>
-      downloadText(`assignment-${assignmentId}-analytics.csv`, value.csv),
-    onError: (error: Error) => toast("error", `作业分析导出失败：${error.message}`),
-  });
-  const sessions = useQuery({
-    queryKey: sessionsKey,
-    queryFn: () => localAppRequest<{ items: ActiveSession[] }>("account.sessions"),
-    enabled: accountOpen,
-    retry: false,
-  });
-  useEffect(() => {
-    if (sessions.isError) toast("error", `加载会话失败：${sessions.error?.message ?? ""}`);
-  }, [sessions.isError, sessions.error, toast]);
-  const revokeSession = useMutation({
-    mutationFn: (sessionId: string) => localAppRequest("account.session.revoke", { sessionId }),
-    onSuccess: () => {
-      void client.invalidateQueries({ queryKey: sessionsKey });
-    },
-    onError: (error: Error) => toast("error", `撤销会话失败：${error.message}`),
-  });
-  const changePassword = useMutation({
-    mutationFn: () =>
-      localAppRequest("account.password.change", {
-        currentPassword,
-        newPassword,
-      }),
-    onSuccess: () => {
-      setCurrentPassword("");
-      setNewPassword("");
-      setAccountMessage("密码已修改，其他会话将按服务器策略处理。");
-      toast("success", "密码已修改");
-    },
-    onError: (error: Error) => {
-      // 失败时保留输入，用户可直接修改后重试。
-      setAccountMessage(`密码修改失败：${error.message}`);
-      toast("error", `密码修改失败：${error.message}`);
-    },
-  });
-  const requestExport = useMutation({
-    mutationFn: () => localAppRequest<Record<string, unknown>>("account.export.request"),
-    onSuccess: (value) => {
-      const id = String(value.id ?? value.taskId ?? "");
-      setExportTaskId(id);
-      setAccountMessage(`数据导出任务已创建：${id || "请稍后刷新"}`);
-    },
-    onError: (error: Error) => toast("error", `数据导出申请失败：${error.message}`),
-  });
-  const getExport = useMutation({
-    mutationFn: () => localAppRequest<unknown>("account.export.get", { taskId: exportTaskId }),
-    onSuccess: (value) => downloadJson(`sqlteacher-account-export-${exportTaskId}.json`, value),
-    onError: (error: Error) => toast("error", `获取导出结果失败：${error.message}`),
-  });
-  const requestDeletion = useMutation({
-    mutationFn: () => localAppRequest<Record<string, unknown>>("account.deletion.request"),
-    onSuccess: (value) =>
-      setAccountMessage(`账号删除已进入撤销期：${String(value.status ?? "PENDING")}`),
-    onError: (error: Error) => toast("error", `账号删除申请失败：${error.message}`),
-  });
-  const cancelDeletion = useMutation({
-    mutationFn: () => localAppRequest("account.deletion.cancel"),
-    onSuccess: () => setAccountMessage("账号删除已取消。"),
-    onError: (error: Error) => toast("error", `取消账号删除失败：${error.message}`),
-  });
-  const deletionStatus = useMutation({
-    mutationFn: () => localAppRequest<Record<string, unknown>>("account.deletion.status"),
-    onSuccess: (value) => setAccountMessage(`账号删除状态：${String(value.status ?? "NONE")}`),
-    onError: (error: Error) => toast("error", `查询删除状态失败：${error.message}`),
-  });
-  useEffect(() => {
-    if (!classroomId && query.data?.classes[0]) {
-      setClassroomId(query.data.classes[0].id);
-    }
-  }, [classroomId, query.data?.classes]);
-  // 命令面板深链 ?class=：页面已挂载时参数变化也要切换班级并加载其任务。
-  useEffect(() => {
-    const fromUrl = searchParams.get("class");
-    if (
-      fromUrl &&
-      fromUrl !== classroomId &&
-      query.data?.classes.some((item) => item.id === fromUrl)
-    ) {
-      setClassroomId(fromUrl);
-    }
-  }, [searchParams, classroomId, query.data?.classes]);
   // 首屏云端班级列表为空时自动刷新一次（issue #20/#23）：cloud.workspace 不带
   // refreshRemote 只回本地状态，班级面板会一直空着，添加成员与发布任务的入口
   // 也随之不可见。DEGRADED（刷新已失败）与已尝试标记共同避免循环请求。
@@ -966,7 +591,7 @@ export function CloudPage() {
                 <strong>{item.title}</strong>
                 <span>
                   {assignmentStatusLabel(item.status)}
-                  {item.dueAt ? ` · 截止 ${new Date(item.dueAt).toLocaleString()}` : ""}
+                  {item.dueAt ? ` · 截止 ${formatInstant(item.dueAt)}` : ""}
                 </span>
                 {data.role === "STUDENT" && item.status === "PUBLISHED" && (
                   <Button
@@ -994,15 +619,7 @@ export function CloudPage() {
                     >
                       导出 CSV
                     </Button>
-                    <Button
-                      variant="secondary"
-                      onClick={() => {
-                        setFeedbackAssignmentId(item.id);
-                        void client.invalidateQueries({
-                          queryKey: ["cloud", "feedback", classroomId, item.id],
-                        });
-                      }}
-                    >
+                    <Button variant="secondary" onClick={() => openFeedback(item.id)}>
                       批阅反馈
                     </Button>
                     <Button variant="secondary" onClick={() => copyAssignment.mutate(item)}>
@@ -1026,15 +643,7 @@ export function CloudPage() {
                   </>
                 )}
                 {data.role === "STUDENT" && (
-                  <Button
-                    variant="secondary"
-                    onClick={() => {
-                      setFeedbackAssignmentId(item.id);
-                      void client.invalidateQueries({
-                        queryKey: ["cloud", "feedback", classroomId, item.id],
-                      });
-                    }}
-                  >
+                  <Button variant="secondary" onClick={() => openFeedback(item.id)}>
                     查看反馈
                   </Button>
                 )}
@@ -1085,16 +694,7 @@ export function CloudPage() {
             />
           )}
           <div className="button-row class-actions">
-            <Button
-              variant="secondary"
-              busy={mastery.isFetching}
-              onClick={() => {
-                setMasteryOpen(true);
-                void client.invalidateQueries({
-                  queryKey: [...masteryKey, classroomId],
-                });
-              }}
-            >
+            <Button variant="secondary" busy={mastery.isFetching} onClick={openMastery}>
               {data.role === "STUDENT" ? "我的掌握度" : "当前账号掌握度"}
             </Button>
           </div>
@@ -1176,10 +776,7 @@ export function CloudPage() {
         <details
           className="content-card"
           onToggle={(event) => {
-            if (event.currentTarget.open) {
-              setCoursesOpen(true);
-              if (courseItems.length === 0) void client.invalidateQueries({ queryKey: coursesKey });
-            }
+            if (event.currentTarget.open) openCourses();
           }}
         >
           <summary>
@@ -1226,13 +823,7 @@ export function CloudPage() {
             </FormField>
           </div>
           <div className="button-row">
-            <Button
-              busy={courses.isFetching}
-              onClick={() => {
-                setCoursesOpen(true);
-                void client.invalidateQueries({ queryKey: coursesKey });
-              }}
-            >
+            <Button busy={courses.isFetching} onClick={refreshCourses}>
               刷新课程
             </Button>
             <Button
@@ -1246,12 +837,7 @@ export function CloudPage() {
               variant="secondary"
               disabled={!courseId}
               busy={courseContent.isFetching}
-              onClick={() => {
-                setContentOpen(true);
-                void client.invalidateQueries({
-                  queryKey: [...courseContentKey, courseId],
-                });
-              }}
+              onClick={openCourseContent}
             >
               打开课程
             </Button>
@@ -1499,10 +1085,7 @@ export function CloudPage() {
       <details
         className="content-card account-governance"
         onToggle={(event) => {
-          if (event.currentTarget.open) {
-            setAccountOpen(true);
-            void client.invalidateQueries({ queryKey: sessionsKey });
-          }
+          if (event.currentTarget.open) openAccount();
         }}
       >
         <summary>

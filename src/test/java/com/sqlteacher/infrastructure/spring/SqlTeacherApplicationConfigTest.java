@@ -38,7 +38,6 @@ import com.sqlteacher.application.runner.LocalCodeRunner;
 import com.sqlteacher.infrastructure.cloud.HttpCloudApiClient;
 import com.sqlteacher.infrastructure.database.JdbcLearningEventRecorder;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.Tag;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -46,7 +45,6 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 
-@Tag("integration")
 class SqlTeacherApplicationConfigTest {
     @Test
     void shouldUseProductionCloudApiByDefault() {
