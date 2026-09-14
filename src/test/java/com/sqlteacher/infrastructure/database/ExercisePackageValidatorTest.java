@@ -9,6 +9,7 @@ import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -77,7 +78,7 @@ class ExercisePackageValidatorTest {
         ExerciseDataset dataset = dataset(SETUP_SQL);
         ExerciseDefinition exercise = exercise(
             "select name from student",
-            new ExerciseEvaluationRule(true, true, false, 7, List.of())
+            new ExerciseEvaluationRule(true, true, false, 7, List.of(), Map.of(), List.of())
         );
 
         ExercisePackageValidator.Result result = validator.validate(
@@ -94,7 +95,7 @@ class ExercisePackageValidatorTest {
         ExerciseDataset dataset = dataset(SETUP_SQL);
         ExerciseDefinition exercise = exercise(
             "select name from student where score >= 60",
-            new ExerciseEvaluationRule(true, true, false, null, List.of("HAVING"))
+            new ExerciseEvaluationRule(true, true, false, null, List.of("HAVING"), Map.of(), List.of())
         );
 
         ExercisePackageValidator.Result result = validator.validate(
@@ -125,7 +126,7 @@ class ExercisePackageValidatorTest {
         ExerciseDataset stored = dataset(SETUP_SQL);
         ExerciseDefinition exercise = exercise(
             "select name from student",
-            new ExerciseEvaluationRule(true, true, false, 3, List.of())
+            new ExerciseEvaluationRule(true, true, false, 3, List.of(), Map.of(), List.of())
         );
 
         ExercisePackageValidator.Result result = validator.validate(
@@ -157,7 +158,7 @@ class ExercisePackageValidatorTest {
             ExerciseEvaluationRule.exactResult(false), List.of(), 1, true,
             Instant.EPOCH, Instant.EPOCH,
             ExerciseType.STATE, "select name from student where score = 100",
-            List.of(), 1, List.of(), null
+            List.of(), 1, List.of(), null, List.of(), null
         );
 
         ExercisePackageValidator.Result result = validator.validate(
@@ -176,7 +177,7 @@ class ExercisePackageValidatorTest {
             ExerciseEvaluationRule.exactResult(false), List.of(), 1, true,
             Instant.EPOCH, Instant.EPOCH,
             ExerciseType.STATE, "select name from student where score = 100",
-            List.of(), 2, List.of(), null
+            List.of(), 2, List.of(), null, List.of(), null
         );
 
         ExercisePackageValidator.Result result = validator.validate(
@@ -196,7 +197,7 @@ class ExercisePackageValidatorTest {
             "test-data", "update student set score = 1 where id = 1; update student set score = 2 where id = 2",
             ExerciseEvaluationRule.exactResult(false), List.of(), 1, true,
             Instant.EPOCH, Instant.EPOCH,
-            ExerciseType.STATE, "select 1", List.of(), null, List.of(), null
+            ExerciseType.STATE, "select 1", List.of(), null, List.of(), null, List.of(), null
         );
 
         ExercisePackageValidator.Result result = validator.validate(
@@ -215,7 +216,7 @@ class ExercisePackageValidatorTest {
             "test-data", "update student set score = 100 where id = 1",
             ExerciseEvaluationRule.exactResult(false), List.of(), 1, true,
             Instant.EPOCH, Instant.EPOCH,
-            ExerciseType.STATE, "delete from student", List.of(), null, List.of(), null
+            ExerciseType.STATE, "delete from student", List.of(), null, List.of(), null, List.of(), null
         );
 
         ExercisePackageValidator.Result result = validator.validate(
@@ -235,7 +236,7 @@ class ExercisePackageValidatorTest {
             ExerciseEvaluationRule.exactResult(false), List.of(), 1, true,
             Instant.EPOCH, Instant.EPOCH,
             ExerciseType.SCRIPT, "select count(*) from student", List.of(), null,
-            List.of("BEGIN", "COMMIT"), null
+            List.of("BEGIN", "COMMIT"), null, List.of(), null
         );
 
         ExercisePackageValidator.Result result = validator.validate(
@@ -257,7 +258,7 @@ class ExercisePackageValidatorTest {
             ExerciseEvaluationRule.exactResult(false), List.of(), 1, true,
             Instant.EPOCH, Instant.EPOCH,
             ExerciseType.TRIGGER, "select id from audit", List.of(), null, List.of(),
-            "insert into student values (99, 'New', 10);"
+            "insert into student values (99, 'New', 10);", List.of(), null
         );
         ExerciseDefinition badReference = new ExerciseDefinition(
             "trigger-ex", "Trigger", "Audit inserts.", "Triggers", ExerciseDifficulty.ADVANCED,
@@ -265,7 +266,7 @@ class ExercisePackageValidatorTest {
             ExerciseEvaluationRule.exactResult(false), List.of(), 1, true,
             Instant.EPOCH, Instant.EPOCH,
             ExerciseType.TRIGGER, "select id from audit", List.of(), null, List.of(),
-            "insert into student values (99, 'New', 10);"
+            "insert into student values (99, 'New', 10);", List.of(), null
         );
         ExerciseDefinition badProbe = new ExerciseDefinition(
             "trigger-ex", "Trigger", "Audit inserts.", "Triggers", ExerciseDifficulty.ADVANCED,
@@ -274,7 +275,7 @@ class ExercisePackageValidatorTest {
             ExerciseEvaluationRule.exactResult(false), List.of(), 1, true,
             Instant.EPOCH, Instant.EPOCH,
             ExerciseType.TRIGGER, "select id from audit", List.of(), null, List.of(),
-            "attach database 'x.db' as extra;"
+            "attach database 'x.db' as extra;", List.of(), null
         );
 
         assertTrue(validator.validate(List.of(dataset), List.of(good), id -> Optional.empty())
@@ -308,7 +309,8 @@ class ExercisePackageValidatorTest {
             1,
             true,
             Instant.EPOCH,
-            Instant.EPOCH
+            Instant.EPOCH,
+            ExerciseType.QUERY, null, List.of(), null, List.of(), null, List.of(), null
         );
     }
 }

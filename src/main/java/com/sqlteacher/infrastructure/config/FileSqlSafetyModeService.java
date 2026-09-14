@@ -19,7 +19,6 @@ import java.util.Properties;
 public final class FileSqlSafetyModeService implements SqlSafetyModeService {
     private static final Logger log = LoggerFactory.getLogger(FileSqlSafetyModeService.class);
     private static final String KEY = "developer-mode";
-    private static final String LEGACY_KEY = "unrestricted-mode";
 
     private final Path settingsFile;
     private volatile boolean unrestrictedModeEnabled;
@@ -47,7 +46,7 @@ public final class FileSqlSafetyModeService implements SqlSafetyModeService {
             log.warn("Failed to read SQL safety settings; treating the mode as not chosen", error);
             return false;
         }
-        return properties.containsKey(KEY) || properties.containsKey(LEGACY_KEY);
+        return properties.containsKey(KEY);
     }
 
     @Override
@@ -90,7 +89,6 @@ public final class FileSqlSafetyModeService implements SqlSafetyModeService {
         try (InputStream input = Files.newInputStream(settingsFile)) {
             properties.load(input);
             if (properties.containsKey(KEY)) return Boolean.parseBoolean(properties.getProperty(KEY));
-            if (properties.containsKey(LEGACY_KEY)) return Boolean.parseBoolean(properties.getProperty(LEGACY_KEY));
             return false;
         } catch (IOException error) {
             log.warn("Failed to load SQL safety settings; falling back to teaching mode", error);

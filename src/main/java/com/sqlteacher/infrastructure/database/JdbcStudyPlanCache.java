@@ -21,7 +21,6 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.sql.Statement;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -49,7 +48,6 @@ public final class JdbcStudyPlanCache implements StudyPlanCache {
 
     @Override
     public void saveObjectives(String courseId, List<com.sqlteacher.application.planning.CourseObjective> objectives) {
-        ensureCompatibilityColumns();
         if (courseId == null || courseId.isBlank()) throw new IllegalArgumentException("courseId must not be blank");
         List<com.sqlteacher.application.planning.CourseObjective> values = objectives == null ? List.of()
             : objectives.stream().filter(item -> courseId.equals(item.courseId())).toList();
@@ -81,7 +79,6 @@ public final class JdbcStudyPlanCache implements StudyPlanCache {
 
     @Override
     public StudyPlanRefresh save(StudyPlanSnapshot requested) {
-        ensureCompatibilityColumns();
         Objects.requireNonNull(requested, "snapshot must not be null");
         String owner = owner();
         if (!owner.equals(requested.ownerId())) throw new SecurityException("Study plan owner mismatch");
@@ -138,7 +135,6 @@ public final class JdbcStudyPlanCache implements StudyPlanCache {
 
     @Override
     public List<StudyPlanSnapshot> currentPlans() {
-        ensureCompatibilityColumns();
         try (Connection connection = connections.open("app"); PreparedStatement statement = connection.prepareStatement(
             "select distinct course_id from study_plan_snapshot where owner_id=? and status='ACTIVE' order by course_id")) {
             statement.setString(1, owner());
@@ -157,7 +153,6 @@ public final class JdbcStudyPlanCache implements StudyPlanCache {
 
     @Override
     public PlanSyncOperation updateAction(String courseId, String actionId, StudyPlanActionState state) {
-        ensureCompatibilityColumns();
         if (courseId == null || courseId.isBlank() || actionId == null || actionId.isBlank() || state == null
             || state == StudyPlanActionState.OPEN || state == StudyPlanActionState.INVALIDATED) {
             throw new IllegalArgumentException("Invalid study plan action transition");
@@ -196,7 +191,6 @@ public final class JdbcStudyPlanCache implements StudyPlanCache {
 
     @Override
     public int pendingOperations() {
-        ensureCompatibilityColumns();
         try (Connection connection = connections.open("app"); PreparedStatement statement = connection.prepareStatement(
             "select count(*) from study_plan_outbox where owner_id=? and status='PENDING'")) {
             statement.setString(1, owner());
@@ -208,7 +202,6 @@ public final class JdbcStudyPlanCache implements StudyPlanCache {
 
     @Override
     public List<PlanSyncOperation> pending() {
-        ensureCompatibilityColumns();
         try (Connection connection = connections.open("app"); PreparedStatement statement = connection.prepareStatement("""
             select o.operation_id,s.course_id,o.action_id,o.requested_state,a.sync_version,o.attempt_count
             from study_plan_outbox o join study_plan_action a on a.action_key=o.action_id
@@ -231,7 +224,6 @@ public final class JdbcStudyPlanCache implements StudyPlanCache {
 
     @Override
     public void markDelivered(String operationId, String actionId, long serverVersion) {
-        ensureCompatibilityColumns();
         try (Connection connection = connections.open("app")) {
             connection.setAutoCommit(false);
             try (PreparedStatement statement = connection.prepareStatement(
@@ -254,7 +246,6 @@ public final class JdbcStudyPlanCache implements StudyPlanCache {
 
     @Override
     public void markFailed(String operationId, String errorCode, boolean retryable) {
-        ensureCompatibilityColumns();
         Instant now = clock.instant();
         try (Connection connection = connections.open("app"); PreparedStatement statement = connection.prepareStatement("""
             update study_plan_outbox set status=?,attempt_count=attempt_count+1,next_attempt_at=?,
@@ -413,25 +404,6 @@ public final class JdbcStudyPlanCache implements StudyPlanCache {
     private String owner() {
         String value = owners.currentOwnerId();
         return value == null || value.isBlank() ? LearningEventOwnerProvider.GUEST_OWNER : value.trim();
-    }
-
-    private void ensureCompatibilityColumns() {
-        try (Connection connection = connections.open("app"); Statement statement = connection.createStatement()) {
-            addColumn(statement, "alter table study_plan_action add column title text not null default '学习动作'");
-            addColumn(statement, "alter table study_plan_action add column description text not null default '根据课程目标继续学习。'");
-            addColumn(statement, "alter table study_plan_action add column resolution_condition text not null default '产生新的有效证据'");
-            addColumn(statement, "alter table study_plan_action add column action_key text not null default ''");
-            addColumn(statement, "alter table study_plan_action add column sync_version integer not null default 0");
-            statement.executeUpdate("update study_plan_action set action_key=id where action_key=''");
-            statement.executeUpdate("create unique index if not exists study_plan_action_key on study_plan_action(snapshot_id,action_key)");
-        } catch (SQLException error) {
-            throw database("PLAN_CACHE_INIT_FAILED", error);
-        }
-    }
-
-    private static void addColumn(Statement statement, String sql) throws SQLException {
-        try { statement.executeUpdate(sql); }
-        catch (SQLException error) { if (!error.getMessage().toLowerCase(java.util.Locale.ROOT).contains("duplicate column")) throw error; }
     }
 
     private static SqlTeacherException database(String code, SQLException error) {

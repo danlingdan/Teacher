@@ -423,7 +423,8 @@ public final class JdbcExercisePracticeService implements ExercisePracticeServic
             List.of(new EvaluationCriterionResult("execution", false, "SQL 未能成功执行，请先修正语法或字段。")),
             "本次提交未通过：SQL 执行失败。",
             duration,
-            "SQL_EXECUTION_FAILED"
+            "SQL_EXECUTION_FAILED",
+            null, null
         );
     }
 

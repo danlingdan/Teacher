@@ -48,14 +48,10 @@ public final class PersistentCloudSessionService implements CloudSessionService 
         }
     }
 
-    /** A rejected refresh must clear the stored session; string matching stays only as a fallback. */
+    /** A rejected refresh (401/403 structured status) must clear the stored session. */
     private static boolean isSessionRejected(RuntimeException error) {
-        if (error instanceof CloudApiRequestException request
-                && (request.statusCode() == 401 || request.statusCode() == 403)) {
-            return true;
-        }
-        String message = error.getMessage() == null ? "" : error.getMessage();
-        return message.contains("HTTP 401") || message.contains("HTTP 403");
+        return error instanceof CloudApiRequestException request
+                && (request.statusCode() == 401 || request.statusCode() == 403);
     }
 
     @Override

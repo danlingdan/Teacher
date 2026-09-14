@@ -58,7 +58,8 @@ class ExerciseScoreAndComparisonTest {
         return new ExerciseDefinition(
             "e1", "T", "D", "KP", ExerciseDifficulty.BEGINNER, "test-data",
             "select name from student where score >= 60 order by id",
-            rule, List.of(), 1, true, Instant.EPOCH, Instant.EPOCH
+            rule, List.of(), 1, true, Instant.EPOCH, Instant.EPOCH,
+            ExerciseType.QUERY, null, List.of(), null, List.of(), null, List.of(), null
         );
     }
 

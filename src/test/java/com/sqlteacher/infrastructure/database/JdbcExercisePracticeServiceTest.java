@@ -107,7 +107,7 @@ class JdbcExercisePracticeServiceTest {
         var service = new JdbcExercisePracticeService(
             fixture.connections(), new JdbcExerciseManagementService(fixture.connections()),
             new DefaultSqlRiskAnalysisService(), (exercise, dataset, sql) -> new ExerciseEvaluationResult(
-                true, List.of(), "通过", Duration.ZERO, ""), new SqlResultMapper(), fixture.configuration(),
+                true, List.of(), "通过", Duration.ZERO, "", null, null), new SqlResultMapper(), fixture.configuration(),
             new MockLearningEventService(), () -> "student-42");
 
         ExerciseSession session = service.start("query-02");
@@ -142,7 +142,7 @@ class JdbcExercisePracticeServiceTest {
         return new JdbcExercisePracticeService(
             fixture.connections(), new JdbcExerciseManagementService(fixture.connections()),
             new DefaultSqlRiskAnalysisService(), (exercise, dataset, sql) -> new ExerciseEvaluationResult(
-                true, List.of(), "通过", Duration.ZERO, ""), new SqlResultMapper(), fixture.configuration(),
+                true, List.of(), "通过", Duration.ZERO, "", null, null), new SqlResultMapper(), fixture.configuration(),
             new MockLearningEventService(), () -> ownerId);
     }
 
@@ -339,7 +339,8 @@ class JdbcExercisePracticeServiceTest {
             List.of(new EvaluationCriterionResult("test", true, "测试评测通过。")),
             "通过",
             Duration.ofMillis(1),
-            ""
+            "",
+            null, null
         );
         JdbcExercisePracticeService service = new JdbcExercisePracticeService(
             connections,

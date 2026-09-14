@@ -27,11 +27,14 @@ class FileSqlSafetyModeServiceTest {
     }
 
     @Test
-    void shouldReadLegacyUnrestrictedModeChoice(@TempDir Path tempDirectory) throws Exception {
+    void shouldTreatLegacyUnrestrictedModeKeyAsNotChosen(@TempDir Path tempDirectory) throws Exception {
+        // v3.4.0 removed the pre-3.2 "unrestricted-mode" key; holders return to the
+        // not-chosen state so the first-run choice dialog appears again (fail closed).
         Path settings = tempDirectory.resolve("sql-safety.properties");
         java.nio.file.Files.writeString(settings, "unrestricted-mode=false\n");
-        assertFalse(new FileSqlSafetyModeService(settings).isDeveloperModeEnabled());
-        assertTrue(new FileSqlSafetyModeService(settings).isDeveloperModeExplicit());
+        FileSqlSafetyModeService service = new FileSqlSafetyModeService(settings);
+        assertFalse(service.isDeveloperModeEnabled());
+        assertFalse(service.isDeveloperModeExplicit());
     }
 
     @Test

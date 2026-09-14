@@ -383,7 +383,8 @@ final class ExerciseTextCodec {
         if (!compareColumns && !compareRows && expectedRowCount == null && keywords.isEmpty()) {
             return ExerciseEvaluationRule.exactResult(false);
         }
-        return new ExerciseEvaluationRule(compareColumns, compareRows, rowOrderMatters, expectedRowCount, keywords);
+        return new ExerciseEvaluationRule(compareColumns, compareRows, rowOrderMatters, expectedRowCount, keywords,
+            Map.of(), List.of());
     }
 
     private static List<String> hints(Block block) {

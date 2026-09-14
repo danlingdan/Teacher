@@ -115,6 +115,7 @@ class DefaultCloudLearningSyncServiceTest {
         @Override public CloudAuthenticationService.Session refresh(String refreshToken) { throw unsupported(); }
         @Override public void logout(String token) { throw unsupported(); }
         @Override public List<ClassroomService.Classroom> listClasses(String token) { throw unsupported(); }
+        @Override public List<ClassroomService.RosterMember> listClassRoster(String token, String classroomId) { throw unsupported(); }
         @Override public ClassroomService.Classroom createClass(String token, String name) { throw unsupported(); }
         @Override public ClassroomService.Classroom addClassMember(String token, String classId, String email, UserRole role) { throw unsupported(); }
         @Override public ClassAssignment createAssignment(String token, String classId, String exerciseId, String title) { throw unsupported(); }

@@ -8,7 +8,9 @@ import com.sqlteacher.domain.activity.SqlActivityArtifact;
 import com.sqlteacher.domain.activity.SqlActivitySpecification;
 import com.sqlteacher.domain.exercise.ExerciseDefinition;
 import com.sqlteacher.domain.exercise.ExerciseDifficulty;
+import com.sqlteacher.domain.exercise.ExerciseType;
 
+import java.util.List;
 import java.util.Objects;
 
 public final class SqlActivityEvaluator implements ActivityEvaluator<SqlActivitySpecification, SqlActivityArtifact> {
@@ -36,7 +38,8 @@ public final class SqlActivityEvaluator implements ActivityEvaluator<SqlActivity
             definition.id(), definition.title(), definition.description(),
             specification.knowledgePoint(), ExerciseDifficulty.valueOf(definition.difficulty().name()),
             specification.dataset().id(), specification.referenceSql(), specification.evaluationRule(),
-            specification.hints(), definition.version(), definition.enabled(), definition.createdAt(), definition.updatedAt()
+            specification.hints(), definition.version(), definition.enabled(), definition.createdAt(), definition.updatedAt(),
+            ExerciseType.QUERY, null, List.of(), null, List.of(), null, List.of(), null
         );
         ExerciseEvaluationResult result = delegate.evaluate(exercise, specification.dataset(), artifact.submittedSql());
         return new ActivityEvaluationResult(

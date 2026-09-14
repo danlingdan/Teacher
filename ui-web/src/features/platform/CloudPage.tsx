@@ -159,7 +159,7 @@ export function CloudPage() {
       localAppRequest<{ items: ExerciseSummary[] }>("practice.catalog"),
     enabled: Boolean(query.data?.signedIn),
   });
-  // 班级成员名单（issue #26）：仅教师可见；旧版云端服务没有该端点时静默降级。
+  // 班级成员名单（issue #26）：仅教师可见。
   const isTeacherRole =
     query.data?.role === "TEACHER" || query.data?.role === "ADMINISTRATOR";
   const roster = useQuery({
@@ -818,9 +818,7 @@ export function CloudPage() {
               {roster.isPending ? (
                 <p className="muted">正在加载成员名单…</p>
               ) : roster.isError ? (
-                <p className="muted">
-                  成员名单暂时不可用：需要云端服务更新到最新版本后支持。
-                </p>
+                <p className="muted">成员名单暂时不可用，请稍后重试。</p>
               ) : roster.data?.members.length ? (
                 <ul className="plain-list">
                   {roster.data.members.map((member) => (

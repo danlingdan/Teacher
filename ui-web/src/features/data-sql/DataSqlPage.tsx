@@ -58,14 +58,13 @@ export default function DataSqlPage() {
   }, [searchParams, connections.data]);
   const schema = useQuery({ queryKey: ["data", "schema", connectionId], queryFn: () => localAppRequest<{ tables: DatabaseTable[] }>("data.schema", { connectionId }), enabled: Boolean(connectionId) });
   // 首次运行选择 SQL 安全模式：后端明确返回 developerModeExplicit=false 时弹一次选择框。
-  // 旧版后端没有该字段（undefined），视为已选择，不弹框，保持向前兼容。
   const settings = useQuery(settingsPreferencesQuery);
   const [modeDialogDismissed, setModeDialogDismissed] = useState(false);
   const sqlModeOpen = Boolean(settings.data) && settings.data?.developerModeExplicit === false && !modeDialogDismissed;
   const chooseSqlMode = useMutation({
     mutationFn: (developerMode: boolean) => localAppRequest("settings.update", { ...settings.data?.general, developerMode }),
     onSuccess: (_value, chosenDeveloperMode) => {
-      // 立即写回缓存，后端尚未上线 developerModeExplicit 时也不会重复弹框。
+      // 立即写回缓存，避免下次进入页面时重复弹框。
       if (settings.data) client.setQueryData<SettingsPreferences>(settingsPreferencesQuery.queryKey, { ...settings.data, developerMode: chosenDeveloperMode, developerModeExplicit: true });
       setModeDialogDismissed(true);
       void client.invalidateQueries({ queryKey: settingsPreferencesQuery.queryKey });

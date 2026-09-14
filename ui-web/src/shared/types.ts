@@ -693,8 +693,8 @@ export interface SettingsPreferences {
   bank?: BankPreferencesView;
   role: AppRole;
   developerMode: boolean;
-  /** 用户是否已明确选择过 SQL 安全模式；false 表示首次运行待选择。旧版后端缺省该字段，视为已选择。 */
-  developerModeExplicit?: boolean;
+  /** 用户是否已明确选择过 SQL 安全模式；false 表示首次运行待选择。 */
+  developerModeExplicit: boolean;
   canMaintainLocalData: boolean;
   secretsExposed: false;
   general: {

@@ -115,6 +115,7 @@ class PersistentCloudSessionServiceTest {
         @Override public CloudAuthenticationService.Session refresh(String refreshToken) { throw unsupported(); }
         @Override public void logout(String accessToken) { throw unsupported(); }
         @Override public java.util.List<com.sqlteacher.application.collaboration.ClassroomService.Classroom> listClasses(String accessToken) { throw unsupported(); }
+        @Override public java.util.List<com.sqlteacher.application.collaboration.ClassroomService.RosterMember> listClassRoster(String accessToken, String classroomId) { throw unsupported(); }
         @Override public com.sqlteacher.application.collaboration.ClassroomService.Classroom createClass(String accessToken, String name) { throw unsupported(); }
         @Override public com.sqlteacher.application.collaboration.ClassroomService.Classroom addClassMember(String accessToken, String classroomId, String email, com.sqlteacher.application.collaboration.UserRole role) { throw unsupported(); }
         @Override public com.sqlteacher.application.collaboration.ClassAssignment createAssignment(String accessToken, String classroomId, String exerciseId, String title) { throw unsupported(); }

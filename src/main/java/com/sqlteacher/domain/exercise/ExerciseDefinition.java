@@ -94,55 +94,6 @@ public record ExerciseDefinition(
         }
     }
 
-    /** Compatibility view for pre-v3.3 callers: every QUERY-era constructor arity. */
-    public ExerciseDefinition(
-        String id,
-        String title,
-        String description,
-        String knowledgePoint,
-        ExerciseDifficulty difficulty,
-        String datasetId,
-        String referenceSql,
-        ExerciseEvaluationRule evaluationRule,
-        List<String> hints,
-        int version,
-        boolean enabled,
-        Instant createdAt,
-        Instant updatedAt
-    ) {
-        this(id, title, description, knowledgePoint, difficulty, datasetId, referenceSql,
-            evaluationRule, hints, version, enabled, createdAt, updatedAt,
-            ExerciseType.QUERY, null, List.of(), null, List.of(), null, List.of(), null);
-    }
-
-    /** Compatibility view for v3.3 W1 callers, before expected columns and reveal mode. */
-    public ExerciseDefinition(
-        String id,
-        String title,
-        String description,
-        String knowledgePoint,
-        ExerciseDifficulty difficulty,
-        String datasetId,
-        String referenceSql,
-        ExerciseEvaluationRule evaluationRule,
-        List<String> hints,
-        int version,
-        boolean enabled,
-        Instant createdAt,
-        Instant updatedAt,
-        ExerciseType exerciseType,
-        String verificationSql,
-        List<String> allowedStatementTypes,
-        Integer expectedAffectedRows,
-        List<String> requiredTransactionKeywords,
-        String triggerProbeSql
-    ) {
-        this(id, title, description, knowledgePoint, difficulty, datasetId, referenceSql,
-            evaluationRule, hints, version, enabled, createdAt, updatedAt,
-            exerciseType, verificationSql, allowedStatementTypes, expectedAffectedRows,
-            requiredTransactionKeywords, triggerProbeSql, List.of(), null);
-    }
-
     /**
      * The deterministic set of comparable criteria this exercise produces on a normal
      * evaluation. Failure-only criteria (safety/execution/reference/verification) are not

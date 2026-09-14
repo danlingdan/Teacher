@@ -15,6 +15,7 @@ import com.sqlteacher.domain.exercise.ExerciseDifficulty;
 import com.sqlteacher.domain.exercise.ExerciseEvaluationRule;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Consumer;
@@ -113,7 +114,7 @@ final class TeachingApiSection extends ApiSection {
             requiredText(params, "datasetId", 128), requiredText(params, "referenceSql", 256 * 1024),
             new ExerciseEvaluationRule(params.path("compareColumns").asBoolean(true),
                 params.path("compareRows").asBoolean(true), params.path("rowOrderMatters").asBoolean(false),
-                expectedRows, keywords), hints, expectedVersion, params.path("enabled").asBoolean(true));
+                expectedRows, keywords, Map.of(), List.of()), hints, expectedVersion, params.path("enabled").asBoolean(true));
         return mapper.valueToTree(context().getBean(ExerciseManagementService.class).save(draft));
     }
 

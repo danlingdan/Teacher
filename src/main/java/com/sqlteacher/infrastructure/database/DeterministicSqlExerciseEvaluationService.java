@@ -620,7 +620,8 @@ public final class DeterministicSqlExerciseEvaluationService implements SqlExerc
         EvaluationCriterionResult criterion
     ) {
         return new ExerciseEvaluationResult(
-            false, List.of(criterion), "提交未通过，请根据反馈修改后重试。", elapsed(started), errorCode
+            false, List.of(criterion), "提交未通过，请根据反馈修改后重试。", elapsed(started), errorCode,
+            null, null
         );
     }
 

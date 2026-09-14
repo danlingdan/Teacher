@@ -34,15 +34,4 @@ public record ExerciseEvaluationResult(
             throw new IllegalArgumentException("score must be between 0 and 100");
         }
     }
-
-    /** Compatibility view for pre-v3.3 callers without score or comparison. */
-    public ExerciseEvaluationResult(
-        boolean passed,
-        List<EvaluationCriterionResult> criteria,
-        String feedback,
-        Duration duration,
-        String errorCode
-    ) {
-        this(passed, criteria, feedback, duration, errorCode, null, null);
-    }
 }

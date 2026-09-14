@@ -63,7 +63,7 @@ class DeterministicSqlExerciseEvaluationServiceTest {
     void shouldEnforceRequiredStructureAndRejectMutation() {
         Fixture fixture = fixture();
         ExerciseDefinition structural = exercise(
-            new ExerciseEvaluationRule(true, true, false, null, List.of("WHERE"))
+            new ExerciseEvaluationRule(true, true, false, null, List.of("WHERE"), Map.of(), List.of())
         );
 
         ExerciseEvaluationResult missingStructure = fixture.evaluator().evaluate(
@@ -99,7 +99,8 @@ class DeterministicSqlExerciseEvaluationServiceTest {
             1,
             true,
             Instant.EPOCH,
-            Instant.EPOCH
+            Instant.EPOCH,
+            ExerciseType.QUERY, null, List.of(), null, List.of(), null, List.of(), null
         );
 
         ExerciseEvaluationResult result = fixture.evaluator().evaluate(
@@ -209,7 +210,7 @@ class DeterministicSqlExerciseEvaluationServiceTest {
             ExerciseType.STATE,
             "update student set score = 95 where id = 1",
             "select score from student where id = 1",
-            new ExerciseEvaluationRule(true, true, false, null, List.of()), 2, List.of(), List.of(), null
+            new ExerciseEvaluationRule(true, true, false, null, List.of(), Map.of(), List.of()), 2, List.of(), List.of(), null
         );
 
         ExerciseEvaluationResult result = fixture.evaluator().evaluate(
@@ -256,7 +257,7 @@ class DeterministicSqlExerciseEvaluationServiceTest {
             ExerciseType.STATE,
             "create table bonus(id integer)",
             "select count(*) from sqlite_master where name = 'bonus'",
-            new ExerciseEvaluationRule(true, true, false, 1, List.of()), null,
+            new ExerciseEvaluationRule(true, true, false, 1, List.of(), Map.of(), List.of()), null,
             List.of("CREATE"), List.of(), null
         );
 
@@ -274,7 +275,7 @@ class DeterministicSqlExerciseEvaluationServiceTest {
             ExerciseType.SCRIPT,
             "begin;\ninsert into student values (9, 'Zoe', 60);\ncommit;",
             "select count(*) from student",
-            new ExerciseEvaluationRule(true, true, false, 1, List.of()), null,
+            new ExerciseEvaluationRule(true, true, false, 1, List.of(), Map.of(), List.of()), null,
             List.of(), List.of("BEGIN", "COMMIT"), null
         );
 
@@ -452,7 +453,8 @@ class DeterministicSqlExerciseEvaluationServiceTest {
             1,
             true,
             Instant.EPOCH,
-            Instant.EPOCH
+            Instant.EPOCH,
+            ExerciseType.QUERY, null, List.of(), null, List.of(), null, List.of(), null
         );
     }
 
@@ -470,7 +472,8 @@ class DeterministicSqlExerciseEvaluationServiceTest {
             "stateful-exercise", "Test", "Stateful exercise.", "Filtering",
             ExerciseDifficulty.BEGINNER, "test-data", referenceSql, rule, List.of(), 1, true,
             Instant.EPOCH, Instant.EPOCH,
-            type, verificationSql, allowedTypes, affectedRows, transactionKeywords, probeSql
+            type, verificationSql, allowedTypes, affectedRows, transactionKeywords, probeSql,
+            List.of(), null
         );
     }
 

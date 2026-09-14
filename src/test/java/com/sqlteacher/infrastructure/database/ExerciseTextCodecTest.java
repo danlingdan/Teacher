@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -32,9 +33,10 @@ class ExerciseTextCodecTest {
         ExerciseDefinition exercise = new ExerciseDefinition(
             "query-01", "查询全部学生", "返回全部列。", "基础查询", ExerciseDifficulty.BEGINNER,
             "school-core-v1", "select id from student order by id",
-            new ExerciseEvaluationRule(true, true, true, 3, List.of("SELECT", "FROM")),
+            new ExerciseEvaluationRule(true, true, true, 3, List.of("SELECT", "FROM"), Map.of(), List.of()),
             List.of("先写 SELECT。", "再写 FROM。"), 2, true,
-            Instant.parse("2026-07-21T00:00:00Z"), Instant.parse("2026-07-30T00:00:00Z")
+            Instant.parse("2026-07-21T00:00:00Z"), Instant.parse("2026-07-30T00:00:00Z"),
+            ExerciseType.QUERY, null, List.of(), null, List.of(), null, List.of(), null
         );
 
         ExerciseTextCodec.DecodedPackage decoded =
@@ -158,7 +160,7 @@ class ExerciseTextCodecTest {
             ExerciseEvaluationRule.exactResult(false), List.of(), 1, true,
             Instant.parse("2026-09-10T00:00:00Z"), Instant.parse("2026-09-10T00:00:00Z"),
             ExerciseType.STATE, "select score from student where id = 1",
-            List.of("INSERT", "UPDATE", "DELETE"), 1, List.of(), null
+            List.of("INSERT", "UPDATE", "DELETE"), 1, List.of(), null, List.of(), null
         );
         ExerciseDefinition script = new ExerciseDefinition(
             "script-01", "事务脚本", "在事务中插入一名学生。", "事务", ExerciseDifficulty.INTERMEDIATE,
@@ -166,7 +168,7 @@ class ExerciseTextCodecTest {
             ExerciseEvaluationRule.exactResult(false), List.of(), 1, true,
             Instant.parse("2026-09-10T00:00:00Z"), Instant.parse("2026-09-10T00:00:00Z"),
             ExerciseType.SCRIPT, "select count(*) from student", List.of(), null,
-            List.of("BEGIN", "COMMIT"), null
+            List.of("BEGIN", "COMMIT"), null, List.of(), null
         );
         ExerciseDefinition trigger = new ExerciseDefinition(
             "trigger-01", "审计触发器", "插入学生时写入审计表。", "触发器", ExerciseDifficulty.ADVANCED,
@@ -175,7 +177,7 @@ class ExerciseTextCodecTest {
             ExerciseEvaluationRule.exactResult(false), List.of(), 1, true,
             Instant.parse("2026-09-10T00:00:00Z"), Instant.parse("2026-09-10T00:00:00Z"),
             ExerciseType.TRIGGER, "select id from audit", List.of(), null, List.of(),
-            "insert into student values (99, 'New', 10);"
+            "insert into student values (99, 'New', 10);", List.of(), null
         );
 
         ExerciseTextCodec.DecodedPackage decoded =

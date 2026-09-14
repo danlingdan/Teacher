@@ -32,7 +32,8 @@ public final class ActivityBackedSqlExerciseEvaluationService implements SqlExer
             result.criteria().stream().map(item -> new EvaluationCriterionResult(
                 item.criterion(), item.passed(), item.feedback()
             )).toList(),
-            result.summary(), result.resourceUsage().wallTime(), result.reasonCode()
+            result.summary(), result.resourceUsage().wallTime(), result.reasonCode(),
+            null, null
         );
     }
 }

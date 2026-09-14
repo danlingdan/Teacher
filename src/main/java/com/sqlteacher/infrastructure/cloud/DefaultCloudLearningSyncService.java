@@ -232,9 +232,7 @@ public final class DefaultCloudLearningSyncService implements CloudLearningSyncS
                 && (request.statusCode() == 401 || request.statusCode() == 403)) {
             return "SYNC_AUTH";
         }
-        // Fallback for errors that carry the status only in their message text.
         String message = error.getMessage() == null ? "" : error.getMessage();
-        if (message.contains("HTTP 401") || message.contains("HTTP 403")) return "SYNC_AUTH";
         if (message.contains("invalid")) return "SYNC_DATA";
         return "SYNC_NETWORK";
     }

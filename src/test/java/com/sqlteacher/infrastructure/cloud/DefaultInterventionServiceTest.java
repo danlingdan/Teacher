@@ -141,6 +141,9 @@ class DefaultInterventionServiceTest {
             return List.of(new ClassroomService.Classroom("class-1", "=Class", NOW.minusSeconds(100),
                 List.of(new ClassroomService.Member("teacher-1", UserRole.TEACHER))));
         }
+        @Override public List<ClassroomService.RosterMember> listClassRoster(String token, String classroomId) {
+            throw new UnsupportedOperationException("Class roster is unavailable");
+        }
         @Override public List<ClassAssignment> listAssignments(String token, String classroomId) {
             return List.of(new ClassAssignment("assignment-1", classroomId, "exercise-1", "Task",
                 NOW.minusSeconds(1000), AssignmentStatus.PUBLISHED, NOW.minusSeconds(10), NOW.minusSeconds(1000)));

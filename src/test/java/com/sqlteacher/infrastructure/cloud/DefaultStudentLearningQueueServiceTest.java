@@ -172,6 +172,9 @@ class DefaultStudentLearningQueueServiceTest {
             return List.of(new ClassroomService.Classroom("class-1", "Class", NOW.minusSeconds(100),
                 List.of(new ClassroomService.Member("student-1", UserRole.STUDENT))));
         }
+        @Override public List<ClassroomService.RosterMember> listClassRoster(String token, String classroomId) {
+            throw new UnsupportedOperationException("Class roster is unavailable");
+        }
         @Override public List<ClassAssignment> listAssignments(String token, String classroomId) {
             return List.of(new ClassAssignment("assignment-1", classroomId, "query-01", "Task",
                 NOW.minusSeconds(1000), AssignmentStatus.PUBLISHED, NOW.plusSeconds(3600), NOW.minusSeconds(50)));

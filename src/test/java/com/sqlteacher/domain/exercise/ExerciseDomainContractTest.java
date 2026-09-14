@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -21,12 +22,13 @@ class ExerciseDomainContractTest {
             ExerciseDifficulty.BEGINNER,
             "student-basic-v1",
             "SELECT name FROM student ORDER BY id",
-            new ExerciseEvaluationRule(true, true, true, null, List.of(" select ", "SELECT")),
+            new ExerciseEvaluationRule(true, true, true, null, List.of(" select ", "SELECT"), Map.of(), List.of()),
             hints,
             1,
             true,
             Instant.EPOCH,
-            Instant.EPOCH
+            Instant.EPOCH,
+            ExerciseType.QUERY, null, List.of(), null, List.of(), null, List.of(), null
         );
 
         hints.clear();
@@ -40,11 +42,11 @@ class ExerciseDomainContractTest {
     void shouldRejectInvalidRulesAndVersions() {
         assertThrows(
             IllegalArgumentException.class,
-            () -> new ExerciseEvaluationRule(false, false, false, null, List.of())
+            () -> new ExerciseEvaluationRule(false, false, false, null, List.of(), Map.of(), List.of())
         );
         assertThrows(
             IllegalArgumentException.class,
-            () -> new ExerciseEvaluationRule(true, false, true, null, List.of())
+            () -> new ExerciseEvaluationRule(true, false, true, null, List.of(), Map.of(), List.of())
         );
         assertThrows(
             IllegalArgumentException.class,

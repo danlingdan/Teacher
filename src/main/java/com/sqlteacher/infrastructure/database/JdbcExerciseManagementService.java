@@ -449,7 +449,8 @@ public final class JdbcExerciseManagementService implements ExerciseManagementSe
         return new ExerciseDefinition(
             id, draft.title(), draft.description(), draft.knowledgePoint(), draft.difficulty(),
             draft.datasetId(), draft.referenceSql(), draft.evaluationRule(), draft.hints(), version,
-            draft.enabled(), createdAt, updatedAt
+            draft.enabled(), createdAt, updatedAt,
+            ExerciseType.QUERY, null, List.of(), null, List.of(), null, List.of(), null
         );
     }
 

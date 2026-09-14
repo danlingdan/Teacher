@@ -117,6 +117,7 @@ class JdbcAssignmentDeliveryServiceTest {
         @Override public CloudAuthenticationService.Session refresh(String refreshToken) { throw unsupported(); }
         @Override public void logout(String accessToken) { throw unsupported(); }
         @Override public List<com.sqlteacher.application.collaboration.ClassroomService.Classroom> listClasses(String token) { throw unsupported(); }
+        @Override public List<com.sqlteacher.application.collaboration.ClassroomService.RosterMember> listClassRoster(String token, String classroomId) { throw unsupported(); }
         @Override public com.sqlteacher.application.collaboration.ClassroomService.Classroom createClass(String token, String name) { throw unsupported(); }
         @Override public com.sqlteacher.application.collaboration.ClassroomService.Classroom addClassMember(String token, String classroomId, String email, UserRole role) { throw unsupported(); }
         @Override public com.sqlteacher.application.collaboration.ClassAssignment createAssignment(String token, String classroomId, String exerciseId, String title) { throw unsupported(); }

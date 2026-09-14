@@ -8,6 +8,7 @@ import com.sqlteacher.domain.exercise.ExerciseDataset;
 import com.sqlteacher.domain.exercise.ExerciseDefinition;
 import com.sqlteacher.domain.exercise.ExerciseDifficulty;
 import com.sqlteacher.domain.exercise.ExerciseEvaluationRule;
+import com.sqlteacher.domain.exercise.ExerciseType;
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
@@ -27,7 +28,8 @@ class ActivityEvaluationDispatcherTest {
                 List.of(new EvaluationCriterionResult("rows", true, "ok")),
                 "passed",
                 Duration.ofMillis(4),
-                ""
+                "",
+                null, null
             );
         var dispatcher = new DefaultActivityEvaluationDispatcher(List.of(new SqlActivityEvaluator(legacy)));
         var adapter = new SqlLearningActivityAdapter();
@@ -64,7 +66,8 @@ class ActivityEvaluationDispatcherTest {
                 List.of(new EvaluationCriterionResult("safety", false, "read only")),
                 "rejected",
                 Duration.ofMillis(2),
-                "SQL_SAFETY_REJECTED"
+                "SQL_SAFETY_REJECTED",
+                null, null
             );
         var bridge = new ActivityBackedSqlExerciseEvaluationService(
             new DefaultActivityEvaluationDispatcher(List.of(new SqlActivityEvaluator(legacy)))
@@ -80,7 +83,8 @@ class ActivityEvaluationDispatcherTest {
         return new ExerciseDefinition(
             "sql-1", "SQL", "SQL activity", "Filtering", ExerciseDifficulty.BEGINNER,
             "dataset", "select id from sample", ExerciseEvaluationRule.exactResult(false),
-            List.of(), 1, true, Instant.EPOCH, Instant.EPOCH
+            List.of(), 1, true, Instant.EPOCH, Instant.EPOCH,
+            ExerciseType.QUERY, null, List.of(), null, List.of(), null, List.of(), null
         );
     }
 

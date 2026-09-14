@@ -41,17 +41,6 @@ public record ExerciseEvaluationRule(
         return new ExerciseEvaluationRule(true, true, rowOrderMatters, null, List.of(), Map.of(), List.of());
     }
 
-    /** Compatibility view for pre-v3.3 callers without weights or plan keywords. */
-    public ExerciseEvaluationRule(
-        boolean compareColumns,
-        boolean compareRows,
-        boolean rowOrderMatters,
-        Integer expectedRowCount,
-        List<String> requiredSqlKeywords
-    ) {
-        this(compareColumns, compareRows, rowOrderMatters, expectedRowCount, requiredSqlKeywords, Map.of(), List.of());
-    }
-
     /** Returns the display weight of a scored criterion; unset criteria weigh 1. */
     public int weightOf(String criterion) {
         Integer weight = criterionWeights.get(criterion.trim().toUpperCase(Locale.ROOT));

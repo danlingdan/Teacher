@@ -80,14 +80,8 @@ public interface CloudApiClient {
 
     List<ClassroomService.Classroom> listClasses(String accessToken);
 
-    /**
-     * Lists one classroom's members with contact details for the class teacher
-     * (v3.3.3). Servers without the capability throw; the desktop degrades to the
-     * basic member list in the workspace payload.
-     */
-    default List<ClassroomService.RosterMember> listClassRoster(String accessToken, String classroomId) {
-        throw new UnsupportedOperationException("Class roster is unavailable");
-    }
+    /** Lists one classroom's members with contact details for the class teacher. */
+    List<ClassroomService.RosterMember> listClassRoster(String accessToken, String classroomId);
 
     ClassroomService.Classroom createClass(String accessToken, String name);
 
