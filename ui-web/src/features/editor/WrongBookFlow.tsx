@@ -10,8 +10,7 @@ export function WrongBookFlow() {
   const [searchParams, setSearchParams] = useSearchParams();
   const wrongBook = useQuery({
     queryKey: ["practice", "wrongbook"],
-    queryFn: () =>
-      localAppRequest<{ items: WrongBookItem[] }>("practice.wrongbook"),
+    queryFn: () => localAppRequest<{ items: WrongBookItem[] }>("practice.wrongbook"),
   });
   const openExercise = (exerciseId: string) => {
     const params = new URLSearchParams(searchParams);
@@ -36,9 +35,7 @@ export function WrongBookFlow() {
             {wrongBook.error.message}
           </Feedback>
         )}
-        {!wrongBook.isPending && items.length === 0 && (
-          <EmptyState title="错题本是空的" />
-        )}
+        {!wrongBook.isPending && items.length === 0 && <EmptyState title="错题本是空的" />}
         {items.map((item) => (
           <section className="content-card wrongbook-card" key={item.exerciseId}>
             <header className="editor-toolbar">
@@ -54,13 +51,9 @@ export function WrongBookFlow() {
                 {item.bestScore != null ? ` · 最佳 ${item.bestScore} 分` : ""}
               </span>
             </header>
-            {item.lastFeedback && (
-              <p className="muted">最近反馈：{item.lastFeedback}</p>
-            )}
+            {item.lastFeedback && <p className="muted">最近反馈：{item.lastFeedback}</p>}
             <div className="button-row">
-              <Button onClick={() => openExercise(item.exerciseId)}>
-                一键重练
-              </Button>
+              <Button onClick={() => openExercise(item.exerciseId)}>一键重练</Button>
             </div>
           </section>
         ))}

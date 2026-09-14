@@ -15,12 +15,26 @@ const preferences = {
   canMaintainLocalData: true,
   secretsExposed: false,
   general: {
-    automaticUpdateChecks: true, skippedVersion: "", proxyMode: "SYSTEM", proxyHost: "", proxyPort: 0,
-    reducedMotion: false, highContrast: false, supportLogging: false, supportLoggingExpiresAt: 0,
-    updateMirrorsEnabled: false, language: "zh", nativeNotificationsEnabled: true, meteredNetwork: false,
-    theme: "system", font: "modern", density: "comfortable",
+    automaticUpdateChecks: true,
+    skippedVersion: "",
+    proxyMode: "SYSTEM",
+    proxyHost: "",
+    proxyPort: 0,
+    reducedMotion: false,
+    highContrast: false,
+    supportLogging: false,
+    supportLoggingExpiresAt: 0,
+    updateMirrorsEnabled: false,
+    language: "zh",
+    nativeNotificationsEnabled: true,
+    meteredNetwork: false,
+    theme: "system",
+    font: "modern",
+    density: "comfortable",
   },
-  notifications: [], tasks: [], helpTopics: [],
+  notifications: [],
+  tasks: [],
+  helpTopics: [],
 };
 
 describe("SettingsPage", () => {
@@ -28,16 +42,24 @@ describe("SettingsPage", () => {
     requestMock.mockReset();
     requestMock.mockImplementation((method: string) => {
       if (method === "settings.preferences") return Promise.resolve(preferences);
-      if (method === "settings.environment") return Promise.resolve({
-        connectivity: "未连接", manualPathPolicy: "PATH", runnerCapabilities: [], components: [],
-      });
+      if (method === "settings.environment")
+        return Promise.resolve({
+          connectivity: "未连接",
+          manualPathPolicy: "PATH",
+          runnerCapabilities: [],
+          components: [],
+        });
       throw new Error(`Unexpected request: ${method}`);
     });
   });
 
   it("loads preferences without probing the local environment", async () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    render(<QueryClientProvider client={client}><SettingsPage /></QueryClientProvider>);
+    render(
+      <QueryClientProvider client={client}>
+        <SettingsPage />
+      </QueryClientProvider>,
+    );
 
     expect(await screen.findByText("按你的方式使用 SQLTeacher")).toBeInTheDocument();
     expect(requestMock).toHaveBeenCalledWith("settings.preferences");
@@ -51,13 +73,25 @@ describe("SettingsPage", () => {
   it("surfaces an error toast when restoring a backup fails", async () => {
     requestMock.mockImplementation((method: string) => {
       if (method === "settings.preferences") return Promise.resolve(preferences);
-      if (method === "settings.environment") return Promise.resolve({
-        connectivity: "未连接", manualPathPolicy: "PATH", runnerCapabilities: [], components: [],
-      });
-      if (method === "settings.storage") return Promise.resolve({ storage: { categoryBytes: {}, usableBytes: 1024 } });
+      if (method === "settings.environment")
+        return Promise.resolve({
+          connectivity: "未连接",
+          manualPathPolicy: "PATH",
+          runnerCapabilities: [],
+          components: [],
+        });
+      if (method === "settings.storage")
+        return Promise.resolve({ storage: { categoryBytes: {}, usableBytes: 1024 } });
       if (method === "settings.backups") {
         return Promise.resolve({
-          items: [{ id: "backup-1", createdAt: "2026-09-01T00:00:00Z", sizeBytes: 2048, automatic: false }],
+          items: [
+            {
+              id: "backup-1",
+              createdAt: "2026-09-01T00:00:00Z",
+              sizeBytes: 2048,
+              automatic: false,
+            },
+          ],
         });
       }
       if (method === "settings.backup.restore") return Promise.reject(new Error("备份文件已损坏"));

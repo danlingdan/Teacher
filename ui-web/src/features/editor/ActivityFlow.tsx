@@ -44,8 +44,7 @@ export function ActivityFlow() {
     [workspace.data],
   );
   const [selectedCourseId, setSelectedCourseId] = useState<string>();
-  const activities =
-    courses.find((course) => course.id === selectedCourseId)?.activities ?? [];
+  const activities = courses.find((course) => course.id === selectedCourseId)?.activities ?? [];
   const definition = useQuery({
     queryKey: ["activity", "definition", selectedId],
     queryFn: () =>
@@ -56,20 +55,13 @@ export function ActivityFlow() {
   });
   useEffect(() => {
     const linkedCourse = selectedId
-      ? courses.find((course) =>
-          course.activities.some((activity) => activity.id === selectedId),
-        )
+      ? courses.find((course) => course.activities.some((activity) => activity.id === selectedId))
       : undefined;
-    if (linkedCourse && selectedCourseId !== linkedCourse.id)
-      setSelectedCourseId(linkedCourse.id);
-    else if (!selectedCourseId && courses.length > 0)
-      setSelectedCourseId(courses[0].id);
+    if (linkedCourse && selectedCourseId !== linkedCourse.id) setSelectedCourseId(linkedCourse.id);
+    else if (!selectedCourseId && courses[0]) setSelectedCourseId(courses[0].id);
   }, [courses, selectedCourseId, selectedId]);
   useEffect(() => {
-    if (
-      selectedCourseId &&
-      !activities.some((activity) => activity.id === selectedId)
-    )
+    if (selectedCourseId && !activities.some((activity) => activity.id === selectedId))
       setSelectedId(activities[0]?.id);
   }, [activities, selectedCourseId, selectedId]);
   // 选中活动写回 URL，刷新后可恢复。
@@ -118,12 +110,9 @@ export function ActivityFlow() {
       <main className="flow-main">
         <Stepper
           steps={["选择活动", "预览", "运行与评价"]}
-          current={
-            !definition.data ? 0 : confirmedId === definition.data.id ? 2 : 1
-          }
+          current={!definition.data ? 0 : confirmedId === definition.data.id ? 2 : 1}
         />
-        {workspace.isPending ||
-        (Boolean(selectedId) && definition.isPending) ? (
+        {workspace.isPending || (Boolean(selectedId) && definition.isPending) ? (
           <section className="page-skeleton">
             <span className="spinner" />
             正在加载活动
@@ -150,26 +139,17 @@ export function ActivityFlow() {
                 <dd>{definition.data.estimatedMinutes} 分钟</dd>
               </div>
             </dl>
-            <Button onClick={() => setConfirmedId(definition.data?.id)}>
-              确认并开始活动
-            </Button>
+            <Button onClick={() => setConfirmedId(definition.data?.id)}>确认并开始活动</Button>
           </section>
         ) : (
-          <ActivityInteraction
-            key={definition.data.id}
-            definition={definition.data}
-          />
+          <ActivityInteraction key={definition.data.id} definition={definition.data} />
         )}
       </main>
     </div>
   );
 }
 
-function ActivityInteraction({
-  definition,
-}: {
-  definition: ActivityDefinition;
-}) {
+function ActivityInteraction({ definition }: { definition: ActivityDefinition }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const spec = definition.specification as Record<string, unknown>;
   const [selections, setSelections] = useState<Record<string, string>>({});
@@ -194,9 +174,7 @@ function ActivityInteraction({
   const prompt = String(spec.prompt ?? definition.description);
   function toggle(id: string) {
     setChecked((values) =>
-      values.includes(id)
-        ? values.filter((value) => value !== id)
-        : [...values, id],
+      values.includes(id) ? values.filter((value) => value !== id) : [...values, id],
     );
   }
   function finish(artifact: Record<string, unknown>) {
@@ -254,20 +232,13 @@ function ActivityInteraction({
         </div>
         <p>
           访问顺序：
-          {sequence
-            .map((id) => list("nodes").find((node) => node.id === id)?.label)
-            .join(" → ") || "尚未选择"}
+          {sequence.map((id) => list("nodes").find((node) => node.id === id)?.label).join(" → ") ||
+            "尚未选择"}
         </p>
-        <Button
-          variant="secondary"
-          onClick={() => setSequence((value) => value.slice(0, -1))}
-        >
+        <Button variant="secondary" onClick={() => setSequence((value) => value.slice(0, -1))}>
           撤销
         </Button>{" "}
-        <Button
-          disabled={submit.isPending}
-          onClick={() => finish({ visitedNodeIds: sequence })}
-        >
+        <Button disabled={submit.isPending} onClick={() => finish({ visitedNodeIds: sequence })}>
           提交顺序
         </Button>
       </>
@@ -289,18 +260,13 @@ function ActivityInteraction({
         <p>
           操作序列：
           {sequence
-            .map(
-              (id) => list("actions").find((action) => action.id === id)?.label,
-            )
+            .map((id) => list("actions").find((action) => action.id === id)?.label)
             .join(" → ") || "尚未操作"}
         </p>
         <Button variant="secondary" onClick={() => setSequence([])}>
           重置
         </Button>{" "}
-        <Button
-          disabled={submit.isPending}
-          onClick={() => finish({ actionIds: sequence })}
-        >
+        <Button disabled={submit.isPending} onClick={() => finish({ actionIds: sequence })}>
           提交模拟
         </Button>
       </>
@@ -316,9 +282,7 @@ function ActivityInteraction({
         />
         <Button
           disabled={submit.isPending}
-          onClick={() =>
-            finish({ language: spec.language, sourceCode: source })
-          }
+          onClick={() => finish({ language: spec.language, sourceCode: source })}
         >
           运行并评价
         </Button>
@@ -341,9 +305,7 @@ function ActivityInteraction({
           证据摘要
           <textarea
             value={texts.evidence ?? ""}
-            onChange={(event) =>
-              setTexts((value) => ({ ...value, evidence: event.target.value }))
-            }
+            onChange={(event) => setTexts((value) => ({ ...value, evidence: event.target.value }))}
           />
         </label>
         <label>
@@ -436,9 +398,7 @@ function ActivityInteraction({
         <p className="policy-chip">
           {String(spec.sourceTitle ?? "")} · {String(spec.license ?? "")}
         </p>
-        <article className="reading-content">
-          {String(spec.content ?? "")}
-        </article>
+        <article className="reading-content">{String(spec.content ?? "")}</article>
         <label>
           <input
             type="checkbox"
@@ -493,16 +453,14 @@ function ActivityInteraction({
             切换到 SQL 练习
           </Button>
         }
-      >
-      </EmptyState>
+      ></EmptyState>
     );
   return (
     <section className="content-card activity-interaction">
       <header className="editor-toolbar">
         <div>
           <p className="eyebrow">
-            {definition.type} · {definition.difficulty} ·{" "}
-            {definition.estimatedMinutes} 分钟
+            {definition.type} · {definition.difficulty} · {definition.estimatedMinutes} 分钟
           </p>
           <h2>{definition.title}</h2>
         </div>

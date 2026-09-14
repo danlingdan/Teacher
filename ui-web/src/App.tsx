@@ -646,6 +646,7 @@ function TodayPage() {
       </EmptyState>
     );
   const data = summary.data;
+  const nextAction = data.actions[0];
   return (
     <div className="page-grid">
       <section className="hero-card">
@@ -657,12 +658,12 @@ function TodayPage() {
           )}
         </div>
         <div className="button-row">
-          {data.actions[0] && (
-            <Button onClick={() => continueAction(data.actions[0])}>
+          {nextAction && (
+            <Button onClick={() => continueAction(nextAction)}>
               继续学习
             </Button>
           )}
-          {!data.actions[0] && (
+          {!nextAction && (
             <Button onClick={() => navigate("/practice")}>去练习一题</Button>
           )}
           <Button

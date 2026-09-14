@@ -57,8 +57,7 @@ describe("CloudPage", () => {
   beforeEach(() => {
     requestMock.mockReset();
     requestMock.mockImplementation((method: string) => {
-      if (method === "cloud.workspace")
-        return Promise.resolve(teacherWorkspace([]));
+      if (method === "cloud.workspace") return Promise.resolve(teacherWorkspace([]));
       if (method === "practice.catalog") return Promise.resolve({ items: [] });
       return Promise.reject(new Error(`Unexpected request: ${method}`));
     });
@@ -66,8 +65,7 @@ describe("CloudPage", () => {
 
   it("surfaces an error toast when adding a section fails instead of failing silently", async () => {
     requestMock.mockImplementation((method: string) => {
-      if (method === "cloud.workspace")
-        return Promise.resolve(teacherWorkspace([]));
+      if (method === "cloud.workspace") return Promise.resolve(teacherWorkspace([]));
       if (method === "practice.catalog") return Promise.resolve({ items: [] });
       if (method === "cloud.courses")
         return Promise.resolve({
@@ -98,9 +96,7 @@ describe("CloudPage", () => {
     });
     renderCloudPage();
 
-    fireEvent.click(
-      await screen.findByText("共享课程、知识点与版本化任务"),
-    );
+    fireEvent.click(await screen.findByText("共享课程、知识点与版本化任务"));
     fireEvent.click(await screen.findByRole("button", { name: "刷新课程" }));
     await screen.findByText("数据库基础");
     fireEvent.click(screen.getByRole("button", { name: "打开课程" }));
@@ -135,8 +131,7 @@ describe("CloudPage", () => {
         expect(String(params?.name)).toBe("软件2401");
         return Promise.resolve({ classroom: { id: "class-2" }, role: "TEACHER" });
       }
-      if (method === "cloud.assignments")
-        return Promise.resolve({ items: [] });
+      if (method === "cloud.assignments") return Promise.resolve({ items: [] });
       return Promise.reject(new Error(`Unexpected request: ${method}`));
     });
     renderCloudPage();
@@ -147,7 +142,9 @@ describe("CloudPage", () => {
 
     expect(await screen.findByText(/已创建/)).toBeInTheDocument();
     await waitFor(() =>
-      expect(screen.getByRole("heading", { level: 2, name: "班级任务：软件2401" })).toBeInTheDocument(),
+      expect(
+        screen.getByRole("heading", { level: 2, name: "班级任务：软件2401" }),
+      ).toBeInTheDocument(),
     );
     const selectedItem = screen
       .getAllByText("软件2401")
@@ -204,8 +201,7 @@ describe("CloudPage", () => {
   });
 
   it("drops a stale assignment response when the classroom switches in flight", async () => {
-    let resolveClassA: (value: { items: CloudAssignment[] }) => void =
-      () => undefined;
+    let resolveClassA: (value: { items: CloudAssignment[] }) => void = () => undefined;
     requestMock.mockImplementation((method: string, params?: Record<string, unknown>) => {
       if (method === "cloud.workspace")
         return Promise.resolve(
@@ -315,8 +311,7 @@ describe("CloudPage", () => {
     await waitFor(() =>
       expect(
         requestMock.mock.calls.filter(
-          ([method, params]) =>
-            method === "cloud.workspace" && params?.refreshRemote,
+          ([method, params]) => method === "cloud.workspace" && params?.refreshRemote,
         ),
       ).toHaveLength(1),
     );
@@ -359,12 +354,8 @@ describe("CloudPage", () => {
     renderCloudPage();
 
     // 成员/任务面板里必须显式提供目标班级选择，并预告新成员的去向（issue #20）。
-    fireEvent.click(
-      await screen.findByText("添加成员", { selector: "summary strong" }),
-    );
-    expect(
-      await screen.findByLabelText("目标班级"),
-    ).toHaveValue("class-1");
+    fireEvent.click(await screen.findByText("添加成员", { selector: "summary strong" }));
+    expect(await screen.findByLabelText("目标班级")).toHaveValue("class-1");
     expect(screen.getByText(/新成员将加入「软件2401」/)).toBeInTheDocument();
 
     // 成员名单（issue #26）：展开后展示姓名、角色与邮箱。

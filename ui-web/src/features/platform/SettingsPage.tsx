@@ -13,13 +13,7 @@ import type {
   SettingsStorage,
   UpdateCheck,
 } from "../../shared/types";
-import {
-  Button,
-  Dialog,
-  Feedback,
-  FormField,
-  useToast,
-} from "../../shared/ui";
+import { Button, Dialog, Feedback, FormField, useToast } from "../../shared/ui";
 import { Loading, Toggle } from "./shared";
 
 type SettingsDraft = SettingsPreferences["general"] & {
@@ -38,17 +32,12 @@ type BankChannelInfo = {
 };
 
 /** 题库更新设置（W4.2/W4.3）：订阅频道 + 定时检查 opt-in（默认关闭）。 */
-function BankUpdateSettings({
-  preferences,
-}: {
-  preferences?: BankPreferencesView;
-}) {
+function BankUpdateSettings({ preferences }: { preferences?: BankPreferencesView }) {
   const client = useQueryClient();
   const toast = useToast();
   const channels = useQuery({
     queryKey: ["practice", "bank", "channels"],
-    queryFn: () =>
-      localAppRequest<{ items: BankChannelInfo[] }>("practice.bank.channels"),
+    queryFn: () => localAppRequest<{ items: BankChannelInfo[] }>("practice.bank.channels"),
     staleTime: 60_000,
     retry: false,
   });
@@ -81,10 +70,9 @@ function BankUpdateSettings({
     );
   };
   const dirty =
-    autoCheck !== undefined && autoCheck !== (preferences?.autoCheckEnabled ?? false) ||
-    selected !== undefined &&
-      JSON.stringify([...(selected ?? [])].sort()) !==
-        JSON.stringify([...subscribed].sort());
+    (autoCheck !== undefined && autoCheck !== (preferences?.autoCheckEnabled ?? false)) ||
+    (selected !== undefined &&
+      JSON.stringify([...(selected ?? [])].sort()) !== JSON.stringify([...subscribed].sort()));
   return (
     <section className="content-card settings-panel">
       <div className="section-heading">
@@ -101,7 +89,9 @@ function BankUpdateSettings({
         />
         <span>
           <strong>定时检查题库更新</strong>
-          <small>开启后每 6 小时在后台检查一次；发现更新仅提示，不会自动应用，也绝不打断练习。</small>
+          <small>
+            开启后每 6 小时在后台检查一次；发现更新仅提示，不会自动应用，也绝不打断练习。
+          </small>
         </span>
       </label>
       <p className="muted">订阅的题库频道（未订阅的频道不会拉取）：</p>
@@ -115,19 +105,13 @@ function BankUpdateSettings({
           <span>
             <strong>{channel}</strong>
             {(() => {
-              const info = channels.data?.items.find(
-                (item) => item.channel === channel,
-              );
-              return info ? (
-                <small>服务器版本 {info.bankVersion}</small>
-              ) : null;
+              const info = channels.data?.items.find((item) => item.channel === channel);
+              return info ? <small>服务器版本 {info.bankVersion}</small> : null;
             })()}
           </span>
         </label>
       ))}
-      {channels.isError && (
-        <p className="muted">无法获取服务器频道列表，仅显示已订阅频道。</p>
-      )}
+      {channels.isError && <p className="muted">无法获取服务器频道列表，仅显示已订阅频道。</p>}
       <div className="button-row">
         <Button
           disabled={!dirty || save.isPending}
@@ -184,9 +168,7 @@ export function SettingsPage() {
     // 上次离开时有未保存的更改会暂存在 sessionStorage，优先恢复，避免静默丢失。
     let stored: SettingsDraft | null = null;
     try {
-      stored = JSON.parse(
-        sessionStorage.getItem("sqlteacher.settings.draft") ?? "null",
-      );
+      stored = JSON.parse(sessionStorage.getItem("sqlteacher.settings.draft") ?? "null");
     } catch {
       stored = null;
     }
@@ -207,24 +189,19 @@ export function SettingsPage() {
   useEffect(() => {
     try {
       if (dirtyEarly && draft)
-        sessionStorage.setItem(
-          "sqlteacher.settings.draft",
-          JSON.stringify(draft),
-        );
+        sessionStorage.setItem("sqlteacher.settings.draft", JSON.stringify(draft));
       else sessionStorage.removeItem("sqlteacher.settings.draft");
     } catch {
       // ignore
     }
   }, [dirtyEarly, draft]);
   const save = useMutation({
-    mutationFn: (value: SettingsDraft) =>
-      localAppRequest("settings.update", value),
+    mutationFn: (value: SettingsDraft) => localAppRequest("settings.update", value),
     onSuccess: (_result, value) => {
       void client.invalidateQueries({
         queryKey: settingsPreferencesQuery.queryKey,
       });
-      if (query.data?.general.language !== value.language)
-        window.location.reload();
+      if (query.data?.general.language !== value.language) window.location.reload();
     },
     onError: (error: Error) => toast("error", `设置保存失败：${error.message}`),
   });
@@ -244,16 +221,14 @@ export function SettingsPage() {
     retry: false,
   });
   useEffect(() => {
-    if (backups.isError)
-      toast("error", `加载备份列表失败：${backups.error?.message ?? ""}`);
+    if (backups.isError) toast("error", `加载备份列表失败：${backups.error?.message ?? ""}`);
   }, [backups.isError, backups.error, toast]);
   const createBackup = useMutation({
     mutationFn: () => localAppRequest<BackupSnapshot>("settings.backup.create"),
     onSuccess: () => {
       void client.invalidateQueries({ queryKey: ["settings", "backups"] });
     },
-    onError: (error: Error) =>
-      toast("error", `创建备份失败：${error.message}`),
+    onError: (error: Error) => toast("error", `创建备份失败：${error.message}`),
   });
   const restoreBackup = useMutation({
     mutationFn: () =>
@@ -261,32 +236,25 @@ export function SettingsPage() {
         backupId: restoreTarget?.id,
       }),
     onSuccess: () => setRestoreTarget(undefined),
-    onError: (error: Error) =>
-      toast("error", `恢复备份失败，当前数据未被替换：${error.message}`),
+    onError: (error: Error) => toast("error", `恢复备份失败，当前数据未被替换：${error.message}`),
   });
   const restoreDemo = useMutation({
     mutationFn: () => localAppRequest("settings.demo.restore"),
-    onError: (error: Error) =>
-      toast("error", `恢复演示数据库失败：${error.message}`),
+    onError: (error: Error) => toast("error", `恢复演示数据库失败：${error.message}`),
   });
   const resetLearning = useMutation({
-    mutationFn: () =>
-      localAppRequest("settings.learning.reset", { confirmation: resetPhrase }),
+    mutationFn: () => localAppRequest("settings.learning.reset", { confirmation: resetPhrase }),
     onSuccess: () => setResetPhrase(""),
-    onError: (error: Error) =>
-      toast("error", `清空学习数据失败：${error.message}`),
+    onError: (error: Error) => toast("error", `清空学习数据失败：${error.message}`),
   });
   const clearCache = useMutation({
-    mutationFn: () =>
-      localAppRequest<{ clearedBytes: number }>("settings.cache.clear"),
-    onError: (error: Error) =>
-      toast("error", `清理缓存失败：${error.message}`),
+    mutationFn: () => localAppRequest<{ clearedBytes: number }>("settings.cache.clear"),
+    onError: (error: Error) => toast("error", `清理缓存失败：${error.message}`),
   });
   const checkUpdate = useMutation({
     mutationFn: () => localAppRequest<UpdateCheck>("settings.update.check"),
     onSuccess: setUpdateResult,
-    onError: (error: Error) =>
-      toast("error", `检查更新失败：${error.message}`),
+    onError: (error: Error) => toast("error", `检查更新失败：${error.message}`),
   });
   const loadHelp = useMutation({
     mutationFn: (topicId: string) =>
@@ -309,8 +277,7 @@ export function SettingsPage() {
     ? { ...query.data.general, developerMode: query.data.developerMode }
     : undefined;
   const dirty =
-    Boolean(savedPreferences) &&
-    JSON.stringify(savedPreferences) !== JSON.stringify(draft);
+    Boolean(savedPreferences) && JSON.stringify(savedPreferences) !== JSON.stringify(draft);
   const discardChanges = () => {
     if (savedPreferences) setDraft(savedPreferences);
     try {
@@ -340,9 +307,7 @@ export function SettingsPage() {
           </Button>
         </div>
       </section>
-      {save.isSuccess && (
-        <Feedback tone="success" title="设置已保存" />
-      )}
+      {save.isSuccess && <Feedback tone="success" title="设置已保存" />}
       <section className="content-card settings-card">
         <div className="settings-section-title">
           <span className="settings-symbol">Aa</span>
@@ -447,9 +412,7 @@ export function SettingsPage() {
                   <input
                     {...ids}
                     value={draft.proxyHost}
-                    onChange={(event) =>
-                      setDraft({ ...draft, proxyHost: event.target.value })
-                    }
+                    onChange={(event) => setDraft({ ...draft, proxyHost: event.target.value })}
                   />
                 )}
               </FormField>
@@ -552,9 +515,7 @@ export function SettingsPage() {
                 {environment.data.components.map((item) => (
                   <article key={item.id} className="subtle-card">
                     <strong>{item.displayName}</strong>
-                    <span
-                      className={`component-state state-${item.state.toLowerCase()}`}
-                    >
+                    <span className={`component-state state-${item.state.toLowerCase()}`}>
                       {item.state}
                     </span>
                     <small>{item.detail || item.source}</small>
@@ -572,10 +533,7 @@ export function SettingsPage() {
                       </Button>
                     ) : (
                       item.state !== "READY" && (
-                        <Button
-                          variant="secondary"
-                          onClick={() => install.mutate(item.id)}
-                        >
+                        <Button variant="secondary" onClick={() => install.mutate(item.id)}>
                           安装或修复
                         </Button>
                       )
@@ -624,10 +582,7 @@ export function SettingsPage() {
                 </p>
               )}
               <div className="button-row">
-                <Button
-                  busy={createBackup.isPending}
-                  onClick={() => createBackup.mutate()}
-                >
+                <Button busy={createBackup.isPending} onClick={() => createBackup.mutate()}>
                   创建完整备份
                 </Button>
                 <Button
@@ -658,19 +613,13 @@ export function SettingsPage() {
                       {formatBytes(item.sizeBytes)}
                       {item.automatic ? " · 自动" : ""}
                     </span>
-                    <Button
-                      variant="secondary"
-                      onClick={() => setRestoreTarget(item)}
-                    >
+                    <Button variant="secondary" onClick={() => setRestoreTarget(item)}>
                       恢复
                     </Button>
                   </li>
                 ))}
               </ul>
-              <FormField
-                label="清空学习数据确认词"
-                hint="输入 RESET LEARNING DATA 解锁按钮"
-              >
+              <FormField label="清空学习数据确认词" hint="输入 RESET LEARNING DATA 解锁按钮">
                 {(ids) => (
                   <input
                     {...ids}
@@ -681,10 +630,7 @@ export function SettingsPage() {
               </FormField>
               <Button
                 variant="danger"
-                disabled={
-                  resetPhrase !== "RESET LEARNING DATA" ||
-                  resetLearning.isPending
-                }
+                disabled={resetPhrase !== "RESET LEARNING DATA" || resetLearning.isPending}
                 onClick={() => resetLearning.mutate()}
               >
                 清空学习数据
@@ -709,10 +655,7 @@ export function SettingsPage() {
         </summary>
         <div className="settings-panel-body">
           <div className="button-row">
-            <Button
-              busy={checkUpdate.isPending}
-              onClick={() => checkUpdate.mutate()}
-            >
+            <Button busy={checkUpdate.isPending} onClick={() => checkUpdate.mutate()}>
               检查更新
             </Button>
             {data.notifications.some((item) => !item.read) && (
@@ -725,9 +668,7 @@ export function SettingsPage() {
                         queryKey: settingsPreferencesQuery.queryKey,
                       }),
                     )
-                    .catch((error: Error) =>
-                      toast("error", `标记已读失败：${error.message}`),
-                    )
+                    .catch((error: Error) => toast("error", `标记已读失败：${error.message}`))
                 }
               >
                 全部标为已读
@@ -775,10 +716,7 @@ export function SettingsPage() {
           {restoreTarget ? formatInstant(restoreTarget.createdAt) : ""} 的备份？
         </p>
         <div className="button-row">
-          <Button
-            variant="secondary"
-            onClick={() => setRestoreTarget(undefined)}
-          >
+          <Button variant="secondary" onClick={() => setRestoreTarget(undefined)}>
             取消
           </Button>
           <Button

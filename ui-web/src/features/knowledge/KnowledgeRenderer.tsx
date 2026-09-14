@@ -19,6 +19,8 @@ const remarkSqlTeacherSyntax: Plugin<[], Root> = () => (tree) => {
     const match = /^\[!([a-z0-9_-]+)]([+-])?[^\S\r\n]*([^\r\n]*)/i.exec(marker.value);
     if (!match) return;
     const [, type, fold, title] = match;
+    // 命中正则时捕获组 1 必然存在；这里仅供类型收窄。
+    if (!type) return;
     marker.value = marker.value.slice(match[0].length).trimStart();
     node.data = {
       ...node.data,
@@ -46,7 +48,11 @@ const remarkSqlTeacherSyntax: Plugin<[], Root> = () => (tree) => {
       const offset = match.index ?? 0;
       if (offset > cursor) children.push({ type: "text", value: node.value.slice(cursor, offset) });
       const target = match[2];
-      const [destination, alias] = target.split("|");
+      if (target === undefined) continue;
+      const parts = target.split("|");
+      // split 至少返回一个元素；undefined 时回退到原始 target。
+      const destination = parts[0] ?? target;
+      const alias = parts[1];
       if (match[1]) {
         children.push({
           type: "text",

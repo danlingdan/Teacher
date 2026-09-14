@@ -1,0 +1,9 @@
+# Generated, vendored, and build output (v3.4.0 REF-18).
+node_modules/
+dist/
+src-tauri/target/
+src-tauri/sidecar/
+src-tauri/gen/
+logs/
+coverage/
+package-lock.json

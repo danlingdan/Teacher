@@ -1,7 +1,4 @@
-import Editor, {
-  loader,
-  type OnMount,
-} from "@monaco-editor/react";
+import Editor, { loader, type OnMount } from "@monaco-editor/react";
 import * as monaco from "monaco-editor/editor/editor.api";
 import EditorWorker from "monaco-editor/editor/editor.worker?worker";
 import "monaco-editor/languages/definitions/sql/register";
@@ -35,24 +32,19 @@ monaco.languages.registerCompletionItemProvider("sql", {
       position.lineNumber,
       word.endColumn,
     );
-    const names = Array.from(
-      new Set(practiceEditorSchema.match(/[A-Za-z_][A-Za-z0-9_]*/g) ?? []),
-    );
-    const suggestions: monaco.languages.CompletionItem[] = names
-      .slice(0, 200)
-      .map((label) => ({
-        label,
-        kind: monaco.languages.CompletionItemKind.Field,
-        insertText: label,
-        detail: "当前练习结构",
-        range,
-      }));
+    const names = Array.from(new Set(practiceEditorSchema.match(/[A-Za-z_][A-Za-z0-9_]*/g) ?? []));
+    const suggestions: monaco.languages.CompletionItem[] = names.slice(0, 200).map((label) => ({
+      label,
+      kind: monaco.languages.CompletionItemKind.Field,
+      insertText: label,
+      detail: "当前练习结构",
+      range,
+    }));
     suggestions.push({
       label: "safe select",
       kind: monaco.languages.CompletionItemKind.Snippet,
       insertText: "SELECT ${1:*} FROM ${2:table} LIMIT ${3:100};",
-      insertTextRules:
-        monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+      insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
       range,
     });
     return { suggestions };
@@ -74,9 +66,7 @@ export default function EditorPage() {
     modeParam === "activity" || modeParam === "runner" || modeParam === "wrongbook"
       ? modeParam
       : "exercise";
-  const setMode = (
-    next: "exercise" | "activity" | "runner" | "wrongbook",
-  ) => {
+  const setMode = (next: "exercise" | "activity" | "runner" | "wrongbook") => {
     const params = new URLSearchParams(searchParams);
     if (next === "exercise") params.delete("tab");
     else params.set("tab", next);
@@ -157,13 +147,9 @@ export function CodeEditor({
   const callbacks = useRef({ onRun, onSubmit, onHint });
   callbacks.current = { onRun, onSubmit, onHint };
   const mount: OnMount = (editor, api) => {
-    editor.addCommand(
-      api.KeyMod.CtrlCmd | api.KeyCode.Enter,
-      () => callbacks.current.onRun(),
-    );
-    editor.addCommand(
-      api.KeyMod.CtrlCmd | api.KeyMod.Shift | api.KeyCode.Enter,
-      () => callbacks.current.onSubmit?.(),
+    editor.addCommand(api.KeyMod.CtrlCmd | api.KeyCode.Enter, () => callbacks.current.onRun());
+    editor.addCommand(api.KeyMod.CtrlCmd | api.KeyMod.Shift | api.KeyCode.Enter, () =>
+      callbacks.current.onSubmit?.(),
     );
     editor.addCommand(api.KeyCode.F1, () => callbacks.current.onHint?.());
     const model = editor.getModel();

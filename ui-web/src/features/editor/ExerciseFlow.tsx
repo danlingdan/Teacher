@@ -106,19 +106,14 @@ export function ExerciseFlow() {
   // 定时检查产生的待更新通知（W4.3）：仅提示，不打断。
   const bankNotice = useQuery({
     queryKey: ["practice", "bank", "notice"],
-    queryFn: () =>
-      localAppRequest<{ notice: BankPendingNotice | null }>(
-        "practice.bank.notice",
-      ),
+    queryFn: () => localAppRequest<{ notice: BankPendingNotice | null }>("practice.bank.notice"),
     staleTime: 60_000,
   });
   // 确定性推荐下一题（本地作答历史重算，无随机、无 AI）。
   const recommendation = useQuery({
     queryKey: ["practice", "recommend"],
     queryFn: () =>
-      localAppRequest<{ recommendation: RecommendationView | null }>(
-        "practice.recommend",
-      ),
+      localAppRequest<{ recommendation: RecommendationView | null }>("practice.recommend"),
     staleTime: 30_000,
   });
   const [selectedId, setSelectedId] = useState<string | undefined>(
@@ -194,34 +189,30 @@ export function ExerciseFlow() {
   const attempt = useMutation({
     mutationFn: async (submit: boolean) => ({
       submit,
-      result: await localAppRequest<ExerciseAttempt>(
-        submit ? "practice.submit" : "practice.run",
-        { sessionId: session?.id, answer },
-      ),
+      result: await localAppRequest<ExerciseAttempt>(submit ? "practice.submit" : "practice.run", {
+        sessionId: session?.id,
+        answer,
+      }),
     }),
     onSuccess: ({ result, submit }) => {
       setFeedback(result);
-      if (submit && selectedId && result.evaluation?.passed)
-        clearDraft(selectedId);
+      if (submit && selectedId && result.evaluation?.passed) clearDraft(selectedId);
       if (submit && assignmentContext) deliverAssignment.mutate(result);
     },
   });
   // AI 讲解：按需起草展示文本，只读展示，不写任何学习状态。
   const explain = useMutation({
     mutationFn: () =>
-      localAppRequest<{ explanation: string; model: string }>(
-        "ai.exercise.explain",
-        {
-          title: session?.exercise.title ?? "",
-          description: session?.exercise.description ?? "",
-          knowledgePoint: session?.exercise.knowledgePoint ?? "",
-          exerciseType: session?.exercise.exerciseType ?? "QUERY",
-          answer,
-          feedback: (feedback?.evaluation?.criteria ?? [])
-            .filter((item) => !item.passed)
-            .map((item) => `${item.criterion}：${item.feedback}`),
-        },
-      ),
+      localAppRequest<{ explanation: string; model: string }>("ai.exercise.explain", {
+        title: session?.exercise.title ?? "",
+        description: session?.exercise.description ?? "",
+        knowledgePoint: session?.exercise.knowledgePoint ?? "",
+        exerciseType: session?.exercise.exerciseType ?? "QUERY",
+        answer,
+        feedback: (feedback?.evaluation?.criteria ?? [])
+          .filter((item) => !item.passed)
+          .map((item) => `${item.criterion}：${item.feedback}`),
+      }),
   });
   const requestHint = useMutation({
     mutationFn: () =>
@@ -230,9 +221,7 @@ export function ExerciseFlow() {
       }),
     onSuccess: (value) => {
       setHint(value);
-      setSession((current) =>
-        current ? { ...current, hintsUsed: value.level } : current,
-      );
+      setSession((current) => (current ? { ...current, hintsUsed: value.level } : current));
     },
   });
   const reset = useMutation({
@@ -261,16 +250,11 @@ export function ExerciseFlow() {
   // URL 并触发目录查询。受控值若逐键经 setSearchParams 回写，会打断中文输入法
   // 合成导致乱码；解耦后 IPC 也从每键一次降为每次停顿一次。
   // appliedQueryRef 记录已写入 URL 的词，用于区分自身防抖写入与外部跳转携带的 q。
-  const [queryInput, setQueryInput] = useState(
-    () => searchParams.get("q") ?? "",
-  );
+  const [queryInput, setQueryInput] = useState(() => searchParams.get("q") ?? "");
   const appliedQueryRef = useRef(searchParams.get("q") ?? "");
   const queryWriteTimer = useRef<number | undefined>(undefined);
   useEffect(() => () => window.clearTimeout(queryWriteTimer.current), []);
-  const setCatalogFilter = (
-    key: "q" | "difficulty" | "status",
-    value: string,
-  ) => {
+  const setCatalogFilter = (key: "q" | "difficulty" | "status", value: string) => {
     if (key === "q") {
       setQueryInput(value);
       window.clearTimeout(queryWriteTimer.current);
@@ -307,14 +291,12 @@ export function ExerciseFlow() {
     }
   }, [searchParams]);
   const close = useMutation({
-    mutationFn: (sessionId: string) =>
-      localAppRequest("practice.close", { sessionId }),
+    mutationFn: (sessionId: string) => localAppRequest("practice.close", { sessionId }),
   });
   // 题库更新：先检查差集，再流式应用；任何失败都不影响本地练习。
   const [bankStatus, setBankStatus] = useState<ExerciseBankUpdateStatus>();
   const bankCheck = useMutation({
-    mutationFn: () =>
-      localAppRequest<ExerciseBankUpdateStatus>("practice.bank.check"),
+    mutationFn: () => localAppRequest<ExerciseBankUpdateStatus>("practice.bank.check"),
     onSuccess: (value) => {
       setBankStatus(value);
       if (value.upToDate) toast("success", value.message);
@@ -322,8 +304,7 @@ export function ExerciseFlow() {
     onError: (error: Error) => toast("error", `检查更新失败：${error.message}`),
   });
   const bankUpdate = useMutation({
-    mutationFn: () =>
-      localAppRequest<ExerciseBankUpdateResult>("practice.bank.update"),
+    mutationFn: () => localAppRequest<ExerciseBankUpdateResult>("practice.bank.update"),
     onSuccess: (value) => {
       setBankStatus(undefined);
       toast("success", value.message);
@@ -380,12 +361,8 @@ export function ExerciseFlow() {
           <section className="content-card recommend-card">
             <div>
               <p className="eyebrow">推荐下一题</p>
-              <strong>
-                {recommendationView.title}
-              </strong>
-              <p className="muted">
-                {recommendationView.reason}
-              </p>
+              <strong>{recommendationView.title}</strong>
+              <p className="muted">{recommendationView.reason}</p>
             </div>
             <Button
               variant="secondary"
@@ -395,10 +372,7 @@ export function ExerciseFlow() {
             </Button>
           </section>
         )}
-        <Stepper
-          steps={["选题", "预览确认", "作答", "反馈"]}
-          current={step}
-        />
+        <Stepper steps={["选题", "预览确认", "作答", "反馈"]} current={step} />
         {bankNotice.data?.notice && (
           <Feedback tone="info" title="题库有可用更新">
             <p>
@@ -431,25 +405,19 @@ export function ExerciseFlow() {
             本地题库保持不变：{bankUpdate.error.message}
           </Feedback>
         )}
-        {!selectedId && (
-          <EmptyState title="先选择练习" />
-        )}
+        {!selectedId && <EmptyState title="先选择练习" />}
         {preview.data && !session && (
           <section className="content-card preview-card">
             <p className="eyebrow">
               作答前预览 · {exerciseTypeTitleLabel(preview.data.exerciseType)}
             </p>
             {assignmentContext && assignmentSnapshot.isError && (
-              <p className="muted">
-                任务快照不可用，正在显示本地预览，不影响作答与提交。
-              </p>
+              <p className="muted">任务快照不可用，正在显示本地预览，不影响作答与提交。</p>
             )}
             <h2>{assignmentSnapshot.data?.title ?? preview.data.title}</h2>
             <p>{assignmentSnapshot.data?.prompt ?? preview.data.description}</p>
             {preview.data.expectedColumns.length > 0 && (
-              <p className="muted">
-                期望列：{preview.data.expectedColumns.join("、")}
-              </p>
+              <p className="muted">期望列：{preview.data.expectedColumns.join("、")}</p>
             )}
             {assignmentSnapshot.data && (
               <p className="muted">
@@ -485,24 +453,18 @@ export function ExerciseFlow() {
                 </p>
                 <h2>{session.exercise.title}</h2>
               </div>
-              <span className="policy-chip">
-                Java 评价 · 提示 {session.hintsUsed}/3
-              </span>
+              <span className="policy-chip">Java 评价 · 提示 {session.hintsUsed}/3</span>
             </header>
             {typeGuidance(session.exercise.exerciseType) && (
               <p className="muted">{typeGuidance(session.exercise.exerciseType)}</p>
             )}
             <p className="exercise-prompt">{session.exercise.description}</p>
             {session.exercise.expectedColumns.length > 0 && (
-              <p className="muted">
-                期望列：{session.exercise.expectedColumns.join("、")}
-              </p>
+              <p className="muted">期望列：{session.exercise.expectedColumns.join("、")}</p>
             )}
             <details className="schema-brief">
               <summary>数据表结构</summary>
-              <pre>
-                {session.exercise.schemaSummary.replace(/；/g, "；\n")}
-              </pre>
+              <pre>{session.exercise.schemaSummary.replace(/；/g, "；\n")}</pre>
             </details>
             <CodeEditor
               language="SQL"
@@ -512,8 +474,7 @@ export function ExerciseFlow() {
               onRun={() => attempt.mutate(false)}
               onSubmit={() => attempt.mutate(true)}
               onHint={() => {
-                if (!requestHint.isPending && session.hintsUsed < 3)
-                  requestHint.mutate();
+                if (!requestHint.isPending && session.hintsUsed < 3) requestHint.mutate();
               }}
             />
             {hint && (
@@ -523,8 +484,8 @@ export function ExerciseFlow() {
             )}
             <footer className="editor-actions">
               <span>
-                {answer.length.toLocaleString()} 字符 · Ctrl+Enter 运行 ·
-                Ctrl+Shift+Enter 提交 · F1 提示
+                {answer.length.toLocaleString()} 字符 · Ctrl+Enter 运行 · Ctrl+Shift+Enter 提交 · F1
+                提示
               </span>
               <Button
                 variant="secondary"
@@ -561,19 +522,12 @@ export function ExerciseFlow() {
         {feedback && (
           <Feedback
             tone={feedback.evaluation?.passed ? "success" : "warning"}
-            title={
-              feedback.evaluation?.passed
-                ? "练习通过"
-                : `状态：${feedback.status}`
-            }
+            title={feedback.evaluation?.passed ? "练习通过" : `状态：${feedback.status}`}
           >
-            <p>
-              {feedback.evaluation?.feedback ?? feedback.execution?.message}
-            </p>
+            <p>{feedback.evaluation?.feedback ?? feedback.execution?.message}</p>
             {feedback.evaluation?.score != null && (
               <p className="score-line">
-                得分：{feedback.evaluation.score} / 100
-                （仅用于反馈，通过仍需全部分项达标）
+                得分：{feedback.evaluation.score} / 100 （仅用于反馈，通过仍需全部分项达标）
               </p>
             )}
             {feedback.evaluation?.criteria.map((item) => (
@@ -584,9 +538,7 @@ export function ExerciseFlow() {
             {feedback.evaluation &&
               !feedback.evaluation.passed &&
               feedback.evaluation.comparison && (
-                <ComparisonView
-                  comparison={feedback.evaluation.comparison}
-                />
+                <ComparisonView comparison={feedback.evaluation.comparison} />
               )}
             {feedback.evaluation && !feedback.evaluation.passed && (
               <div className="button-row">
@@ -672,23 +624,13 @@ export function ExerciseFlow() {
             }
           </Feedback>
         )}
-        <Dialog
-          open={resetOpen}
-          title="重置练习"
-          onClose={() => setResetOpen(false)}
-        >
-          <p>
-            将恢复初始代码并清除本题草稿，无法撤销。
-          </p>
+        <Dialog open={resetOpen} title="重置练习" onClose={() => setResetOpen(false)}>
+          <p>将恢复初始代码并清除本题草稿，无法撤销。</p>
           <div className="button-row">
             <Button variant="secondary" onClick={() => setResetOpen(false)}>
               取消
             </Button>
-            <Button
-              variant="danger"
-              busy={reset.isPending}
-              onClick={() => reset.mutate()}
-            >
+            <Button variant="danger" busy={reset.isPending} onClick={() => reset.mutate()}>
               确认重置
             </Button>
           </div>
@@ -722,10 +664,7 @@ const ComparisonView = memo(function ComparisonView({
               {comparison.expectedRows.map((row, rowIndex) => (
                 <tr key={`expected-${rowIndex}`}>
                   {row.cells.map((cell, cellIndex) => (
-                    <td
-                      key={cellIndex}
-                      className={row.cellDiff[cellIndex] ? "diff-cell" : ""}
-                    >
+                    <td key={cellIndex} className={row.cellDiff[cellIndex] ? "diff-cell" : ""}>
                       {String(cell ?? "NULL")}
                     </td>
                   ))}
@@ -748,10 +687,7 @@ const ComparisonView = memo(function ComparisonView({
               {comparison.actualRows.map((row, rowIndex) => (
                 <tr key={`actual-${rowIndex}`}>
                   {row.cells.map((cell, cellIndex) => (
-                    <td
-                      key={cellIndex}
-                      className={row.cellDiff[cellIndex] ? "diff-cell" : ""}
-                    >
+                    <td key={cellIndex} className={row.cellDiff[cellIndex] ? "diff-cell" : ""}>
                       {String(cell ?? "NULL")}
                     </td>
                   ))}
@@ -775,8 +711,7 @@ const PracticeResultTable = memo(function PracticeResultTable({
     <section className="result-panel">
       <div className="section-heading">
         <h3>
-          查询结果 · {execution.totalRows} 行
-          {execution.truncated ? "（已截断）" : ""}
+          查询结果 · {execution.totalRows} 行{execution.truncated ? "（已截断）" : ""}
         </h3>
         <span className="safe-chip">{execution.durationMillis} ms</span>
       </div>

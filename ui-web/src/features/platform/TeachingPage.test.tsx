@@ -12,8 +12,7 @@ describe("TeachingPage", () => {
   beforeEach(() => {
     requestMock.mockReset();
     requestMock.mockImplementation((method: string) => {
-      if (method !== "teaching.workspace")
-        throw new Error(`Unexpected request: ${method}`);
+      if (method !== "teaching.workspace") throw new Error(`Unexpected request: ${method}`);
       return Promise.resolve({
         role: "TEACHER",
         canPublish: true,
@@ -63,59 +62,57 @@ describe("TeachingPage", () => {
   });
 
   it("parses a preview before confirming text import", async () => {
-    requestMock.mockImplementation(
-      (method: string, params: Record<string, unknown>) => {
-        if (method === "teaching.workspace")
-          return Promise.resolve({
-            role: "TEACHER",
-            canPublish: true,
-            authority: "java-and-cloud-server",
-            exercises: [],
-            progressOverview: {
-              sessions: 0,
-              attempts: 0,
-              submissions: 0,
-              passedSubmissions: 0,
-              submissionPassRate: 0,
-              averageSubmissionDuration: 0,
-              hintsUsed: 0,
-              completedExercises: 0,
+    requestMock.mockImplementation((method: string, params: Record<string, unknown>) => {
+      if (method === "teaching.workspace")
+        return Promise.resolve({
+          role: "TEACHER",
+          canPublish: true,
+          authority: "java-and-cloud-server",
+          exercises: [],
+          progressOverview: {
+            sessions: 0,
+            attempts: 0,
+            submissions: 0,
+            passedSubmissions: 0,
+            submissionPassRate: 0,
+            averageSubmissionDuration: 0,
+            hintsUsed: 0,
+            completedExercises: 0,
+          },
+          progressItems: [],
+          datasets: [],
+        });
+      if (method === "teaching.exercise.parse") {
+        expect(String(params.text)).toContain("===[EXERCISE]===");
+        return Promise.resolve({
+          datasets: [
+            {
+              id: "d1",
+              name: "数据集",
+              selfTest: { passed: true, message: "数据集 SQL 自测通过" },
             },
-            progressItems: [],
-            datasets: [],
-          });
-        if (method === "teaching.exercise.parse") {
-          expect(String(params.text)).toContain("===[EXERCISE]===");
-          return Promise.resolve({
-            datasets: [
-              {
-                id: "d1",
-                name: "数据集",
-                selfTest: { passed: true, message: "数据集 SQL 自测通过" },
-              },
-            ],
-            exercises: [
-              {
-                id: "e1",
-                title: "预览题",
-                knowledgePoint: "基础查询",
-                difficulty: "BEGINNER",
-                selfTest: { passed: true, message: "参考答案自测通过" },
-              },
-            ],
-          });
-        }
-        if (method === "teaching.exercise.import") {
-          expect(String(params.text)).toContain("===[EXERCISE]===");
-          return Promise.resolve({
-            datasetsImported: 0,
-            exercisesImported: 1,
-            importedExerciseIds: ["e1"],
-          });
-        }
-        throw new Error(`Unexpected request: ${method}`);
-      },
-    );
+          ],
+          exercises: [
+            {
+              id: "e1",
+              title: "预览题",
+              knowledgePoint: "基础查询",
+              difficulty: "BEGINNER",
+              selfTest: { passed: true, message: "参考答案自测通过" },
+            },
+          ],
+        });
+      }
+      if (method === "teaching.exercise.import") {
+        expect(String(params.text)).toContain("===[EXERCISE]===");
+        return Promise.resolve({
+          datasetsImported: 0,
+          exercisesImported: 1,
+          importedExerciseIds: ["e1"],
+        });
+      }
+      throw new Error(`Unexpected request: ${method}`);
+    });
     const client = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     });
@@ -143,37 +140,35 @@ describe("TeachingPage", () => {
   });
 
   it("replaces free text with the AI-generated DSL draft", async () => {
-    requestMock.mockImplementation(
-      (method: string, params: Record<string, unknown>) => {
-        if (method === "teaching.workspace")
-          return Promise.resolve({
-            role: "TEACHER",
-            canPublish: true,
-            authority: "java-and-cloud-server",
-            exercises: [],
-            progressOverview: {
-              sessions: 0,
-              attempts: 0,
-              submissions: 0,
-              passedSubmissions: 0,
-              submissionPassRate: 0,
-              averageSubmissionDuration: 0,
-              hintsUsed: 0,
-              completedExercises: 0,
-            },
-            progressItems: [],
-            datasets: [],
-          });
-        if (method === "teaching.exercise.draft") {
-          expect(String(params.text)).toContain("查询学生");
-          return Promise.resolve({
-            text: "===[EXERCISE]===\nTITLE: 草稿题",
-            model: "test-model",
-          });
-        }
-        throw new Error(`Unexpected request: ${method}`);
-      },
-    );
+    requestMock.mockImplementation((method: string, params: Record<string, unknown>) => {
+      if (method === "teaching.workspace")
+        return Promise.resolve({
+          role: "TEACHER",
+          canPublish: true,
+          authority: "java-and-cloud-server",
+          exercises: [],
+          progressOverview: {
+            sessions: 0,
+            attempts: 0,
+            submissions: 0,
+            passedSubmissions: 0,
+            submissionPassRate: 0,
+            averageSubmissionDuration: 0,
+            hintsUsed: 0,
+            completedExercises: 0,
+          },
+          progressItems: [],
+          datasets: [],
+        });
+      if (method === "teaching.exercise.draft") {
+        expect(String(params.text)).toContain("查询学生");
+        return Promise.resolve({
+          text: "===[EXERCISE]===\nTITLE: 草稿题",
+          model: "test-model",
+        });
+      }
+      throw new Error(`Unexpected request: ${method}`);
+    });
     const client = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     });
@@ -188,8 +183,6 @@ describe("TeachingPage", () => {
     fireEvent.change(textarea, { target: { value: "帮我出题：查询学生" } });
 
     fireEvent.click(screen.getByRole("button", { name: "AI 解析" }));
-    await waitFor(() =>
-      expect(textarea).toHaveValue("===[EXERCISE]===\nTITLE: 草稿题"),
-    );
+    await waitFor(() => expect(textarea).toHaveValue("===[EXERCISE]===\nTITLE: 草稿题"));
   });
 });

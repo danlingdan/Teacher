@@ -26,25 +26,19 @@ export function exerciseTypeTitleLabel(value: string | undefined): string {
 
 export function exerciseStatusLabel(value: string): string {
   return (
-    ({ passed: "已通过", failed: "未通过", todo: "未做" } as Record<string, string>)[
-      value
-    ] ?? value
+    ({ passed: "已通过", failed: "未通过", todo: "未做" } as Record<string, string>)[value] ?? value
   );
 }
 
 export function difficultyLabel(value: string): string {
   return (
-    ({ BEGINNER: "入门", INTERMEDIATE: "进阶", ADVANCED: "高级" } as Record<
-      string,
-      string
-    >)[value] ?? value
+    ({ BEGINNER: "入门", INTERMEDIATE: "进阶", ADVANCED: "高级" } as Record<string, string>)[
+      value
+    ] ?? value
   );
 }
 
-export function knowledgePointLabel(
-  value: string,
-  missingText = "未设置知识点",
-): string {
+export function knowledgePointLabel(value: string, missingText = "未设置知识点"): string {
   return !value || value === "NOT EXISTS" ? missingText : value;
 }
 

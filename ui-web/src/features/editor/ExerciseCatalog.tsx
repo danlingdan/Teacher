@@ -47,19 +47,13 @@ interface ExerciseCatalogPanelProps {
   onPageChange?: (page: number) => void;
 }
 
-export function filterCatalogItems(
-  items: ExerciseCatalogItem[],
-  filters: ExerciseCatalogFilters,
-) {
+export function filterCatalogItems(items: ExerciseCatalogItem[], filters: ExerciseCatalogFilters) {
   const query = filters.query.trim().toLowerCase();
   return items.filter((item) => {
     const matchesQuery =
-      query === "" ||
-      `${item.title} ${item.knowledgePoint}`.toLowerCase().includes(query);
-    const matchesDifficulty =
-      filters.difficulty === "" || item.difficulty === filters.difficulty;
-    const matchesStatus =
-      filters.status === "" || catalogItemStatus(item) === filters.status;
+      query === "" || `${item.title} ${item.knowledgePoint}`.toLowerCase().includes(query);
+    const matchesDifficulty = filters.difficulty === "" || item.difficulty === filters.difficulty;
+    const matchesStatus = filters.status === "" || catalogItemStatus(item) === filters.status;
     return matchesQuery && matchesDifficulty && matchesStatus;
   });
 }
@@ -79,10 +73,7 @@ export function ExerciseCatalogPanel({
   pageSize = 50,
   onPageChange,
 }: ExerciseCatalogPanelProps) {
-  const filtered = useMemo(
-    () => filterCatalogItems(items, filters),
-    [items, filters],
-  );
+  const filtered = useMemo(() => filterCatalogItems(items, filters), [items, filters]);
   const groups = useMemo(() => {
     const byDifficulty = new Map<string, ExerciseCatalogItem[]>();
     for (const item of filtered) {
@@ -91,18 +82,14 @@ export function ExerciseCatalogPanel({
       byDifficulty.set(item.difficulty, list);
     }
     return [...byDifficulty.entries()]
-      .sort(
-        (a, b) =>
-          (difficultyOrder[a[0]] ?? 9) - (difficultyOrder[b[0]] ?? 9),
-      )
+      .sort((a, b) => (difficultyOrder[a[0]] ?? 9) - (difficultyOrder[b[0]] ?? 9))
       .map(
         ([difficulty, groupItems]) =>
           [
             difficulty,
             groupItems.sort(
               (a, b) =>
-                (a.passed ? 1 : 0) - (b.passed ? 1 : 0) ||
-                a.title.localeCompare(b.title, "zh"),
+                (a.passed ? 1 : 0) - (b.passed ? 1 : 0) || a.title.localeCompare(b.title, "zh"),
             ),
           ] as const,
       );
@@ -113,9 +100,7 @@ export function ExerciseCatalogPanel({
       <div className="section-heading">
         <div>
           <p className="eyebrow">题目目录</p>
-          <strong>
-            {isPending ? "加载中…" : `${filtered.length} 道题`}
-          </strong>
+          <strong>{isPending ? "加载中…" : `${filtered.length} 道题`}</strong>
         </div>
       </div>
       {headerAction && <div className="catalog-toolbar">{headerAction}</div>}
@@ -123,9 +108,7 @@ export function ExerciseCatalogPanel({
         aria-label="搜索练习题"
         value={queryInput}
         onChange={(event) =>
-          onQueryInput
-            ? onQueryInput(event.target.value)
-            : onFilterChange("q", event.target.value)
+          onQueryInput ? onQueryInput(event.target.value) : onFilterChange("q", event.target.value)
         }
         placeholder="搜索题目或知识点"
       />
@@ -133,9 +116,7 @@ export function ExerciseCatalogPanel({
         <select
           aria-label="按难度筛选"
           value={filters.difficulty}
-          onChange={(event) =>
-            onFilterChange("difficulty", event.target.value)
-          }
+          onChange={(event) => onFilterChange("difficulty", event.target.value)}
         >
           <option value="">全部难度</option>
           <option value="BEGINNER">入门</option>
@@ -178,12 +159,9 @@ export function ExerciseCatalogPanel({
                   <span className="catalog-item-title">{item.title}</span>
                   <small>
                     {exerciseTypeLabel(item.exerciseType)} ·{" "}
-                    {knowledgePointLabel(item.knowledgePoint)} ·{" "}
-                    {difficultyLabel(item.difficulty)}
+                    {knowledgePointLabel(item.knowledgePoint)} · {difficultyLabel(item.difficulty)}
                     {item.bestScore != null ? ` · ${item.bestScore} 分` : ""}
-                    <span className={`catalog-badge ${status}`}>
-                      {exerciseStatusLabel(status)}
-                    </span>
+                    <span className={`catalog-badge ${status}`}>{exerciseStatusLabel(status)}</span>
                   </small>
                 </button>
               );
@@ -191,16 +169,10 @@ export function ExerciseCatalogPanel({
           </div>
         ))
       )}
-      {!isPending && filtered.length === 0 && (
-        <p className="muted">没有匹配的题目。</p>
-      )}
+      {!isPending && filtered.length === 0 && <p className="muted">没有匹配的题目。</p>}
       {onPageChange && total != null && total > pageSize && (
         <div className="compact-pager" aria-label="目录分页">
-          <button
-            type="button"
-            disabled={page === 0}
-            onClick={() => onPageChange(page - 1)}
-          >
+          <button type="button" disabled={page === 0} onClick={() => onPageChange(page - 1)}>
             上一页
           </button>
           <span>

@@ -3,11 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { localAppRequest } from "../../shared/ipc";
-import {
-  difficultyLabel,
-  knowledgePointLabel,
-  roleLabel,
-} from "../../shared/labels";
+import { difficultyLabel, knowledgePointLabel, roleLabel } from "../../shared/labels";
 import type {
   ExerciseDefinition,
   ExerciseImportPreview,
@@ -16,20 +12,8 @@ import type {
   LearningAnalytics,
   TeachingWorkspace,
 } from "../../shared/types";
-import {
-  Button,
-  DataTable,
-  Feedback,
-  FormField,
-  useToast,
-} from "../../shared/ui";
-import {
-  Loading,
-  Metric,
-  Toggle,
-  analyticsMetricLabel,
-  formatAccountDate,
-} from "./shared";
+import { Button, DataTable, Feedback, FormField, useToast } from "../../shared/ui";
+import { Loading, Metric, Toggle, analyticsMetricLabel, formatAccountDate } from "./shared";
 
 const teachingKey = ["teaching", "workspace"] as const;
 const interventionsKey = ["teaching", "interventions"] as const;
@@ -131,8 +115,7 @@ export function TeachingPage() {
     mutationFn: () =>
       localAppRequest<ExerciseDefinition>("teaching.exercise.save", {
         ...draft,
-        expectedRowCount:
-          draft.expectedRowCount === "" ? null : Number(draft.expectedRowCount),
+        expectedRowCount: draft.expectedRowCount === "" ? null : Number(draft.expectedRowCount),
         requiredSqlKeywords: splitLines(draft.requiredSqlKeywords),
         hints: splitLines(draft.hints),
       }),
@@ -189,8 +172,7 @@ export function TeachingPage() {
       localAppRequest<{ bankVersion: number }>("teaching.exercise.publish", {
         text: importText,
       }),
-    onSuccess: (value) =>
-      toast("success", `已发布到服务器，题库版本 ${value.bankVersion}`),
+    onSuccess: (value) => toast("success", `已发布到服务器，题库版本 ${value.bankVersion}`),
     onError: (error: Error) => toast("error", `发布失败：${error.message}`),
   });
   // 题库体检（W3.4）：对库内全部题目批量执行导入自测同等校验，只读无副作用。
@@ -240,8 +222,7 @@ export function TeachingPage() {
     onError: (error: Error) => toast("error", `AI 解析失败：${error.message}`),
   });
   const importExercises = useMutation({
-    mutationFn: () =>
-      localAppRequest("teaching.exercise.import", { text: importText }),
+    mutationFn: () => localAppRequest("teaching.exercise.import", { text: importText }),
     onSuccess: () => {
       setImportText("");
       setImportPreview(undefined);
@@ -253,29 +234,20 @@ export function TeachingPage() {
   // 挂载即加载干预队列，让折叠区外的“待处理 N”徽章有数据。
   const interventions = useQuery({
     queryKey: interventionsKey,
-    queryFn: () =>
-      localAppRequest<{ items: InterventionCandidate[] }>(
-        "teaching.interventions",
-      ),
+    queryFn: () => localAppRequest<{ items: InterventionCandidate[] }>("teaching.interventions"),
     retry: false,
   });
   useEffect(() => {
     if (interventions.isError)
-      toast(
-        "error",
-        `加载干预队列失败：${interventions.error?.message ?? ""}`,
-      );
+      toast("error", `加载干预队列失败：${interventions.error?.message ?? ""}`);
   }, [interventions.isError, interventions.error, toast]);
   const updateIntervention = useMutation({
-    mutationFn: (value: {
-      candidateId: string;
-      status: InterventionCandidate["status"];
-    }) => localAppRequest("teaching.intervention.update", value),
+    mutationFn: (value: { candidateId: string; status: InterventionCandidate["status"] }) =>
+      localAppRequest("teaching.intervention.update", value),
     onSuccess: () => {
       void client.invalidateQueries({ queryKey: interventionsKey });
     },
-    onError: (error: Error) =>
-      toast("error", `更新干预状态失败：${error.message}`),
+    onError: (error: Error) => toast("error", `更新干预状态失败：${error.message}`),
   });
   const analytics = useQuery({
     queryKey: analyticsKey,
@@ -284,8 +256,7 @@ export function TeachingPage() {
     retry: false,
   });
   useEffect(() => {
-    if (analytics.isError)
-      toast("error", `加载学情分析失败：${analytics.error?.message ?? ""}`);
+    if (analytics.isError) toast("error", `加载学情分析失败：${analytics.error?.message ?? ""}`);
   }, [analytics.isError, analytics.error, toast]);
   if (query.isPending) return <Loading label="正在读取本地题库与学情" />;
   if (query.isError)
@@ -302,20 +273,14 @@ export function TeachingPage() {
       .includes(exerciseQuery.trim().toLowerCase()),
   );
   const exercisePageSize = 50;
-  const exercisePages = Math.max(
-    1,
-    Math.ceil(filteredExercises.length / exercisePageSize),
-  );
+  const exercisePages = Math.max(1, Math.ceil(filteredExercises.length / exercisePageSize));
   const visibleExercisePage = Math.min(exercisePage, exercisePages - 1);
   const visibleExercises = filteredExercises.slice(
     visibleExercisePage * exercisePageSize,
     (visibleExercisePage + 1) * exercisePageSize,
   );
   const progressPageSize = 50;
-  const progressPages = Math.max(
-    1,
-    Math.ceil(data.progressItems.length / progressPageSize),
-  );
+  const progressPages = Math.max(1, Math.ceil(data.progressItems.length / progressPageSize));
   const visibleProgressPage = Math.min(progressPage, progressPages - 1);
   const visibleProgressItems = data.progressItems.slice(
     visibleProgressPage * progressPageSize,
@@ -334,10 +299,7 @@ export function TeachingPage() {
         <Metric label="题目" value={data.exercises.length} />
         <Metric label="练习会话" value={data.progressOverview.sessions} />
         <Metric label="提交" value={data.progressOverview.submissions} />
-        <Metric
-          label="已通过"
-          value={data.progressOverview.passedSubmissions}
-        />
+        <Metric label="已通过" value={data.progressOverview.passedSubmissions} />
       </section>
       <p className="muted">
         以下统计与学情均为本机作答记录（学生练习发生在各自的电脑上）；班级维度的提交与学情请前往「班级与云端」。
@@ -348,9 +310,7 @@ export function TeachingPage() {
             <p className="eyebrow">题库管理</p>
             <h2>本地题库</h2>
           </div>
-          <span className="policy-chip">
-            {data.canPublish ? "可发布" : "只读"}
-          </span>
+          <span className="policy-chip">{data.canPublish ? "可发布" : "只读"}</span>
         </div>
         <div className="bank-toolbar">
           <input
@@ -362,9 +322,7 @@ export function TeachingPage() {
             }}
             placeholder="搜索题目或知识点"
           />
-          <Button onClick={() => openEditorForNew(data.datasets[0]?.id)}>
-            新建题目
-          </Button>
+          <Button onClick={() => openEditorForNew(data.datasets[0]?.id)}>新建题目</Button>
         </div>
         <DataTable
           caption={`教师题库，共 ${filteredExercises.length} 道题`}
@@ -375,11 +333,7 @@ export function TeachingPage() {
               key: "title",
               title: "题目",
               render: (row) => (
-                <button
-                  type="button"
-                  className="table-link"
-                  onClick={() => setSelectedId(row.id)}
-                >
+                <button type="button" className="table-link" onClick={() => setSelectedId(row.id)}>
                   {row.title}
                 </button>
               ),
@@ -440,22 +394,15 @@ export function TeachingPage() {
         ref={editorRef}
         className="content-card teaching-editor"
         open={editorOpen}
-        onToggle={(event) =>
-          setEditorOpen((event.target as HTMLDetailsElement).open)
-        }
+        onToggle={(event) => setEditorOpen((event.target as HTMLDetailsElement).open)}
       >
         <summary>
           <strong>
-            {selectedId
-              ? `编辑：${draft.title || "所选题目"}`
-              : "新建题目与题库导入导出"}
+            {selectedId ? `编辑：${draft.title || "所选题目"}` : "新建题目与题库导入导出"}
           </strong>
         </summary>
         <div className="button-row">
-          <Button
-            variant="secondary"
-            onClick={() => openEditorForNew(data.datasets[0]?.id)}
-          >
+          <Button variant="secondary" onClick={() => openEditorForNew(data.datasets[0]?.id)}>
             新建题目
           </Button>
           <Button
@@ -480,9 +427,7 @@ export function TeachingPage() {
               <input
                 {...ids}
                 value={draft.title}
-                onChange={(event) =>
-                  setDraft({ ...draft, title: event.target.value })
-                }
+                onChange={(event) => setDraft({ ...draft, title: event.target.value })}
               />
             )}
           </FormField>
@@ -491,9 +436,7 @@ export function TeachingPage() {
               <input
                 {...ids}
                 value={draft.knowledgePoint}
-                onChange={(event) =>
-                  setDraft({ ...draft, knowledgePoint: event.target.value })
-                }
+                onChange={(event) => setDraft({ ...draft, knowledgePoint: event.target.value })}
               />
             )}
           </FormField>
@@ -502,9 +445,7 @@ export function TeachingPage() {
               <select
                 {...ids}
                 value={draft.difficulty}
-                onChange={(event) =>
-                  setDraft({ ...draft, difficulty: event.target.value })
-                }
+                onChange={(event) => setDraft({ ...draft, difficulty: event.target.value })}
               >
                 <option value="BEGINNER">入门</option>
                 <option value="INTERMEDIATE">进阶</option>
@@ -517,9 +458,7 @@ export function TeachingPage() {
               <select
                 {...ids}
                 value={draft.datasetId}
-                onChange={(event) =>
-                  setDraft({ ...draft, datasetId: event.target.value })
-                }
+                onChange={(event) => setDraft({ ...draft, datasetId: event.target.value })}
               >
                 <option value="">选择数据集</option>
                 {data.datasets.map((item) => (
@@ -535,9 +474,7 @@ export function TeachingPage() {
               <textarea
                 {...ids}
                 value={draft.description}
-                onChange={(event) =>
-                  setDraft({ ...draft, description: event.target.value })
-                }
+                onChange={(event) => setDraft({ ...draft, description: event.target.value })}
               />
             )}
           </FormField>
@@ -550,9 +487,7 @@ export function TeachingPage() {
               <textarea
                 {...ids}
                 value={draft.referenceSql}
-                onChange={(event) =>
-                  setDraft({ ...draft, referenceSql: event.target.value })
-                }
+                onChange={(event) => setDraft({ ...draft, referenceSql: event.target.value })}
               />
             )}
           </FormField>
@@ -575,9 +510,7 @@ export function TeachingPage() {
               <textarea
                 {...ids}
                 value={draft.hints}
-                onChange={(event) =>
-                  setDraft({ ...draft, hints: event.target.value })
-                }
+                onChange={(event) => setDraft({ ...draft, hints: event.target.value })}
               />
             )}
           </FormField>
@@ -586,23 +519,17 @@ export function TeachingPage() {
           <Toggle
             label="比较列"
             checked={draft.compareColumns}
-            onChange={() =>
-              setDraft({ ...draft, compareColumns: !draft.compareColumns })
-            }
+            onChange={() => setDraft({ ...draft, compareColumns: !draft.compareColumns })}
           />
           <Toggle
             label="比较行"
             checked={draft.compareRows}
-            onChange={() =>
-              setDraft({ ...draft, compareRows: !draft.compareRows })
-            }
+            onChange={() => setDraft({ ...draft, compareRows: !draft.compareRows })}
           />
           <Toggle
             label="行顺序敏感"
             checked={draft.rowOrderMatters}
-            onChange={() =>
-              setDraft({ ...draft, rowOrderMatters: !draft.rowOrderMatters })
-            }
+            onChange={() => setDraft({ ...draft, rowOrderMatters: !draft.rowOrderMatters })}
           />
         </div>
         <Button
@@ -672,8 +599,7 @@ export function TeachingPage() {
             <ul className="plain-list">
               {importPreview.exercises.map((item) => (
                 <li key={item.id}>
-                  {item.selfTest.passed ? "✓" : "✕"}{" "}
-                  <span>{item.title}</span>
+                  {item.selfTest.passed ? "✓" : "✕"} <span>{item.title}</span>
                   {!item.selfTest.passed && <>—— {item.selfTest.message}</>}
                 </li>
               ))}
@@ -682,9 +608,7 @@ export function TeachingPage() {
         )}
         {healthReport.length > 0 && (
           <Feedback
-            tone={
-              healthReport.every((item) => item.passed) ? "success" : "warning"
-            }
+            tone={healthReport.every((item) => item.passed) ? "success" : "warning"}
             title={`题库体检报告（${healthReport.filter((item) => item.passed).length}/${healthReport.length} 通过）`}
           >
             <ul className="plain-list">
@@ -699,10 +623,7 @@ export function TeachingPage() {
               <Button variant="secondary" onClick={() => exportHealthReport()}>
                 复制文字报告
               </Button>
-              <Button
-                variant="secondary"
-                onClick={() => setHealthReport([])}
-              >
+              <Button variant="secondary" onClick={() => setHealthReport([])}>
                 关闭报告
               </Button>
             </div>
@@ -823,11 +744,7 @@ export function TeachingPage() {
             <p>生成时间：{formatAccountDate(analytics.data.generatedAt)}</p>
             <div className="metric-row">
               {Object.entries(analytics.data.overview).map(([key, value]) => (
-                <Metric
-                  key={key}
-                  label={analyticsMetricLabel(key)}
-                  value={value}
-                />
+                <Metric key={key} label={analyticsMetricLabel(key)} value={value} />
               ))}
             </div>
             <p>
@@ -867,8 +784,7 @@ export function TeachingPage() {
                   {item.studentDisplayName} · {item.assignmentTitle}
                 </strong>
                 <span>
-                  {item.reason} · 优先级 {item.priority} ·{" "}
-                  {item.evidenceSummary}
+                  {item.reason} · 优先级 {item.priority} · {item.evidenceSummary}
                 </span>
                 <select
                   aria-label={`${item.studentDisplayName} 干预状态`}
@@ -876,8 +792,7 @@ export function TeachingPage() {
                   onChange={(event) =>
                     updateIntervention.mutate({
                       candidateId: item.id,
-                      status: event.target
-                        .value as InterventionCandidate["status"],
+                      status: event.target.value as InterventionCandidate["status"],
                     })
                   }
                 >

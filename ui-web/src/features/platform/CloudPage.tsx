@@ -1,12 +1,7 @@
 // Cloud workspace page (v3.4.0 REF-13): extracted from PlatformPages.tsx.
 // Read-only loads use useQuery; all write/action mutations stay mutations.
 import { useEffect, useRef, useState } from "react";
-import {
-  keepPreviousData,
-  useMutation,
-  useQuery,
-  useQueryClient,
-} from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { LocalAppError, localAppRequest } from "../../shared/ipc";
 import { assignmentStatusLabel, syncStateLabel } from "../../shared/labels";
@@ -25,19 +20,8 @@ import type {
   PortfolioEntry,
   SubmissionFeedback,
 } from "../../shared/types";
-import {
-  Button,
-  Dialog,
-  Feedback,
-  FormField,
-  useToast,
-} from "../../shared/ui";
-import {
-  Loading,
-  Metric,
-  analyticsMetricLabel,
-  formatAccountDate,
-} from "./shared";
+import { Button, Dialog, Feedback, FormField, useToast } from "../../shared/ui";
+import { Loading, Metric, analyticsMetricLabel, formatAccountDate } from "./shared";
 
 const cloudKey = ["cloud", "workspace"] as const;
 const assignmentsKey = ["cloud", "assignments"] as const;
@@ -53,8 +37,7 @@ const sessionsKey = ["account", "sessions"] as const;
  */
 function cloudFailureText(error: Error): string {
   const code = error instanceof LocalAppError ? error.code : "";
-  if (code === "CLOUD_UNAVAILABLE")
-    return "云端服务暂时不可用，请检查网络后重试";
+  if (code === "CLOUD_UNAVAILABLE") return "云端服务暂时不可用，请检查网络后重试";
   if (code === "UNAUTHORIZED") return "云端登录状态已过期，请重新登录";
   return error.message;
 }
@@ -66,9 +49,7 @@ export function CloudPage() {
   const toast = useToast();
   const [className, setClassName] = useState("");
   // 命令面板等入口通过 ?class= 深链到指定班级。
-  const [classroomId, setClassroomId] = useState(
-    () => searchParams.get("class") ?? "",
-  );
+  const [classroomId, setClassroomId] = useState(() => searchParams.get("class") ?? "");
   const [memberEmail, setMemberEmail] = useState("");
   const [memberRole, setMemberRole] = useState("STUDENT");
   const [pendingTransition, setPendingTransition] = useState<{
@@ -85,8 +66,7 @@ export function CloudPage() {
   const [newPassword, setNewPassword] = useState("");
   const [accountMessage, setAccountMessage] = useState("");
   const [exportTaskId, setExportTaskId] = useState("");
-  const [analyticsResult, setAnalyticsResult] =
-    useState<Record<string, unknown>>();
+  const [analyticsResult, setAnalyticsResult] = useState<Record<string, unknown>>();
   const [masteryOpen, setMasteryOpen] = useState(false);
   const [portfolioOpen, setPortfolioOpen] = useState(false);
   const [coursesOpen, setCoursesOpen] = useState(false);
@@ -124,8 +104,7 @@ export function CloudPage() {
     onError: (error: Error) => toast("error", `刷新班级失败：${error.message}`),
   });
   const sync = useMutation({
-    mutationFn: () =>
-      localAppRequest<{ uploaded: number; downloaded: number }>("cloud.sync"),
+    mutationFn: () => localAppRequest<{ uploaded: number; downloaded: number }>("cloud.sync"),
     onSuccess: (value) => {
       void client.invalidateQueries({ queryKey: cloudKey });
       toast("success", `同步完成：上传 ${value.uploaded} 项，下载 ${value.downloaded} 项`);
@@ -155,20 +134,15 @@ export function CloudPage() {
   });
   const exercises = useQuery({
     queryKey: ["cloud", "exercise-catalog"],
-    queryFn: () =>
-      localAppRequest<{ items: ExerciseSummary[] }>("practice.catalog"),
+    queryFn: () => localAppRequest<{ items: ExerciseSummary[] }>("practice.catalog"),
     enabled: Boolean(query.data?.signedIn),
   });
   // 班级成员名单（issue #26）：仅教师可见。
-  const isTeacherRole =
-    query.data?.role === "TEACHER" || query.data?.role === "ADMINISTRATOR";
+  const isTeacherRole = query.data?.role === "TEACHER" || query.data?.role === "ADMINISTRATOR";
   const roster = useQuery({
     queryKey: ["cloud", "roster", classroomId],
     queryFn: () =>
-      localAppRequest<{ members: CloudClassRosterMember[] }>(
-        "cloud.class.roster",
-        { classroomId },
-      ),
+      localAppRequest<{ members: CloudClassRosterMember[] }>("cloud.class.roster", { classroomId }),
     enabled: Boolean(classroomId) && isTeacherRole,
     retry: false,
     staleTime: 30_000,
@@ -193,14 +167,12 @@ export function CloudPage() {
     onSuccess: async () => {
       setMemberEmail("");
       toast("success", "成员已添加");
-      const refreshed = await localAppRequest<CloudWorkspace>(
-        "cloud.workspace",
-        { refreshRemote: true },
-      );
+      const refreshed = await localAppRequest<CloudWorkspace>("cloud.workspace", {
+        refreshRemote: true,
+      });
       client.setQueryData(cloudKey, refreshed);
     },
-    onError: (error: Error) =>
-      toast("error", `添加成员失败：${cloudFailureText(error)}`),
+    onError: (error: Error) => toast("error", `添加成员失败：${cloudFailureText(error)}`),
   });
   const createAssignment = useMutation<CloudAssignment, Error, boolean>({
     mutationFn: () =>
@@ -223,8 +195,7 @@ export function CloudPage() {
         toast("success", `任务「${created.title}」已保存为草稿`);
       }
     },
-    onError: (error: Error) =>
-      toast("error", `任务创建失败：${cloudFailureText(error)}`),
+    onError: (error: Error) => toast("error", `任务创建失败：${cloudFailureText(error)}`),
   });
   const changeAssignmentStatus = useMutation({
     mutationFn: (item: CloudAssignment & { next: CloudAssignment["status"] }) =>
@@ -236,10 +207,7 @@ export function CloudPage() {
       }),
     onSuccess: (_value, item) => {
       void client.invalidateQueries({ queryKey: assignmentsKey });
-      toast(
-        "success",
-        `任务「${item.title}」状态已更新为「${assignmentStatusLabel(item.next)}」`,
-      );
+      toast("success", `任务「${item.title}」状态已更新为「${assignmentStatusLabel(item.next)}」`);
     },
     onError: (error: Error) => toast("error", `状态变更失败：${error.message}`),
   });
@@ -262,8 +230,7 @@ export function CloudPage() {
         classroomId,
       }),
     onSuccess: setAnalyticsResult,
-    onError: (error: Error) =>
-      toast("error", `班级分析失败：${error.message}`),
+    onError: (error: Error) => toast("error", `班级分析失败：${error.message}`),
   });
   const assignmentAnalytics = useMutation({
     mutationFn: (assignmentId: string) =>
@@ -275,31 +242,24 @@ export function CloudPage() {
         to: analyticsTo ? new Date(analyticsTo).toISOString() : "",
       }),
     onSuccess: setAnalyticsResult,
-    onError: (error: Error) =>
-      toast("error", `作业分析失败：${error.message}`),
+    onError: (error: Error) => toast("error", `作业分析失败：${error.message}`),
   });
   // 提交反馈按“班级 + 任务”缓存：切换目标即取对应反馈，保存后原地补丁缓存。
   const feedbackQuery = useQuery({
     queryKey: ["cloud", "feedback", classroomId, feedbackAssignmentId],
     queryFn: () =>
-      localAppRequest<{ items: SubmissionFeedback[]; cached: boolean }>(
-        "cloud.feedback.list",
-        {
-          classroomId,
-          assignmentId: feedbackAssignmentId,
-          refreshRemote: true,
-        },
-      ),
+      localAppRequest<{ items: SubmissionFeedback[]; cached: boolean }>("cloud.feedback.list", {
+        classroomId,
+        assignmentId: feedbackAssignmentId,
+        refreshRemote: true,
+      }),
     enabled: Boolean(classroomId) && Boolean(feedbackAssignmentId),
     placeholderData: keepPreviousData,
     retry: false,
   });
   useEffect(() => {
     if (feedbackQuery.isError)
-      toast(
-        "error",
-        `加载提交反馈失败：${feedbackQuery.error?.message ?? ""}`,
-      );
+      toast("error", `加载提交反馈失败：${feedbackQuery.error?.message ?? ""}`);
   }, [feedbackQuery.isError, feedbackQuery.error, toast]);
   const patchFeedbackItem = (
     submissionId: string,
@@ -312,9 +272,7 @@ export function CloudPage() {
           ? {
               ...current,
               items: current.items.map((candidate) =>
-                candidate.submissionId === submissionId
-                  ? patch(candidate)
-                  : candidate,
+                candidate.submissionId === submissionId ? patch(candidate) : candidate,
               ),
             }
           : current,
@@ -333,9 +291,7 @@ export function CloudPage() {
       }),
     onSuccess: (saved) => {
       patchFeedbackItem(saved.submissionId, () => saved);
-      setFeedbackDirtyIds((ids) =>
-        ids.filter((id) => id !== saved.submissionId),
-      );
+      setFeedbackDirtyIds((ids) => ids.filter((id) => id !== saved.submissionId));
       toast("success", "反馈已保存，学生端可见");
     },
     onError: (error: Error) => toast("error", `反馈保存失败：${error.message}`),
@@ -343,51 +299,44 @@ export function CloudPage() {
   const mastery = useQuery({
     queryKey: [...masteryKey, classroomId],
     queryFn: () =>
-      localAppRequest<{ items: KnowledgeMastery[]; cached: boolean }>(
-        "cloud.mastery",
-        { classroomId, refreshRemote: true },
-      ),
+      localAppRequest<{ items: KnowledgeMastery[]; cached: boolean }>("cloud.mastery", {
+        classroomId,
+        refreshRemote: true,
+      }),
     enabled: masteryOpen && Boolean(classroomId),
     retry: false,
   });
   useEffect(() => {
-    if (mastery.isError)
-      toast("error", `加载掌握度失败：${mastery.error?.message ?? ""}`);
+    if (mastery.isError) toast("error", `加载掌握度失败：${mastery.error?.message ?? ""}`);
   }, [mastery.isError, mastery.error, toast]);
   const portfolio = useQuery({
     queryKey: portfolioKey,
-    queryFn: () =>
-      localAppRequest<{ items: PortfolioEntry[] }>("learning.portfolio"),
+    queryFn: () => localAppRequest<{ items: PortfolioEntry[] }>("learning.portfolio"),
     enabled: portfolioOpen,
     retry: false,
   });
   useEffect(() => {
-    if (portfolio.isError)
-      toast("error", `加载作品集失败：${portfolio.error?.message ?? ""}`);
+    if (portfolio.isError) toast("error", `加载作品集失败：${portfolio.error?.message ?? ""}`);
   }, [portfolio.isError, portfolio.error, toast]);
   const exportPortfolio = useMutation({
     mutationFn: () =>
       localAppRequest<{ content: string }>("learning.portfolio.export", {
         confirmed: true,
       }),
-    onSuccess: (value) =>
-      downloadText("sqlteacher-portfolio.json", value.content),
-    onError: (error: Error) =>
-      toast("error", `导出作品集失败：${error.message}`),
+    onSuccess: (value) => downloadText("sqlteacher-portfolio.json", value.content),
+    onError: (error: Error) => toast("error", `导出作品集失败：${error.message}`),
   });
   const courses = useQuery({
     queryKey: coursesKey,
     queryFn: () =>
-      localAppRequest<{ items: CloudCourse[]; cached: boolean }>(
-        "cloud.courses",
-        { refreshRemote: true },
-      ),
+      localAppRequest<{ items: CloudCourse[]; cached: boolean }>("cloud.courses", {
+        refreshRemote: true,
+      }),
     enabled: coursesOpen,
     retry: false,
   });
   useEffect(() => {
-    if (courses.isError)
-      toast("error", `刷新课程失败：${courses.error?.message ?? ""}`);
+    if (courses.isError) toast("error", `刷新课程失败：${courses.error?.message ?? ""}`);
   }, [courses.isError, courses.error, toast]);
   const createCourse = useMutation({
     mutationFn: () =>
@@ -416,10 +365,7 @@ export function CloudPage() {
   });
   useEffect(() => {
     if (courseContent.isError)
-      toast(
-        "error",
-        `打开课程失败：${cloudFailureText(courseContent.error ?? new Error())}`,
-      );
+      toast("error", `打开课程失败：${cloudFailureText(courseContent.error ?? new Error())}`);
   }, [courseContent.isError, courseContent.error, toast]);
   useEffect(() => {
     if (!courseId && courses.data?.items[0]) setCourseId(courses.data.items[0].id);
@@ -440,8 +386,7 @@ export function CloudPage() {
       setSectionName("");
       void client.invalidateQueries({ queryKey: courseContentKey });
     },
-    onError: (error: Error) =>
-      toast("error", `章节添加失败：${cloudFailureText(error)}`),
+    onError: (error: Error) => toast("error", `章节添加失败：${cloudFailureText(error)}`),
   });
   const createKnowledgePoint = useMutation({
     mutationFn: () =>
@@ -458,15 +403,13 @@ export function CloudPage() {
       setKnowledgeDescription("");
       void client.invalidateQueries({ queryKey: courseContentKey });
     },
-    onError: (error: Error) =>
-      toast("error", `知识点添加失败：${cloudFailureText(error)}`),
+    onError: (error: Error) => toast("error", `知识点添加失败：${cloudFailureText(error)}`),
   });
   const publishSharedExercise = useMutation({
     mutationFn: async () => {
-      const exercise = await localAppRequest<ExerciseDefinition>(
-        "teaching.exercise.detail",
-        { exerciseId: sharedLocalExerciseId },
-      );
+      const exercise = await localAppRequest<ExerciseDefinition>("teaching.exercise.detail", {
+        exerciseId: sharedLocalExerciseId,
+      });
       return localAppRequest("cloud.course.exercise.publish", {
         courseId,
         exerciseId: exercise.id,
@@ -474,9 +417,7 @@ export function CloudPage() {
         prompt: exercise.description,
         datasetVersion: `${exercise.datasetId}@${exercise.version}`,
         evaluationRule: JSON.stringify(exercise.evaluationRule),
-        knowledgePointIds: sharedKnowledgePointId
-          ? [sharedKnowledgePointId]
-          : [],
+        knowledgePointIds: sharedKnowledgePointId ? [sharedKnowledgePointId] : [],
       });
     },
     onSuccess: () => {
@@ -492,9 +433,7 @@ export function CloudPage() {
         exerciseVersionId,
         title:
           assignmentTitle ||
-          courseContent.data?.exercises.find(
-            (item) => item.id === exerciseVersionId,
-          )?.title,
+          courseContent.data?.exercises.find((item) => item.id === exerciseVersionId)?.title,
         description: assignmentDescription,
         dueAt: assignmentDueAt ? new Date(assignmentDueAt).toISOString() : "",
       }),
@@ -505,10 +444,8 @@ export function CloudPage() {
     onError: (error: Error) => toast("error", `任务创建失败：${error.message}`),
   });
   const exportCourse = useMutation({
-    mutationFn: () =>
-      localAppRequest<{ content: string }>("cloud.course.export", { courseId }),
-    onSuccess: (value) =>
-      downloadText(`sqlteacher-course-${courseId}.json`, value.content),
+    mutationFn: () => localAppRequest<{ content: string }>("cloud.course.export", { courseId }),
+    onSuccess: (value) => downloadText(`sqlteacher-course-${courseId}.json`, value.content),
     onError: (error: Error) => toast("error", `课程导出失败：${error.message}`),
   });
   const previewCoursePackage = useMutation({
@@ -517,8 +454,7 @@ export function CloudPage() {
         content: coursePackage,
       }),
     onSuccess: setPackagePreview,
-    onError: (error: Error) =>
-      toast("error", `课程包解析失败：${error.message}`),
+    onError: (error: Error) => toast("error", `课程包解析失败：${error.message}`),
   });
   const importCoursePackage = useMutation({
     mutationFn: () =>
@@ -533,18 +469,15 @@ export function CloudPage() {
       toast("success", "课程包已导入");
       void client.invalidateQueries({ queryKey: coursesKey });
     },
-    onError: (error: Error) =>
-      toast("error", `课程包导入失败：${error.message}`),
+    onError: (error: Error) => toast("error", `课程包导入失败：${error.message}`),
   });
   const exportClassAnalytics = useMutation({
     mutationFn: () =>
       localAppRequest<{ csv: string }>("cloud.class.analytics.export", {
         classroomId,
       }),
-    onSuccess: (value) =>
-      downloadText(`class-${classroomId}-analytics.csv`, value.csv),
-    onError: (error: Error) =>
-      toast("error", `班级分析导出失败：${error.message}`),
+    onSuccess: (value) => downloadText(`class-${classroomId}-analytics.csv`, value.csv),
+    onError: (error: Error) => toast("error", `班级分析导出失败：${error.message}`),
   });
   const exportAssignmentAnalytics = useMutation({
     mutationFn: (assignmentId: string) =>
@@ -557,28 +490,23 @@ export function CloudPage() {
       }),
     onSuccess: (value, assignmentId) =>
       downloadText(`assignment-${assignmentId}-analytics.csv`, value.csv),
-    onError: (error: Error) =>
-      toast("error", `作业分析导出失败：${error.message}`),
+    onError: (error: Error) => toast("error", `作业分析导出失败：${error.message}`),
   });
   const sessions = useQuery({
     queryKey: sessionsKey,
-    queryFn: () =>
-      localAppRequest<{ items: ActiveSession[] }>("account.sessions"),
+    queryFn: () => localAppRequest<{ items: ActiveSession[] }>("account.sessions"),
     enabled: accountOpen,
     retry: false,
   });
   useEffect(() => {
-    if (sessions.isError)
-      toast("error", `加载会话失败：${sessions.error?.message ?? ""}`);
+    if (sessions.isError) toast("error", `加载会话失败：${sessions.error?.message ?? ""}`);
   }, [sessions.isError, sessions.error, toast]);
   const revokeSession = useMutation({
-    mutationFn: (sessionId: string) =>
-      localAppRequest("account.session.revoke", { sessionId }),
+    mutationFn: (sessionId: string) => localAppRequest("account.session.revoke", { sessionId }),
     onSuccess: () => {
       void client.invalidateQueries({ queryKey: sessionsKey });
     },
-    onError: (error: Error) =>
-      toast("error", `撤销会话失败：${error.message}`),
+    onError: (error: Error) => toast("error", `撤销会话失败：${error.message}`),
   });
   const changePassword = useMutation({
     mutationFn: () =>
@@ -599,47 +527,34 @@ export function CloudPage() {
     },
   });
   const requestExport = useMutation({
-    mutationFn: () =>
-      localAppRequest<Record<string, unknown>>("account.export.request"),
+    mutationFn: () => localAppRequest<Record<string, unknown>>("account.export.request"),
     onSuccess: (value) => {
       const id = String(value.id ?? value.taskId ?? "");
       setExportTaskId(id);
       setAccountMessage(`数据导出任务已创建：${id || "请稍后刷新"}`);
     },
-    onError: (error: Error) =>
-      toast("error", `数据导出申请失败：${error.message}`),
+    onError: (error: Error) => toast("error", `数据导出申请失败：${error.message}`),
   });
   const getExport = useMutation({
-    mutationFn: () =>
-      localAppRequest<unknown>("account.export.get", { taskId: exportTaskId }),
-    onSuccess: (value) =>
-      downloadJson(`sqlteacher-account-export-${exportTaskId}.json`, value),
-    onError: (error: Error) =>
-      toast("error", `获取导出结果失败：${error.message}`),
+    mutationFn: () => localAppRequest<unknown>("account.export.get", { taskId: exportTaskId }),
+    onSuccess: (value) => downloadJson(`sqlteacher-account-export-${exportTaskId}.json`, value),
+    onError: (error: Error) => toast("error", `获取导出结果失败：${error.message}`),
   });
   const requestDeletion = useMutation({
-    mutationFn: () =>
-      localAppRequest<Record<string, unknown>>("account.deletion.request"),
+    mutationFn: () => localAppRequest<Record<string, unknown>>("account.deletion.request"),
     onSuccess: (value) =>
-      setAccountMessage(
-        `账号删除已进入撤销期：${String(value.status ?? "PENDING")}`,
-      ),
-    onError: (error: Error) =>
-      toast("error", `账号删除申请失败：${error.message}`),
+      setAccountMessage(`账号删除已进入撤销期：${String(value.status ?? "PENDING")}`),
+    onError: (error: Error) => toast("error", `账号删除申请失败：${error.message}`),
   });
   const cancelDeletion = useMutation({
     mutationFn: () => localAppRequest("account.deletion.cancel"),
     onSuccess: () => setAccountMessage("账号删除已取消。"),
-    onError: (error: Error) =>
-      toast("error", `取消账号删除失败：${error.message}`),
+    onError: (error: Error) => toast("error", `取消账号删除失败：${error.message}`),
   });
   const deletionStatus = useMutation({
-    mutationFn: () =>
-      localAppRequest<Record<string, unknown>>("account.deletion.status"),
-    onSuccess: (value) =>
-      setAccountMessage(`账号删除状态：${String(value.status ?? "NONE")}`),
-    onError: (error: Error) =>
-      toast("error", `查询删除状态失败：${error.message}`),
+    mutationFn: () => localAppRequest<Record<string, unknown>>("account.deletion.status"),
+    onSuccess: (value) => setAccountMessage(`账号删除状态：${String(value.status ?? "NONE")}`),
+    onError: (error: Error) => toast("error", `查询删除状态失败：${error.message}`),
   });
   useEffect(() => {
     if (!classroomId && query.data?.classes[0]) {
@@ -649,7 +564,11 @@ export function CloudPage() {
   // 命令面板深链 ?class=：页面已挂载时参数变化也要切换班级并加载其任务。
   useEffect(() => {
     const fromUrl = searchParams.get("class");
-    if (fromUrl && fromUrl !== classroomId && query.data?.classes.some(item => item.id === fromUrl)) {
+    if (
+      fromUrl &&
+      fromUrl !== classroomId &&
+      query.data?.classes.some((item) => item.id === fromUrl)
+    ) {
       setClassroomId(fromUrl);
     }
   }, [searchParams, classroomId, query.data?.classes]);
@@ -683,9 +602,7 @@ export function CloudPage() {
         <h2>连接你的班级与学习记录</h2>
         <p>登录后同步班级与学习进度；离线功能无需登录。</p>
         <div className="button-row">
-          <Button onClick={() => navigate("/login?returnTo=%2Fcloud")}>
-            登录或创建账号
-          </Button>
+          <Button onClick={() => navigate("/login?returnTo=%2Fcloud")}>登录或创建账号</Button>
           <Button variant="secondary" onClick={() => navigate("/today")}>
             继续离线学习
           </Button>
@@ -700,9 +617,7 @@ export function CloudPage() {
   const courseContentData = courseContent.data;
   const courseCached = Boolean(courseContentData?.cached);
   const sessionItems = sessions.data?.items ?? [];
-  const selectedClassName = data.classes.find(
-    (item) => item.id === classroomId,
-  )?.name;
+  const selectedClassName = data.classes.find((item) => item.id === classroomId)?.name;
   return (
     <div className="platform-workspace page-grid">
       <section className="hero-card">
@@ -722,11 +637,7 @@ export function CloudPage() {
           <Button busy={sync.isPending} onClick={() => sync.mutate()}>
             立即同步
           </Button>
-          <Button
-            variant="secondary"
-            busy={logout.isPending}
-            onClick={() => logout.mutate()}
-          >
+          <Button variant="secondary" busy={logout.isPending} onClick={() => logout.mutate()}>
             退出登录
           </Button>
         </div>
@@ -774,10 +685,7 @@ export function CloudPage() {
         ) : (
           <ul className="plain-list class-list">
             {data.classes.map((item) => (
-              <li
-                key={item.id}
-                className={item.id === classroomId ? "selected" : ""}
-              >
+              <li key={item.id} className={item.id === classroomId ? "selected" : ""}>
                 <button
                   type="button"
                   className="table-link"
@@ -789,9 +697,7 @@ export function CloudPage() {
                   <strong>{item.name}</strong>
                 </button>
                 <span>{item.members.length} 名成员</span>
-                {item.id === classroomId && (
-                  <span className="policy-chip">当前班级</span>
-                )}
+                {item.id === classroomId && <span className="policy-chip">当前班级</span>}
               </li>
             ))}
           </ul>
@@ -811,9 +717,7 @@ export function CloudPage() {
             <details className="class-roster">
               <summary>
                 <strong>成员名单</strong>
-                {roster.data?.members
-                  ? `（${roster.data.members.length} 人）`
-                  : ""}
+                {roster.data?.members ? `（${roster.data.members.length} 人）` : ""}
               </summary>
               {roster.isPending ? (
                 <p className="muted">正在加载成员名单…</p>
@@ -836,9 +740,7 @@ export function CloudPage() {
                   ))}
                 </ul>
               ) : (
-                <p className="muted">
-                  班级暂无成员。展开「添加成员」通过邮箱邀请学生加入。
-                </p>
+                <p className="muted">班级暂无成员。展开「添加成员」通过邮箱邀请学生加入。</p>
               )}
             </details>
           )}
@@ -902,9 +804,7 @@ export function CloudPage() {
                   添加成员
                 </Button>
                 <span className="muted">
-                  {selectedClassName
-                    ? `新成员将加入「${selectedClassName}」`
-                    : "请先选择目标班级"}
+                  {selectedClassName ? `新成员将加入「${selectedClassName}」` : "请先选择目标班级"}
                 </span>
               </div>
             </details>
@@ -913,9 +813,7 @@ export function CloudPage() {
             <details className="class-assignment-create">
               <summary>
                 <strong>新建任务</strong>
-                {assignmentTitle ? (
-                  <span className="policy-chip">草稿未保存</span>
-                ) : null}
+                {assignmentTitle ? <span className="policy-chip">草稿未保存</span> : null}
               </summary>
               <div className="settings-grid">
                 <FormField label="任务标题">
@@ -923,9 +821,7 @@ export function CloudPage() {
                     <input
                       {...ids}
                       value={assignmentTitle}
-                      onChange={(event) =>
-                        setAssignmentTitle(event.target.value)
-                      }
+                      onChange={(event) => setAssignmentTitle(event.target.value)}
                     />
                   )}
                 </FormField>
@@ -934,9 +830,7 @@ export function CloudPage() {
                     <select
                       {...ids}
                       value={assignmentExerciseId}
-                      onChange={(event) =>
-                        setAssignmentExerciseId(event.target.value)
-                      }
+                      onChange={(event) => setAssignmentExerciseId(event.target.value)}
                     >
                       <option value="">选择练习</option>
                       {exercises.data?.items
@@ -955,9 +849,7 @@ export function CloudPage() {
                       {...ids}
                       type="datetime-local"
                       value={assignmentDueAt}
-                      onChange={(event) =>
-                        setAssignmentDueAt(event.target.value)
-                      }
+                      onChange={(event) => setAssignmentDueAt(event.target.value)}
                     />
                   )}
                 </FormField>
@@ -966,9 +858,7 @@ export function CloudPage() {
                     <textarea
                       {...ids}
                       value={assignmentDescription}
-                      onChange={(event) =>
-                        setAssignmentDescription(event.target.value)
-                      }
+                      onChange={(event) => setAssignmentDescription(event.target.value)}
                     />
                   )}
                 </FormField>
@@ -1005,11 +895,7 @@ export function CloudPage() {
                 </Button>
                 <Button
                   variant="secondary"
-                  disabled={
-                    !assignmentTitle ||
-                    !assignmentExerciseId ||
-                    createAssignment.isPending
-                  }
+                  disabled={!assignmentTitle || !assignmentExerciseId || createAssignment.isPending}
                   onClick={() => createAssignment.mutate(false)}
                 >
                   存为草稿
@@ -1080,9 +966,7 @@ export function CloudPage() {
                 <strong>{item.title}</strong>
                 <span>
                   {assignmentStatusLabel(item.status)}
-                  {item.dueAt
-                    ? ` · 截止 ${new Date(item.dueAt).toLocaleString()}`
-                    : ""}
+                  {item.dueAt ? ` · 截止 ${new Date(item.dueAt).toLocaleString()}` : ""}
                 </span>
                 {data.role === "STUDENT" && item.status === "PUBLISHED" && (
                   <Button
@@ -1100,10 +984,7 @@ export function CloudPage() {
                 )}
                 {(data.role === "TEACHER" || data.role === "ADMINISTRATOR") && (
                   <>
-                    <Button
-                      variant="secondary"
-                      onClick={() => assignmentAnalytics.mutate(item.id)}
-                    >
+                    <Button variant="secondary" onClick={() => assignmentAnalytics.mutate(item.id)}>
                       查看学情
                     </Button>
                     <Button
@@ -1118,29 +999,20 @@ export function CloudPage() {
                       onClick={() => {
                         setFeedbackAssignmentId(item.id);
                         void client.invalidateQueries({
-                          queryKey: [
-                            "cloud",
-                            "feedback",
-                            classroomId,
-                            item.id,
-                          ],
+                          queryKey: ["cloud", "feedback", classroomId, item.id],
                         });
                       }}
                     >
                       批阅反馈
                     </Button>
-                    <Button
-                      variant="secondary"
-                      onClick={() => copyAssignment.mutate(item)}
-                    >
+                    <Button variant="secondary" onClick={() => copyAssignment.mutate(item)}>
                       复制
                     </Button>
                     <select
                       aria-label={`${item.title} 状态变更`}
                       value=""
                       onChange={(event) => {
-                        const next = event.target
-                          .value as CloudAssignment["status"];
+                        const next = event.target.value as CloudAssignment["status"];
                         if (next) setPendingTransition({ item, next });
                       }}
                     >
@@ -1176,18 +1048,13 @@ export function CloudPage() {
           >
             <p>
               将任务「{pendingTransition?.item.title}」从「
-              {assignmentStatusLabel(
-                pendingTransition?.item.status ?? "DRAFT",
-              )}
+              {assignmentStatusLabel(pendingTransition?.item.status ?? "DRAFT")}
               」变更为「
               {assignmentStatusLabel(pendingTransition?.next ?? "DRAFT")}」？
               发布后学生立即可见并提交；关闭或撤回后学生无法继续提交。
             </p>
             <div className="button-row">
-              <Button
-                variant="secondary"
-                onClick={() => setPendingTransition(undefined)}
-              >
+              <Button variant="secondary" onClick={() => setPendingTransition(undefined)}>
                 取消
               </Button>
               <Button
@@ -1237,8 +1104,7 @@ export function CloudPage() {
                 <li key={item.knowledgePointId}>
                   <strong>{item.knowledgePointName}</strong>
                   <span>
-                    {item.masteryPercent}% · {item.passes}/{item.attempts}{" "}
-                    次通过
+                    {item.masteryPercent}% · {item.passes}/{item.attempts} 次通过
                   </span>
                 </li>
               ))}
@@ -1254,21 +1120,16 @@ export function CloudPage() {
                   {feedbackItems.map((item) => (
                     <li key={item.submissionId}>
                       <strong>{item.studentUserId}</strong>
-                      {data.role === "TEACHER" ||
-                      data.role === "ADMINISTRATOR" ? (
+                      {data.role === "TEACHER" || data.role === "ADMINISTRATOR" ? (
                         <>
                           <select
                             aria-label="反馈状态"
                             value={item.status}
                             onChange={(event) =>
-                              patchFeedbackItem(
-                                item.submissionId,
-                                (candidate) => ({
-                                  ...candidate,
-                                  status: event.target
-                                    .value as SubmissionFeedback["status"],
-                                }),
-                              )
+                              patchFeedbackItem(item.submissionId, (candidate) => ({
+                                ...candidate,
+                                status: event.target.value as SubmissionFeedback["status"],
+                              }))
                             }
                           >
                             <option value="NEEDS_WORK">需要改进</option>
@@ -1279,17 +1140,12 @@ export function CloudPage() {
                             aria-label="反馈内容"
                             value={item.comment}
                             onChange={(event) => {
-                              patchFeedbackItem(
-                                item.submissionId,
-                                (candidate) => ({
-                                  ...candidate,
-                                  comment: event.target.value,
-                                }),
-                              );
+                              patchFeedbackItem(item.submissionId, (candidate) => ({
+                                ...candidate,
+                                comment: event.target.value,
+                              }));
                               setFeedbackDirtyIds((ids) =>
-                                ids.includes(item.submissionId)
-                                  ? ids
-                                  : [...ids, item.submissionId],
+                                ids.includes(item.submissionId) ? ids : [...ids, item.submissionId],
                               );
                             }}
                           />
@@ -1322,16 +1178,14 @@ export function CloudPage() {
           onToggle={(event) => {
             if (event.currentTarget.open) {
               setCoursesOpen(true);
-              if (courseItems.length === 0)
-                void client.invalidateQueries({ queryKey: coursesKey });
+              if (courseItems.length === 0) void client.invalidateQueries({ queryKey: coursesKey });
             }
           }}
         >
           <summary>
             <strong>共享课程、知识点与版本化任务</strong>
           </summary>
-          <p className="muted">
-          </p>
+          <p className="muted"></p>
           <div className="settings-grid">
             <FormField label="课程">
               {(ids) => (
@@ -1434,9 +1288,7 @@ export function CloudPage() {
                     <select
                       {...ids}
                       value={knowledgeSectionId}
-                      onChange={(event) =>
-                        setKnowledgeSectionId(event.target.value)
-                      }
+                      onChange={(event) => setKnowledgeSectionId(event.target.value)}
                     >
                       <option value="">选择章节</option>
                       {courseContentData.sections.map((item) => (
@@ -1461,9 +1313,7 @@ export function CloudPage() {
                     <input
                       {...ids}
                       value={knowledgeDescription}
-                      onChange={(event) =>
-                        setKnowledgeDescription(event.target.value)
-                      }
+                      onChange={(event) => setKnowledgeDescription(event.target.value)}
                     />
                   )}
                 </FormField>
@@ -1492,9 +1342,7 @@ export function CloudPage() {
                     <select
                       {...ids}
                       value={sharedLocalExerciseId}
-                      onChange={(event) =>
-                        setSharedLocalExerciseId(event.target.value)
-                      }
+                      onChange={(event) => setSharedLocalExerciseId(event.target.value)}
                     >
                       <option value="">选择题目</option>
                       {exercises.data?.items
@@ -1512,9 +1360,7 @@ export function CloudPage() {
                     <select
                       {...ids}
                       value={sharedKnowledgePointId}
-                      onChange={(event) =>
-                        setSharedKnowledgePointId(event.target.value)
-                      }
+                      onChange={(event) => setSharedKnowledgePointId(event.target.value)}
                     >
                       <option value="">不关联</option>
                       {courseContentData.knowledgePoints.map((item) => (
@@ -1547,9 +1393,7 @@ export function CloudPage() {
                       <Button
                         disabled={!classroomId}
                         busy={createVersionedAssignment.isPending}
-                        onClick={() =>
-                          createVersionedAssignment.mutate(item.id)
-                        }
+                        onClick={() => createVersionedAssignment.mutate(item.id)}
                       >
                         发布到当前班级
                       </Button>
@@ -1561,10 +1405,7 @@ export function CloudPage() {
           )}
           <section className="account-section">
             <h3>安全课程包导入</h3>
-            <FormField
-              label="课程包 JSON"
-              hint="先预览摘要、许可证与冲突，再明确确认导入。"
-            >
+            <FormField label="课程包 JSON" hint="先预览摘要、许可证与冲突，再明确确认导入。">
               {(ids) => (
                 <textarea
                   {...ids}
@@ -1597,16 +1438,11 @@ export function CloudPage() {
             </div>
             {packagePreview && (
               <Feedback
-                tone={
-                  packagePreview.conflict === "VERSION_CONFLICT"
-                    ? "warning"
-                    : "info"
-                }
+                tone={packagePreview.conflict === "VERSION_CONFLICT" ? "warning" : "info"}
                 title={packagePreview.courseTitle}
               >
                 <p>
-                  版本 {packagePreview.courseVersion} · 许可证{" "}
-                  {packagePreview.license}
+                  版本 {packagePreview.courseVersion} · 许可证 {packagePreview.license}
                 </p>
                 <p>
                   {packagePreview.sections} 个章节，
@@ -1714,15 +1550,10 @@ export function CloudPage() {
           <ul className="plain-list">
             {sessionItems.map((item) => (
               <li key={item.id}>
-                <strong>
-                  {item.current ? "当前会话" : item.userAgent || "其他会话"}
-                </strong>
+                <strong>{item.current ? "当前会话" : item.userAgent || "其他会话"}</strong>
                 <span>{formatAccountDate(item.lastSeenAt)}</span>
                 {!item.current && (
-                  <Button
-                    variant="secondary"
-                    onClick={() => revokeSession.mutate(item.id)}
-                  >
+                  <Button variant="secondary" onClick={() => revokeSession.mutate(item.id)}>
                     撤销
                   </Button>
                 )}
@@ -1735,9 +1566,7 @@ export function CloudPage() {
         </section>
         <section className="account-section danger-zone">
           <h3>数据导出与账号删除</h3>
-          <p className="muted">
-            导出不会修改账号；删除申请进入可撤销期，请谨慎操作。
-          </p>
+          <p className="muted">导出不会修改账号；删除申请进入可撤销期，请谨慎操作。</p>
           <div className="button-row">
             <Button
               variant="secondary"
@@ -1789,9 +1618,7 @@ export function CloudPage() {
 }
 
 function feedbackStatusLabel(value: SubmissionFeedback["status"]) {
-  return (
-    { NEEDS_WORK: "需要改进", REVIEWED: "已批阅", RESOLVED: "已解决" } as const
-  )[value];
+  return ({ NEEDS_WORK: "需要改进", REVIEWED: "已批阅", RESOLVED: "已解决" } as const)[value];
 }
 /**
  * 学情报告结构化呈现（W5.1）：概览指标中文化 + 知识点/常见错误分表，
@@ -1808,12 +1635,8 @@ function AnalyticsStructuredView({
   };
 }) {
   const entries = Object.entries(report.overview);
-  const points = (report.knowledgePoints ?? []) as Array<
-    Record<string, unknown>
-  >;
-  const errors = (report.commonErrors ?? []) as Array<
-    Record<string, unknown>
-  >;
+  const points = (report.knowledgePoints ?? []) as Array<Record<string, unknown>>;
+  const errors = (report.commonErrors ?? []) as Array<Record<string, unknown>>;
   return (
     <div className="analytics-structured">
       <div className="metric-row">
@@ -1822,8 +1645,7 @@ function AnalyticsStructuredView({
             key={key}
             label={analyticsMetricLabel(key)}
             value={
-              typeof value === "number" &&
-              (key === "passRate" || key === "completionRate")
+              typeof value === "number" && (key === "passRate" || key === "completionRate")
                 ? `${Math.round(value * 100)}%`
                 : value
             }
@@ -1838,8 +1660,8 @@ function AnalyticsStructuredView({
               <li key={index}>
                 <strong>{String(point.knowledgePoint ?? point.name ?? "未命名")}</strong>
                 <span>
-                  尝试 {String(point.attempts ?? 0)} · 完成{" "}
-                  {String(point.completedExercises ?? 0)} · 薄弱率{" "}
+                  尝试 {String(point.attempts ?? 0)} · 完成 {String(point.completedExercises ?? 0)}{" "}
+                  · 薄弱率{" "}
                   {typeof point.weaknessRate === "number"
                     ? `${Math.round(point.weaknessRate * 100)}%`
                     : String(point.weaknessRate ?? "—")}

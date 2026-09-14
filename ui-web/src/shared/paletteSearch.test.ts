@@ -69,11 +69,11 @@ describe("buildPaletteSections", () => {
       "class",
       "connection",
     ]);
-    const exerciseEntry = sections[1].entries[0];
-    expect(exerciseEntry.path).toBe("/practice?exercise=ex-1");
-    expect(sections[2].entries[0].path).toBe("/knowledge?article=art-1");
-    expect(sections[3].entries[0].path).toBe("/cloud?class=class-1");
-    expect(sections[4].entries[0].path).toBe("/data?connection=conn-1");
+    const exerciseEntry = sections[1]?.entries[0];
+    expect(exerciseEntry?.path).toBe("/practice?exercise=ex-1");
+    expect(sections[2]?.entries[0]?.path).toBe("/knowledge?article=art-1");
+    expect(sections[3]?.entries[0]?.path).toBe("/cloud?class=class-1");
+    expect(sections[4]?.entries[0]?.path).toBe("/data?connection=conn-1");
   });
 
   it("按关键字过滤各组并保留页面组的 Ctrl+N 提示", () => {
@@ -87,7 +87,7 @@ describe("buildPaletteSections", () => {
     });
     // "查询"只命中题目与练习页面（detail 含"编码与活动"不含"查询"→页面只剩无匹配）。
     expect(sections.map((section) => section.group)).toEqual(["exercise"]);
-    expect(sections[0].entries[0].title).toBe("查询 B 班学生");
+    expect(sections[0]?.entries[0]?.title).toBe("查询 B 班学生");
   });
 
   it("空查询只显示页面组且前六项带快捷键", () => {
@@ -97,14 +97,15 @@ describe("buildPaletteSections", () => {
     );
     const sections = buildPaletteSections({ query: "", pages: manyPages });
     expect(sections).toHaveLength(1);
-    expect(sections[0].entries).toHaveLength(5);
-    expect(sections[0].entries[0].shortcut).toBe("Ctrl 1");
-    expect(sections[0].entries[4].shortcut).toBe("Ctrl 5");
+    expect(sections[0]?.entries).toHaveLength(5);
+    expect(sections[0]?.entries[0]?.shortcut).toBe("Ctrl 1");
+    expect(sections[0]?.entries[4]?.shortcut).toBe("Ctrl 5");
   });
 
   it("每组最多 5 条并且无匹配的组被省略", () => {
     const manyExercises = Array.from({ length: 9 }, (_, index) => ({
-      ...exercises[0],
+      // 固定夹具必然有第一项；非空断言仅供类型检查。
+      ...exercises[0]!,
       id: `ex-${index + 1}`,
       title: `题目 ${index + 1}`,
     }));
@@ -114,6 +115,6 @@ describe("buildPaletteSections", () => {
       exercises: manyExercises,
     });
     expect(sections).toHaveLength(1);
-    expect(sections[0].entries).toHaveLength(5);
+    expect(sections[0]?.entries).toHaveLength(5);
   });
 });

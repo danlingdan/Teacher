@@ -10,7 +10,7 @@ import type { RunnerCapability, RunnerResult } from "../../shared/types";
 import { Button, Dialog, EmptyState, Feedback } from "../../shared/ui";
 import { CodeEditor } from "./EditorPage";
 
-const templates: Record<string, string> = {
+const templates: Record<"JAVA" | "PYTHON" | "C" | "CPP", string> = {
   JAVA: 'public class Main {\n    public static void main(String[] args) {\n        System.out.println("Hello, SQLTeacher");\n    }\n}\n',
   PYTHON: 'print("Hello, SQLTeacher")\n',
   C: '#include <stdio.h>\nint main(void) { puts("Hello, SQLTeacher"); return 0; }\n',
@@ -20,17 +20,11 @@ const templates: Record<string, string> = {
 export function RunnerFlow() {
   const capabilities = useQuery({
     queryKey: ["runner", "capabilities"],
-    queryFn: () =>
-      localAppRequest<{ items: RunnerCapability[] }>("runner.capabilities"),
+    queryFn: () => localAppRequest<{ items: RunnerCapability[] }>("runner.capabilities"),
     staleTime: 30_000,
   });
-  const available = useMemo(
-    () => capabilities.data?.items ?? [],
-    [capabilities.data],
-  );
-  const [language, setLanguage] = useState<"JAVA" | "PYTHON" | "C" | "CPP">(
-    "JAVA",
-  );
+  const available = useMemo(() => capabilities.data?.items ?? [], [capabilities.data]);
+  const [language, setLanguage] = useState<"JAVA" | "PYTHON" | "C" | "CPP">("JAVA");
   const [source, setSource] = useState(templates.JAVA);
   const [input, setInput] = useState("");
   const [result, setResult] = useState<RunnerResult>();
@@ -71,9 +65,7 @@ export function RunnerFlow() {
     },
     onSettled: () => setRequestId(undefined),
   });
-  const [languageSwitch, setLanguageSwitch] = useState<
-    "JAVA" | "PYTHON" | "C" | "CPP"
-  >();
+  const [languageSwitch, setLanguageSwitch] = useState<"JAVA" | "PYTHON" | "C" | "CPP">();
   function applyLanguage(next: "JAVA" | "PYTHON" | "C" | "CPP") {
     setLanguage(next);
     setSource(templates[next]);
@@ -117,10 +109,7 @@ export function RunnerFlow() {
         />
         <label className="stdin-field">
           标准输入
-          <textarea
-            value={input}
-            onChange={(event) => setInput(event.target.value)}
-          />
+          <textarea value={input} onChange={(event) => setInput(event.target.value)} />
         </label>
         <footer className="editor-actions">
           <span>
@@ -132,19 +121,12 @@ export function RunnerFlow() {
             · 源码上限 256 KiB · 输出上限 64 KiB
           </span>
           {run.isPending && requestId && (
-            <Button
-              variant="danger"
-              onClick={() => void cancelLocalAppRequest(requestId)}
-            >
+            <Button variant="danger" onClick={() => void cancelLocalAppRequest(requestId)}>
               取消
             </Button>
           )}
           <Button
-            disabled={
-              !capability?.available ||
-              run.isPending ||
-              source.length > 256 * 1024
-            }
+            disabled={!capability?.available || run.isPending || source.length > 256 * 1024}
             onClick={() => run.mutate()}
           >
             运行实验
@@ -162,17 +144,11 @@ export function RunnerFlow() {
           <>
             <Feedback
               tone={result.failureReason === "NONE" ? "success" : "warning"}
-              title={
-                result.failureReason === "NONE"
-                  ? "运行成功"
-                  : result.failureReason
-              }
+              title={result.failureReason === "NONE" ? "运行成功" : result.failureReason}
             >
               退出码 {result.exitCode}
             </Feedback>
-            <pre>
-              {result.standardOutput || result.standardError || "（无输出）"}
-            </pre>
+            <pre>{result.standardOutput || result.standardError || "（无输出）"}</pre>
           </>
         ) : (
           <Feedback tone="error" title="Runner 失败">

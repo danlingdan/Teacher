@@ -3,7 +3,7 @@ import Editor, { loader } from "@monaco-editor/react";
 import * as monaco from "monaco-editor/editor/editor.api";
 import EditorWorker from "monaco-editor/editor/editor.worker?worker";
 import "monaco-editor/languages/definitions/sql/register";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Button, Dialog, Feedback, FormField, useToast } from "../../shared/ui";
 import { cancelLocalAppRequest, localAppRequest, localAppRequestWithId } from "../../shared/ipc";
@@ -50,7 +50,7 @@ export default function DataSqlPage() {
   const dialectOptions = useConnectionDialects();
   // 命令面板等入口通过 ?connection= 深链到指定连接。
   const [connectionId, setConnectionId] = useState(() => searchParams.get("connection") ?? "");  const [sql, setSql] = useState(initialSql);
-  useEffect(() => { if (!connectionId && connections.data?.items.length) setConnectionId((connections.data.items.find(item => item.selected) ?? connections.data.items[0]).id); }, [connectionId, connections.data]);
+  useEffect(() => { const selected = connections.data?.items.find(item => item.selected) ?? connections.data?.items[0]; if (!connectionId && selected) setConnectionId(selected.id); }, [connectionId, connections.data]);
   // 命令面板深链 ?connection=：页面已挂载时参数变化也要切换连接。
   useEffect(() => {
     const fromUrl = searchParams.get("connection");
@@ -248,7 +248,8 @@ function SqlWorkbench({ connectionId, dialect, tables, sql, onSqlChange }: { con
   const nextPage = useMutation<SqlPage, Error, number>({ mutationFn: next => localAppRequest<SqlPage>("sql.result.page", { resultId: page?.resultId, page: next, pageSize: 50 }), onSuccess: setPage });
   const history = useQuery({ queryKey: ["sql", "history"], queryFn: () => localAppRequest<{ items: SqlHistoryItem[] }>("sql.history", { limit: 30 }), enabled: historyOpen });
   const clearHistory = useMutation({ mutationFn: () => localAppRequest("sql.history.clear", {}), onSuccess: () => { void client.invalidateQueries({ queryKey: ["sql", "history"] }); toast("success", "执行历史已清空"); }, onError: (error: Error) => toast("error", `清空失败：${error.message}`) });
-  const names = tables.flatMap(table => [table.name, ...table.columns.map(column => column.name)]);
+  // names 必须稳定：否则每次 render 都会向 Monaco 注入全新的符号表并触发 effect 重跑。
+  const names = useMemo(() => tables.flatMap(table => [table.name, ...table.columns.map(column => column.name)]), [tables]);
   useEffect(() => { sqlWorkbenchSymbols = names; }, [names]);
   const [editorTheme, syncEditorTheme] = useMonacoEditorTheme();
   return <section className="content-card sql-workbench"><header className="editor-toolbar"><div><p className="eyebrow">执行策略</p><h2>SQL 工作台</h2></div><div className="button-row"><span className="policy-chip">最多 500 行 · 10 秒</span><Button variant="secondary" disabled={!connectionId || !explainSupported || analyze.isPending || execute.isPending || explainPlan.isPending} title={explainSupported ? undefined : "执行计划仅支持 SQLite 连接"} onClick={() => explainPlan.mutate()}>执行计划</Button><Button disabled={!connectionId || analyze.isPending || execute.isPending} onClick={() => analyze.mutate()}>分析并运行</Button></div></header><div className="sql-editor"><Editor height="100%" theme={editorTheme} beforeMount={syncEditorTheme} language="sql" path={`sqlteacher://sql/${connectionId || "none"}`} value={sql} onChange={value => onSqlChange(value ?? "")} options={{ automaticLayout: true, minimap: { enabled: false }, fontFamily: "'Cascadia Code', Consolas, monospace", fontSize: 14, padding: { top: 16 }, scrollBeyondLastLine: false }} /></div>

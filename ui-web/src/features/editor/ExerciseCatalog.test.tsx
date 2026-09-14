@@ -1,10 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type { ExerciseCatalogItem } from "../../shared/types";
-import {
-  ExerciseCatalogPanel,
-  filterCatalogItems,
-} from "./ExerciseCatalog";
+import { ExerciseCatalogPanel, filterCatalogItems } from "./ExerciseCatalog";
 
 function item(overrides: Partial<ExerciseCatalogItem>): ExerciseCatalogItem {
   return {
@@ -60,14 +57,14 @@ describe("ExerciseCatalogPanel", () => {
       />,
     );
 
-    const headers = Array.from(
-      container.querySelectorAll(".catalog-group-title"),
-    ).map((element) => element.textContent);
+    const headers = Array.from(container.querySelectorAll(".catalog-group-title")).map(
+      (element) => element.textContent,
+    );
     expect(headers).toEqual(["入门 · 2 题", "进阶 · 1 题", "高级 · 1 题"]);
     // 未完成的题排在前面，已通过的沉底。
-    const badges = Array.from(
-      container.querySelectorAll(".catalog-badge"),
-    ).map((element) => element.textContent);
+    const badges = Array.from(container.querySelectorAll(".catalog-badge")).map(
+      (element) => element.textContent,
+    );
     expect(badges).toEqual(["未做", "已通过", "未通过", "未做"]);
   });
 
@@ -76,10 +73,7 @@ describe("ExerciseCatalogPanel", () => {
       ...baseFilters,
       difficulty: "BEGINNER",
     });
-    expect(filtered.map((entry) => entry.id)).toEqual([
-      "query-01",
-      "filter-01",
-    ]);
+    expect(filtered.map((entry) => entry.id)).toEqual(["query-01", "filter-01"]);
 
     const passedOnly = filterCatalogItems(catalogItems, {
       ...baseFilters,

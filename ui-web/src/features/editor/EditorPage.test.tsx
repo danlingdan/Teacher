@@ -64,7 +64,8 @@ const KEY_F1 = 32;
 
 vi.mock("@monaco-editor/react", () => ({
   loader: { config: vi.fn() },
-  default: (props: MonacoMockProps) => {
+  // 命名函数表达式让 react-hooks 规则识别这是组件，mock 仍以 default 导出。
+  default: function MonacoEditorMock(props: MonacoMockProps) {
     const mountedRef = useRef(false);
     monacoTest.latest.onChange = props.onChange;
     useEffect(() => {
@@ -131,9 +132,7 @@ function renderEditorPage() {
 async function openSession() {
   renderEditorPage();
   fireEvent.click(await screen.findByRole("button", { name: /查询练习/ }));
-  fireEvent.click(
-    await screen.findByRole("button", { name: "确认并开始作答" }),
-  );
+  fireEvent.click(await screen.findByRole("button", { name: "确认并开始作答" }));
   await screen.findByText(/Ctrl\+Enter 运行/);
   expect(monacoTest.commands.get(KEY_CTRL_ENTER)).toBeDefined();
 }
@@ -144,8 +143,7 @@ describe("EditorPage CodeEditor shortcuts", () => {
     monacoTest.latest.onChange = undefined;
     requestMock.mockReset();
     requestMock.mockImplementation((method: string) => {
-      if (method === "practice.catalog")
-        return Promise.resolve({ items: [exerciseView] });
+      if (method === "practice.catalog") return Promise.resolve({ items: [exerciseView] });
       if (method === "practice.preview") return Promise.resolve(exerciseView);
       if (method === "practice.start")
         return Promise.resolve({
@@ -258,27 +256,26 @@ describe("EditorPage CodeEditor shortcuts", () => {
           specification: { language: "PYTHON", starterCode: "" },
         });
       }
-      if (method === "activity.submit") return Promise.resolve({
-        sessionId: "s-act",
-        evaluationId: "ev-1",
-        occurredAt: "2026-09-09T00:00:00Z",
-        evaluation: {
-          status: "PASSED",
-          passed: true,
-          summary: "通过",
-          reasonCode: "OK",
-          criteria: [],
-        },
-      });
+      if (method === "activity.submit")
+        return Promise.resolve({
+          sessionId: "s-act",
+          evaluationId: "ev-1",
+          occurredAt: "2026-09-09T00:00:00Z",
+          evaluation: {
+            status: "PASSED",
+            passed: true,
+            summary: "通过",
+            reasonCode: "OK",
+            criteria: [],
+          },
+        });
       return Promise.reject(new Error(`Unexpected request: ${method}`));
     });
     renderEditorPage();
 
     fireEvent.click(screen.getByRole("button", { name: "课程活动" }));
     fireEvent.click(await screen.findByRole("button", { name: /编码活动/ }));
-    fireEvent.click(
-      await screen.findByRole("button", { name: "确认并开始活动" }),
-    );
+    fireEvent.click(await screen.findByRole("button", { name: "确认并开始活动" }));
     expect(await screen.findByText(/运行并评价/)).toBeInTheDocument();
     expect(monacoTest.commands.get(KEY_CTRL_ENTER)).toBeDefined();
 
@@ -315,16 +312,13 @@ describe("EditorPage CodeEditor shortcuts", () => {
     const catalogCallsWithQuery = () =>
       requestMock.mock.calls.filter(
         ([method, params]) =>
-          method === "practice.catalog" &&
-          (params as { q?: string } | undefined)?.q === "连接",
+          method === "practice.catalog" && (params as { q?: string } | undefined)?.q === "连接",
       );
     expect(catalogCallsWithQuery()).toHaveLength(0);
 
     // 防抖结束后按最终词只查一次，并重置回第一页。
-    await waitFor(() =>
-      expect(catalogCallsWithQuery()).toHaveLength(1),
-    );
-    expect(catalogCallsWithQuery()[0][1]).toEqual(
+    await waitFor(() => expect(catalogCallsWithQuery()).toHaveLength(1));
+    expect(catalogCallsWithQuery()[0]?.[1]).toEqual(
       expect.objectContaining({ q: "连接", page: 0 }),
     );
   });
@@ -353,10 +347,8 @@ describe("EditorPage CodeEditor shortcuts", () => {
 
   it("shows writable guidance with reset for STATE exercises", async () => {
     requestMock.mockImplementation((method: string) => {
-      if (method === "practice.catalog")
-        return Promise.resolve({ items: [stateExerciseView] });
-      if (method === "practice.preview")
-        return Promise.resolve(stateExerciseView);
+      if (method === "practice.catalog") return Promise.resolve({ items: [stateExerciseView] });
+      if (method === "practice.preview") return Promise.resolve(stateExerciseView);
       if (method === "practice.start")
         return Promise.resolve({
           id: "session-2",
@@ -370,15 +362,11 @@ describe("EditorPage CodeEditor shortcuts", () => {
     renderEditorPage();
 
     fireEvent.click(await screen.findByRole("button", { name: /写操作练习/ }));
-    fireEvent.click(
-      await screen.findByRole("button", { name: "确认并开始作答" }),
-    );
+    fireEvent.click(await screen.findByRole("button", { name: "确认并开始作答" }));
 
     const guidance = await screen.findAllByText(/本题修改沙盒数据/);
     expect(guidance.length).toBeGreaterThan(0);
     expect(screen.getByRole("button", { name: "重置练习" })).toBeEnabled();
-    expect(
-      screen.getByRole("button", { name: "提交评价" }),
-    ).toBeEnabled();
+    expect(screen.getByRole("button", { name: "提交评价" })).toBeEnabled();
   });
 });
