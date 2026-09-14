@@ -152,8 +152,9 @@ mvn -q test "-Dtest=RelevantTest"
 mvn -q test "-Dtest=FirstTest,SecondTest"
 mvn -q test -Pfast
 mvn test
-mvn -q exec:java "-Dexec.mainClass=com.sqlteacher.TechnologyVerificationApp"
-mvn -q exec:java "-Dexec.mainClass=com.sqlteacher.StageOneVerificationApp"
+mvn -q exec:java "-Dexec.classpathScope=test" "-Dexec.mainClass=com.sqlteacher.TechnologyVerificationApp"
+mvn -q exec:java "-Dexec.classpathScope=test" "-Dexec.mainClass=com.sqlteacher.ReleaseVerificationApp"
+
 npm --prefix ui-web test
 npm --prefix ui-web run build
 ./packaging/package-v3.ps1

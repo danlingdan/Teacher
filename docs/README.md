@@ -44,7 +44,7 @@ plans（计划与范围）
 
 ## 历史资料
 
-Stage 0 至 Stage 28 和早期五人协作方案已集中到 [history/](history/README.md)。`desktop/` 仅保留旧 JavaFX 设计证据，
+Stage 0 至 Stage 29 和早期五人协作方案已集中到 [history/](history/README.md)。`desktop/` 仅保留旧 JavaFX 设计证据，
 不再描述当前架构。这些资料用于追溯实现和决策；当前开发和交付规则以仓库根目录的 [AGENTS.md](../AGENTS.md) 与当前代码为准。
 
 ## 维护规则

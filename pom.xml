@@ -171,7 +171,7 @@
                         <manifest>
                             <addClasspath>true</addClasspath>
                             <classpathPrefix>lib/</classpathPrefix>
-                            <mainClass>com.sqlteacher.TechnologyVerificationApp</mainClass>
+                            <mainClass>com.sqlteacher.desktop.bridge.LocalAppHost</mainClass>
                         </manifest>
                         <manifestEntries>
                             <Implementation-Title>SQLTeacher</Implementation-Title>

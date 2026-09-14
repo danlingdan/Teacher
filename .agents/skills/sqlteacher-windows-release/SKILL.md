@@ -28,7 +28,11 @@ When publication is authorized, use the repository's solo workflow on `main`; do
 
 ## Publish and verify
 
-When authorized, commit the version and documentation together, push `main`, create and push the matching `vX.Y.Z` tag, then follow the triggered GitHub Actions run. Verify that the workflow tests, packages, signs the stable update manifest, uploads the expected assets, and publishes a non-draft, non-prerelease Release marked latest.
+When authorized, commit the version and documentation together, push `main`, create and push the matching `vX.Y.Z` tag, then follow the triggered GitHub Actions run. Verify that the workflow tests, packages, signs the stable update manifest, uploads the expected assets, and publishes a non-draft, non-prerelease Release marked latest. Before the release announcement is finished, complete the release write-back checklist (v3.4.0 DOC-8/DOC-9; both historical drift incidents trace to missing this step):
+
+- Update the docs baseline set: `docs/README.md` "当前基线", `docs/releases/README.md` header status, the release note's date line (replace any "未发布/本地候选" wording with the actual publish date), and the matching `docs/plans/README.md` status column.
+- Update the GitHub Release page itself: the body must carry the full changelog sourced from `docs/releases/vX.Y.Z.md`, the status line must show the real date (a published page must never say "未发布"), and "Latest" must point at the new version. Fix earlier published pages the same way if they still carry candidate wording.
+- Run the pre-release verification app as part of local gates: `mvn -q exec:java "-Dexec.classpathScope=test" "-Dexec.mainClass=com.sqlteacher.ReleaseVerificationApp"`.
 
 Verify remote metadata and asset names by default. Do not download remote Java artifacts solely to compare hashes unless the user requests that comparison.
 
