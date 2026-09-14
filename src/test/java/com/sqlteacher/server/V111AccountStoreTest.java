@@ -27,7 +27,7 @@ class V111AccountStoreTest {
     @TempDir Path directory;
 
     private V111AccountStore newStore() throws Exception {
-        return new V111AccountStore(directory.resolve("cloud.db"), new FileMailSender(directory));
+        return new V111AccountStore(directory.resolve("cloud.db"), new FileMailSender(directory), null);
     }
 
     private String insertUser(java.sql.Connection connection, String id, String email) throws Exception {

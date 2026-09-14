@@ -113,7 +113,10 @@ public final class SqlTeacherCloudServer {
         this.v14Store = new V14CloudStore(databasePath);
         this.v19Store = new V19CloudStore(databasePath);
         this.v110SupportStore = new V110SupportStore(databasePath);
-        this.v111AccountStore = new V111AccountStore(databasePath, new FileMailSender(mailDirectory));
+        // 公开 base URL 可注入：测试/演练环境配置 SQLTEACHER_PUBLIC_BASE_URL 后，
+        // 验证/重置邮件不再指向生产域名（v3.4.0 REF-6）。
+        this.v111AccountStore = new V111AccountStore(databasePath, new FileMailSender(mailDirectory),
+            System.getenv("SQLTEACHER_PUBLIC_BASE_URL"));
         this.v31BankStore = new V31ExerciseBankStore(databasePath);
         this.knowledgeIndex = CloudKnowledgeIndexService.fromEnvironment(v14Store);
         String bootstrapEmail = System.getenv("SQLTEACHER_CLOUD_BOOTSTRAP_ADMIN_EMAIL");

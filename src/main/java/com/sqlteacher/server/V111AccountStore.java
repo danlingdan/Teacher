@@ -22,6 +22,7 @@ import java.util.HexFormat;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
 import javax.crypto.SecretKeyFactory;
 import javax.crypto.spec.PBEKeySpec;
@@ -49,11 +50,14 @@ final class V111AccountStore {
     private final String url;
     private final SecureRandom random = new SecureRandom();
     private final MailSender mail;
+    private final String publicBaseUrl;
     private final AuthRateLimiter verificationMailLimiter = new AuthRateLimiter();
 
-    V111AccountStore(java.nio.file.Path database, MailSender mail) throws SQLException {
+    V111AccountStore(java.nio.file.Path database, MailSender mail, String publicBaseUrl) throws SQLException {
         url = "jdbc:sqlite:" + database.toAbsolutePath().normalize();
         this.mail = mail;
+        this.publicBaseUrl = Objects.requireNonNullElse(
+            publicBaseUrl, "https://api.sqlteacher.tech");
         initialize();
     }
 
@@ -110,7 +114,7 @@ final class V111AccountStore {
             statement.setString(5, now.toString()); statement.setString(6, now.plus(30, ChronoUnit.MINUTES).toString());
             statement.executeUpdate();
         } catch (SQLException error) { throw database(error); }
-        mail.send(email, "SQLTeacher 邮箱验证", "验证链接（30 分钟内有效，仅限一次）：\nhttps://api.sqlteacher.tech/verify-email?token=" + token);
+        mail.send(email, "SQLTeacher 邮箱验证", "验证链接（30 分钟内有效，仅限一次）：\n" + publicBaseUrl + "/verify-email?token=" + token);
     }
 
     void confirmEmailVerification(String token) {
@@ -176,7 +180,7 @@ final class V111AccountStore {
             statement.setBytes(3, tokenHash(token)); statement.setString(4, now.toString());
             statement.setString(5, now.plus(RESET_TOKEN_MINUTES, ChronoUnit.MINUTES).toString()); statement.executeUpdate();
         } catch (SQLException error) { throw database(error); }
-        mail.send(normalized, "SQLTeacher 密码重置", "重置链接（30 分钟内有效，仅限一次）：\nhttps://api.sqlteacher.tech/reset-password?token=" + token);
+        mail.send(normalized, "SQLTeacher 密码重置", "重置链接（30 分钟内有效，仅限一次）：\n" + publicBaseUrl + "/reset-password?token=" + token);
     }
 
     void resetPassword(String token, char[] newPassword) {
