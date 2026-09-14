@@ -1,6 +1,5 @@
 package com.sqlteacher.infrastructure.database;
 
-import com.sqlteacher.application.config.DatabaseConfiguration;
 import com.sqlteacher.application.event.LearningEvent;
 import com.sqlteacher.application.event.LearningEventRecorder;
 import com.sqlteacher.application.event.LearningEventType;
@@ -27,13 +26,7 @@ class JdbcLearningEventQueryServiceTest {
 
     @Test
     void shouldQueryEventsByType(@TempDir Path tempDirectory) throws Exception {
-        DatabaseConfiguration configuration = new DatabaseConfiguration(
-            tempDirectory.resolve("app.db"),
-            tempDirectory.resolve("demo.db")
-        );
-
-        JdbcConnectionFactory connectionFactory = new JdbcConnectionFactory(configuration);
-        initializeAppDatabase(tempDirectory.resolve("app.db"));
+        JdbcConnectionFactory connectionFactory = TestDatabases.migratedFactory(tempDirectory);
 
         LearningEventRecorder recorder = new JdbcLearningEventRecorder(connectionFactory);
         LearningEventQueryService queryService = new JdbcLearningEventQueryService(connectionFactory);
@@ -81,13 +74,7 @@ class JdbcLearningEventQueryServiceTest {
 
     @Test
     void shouldQueryEventsByConnection(@TempDir Path tempDirectory) throws Exception {
-        DatabaseConfiguration configuration = new DatabaseConfiguration(
-            tempDirectory.resolve("app.db"),
-            tempDirectory.resolve("demo.db")
-        );
-
-        JdbcConnectionFactory connectionFactory = new JdbcConnectionFactory(configuration);
-        initializeAppDatabase(tempDirectory.resolve("app.db"));
+        JdbcConnectionFactory connectionFactory = TestDatabases.migratedFactory(tempDirectory);
 
         LearningEventRecorder recorder = new JdbcLearningEventRecorder(connectionFactory);
         LearningEventQueryService queryService = new JdbcLearningEventQueryService(connectionFactory);
@@ -133,13 +120,7 @@ class JdbcLearningEventQueryServiceTest {
 
     @Test
     void shouldQueryEventsWithTimeRange(@TempDir Path tempDirectory) throws Exception {
-        DatabaseConfiguration configuration = new DatabaseConfiguration(
-            tempDirectory.resolve("app.db"),
-            tempDirectory.resolve("demo.db")
-        );
-
-        JdbcConnectionFactory connectionFactory = new JdbcConnectionFactory(configuration);
-        initializeAppDatabase(tempDirectory.resolve("app.db"));
+        JdbcConnectionFactory connectionFactory = TestDatabases.migratedFactory(tempDirectory);
 
         LearningEventRecorder recorder = new JdbcLearningEventRecorder(connectionFactory);
         LearningEventQueryService queryService = new JdbcLearningEventQueryService(connectionFactory);
@@ -194,13 +175,7 @@ class JdbcLearningEventQueryServiceTest {
 
     @Test
     void shouldGetEventStatistics(@TempDir Path tempDirectory) throws Exception {
-        DatabaseConfiguration configuration = new DatabaseConfiguration(
-            tempDirectory.resolve("app.db"),
-            tempDirectory.resolve("demo.db")
-        );
-
-        JdbcConnectionFactory connectionFactory = new JdbcConnectionFactory(configuration);
-        initializeAppDatabase(tempDirectory.resolve("app.db"));
+        JdbcConnectionFactory connectionFactory = TestDatabases.migratedFactory(tempDirectory);
 
         LearningEventRecorder recorder = new JdbcLearningEventRecorder(connectionFactory);
         LearningEventQueryService queryService = new JdbcLearningEventQueryService(connectionFactory);
@@ -255,13 +230,7 @@ class JdbcLearningEventQueryServiceTest {
 
     @Test
     void shouldParseAttributesCorrectly(@TempDir Path tempDirectory) throws Exception {
-        DatabaseConfiguration configuration = new DatabaseConfiguration(
-            tempDirectory.resolve("app.db"),
-            tempDirectory.resolve("demo.db")
-        );
-
-        JdbcConnectionFactory connectionFactory = new JdbcConnectionFactory(configuration);
-        initializeAppDatabase(tempDirectory.resolve("app.db"));
+        JdbcConnectionFactory connectionFactory = TestDatabases.migratedFactory(tempDirectory);
 
         LearningEventRecorder recorder = new JdbcLearningEventRecorder(connectionFactory);
         LearningEventQueryService queryService = new JdbcLearningEventQueryService(connectionFactory);
@@ -294,12 +263,7 @@ class JdbcLearningEventQueryServiceTest {
 
     @Test
     void shouldRejectInvertedTimeRange(@TempDir Path tempDirectory) throws Exception {
-        DatabaseConfiguration configuration = new DatabaseConfiguration(
-                tempDirectory.resolve("app.db"),
-                tempDirectory.resolve("demo.db")
-        );
-        JdbcConnectionFactory connectionFactory = new JdbcConnectionFactory(configuration);
-        initializeAppDatabase(tempDirectory.resolve("app.db"));
+        JdbcConnectionFactory connectionFactory = TestDatabases.migratedFactory(tempDirectory);
         LearningEventQueryService queryService = new JdbcLearningEventQueryService(connectionFactory);
         Instant start = Instant.parse("2026-07-20T02:00:00Z");
         Instant end = Instant.parse("2026-07-20T01:00:00Z");
@@ -314,13 +278,7 @@ class JdbcLearningEventQueryServiceTest {
 
     @Test
     void shouldReturnEmptyListWhenNoEvents(@TempDir Path tempDirectory) throws Exception {
-        DatabaseConfiguration configuration = new DatabaseConfiguration(
-            tempDirectory.resolve("app.db"),
-            tempDirectory.resolve("demo.db")
-        );
-
-        JdbcConnectionFactory connectionFactory = new JdbcConnectionFactory(configuration);
-        initializeAppDatabase(tempDirectory.resolve("app.db"));
+        JdbcConnectionFactory connectionFactory = TestDatabases.migratedFactory(tempDirectory);
 
         LearningEventQueryService queryService = new JdbcLearningEventQueryService(connectionFactory);
 
@@ -337,9 +295,5 @@ class JdbcLearningEventQueryServiceTest {
         assertEquals(0, stats.failedEvents());
         assertTrue(stats.eventsByType().isEmpty());
         assertTrue(stats.eventsByConnection().isEmpty());
-    }
-
-    private static void initializeAppDatabase(Path databasePath) throws Exception {
-        new SqliteSchemaMigrator().migrate(databasePath);
     }
 }

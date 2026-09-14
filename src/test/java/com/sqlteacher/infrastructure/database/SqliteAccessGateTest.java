@@ -8,6 +8,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -88,6 +89,7 @@ class SqliteAccessGateTest {
         CountDownLatch writerInside = new CountDownLatch(1);
         CountDownLatch releaseWriter = new CountDownLatch(1);
         AtomicBoolean readerAdmitted = new AtomicBoolean(false);
+        AtomicReference<Thread> readerThread = new AtomicReference<>();
         ExecutorService executor = Executors.newFixedThreadPool(2);
         var writer = executor.submit(() -> gate.exclusively(() -> {
             writerInside.countDown();
@@ -99,11 +101,14 @@ class SqliteAccessGateTest {
             return null;
         }));
         assertTrue(writerInside.await(10, TimeUnit.SECONDS));
-        var reader = executor.submit(() -> gate.shared(() -> {
-            readerAdmitted.set(true);
-            return null;
-        }));
-        Thread.sleep(100);
+        var reader = executor.submit(() -> {
+            readerThread.set(Thread.currentThread());
+            return gate.shared(() -> {
+                readerAdmitted.set(true);
+                return null;
+            });
+        });
+        awaitReaderQueuedBehindWriter(readerThread);
         assertFalse(readerAdmitted.get());
         releaseWriter.countDown();
         reader.get(10, TimeUnit.SECONDS);
@@ -111,5 +116,23 @@ class SqliteAccessGateTest {
         executor.shutdown();
         assertTrue(executor.awaitTermination(10, TimeUnit.SECONDS));
         assertTrue(readerAdmitted.get());
+    }
+
+    /**
+     * Deterministic replacement for a fixed sleep: once the reader thread is parked waiting for
+     * the read lock (its only timed wait on this path) while the writer still holds the gate, the
+     * reader is provably queued and cannot be admitted until the writer releases.
+     */
+    private static void awaitReaderQueuedBehindWriter(AtomicReference<Thread> readerThread)
+            throws InterruptedException {
+        long deadlineNanos = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+        while (System.nanoTime() < deadlineNanos) {
+            Thread reader = readerThread.get();
+            if (reader != null && reader.getState() == Thread.State.TIMED_WAITING) {
+                return;
+            }
+            Thread.sleep(1);
+        }
+        throw new AssertionError("Reader never queued behind the exclusive writer");
     }
 }

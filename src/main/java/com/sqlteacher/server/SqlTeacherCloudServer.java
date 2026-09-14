@@ -52,6 +52,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
@@ -97,8 +98,18 @@ public final class SqlTeacherCloudServer {
     }
 
     SqlTeacherCloudServer(Path databasePath, int port, Path mailDirectory) throws IOException, SQLException {
+        this(databasePath, port, mailDirectory, Clock.systemUTC());
+    }
+
+    /** Test overload: fixes the classroom-store time source so deadline behavior is deterministic. */
+    SqlTeacherCloudServer(Path databasePath, int port, Clock clock) throws IOException, SQLException {
+        this(databasePath, port, databasePath.getParent() == null ? Path.of(".") : databasePath.getParent(), clock);
+    }
+
+    SqlTeacherCloudServer(Path databasePath, int port, Path mailDirectory, Clock clock)
+            throws IOException, SQLException {
         this.authStore = new CloudAuthenticationStore(databasePath);
-        this.classroomStore = new CloudClassroomStore(databasePath);
+        this.classroomStore = new CloudClassroomStore(databasePath, clock);
         this.adminStore = new CloudAdministrationStore(databasePath);
         this.v14Store = new V14CloudStore(databasePath);
         this.v19Store = new V19CloudStore(databasePath);

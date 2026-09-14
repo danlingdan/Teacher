@@ -27,8 +27,7 @@ class JdbcAssignmentDeliveryServiceTest {
 
     @Test
     void shouldPersistRetryAcrossRestartAndIsolateAccounts() throws Exception {
-        Path database = directory.resolve("app.db");
-        new SqliteSchemaMigrator().migrate(database);
+        Path database = TestDatabases.migratedAppDatabase(directory);
         MutableSessions sessions = new MutableSessions(session("student-1"));
         FailingSubmissionApi api = new FailingSubmissionApi();
         var service = new JdbcAssignmentDeliveryService(api, sessions, database);
@@ -56,8 +55,7 @@ class JdbcAssignmentDeliveryServiceTest {
 
     @Test
     void shouldNotQueuePermanentServerRejection() throws Exception {
-        Path database = directory.resolve("rejected.db");
-        new SqliteSchemaMigrator().migrate(database);
+        Path database = TestDatabases.migratedDatabase(directory.resolve("rejected.db"));
         MutableSessions sessions = new MutableSessions(session("student-1"));
         FailingSubmissionApi api = new FailingSubmissionApi();
         api.available = true;

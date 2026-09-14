@@ -13,7 +13,10 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.file.Path;
 import java.sql.DriverManager;
+import java.time.Clock;
 import java.time.Instant;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
@@ -211,7 +214,8 @@ class SqlTeacherCloudServerTest {
 
     @Test
     void shouldRecordIdempotentStudentSubmissionsAndEnforceServerState() throws Exception {
-        Path database = start();
+        SettableClock clock = new SettableClock(Instant.now());
+        Path database = start(clock);
         JsonNode teacher = register("submit-teacher@example.edu", "Submit Teacher");
         JsonNode student = register("submit-student@example.edu", "Submit Student");
         JsonNode outsider = register("submit-outsider@example.edu", "Submit Outsider");
@@ -246,7 +250,7 @@ class SqlTeacherCloudServerTest {
         assertEquals(2, JSON.readTree(getText(submissionPath, studentToken)).get("submissions").size());
 
         server.stop();
-        server = new SqlTeacherCloudServer(database, 0);
+        server = new SqlTeacherCloudServer(database, 0, clock);
         server.start();
         JsonNode duplicateAfterRestart = post(submissionPath, studentToken, firstBody);
         assertEquals(first.get("id").asText(), duplicateAfterRestart.get("id").asText());
@@ -293,13 +297,14 @@ class SqlTeacherCloudServerTest {
         JsonNode deadlineAssignment = post("classes/" + classroomId + "/assignments", teacherToken,
             JSON.writeValueAsString(java.util.Map.of(
                 "exerciseId", "deadline", "title", "Deadline task", "status", "PUBLISHED",
-                "dueAt", Instant.now().plusSeconds(1).toString())));
-        Thread.sleep(1_100);
+                "dueAt", clock.instant().plusSeconds(1).toString())));
+        // Advance the injected server clock past the deadline instead of sleeping for it.
+        clock.advanceSeconds(2);
         HttpResponse<String> lateSubmission = send("POST", "classes/" + classroomId + "/assignments/"
             + deadlineAssignment.get("id").asText() + "/submissions", studentToken,
             JSON.writeValueAsString(java.util.Map.of(
                 "operationId", "operation-0006", "passed", true, "resultHash", "f".repeat(64),
-                "clientCompletedAt", Instant.now().minusSeconds(60).toString())));
+                "clientCompletedAt", clock.instant().minusSeconds(60).toString())));
         assertEquals(409, lateSubmission.statusCode());
         assertEquals("ASSIGNMENT_CLOSED", JSON.readTree(lateSubmission.body()).get("code").asText());
     }
@@ -603,10 +608,31 @@ class SqlTeacherCloudServerTest {
     }
 
     private Path start() throws Exception {
+        return start(Clock.systemUTC());
+    }
+
+    private Path start(Clock clock) throws Exception {
         Path database = directory.resolve("cloud.db");
-        server = new SqlTeacherCloudServer(database, 0);
+        server = new SqlTeacherCloudServer(database, 0, clock);
         server.start();
         return database;
+    }
+
+    /** Controllable server clock: deadline tests advance time instead of sleeping for it. */
+    private static final class SettableClock extends Clock {
+        private volatile Instant now;
+
+        SettableClock(Instant now) {
+            this.now = now;
+        }
+
+        void advanceSeconds(long seconds) {
+            now = now.plusSeconds(seconds);
+        }
+
+        @Override public ZoneId getZone() { return ZoneOffset.UTC; }
+        @Override public Clock withZone(ZoneId zone) { throw new UnsupportedOperationException(); }
+        @Override public Instant instant() { return now; }
     }
 
     private JsonNode register(String email, String name) throws Exception {

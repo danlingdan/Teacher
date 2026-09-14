@@ -11,7 +11,9 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Clock;
 import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.Optional;
 import java.util.Set;
 
@@ -21,13 +23,16 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @Tag("integration")
 class PersistentCloudSessionServiceTest {
+    /** Fixed reference time: expiry is decided by the injected clock, not the wall clock. */
+    private static final Instant NOW = Instant.parse("2026-09-01T12:00:00Z");
+
     @TempDir Path temporaryDirectory;
 
     @Test
     void shouldRestoreAnUnexpiredSession() {
-        MemoryStore store = new MemoryStore(sessionAt(Instant.now().plusSeconds(300)));
+        MemoryStore store = new MemoryStore(sessionAt(NOW.plusSeconds(300)));
 
-        var sessions = new PersistentCloudSessionService(store, new NoOpCloudApi());
+        var sessions = new PersistentCloudSessionService(store, new NoOpCloudApi(), clockAt(NOW));
 
         assertTrue(sessions.current().isPresent());
         assertEquals("user-1", sessions.current().orElseThrow().user().id());
@@ -35,9 +40,9 @@ class PersistentCloudSessionServiceTest {
 
     @Test
     void shouldKeepAnExpiredSessionAvailableForRefresh() {
-        MemoryStore store = new MemoryStore(sessionAt(Instant.now().minusSeconds(1)));
+        MemoryStore store = new MemoryStore(sessionAt(NOW.minusSeconds(1)));
 
-        var sessions = new PersistentCloudSessionService(store, new NoOpCloudApi());
+        var sessions = new PersistentCloudSessionService(store, new NoOpCloudApi(), clockAt(NOW));
 
         assertFalse(sessions.current().isPresent());
         assertFalse(store.cleared);
@@ -46,9 +51,9 @@ class PersistentCloudSessionServiceTest {
     @Test
     void shouldPersistSignInAndClearSignOut() {
         MemoryStore store = new MemoryStore(null);
-        var sessions = new PersistentCloudSessionService(store, new NoOpCloudApi());
+        var sessions = new PersistentCloudSessionService(store, new NoOpCloudApi(), clockAt(NOW));
 
-        sessions.signIn(sessionAt(Instant.now().plusSeconds(300)));
+        sessions.signIn(sessionAt(NOW.plusSeconds(300)));
         sessions.signOut();
 
         assertEquals(1, store.saved);
@@ -57,13 +62,13 @@ class PersistentCloudSessionServiceTest {
 
     @Test
     void shouldRotateAndPersistAnExpiringSession() {
-        var base = sessionAt(Instant.now().plusSeconds(30));
+        var base = sessionAt(NOW.plusSeconds(30));
         var expiring = new CloudAuthenticationService.Session(base.accessToken(), base.expiresAt(),
             base.user(), "old-refresh");
-        var rotated = new CloudAuthenticationService.Session("rotated-access", Instant.now().plusSeconds(3_600),
+        var rotated = new CloudAuthenticationService.Session("rotated-access", NOW.plusSeconds(3_600),
             expiring.user(), "rotated-refresh");
         MemoryStore store = new MemoryStore(expiring);
-        var sessions = new PersistentCloudSessionService(store, new RefreshingCloudApi(rotated));
+        var sessions = new PersistentCloudSessionService(store, new RefreshingCloudApi(rotated), clockAt(NOW));
 
         var refreshed = sessions.refresh().orElseThrow();
 
@@ -78,8 +83,8 @@ class PersistentCloudSessionServiceTest {
         Path file = temporaryDirectory.resolve("cloud-session.dat");
         var store = new WindowsDpapiCloudSessionStore(file);
         var session = new CloudAuthenticationService.Session("secret-access",
-            Instant.ofEpochMilli(Instant.now().plusSeconds(300).toEpochMilli()),
-            sessionAt(Instant.now().plusSeconds(300)).user(), "secret-refresh");
+            NOW.plusSeconds(300),
+            sessionAt(NOW.plusSeconds(300)).user(), "secret-refresh");
 
         store.save(session);
 
@@ -88,6 +93,10 @@ class PersistentCloudSessionServiceTest {
         assertFalse(encrypted.contains("secret-access"));
         assertFalse(encrypted.contains("secret-refresh"));
         assertEquals(session, store.load().orElseThrow());
+    }
+
+    private static Clock clockAt(Instant instant) {
+        return Clock.fixed(instant, ZoneOffset.UTC);
     }
 
     private static CloudAuthenticationService.Session sessionAt(Instant expiresAt) {

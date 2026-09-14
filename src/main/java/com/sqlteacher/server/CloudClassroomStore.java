@@ -30,11 +30,13 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
 
 /**
@@ -54,8 +56,16 @@ final class CloudClassroomStore extends CloudStoreBase implements ClassroomServi
         + "attempt_number,status,result_hash,error_code,client_completed_at,submitted_at";
     private static final int MAX_SYNC_ITEM_PAYLOAD_BYTES = 16_384;
 
+    private final Clock clock;
+
     CloudClassroomStore(Path database) throws SQLException, IOException {
+        this(database, Clock.systemUTC());
+    }
+
+    /** Test overload: makes the classroom time source injectable without changing behavior. */
+    CloudClassroomStore(Path database, Clock clock) throws SQLException, IOException {
         super(database);
+        this.clock = Objects.requireNonNull(clock, "clock must not be null");
     }
 
     /** Rejects one sync item whose payloadJson exceeds the advertised per-item limit. */
@@ -69,7 +79,7 @@ final class CloudClassroomStore extends CloudStoreBase implements ClassroomServi
         if (!(actor.hasRole(UserRole.TEACHER) || actor.hasRole(UserRole.ADMIN))) throw new SecurityException("teacher role required");
         if (name == null || name.isBlank() || name.length() > 100) throw new IllegalArgumentException("name must be 1 to 100 characters");
         String id = UUID.randomUUID().toString();
-        Instant now = Instant.now();
+        Instant now = clock.instant();
         try (Connection connection = open();
              PreparedStatement classroom = connection.prepareStatement("insert into classrooms(id,name,created_at) values(?,?,?)");
              PreparedStatement member = connection.prepareStatement("insert into classroom_members(classroom_id,user_id,role) values(?,?,?)")) {
@@ -174,7 +184,7 @@ final class CloudClassroomStore extends CloudStoreBase implements ClassroomServi
             throw new IllegalArgumentException("New assignments must be DRAFT or PUBLISHED");
         }
         String id = UUID.randomUUID().toString();
-        Instant now = Instant.now();
+        Instant now = clock.instant();
         Instant publishedAt = status == AssignmentStatus.PUBLISHED ? now : null;
         try (Connection connection = open(); PreparedStatement statement = connection.prepareStatement(
             "insert into class_assignments(id,classroom_id,exercise_id,title,description,created_at,status,"
@@ -203,7 +213,7 @@ final class CloudClassroomStore extends CloudStoreBase implements ClassroomServi
             ClassAssignment source = assignment(connection, classroomId, assignmentId);
             requireVersion(source, expectedVersion);
             String id = UUID.randomUUID().toString();
-            Instant now = Instant.now();
+            Instant now = clock.instant();
             Instant copiedDueAt = source.dueAt() != null && source.dueAt().isAfter(now) ? source.dueAt() : null;
             String copiedTitle = source.title().length() <= 153 ? source.title() + " (copy)" : source.title();
             try (PreparedStatement statement = connection.prepareStatement(
@@ -229,14 +239,14 @@ final class CloudClassroomStore extends CloudStoreBase implements ClassroomServi
     ClassAssignment setAssignmentDueAt(AuthenticatedUser actor, String classroomId, String assignmentId,
                                        Instant dueAt, long expectedVersion) {
         requireTeacher(actor, classroomId);
-        if (dueAt == null || !dueAt.isAfter(Instant.now())) {
+        if (dueAt == null || !dueAt.isAfter(clock.instant())) {
             throw new IllegalArgumentException("dueAt must be in the future");
         }
         try (Connection connection = open()) {
             ClassAssignment current = assignment(connection, classroomId, assignmentId);
             requireEditable(current);
             requireVersion(current, expectedVersion);
-            Instant now = Instant.now();
+            Instant now = clock.instant();
             try (PreparedStatement statement = connection.prepareStatement(
                 "update class_assignments set due_at=?,updated_at=?,version=version+1 "
                     + "where id=? and classroom_id=? and version=?")) {
@@ -257,7 +267,7 @@ final class CloudClassroomStore extends CloudStoreBase implements ClassroomServi
                                             AssignmentStatus status, long expectedVersion) {
         requireTeacher(actor, classroomId);
         if (status == null) throw new IllegalArgumentException("status must not be null");
-        Instant now = Instant.now();
+        Instant now = clock.instant();
         try (Connection connection = open()) {
             ClassAssignment current = assignment(connection, classroomId, assignmentId);
             requireVersion(current, expectedVersion);
@@ -297,7 +307,7 @@ final class CloudClassroomStore extends CloudStoreBase implements ClassroomServi
                 statement.setString(1, title.trim());
                 statement.setString(2, normalizeDescription(description));
                 statement.setString(3, dueAt == null ? null : dueAt.toString());
-                statement.setString(4, Instant.now().toString());
+                statement.setString(4, clock.instant().toString());
                 statement.setString(5, assignmentId);
                 statement.setString(6, classroomId);
                 statement.setLong(7, expectedVersion);
@@ -345,7 +355,7 @@ final class CloudClassroomStore extends CloudStoreBase implements ClassroomServi
     }
 
     private void closeExpiredAssignments(String classroomId) {
-        Instant now = Instant.now();
+        Instant now = clock.instant();
         try (Connection connection = open(); PreparedStatement statement = connection.prepareStatement(
             "update class_assignments set status='CLOSED',updated_at=?,version=version+1 "
                 + "where classroom_id=? and status='PUBLISHED' and due_at is not null and due_at<=?")) {
@@ -371,7 +381,7 @@ final class CloudClassroomStore extends CloudStoreBase implements ClassroomServi
                 return existing;
             }
             String id = UUID.randomUUID().toString();
-            Instant submittedAt = Instant.now();
+            Instant submittedAt = clock.instant();
             try (PreparedStatement statement = connection.prepareStatement(
                 "insert into assignment_submissions(id,operation_id,classroom_id,assignment_id,user_id,"
                     + "attempt_number,status,result_hash,error_code,client_completed_at,submitted_at) "
@@ -450,7 +460,7 @@ final class CloudClassroomStore extends CloudStoreBase implements ClassroomServi
 
     private void ensureSubmissionOpen(ClassAssignment assignment) {
         if (assignment.status() == AssignmentStatus.PUBLISHED
-            && (assignment.dueAt() == null || assignment.dueAt().isAfter(Instant.now()))) return;
+            && (assignment.dueAt() == null || assignment.dueAt().isAfter(clock.instant()))) return;
         String code = switch (assignment.status()) {
             case DRAFT -> "ASSIGNMENT_NOT_PUBLISHED";
             case PUBLISHED, CLOSED -> "ASSIGNMENT_CLOSED";
@@ -515,7 +525,7 @@ final class CloudClassroomStore extends CloudStoreBase implements ClassroomServi
                 rate(submittedStudents, allRows.size()), rate(passedStudents, submittedStudents),
                 commonErrors(connection, classroomId, assignmentId, applied),
                 filteredRows.subList(fromIndex, toIndex), applied.page(), applied.pageSize(), filteredRows.size(),
-                Instant.now()
+                clock.instant()
             );
         } catch (SQLException error) { throw database(error); }
     }
@@ -543,7 +553,7 @@ final class CloudClassroomStore extends CloudStoreBase implements ClassroomServi
                 audit.setString(2, actor.id());
                 audit.setString(3, classroomId);
                 audit.setInt(4, rows.size());
-                audit.setString(5, Instant.now().toString());
+                audit.setString(5, clock.instant().toString());
                 audit.setString(6, assignmentId);
                 audit.setString(7, "ASSIGNMENT_ANALYTICS");
                 audit.setString(8, analyticsFilterSummary(applied));
@@ -670,7 +680,7 @@ final class CloudClassroomStore extends CloudStoreBase implements ClassroomServi
             log.warn("class learning summary for {}: skipped {} sync events with unreadable payloads", classroomId, unreadablePayloads);
         }
         return new ClassLearningSummary(
-            classroomId, seenStudents.size(), activeStudents.size(), events, success, Instant.now());
+            classroomId, seenStudents.size(), activeStudents.size(), events, success, clock.instant());
     }
 
     String exportClassLearningCsv(AuthenticatedUser actor, String classroomId) {
@@ -702,7 +712,7 @@ final class CloudClassroomStore extends CloudStoreBase implements ClassroomServi
                 audit.setString(2, actor.id());
                 audit.setString(3, classroomId);
                 audit.setInt(4, rows);
-                audit.setString(5, Instant.now().toString());
+                audit.setString(5, clock.instant().toString());
                 audit.executeUpdate();
             }
         } catch (SQLException e) {
@@ -755,7 +765,7 @@ final class CloudClassroomStore extends CloudStoreBase implements ClassroomServi
         if (description != null && description.length() > 2_000) {
             throw new IllegalArgumentException("description must contain at most 2000 characters");
         }
-        if (dueAt != null && !dueAt.isAfter(Instant.now())) {
+        if (dueAt != null && !dueAt.isAfter(clock.instant())) {
             throw new IllegalArgumentException("dueAt must be in the future");
         }
     }

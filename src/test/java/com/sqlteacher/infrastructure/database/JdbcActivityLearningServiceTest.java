@@ -13,7 +13,6 @@ import com.sqlteacher.application.runner.CodeRunResult;
 import com.sqlteacher.application.runner.CodeRunner;
 import com.sqlteacher.application.runner.RunnerCapability;
 import com.sqlteacher.application.runner.RunnerFailureReason;
-import com.sqlteacher.application.config.DatabaseConfiguration;
 import com.sqlteacher.application.event.DefaultLearningEventService;
 import com.sqlteacher.application.collaboration.DesktopAccessProfile;
 import com.sqlteacher.application.collaboration.UserRole;
@@ -56,9 +55,7 @@ class JdbcActivityLearningServiceTest {
 
     @Test
     void shouldLoadAndPersistTheBuiltInBinaryTreeLoop() throws Exception {
-        DatabaseConfiguration databases = new DatabaseConfiguration(tempDir.resolve("app.db"), tempDir.resolve("demo.db"));
-        new SqliteSchemaMigrator().migrate(databases.appDatabasePath());
-        JdbcConnectionFactory connections = new JdbcConnectionFactory(databases);
+        JdbcConnectionFactory connections = TestDatabases.migratedFactory(tempDir);
         var owner = (com.sqlteacher.application.event.LearningEventOwnerProvider) () -> "student-1";
         var events = new DefaultLearningEventService(new JdbcLearningEventRecorder(connections), owner);
         var dispatcher = new DefaultActivityEvaluationDispatcher(List.of(
@@ -97,10 +94,8 @@ class JdbcActivityLearningServiceTest {
 
     @Test
     void shouldLoadAndPersistCodeActivityEvidenceWithoutTrustingLocalMode() throws Exception {
-        DatabaseConfiguration databases = new DatabaseConfiguration(tempDir.resolve("code-app.db"),
-            tempDir.resolve("code-demo.db"));
-        new SqliteSchemaMigrator().migrate(databases.appDatabasePath());
-        JdbcConnectionFactory connections = new JdbcConnectionFactory(databases);
+        JdbcConnectionFactory connections = TestDatabases.migratedFactory(
+            tempDir.resolve("code-app.db"), tempDir.resolve("code-demo.db"));
         var owner = (com.sqlteacher.application.event.LearningEventOwnerProvider) () -> "student-code";
         var events = new DefaultLearningEventService(new JdbcLearningEventRecorder(connections), owner);
         CodeRunner runner = new CodeRunner() {
@@ -134,10 +129,8 @@ class JdbcActivityLearningServiceTest {
 
     @Test
     void shouldRunAllBuiltInSimulationCoursesOffline() throws Exception {
-        DatabaseConfiguration databases = new DatabaseConfiguration(tempDir.resolve("simulation-app.db"),
-            tempDir.resolve("simulation-demo.db"));
-        new SqliteSchemaMigrator().migrate(databases.appDatabasePath());
-        JdbcConnectionFactory connections = new JdbcConnectionFactory(databases);
+        JdbcConnectionFactory connections = TestDatabases.migratedFactory(
+            tempDir.resolve("simulation-app.db"), tempDir.resolve("simulation-demo.db"));
         var owner = (com.sqlteacher.application.event.LearningEventOwnerProvider) () -> "student-simulation";
         var events = new DefaultLearningEventService(new JdbcLearningEventRecorder(connections), owner);
         var dispatcher = new DefaultActivityEvaluationDispatcher(List.of(new SimulationActivityEvaluator()));
@@ -178,10 +171,8 @@ class JdbcActivityLearningServiceTest {
 
     @Test
     void shouldLoadAndPersistTheBetaLabAndReadingActivities() throws Exception {
-        DatabaseConfiguration databases = new DatabaseConfiguration(tempDir.resolve("beta-app.db"),
-            tempDir.resolve("beta-demo.db"));
-        new SqliteSchemaMigrator().migrate(databases.appDatabasePath());
-        JdbcConnectionFactory connections = new JdbcConnectionFactory(databases);
+        JdbcConnectionFactory connections = TestDatabases.migratedFactory(
+            tempDir.resolve("beta-app.db"), tempDir.resolve("beta-demo.db"));
         var owner = (com.sqlteacher.application.event.LearningEventOwnerProvider) () -> "student-beta";
         var events = new DefaultLearningEventService(new JdbcLearningEventRecorder(connections), owner);
         var dispatcher = new DefaultActivityEvaluationDispatcher(List.of(
@@ -217,10 +208,8 @@ class JdbcActivityLearningServiceTest {
 
     @Test
     void shouldVersionProjectSubmissionsAndExposeOnlyTheOwnersPortfolio() throws Exception {
-        DatabaseConfiguration databases = new DatabaseConfiguration(tempDir.resolve("project-app.db"),
-            tempDir.resolve("project-demo.db"));
-        new SqliteSchemaMigrator().migrate(databases.appDatabasePath());
-        JdbcConnectionFactory connections = new JdbcConnectionFactory(databases);
+        JdbcConnectionFactory connections = TestDatabases.migratedFactory(
+            tempDir.resolve("project-app.db"), tempDir.resolve("project-demo.db"));
         var activeOwner = new java.util.concurrent.atomic.AtomicReference<>("student-project");
         var owner = (com.sqlteacher.application.event.LearningEventOwnerProvider) activeOwner::get;
         var events = new DefaultLearningEventService(new JdbcLearningEventRecorder(connections), owner);

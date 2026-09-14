@@ -1,6 +1,5 @@
 package com.sqlteacher.infrastructure.database;
 
-import com.sqlteacher.application.config.DatabaseConfiguration;
 import com.sqlteacher.application.event.LearningEvent;
 import com.sqlteacher.application.event.LearningEventType;
 import org.junit.jupiter.api.Test;
@@ -21,13 +20,7 @@ class JdbcLearningEventRecorderTest {
     
     @Test
     void shouldPersistEventToDatabase(@TempDir Path tempDirectory) throws Exception {
-        DatabaseConfiguration configuration = new DatabaseConfiguration(
-            tempDirectory.resolve("app.db"),
-            tempDirectory.resolve("demo.db")
-        );
-        
-        JdbcConnectionFactory connectionFactory = new JdbcConnectionFactory(configuration);
-        initializeAppDatabase(tempDirectory.resolve("app.db"));
+        JdbcConnectionFactory connectionFactory = TestDatabases.migratedFactory(tempDirectory);
         
         JdbcLearningEventRecorder recorder = new JdbcLearningEventRecorder(connectionFactory);
         
@@ -56,13 +49,7 @@ class JdbcLearningEventRecorderTest {
     
     @Test
     void shouldPersistEventWithNullAttributes(@TempDir Path tempDirectory) throws Exception {
-        DatabaseConfiguration configuration = new DatabaseConfiguration(
-            tempDirectory.resolve("app.db"),
-            tempDirectory.resolve("demo.db")
-        );
-        
-        JdbcConnectionFactory connectionFactory = new JdbcConnectionFactory(configuration);
-        initializeAppDatabase(tempDirectory.resolve("app.db"));
+        JdbcConnectionFactory connectionFactory = TestDatabases.migratedFactory(tempDirectory);
         
         JdbcLearningEventRecorder recorder = new JdbcLearningEventRecorder(connectionFactory);
         
@@ -90,13 +77,7 @@ class JdbcLearningEventRecorderTest {
     
     @Test
     void shouldPersistMultipleEvents(@TempDir Path tempDirectory) throws Exception {
-        DatabaseConfiguration configuration = new DatabaseConfiguration(
-            tempDirectory.resolve("app.db"),
-            tempDirectory.resolve("demo.db")
-        );
-        
-        JdbcConnectionFactory connectionFactory = new JdbcConnectionFactory(configuration);
-        initializeAppDatabase(tempDirectory.resolve("app.db"));
+        JdbcConnectionFactory connectionFactory = TestDatabases.migratedFactory(tempDirectory);
         
         JdbcLearningEventRecorder recorder = new JdbcLearningEventRecorder(connectionFactory);
         
@@ -128,13 +109,7 @@ class JdbcLearningEventRecorderTest {
     
     @Test
     void shouldHandleSpecialCharactersInAttributes(@TempDir Path tempDirectory) throws Exception {
-        DatabaseConfiguration configuration = new DatabaseConfiguration(
-            tempDirectory.resolve("app.db"),
-            tempDirectory.resolve("demo.db")
-        );
-        
-        JdbcConnectionFactory connectionFactory = new JdbcConnectionFactory(configuration);
-        initializeAppDatabase(tempDirectory.resolve("app.db"));
+        JdbcConnectionFactory connectionFactory = TestDatabases.migratedFactory(tempDirectory);
         
         JdbcLearningEventRecorder recorder = new JdbcLearningEventRecorder(connectionFactory);
         
@@ -158,9 +133,5 @@ class JdbcLearningEventRecorderTest {
             assertNotNull(attributes);
             assertTrue(attributes.contains("message") && attributes.contains("code"));
         }
-    }
-    
-    private static void initializeAppDatabase(Path databasePath) throws Exception {
-        new SqliteSchemaMigrator().migrate(databasePath);
     }
 }

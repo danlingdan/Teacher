@@ -20,8 +20,7 @@ class JdbcTeachingContentCacheTest {
 
     @Test
     void shouldPersistAccountIsolatedCourseAndNotificationCaches() throws Exception {
-        Path database = directory.resolve("app.db");
-        new SqliteSchemaMigrator().migrate(database);
+        Path database = TestDatabases.migratedAppDatabase(directory);
         JdbcTeachingContentCache cache = new JdbcTeachingContentCache(database);
         Instant now = Instant.parse("2026-07-28T00:00:00Z");
         CourseCatalog course = new CourseCatalog("course-1", "SQL", "", ContentStatus.ACTIVE, 1,

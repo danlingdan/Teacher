@@ -7,7 +7,8 @@ import org.junit.jupiter.api.Test;
 import java.io.StringReader;
 import java.io.StringWriter;
 import java.util.List;
-import java.util.function.Consumer;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -73,15 +74,21 @@ class LocalAppProtocolServerTest {
 
     @Test
     void shouldEmitProgressAndSupportCancellationProtocol() throws Exception {
-        LocalAppApi api = new LocalAppApi() {
-            @Override
-            public JsonNode invoke(String method, JsonNode params, CancellationToken cancellation,
-                                   Consumer<LocalAppEvent> events) throws Exception {
-                events.accept(new LocalAppEvent("progress", mapper.createObjectNode().put("percent", 25)));
-                while (!cancellation.cancelled()) Thread.sleep(2);
-                cancellation.throwIfCancelled();
-                return mapper.nullNode();
+        // system.cancel flips the in-flight request's flag and interrupts its registered worker,
+        // so the wait below ends on a deterministic signal instead of busy-waiting on the flag.
+        // The flag is re-checked first because cancel can be processed before this worker starts
+        // (a worker that has not registered yet receives no interrupt).
+        CountDownLatch cancellationSignal = new CountDownLatch(1);
+        LocalAppApi api = (method, params, cancellation, events) -> {
+            events.accept(new LocalAppEvent("progress", mapper.createObjectNode().put("percent", 25)));
+            cancellation.throwIfCancelled();
+            try {
+                cancellationSignal.await(30, TimeUnit.SECONDS);
+            } catch (InterruptedException expected) {
+                // The protocol cancel path interrupts the in-flight worker.
             }
+            cancellation.throwIfCancelled();
+            return mapper.nullNode();
         };
         String input = request("task-1", "runner.run", "{}") + "\n"
             + request("cancel-1", "system.cancel", "{\"targetRequestId\":\"task-1\"}") + "\n"

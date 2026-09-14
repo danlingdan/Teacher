@@ -5,6 +5,7 @@ import com.sqlteacher.application.collaboration.CloudAuthenticationService;
 import com.sqlteacher.application.collaboration.CloudAuthApi;
 import com.sqlteacher.application.collaboration.CloudSessionService;
 
+import java.time.Clock;
 import java.time.Instant;
 import java.util.Objects;
 import java.util.Optional;
@@ -13,17 +14,24 @@ import java.util.Optional;
 public final class PersistentCloudSessionService implements CloudSessionService {
     private final CloudSessionStore store;
     private final CloudAuthApi api;
+    private final Clock clock;
     private CloudAuthenticationService.Session session;
 
     public PersistentCloudSessionService(CloudSessionStore store, CloudAuthApi api) {
+        this(store, api, Clock.systemUTC());
+    }
+
+    /** Test overload: makes the session expiry time source injectable without changing behavior. */
+    PersistentCloudSessionService(CloudSessionStore store, CloudAuthApi api, Clock clock) {
         this.store = Objects.requireNonNull(store, "store must not be null");
         this.api = Objects.requireNonNull(api, "api must not be null");
+        this.clock = Objects.requireNonNull(clock, "clock must not be null");
         this.session = store.load().orElse(null);
     }
 
     @Override
     public synchronized Optional<CloudAuthenticationService.Session> current() {
-        if (session != null && session.expiresAt().isAfter(Instant.now())) {
+        if (session != null && session.expiresAt().isAfter(clock.instant())) {
             return Optional.of(session);
         }
         return Optional.empty();
@@ -34,7 +42,7 @@ public final class PersistentCloudSessionService implements CloudSessionService 
         if (session == null || session.refreshToken() == null) {
             return Optional.empty();
         }
-        if (session.expiresAt().isAfter(Instant.now().plusSeconds(300))) {
+        if (session.expiresAt().isAfter(clock.instant().plusSeconds(300))) {
             return Optional.of(session);
         }
         try {

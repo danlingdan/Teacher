@@ -1,6 +1,5 @@
 package com.sqlteacher.infrastructure.database;
 
-import com.sqlteacher.application.config.DatabaseConfiguration;
 import com.sqlteacher.application.execution.SqlHistoryEntry;
 import com.sqlteacher.application.execution.SqlHistoryService;
 import org.junit.jupiter.api.Test;
@@ -18,12 +17,7 @@ class JdbcSqlHistoryServiceTest {
     Path tempDir;
 
     private JdbcSqlHistoryService service() throws Exception {
-        DatabaseConfiguration configuration = new DatabaseConfiguration(
-            tempDir.resolve("app.db"),
-            tempDir.resolve("demo.db")
-        );
-        new SqliteSchemaMigrator().migrate(configuration.appDatabasePath());
-        return new JdbcSqlHistoryService(new JdbcConnectionFactory(configuration));
+        return new JdbcSqlHistoryService(TestDatabases.migratedFactory(tempDir));
     }
 
     private SqlHistoryEntry entry(String connectionId, String sql, boolean successful) {
