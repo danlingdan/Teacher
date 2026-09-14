@@ -5,6 +5,8 @@ import com.sqlteacher.application.component.ManagedComponentId;
 import com.sqlteacher.application.component.ManagedComponentService;
 import com.sqlteacher.application.component.ManagedComponentStatus;
 import com.sqlteacher.infrastructure.environment.WindowsToolchainDiscovery;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -25,6 +27,7 @@ import java.util.function.Predicate;
 
 /** Uses fixed Windows Package Manager identifiers and the official WSL command. */
 public final class WindowsManagedComponentService implements ManagedComponentService {
+    private static final Logger log = LoggerFactory.getLogger(WindowsManagedComponentService.class);
     private static final int OUTPUT_LIMIT = 16 * 1024;
     private static final Map<ManagedComponentId, Descriptor> DESCRIPTORS = descriptors();
 
@@ -273,7 +276,9 @@ public final class WindowsManagedComponentService implements ManagedComponentSer
                 if (retained > 0) output.write(buffer, 0, retained);
                 total += retained;
             }
-        } catch (IOException ignored) { }
+        } catch (IOException error) {
+            log.debug("Failed to drain subprocess output", error);
+        }
     }
 
     private static void terminate(Process process) {
@@ -282,7 +287,9 @@ public final class WindowsManagedComponentService implements ManagedComponentSer
                 child.destroy();
                 if (child.isAlive()) child.destroyForcibly();
             });
-        } catch (UnsupportedOperationException ignored) { }
+        } catch (UnsupportedOperationException error) {
+            log.debug("Process tree destruction unsupported; destroying the direct child only", error);
+        }
         process.destroy();
         if (process.isAlive()) process.destroyForcibly();
     }

@@ -1324,12 +1324,8 @@ public final class SqlTeacherCloudServer {
         private CloudStore(Path database) throws SQLException, IOException {
             this.database = database;
             Files.createDirectories(database.getParent());
-            try {
-                Class.forName("org.sqlite.JDBC");
-                initialize();
-            } catch (ClassNotFoundException error) {
-                throw new SQLException("SQLite JDBC driver is unavailable", error);
-            }
+            com.sqlteacher.infrastructure.database.SqliteDriver.ensureLoaded();
+            initialize();
         }
 
         @Override public Session register(String email, String displayName, char[] password) { return toSession(registerData(email, displayName, password)); }

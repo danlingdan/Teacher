@@ -2,13 +2,13 @@ package com.sqlteacher.infrastructure.database;
 
 import java.sql.SQLException;
 
-final class SqliteDriver {
+public final class SqliteDriver {
     private static final String DRIVER_CLASS = "org.sqlite.JDBC";
 
     private SqliteDriver() {
     }
 
-    static void ensureLoaded() throws SQLException {
+    public static void ensureLoaded() throws SQLException {
         try {
             Class.forName(DRIVER_CLASS);
         } catch (ClassNotFoundException error) {

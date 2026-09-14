@@ -37,8 +37,8 @@ public final class JdbcAssignmentDeliveryService implements AssignmentDeliverySe
         this.sessions = Objects.requireNonNull(sessions);
         this.database = Objects.requireNonNull(database).toAbsolutePath().normalize();
         try {
-            Class.forName("org.sqlite.JDBC");
-        } catch (ClassNotFoundException error) {
+            com.sqlteacher.infrastructure.database.SqliteDriver.ensureLoaded();
+        } catch (java.sql.SQLException error) {
             throw new IllegalStateException("SQLite JDBC driver is unavailable", error);
         }
     }

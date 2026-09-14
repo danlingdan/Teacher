@@ -9,6 +9,8 @@ import com.sqlteacher.application.system.ResourcePolicy;
 import com.sqlteacher.application.update.*;
 import com.sqlteacher.infrastructure.system.AtomicJsonFile;
 import com.sqlteacher.infrastructure.system.ConfiguredHttpClient;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -39,6 +41,7 @@ import java.util.UUID;
 import java.util.function.DoubleConsumer;
 
 public final class SecureUpdateService implements UpdateService {
+    private static final Logger log = LoggerFactory.getLogger(SecureUpdateService.class);
     private static final Set<String> ALLOWED_HOSTS = Set.of("api.sqlteacher.tech", "github.com", "objects.githubusercontent.com");
     private static final List<String> MIRROR_HOSTS = List.of("mirror.sqlteacher.tech", "download.sqlteacher.tech");
     private static final ObjectMapper JSON = new ObjectMapper().findAndRegisterModules();
@@ -216,7 +219,9 @@ public final class SecureUpdateService implements UpdateService {
         for (String host : MIRROR_HOSTS) {
             try {
                 result.add(new URI(primary.getScheme(), null, host, primary.getPort(), primary.getPath(), primary.getQuery(), primary.getFragment()));
-            } catch (URISyntaxException ignored) { }
+            } catch (URISyntaxException error) {
+                log.debug("Skipping update mirror {}: {}", error.getInput(), error.getMessage());
+            }
         }
         return result;
     }
