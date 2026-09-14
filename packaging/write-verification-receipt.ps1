@@ -37,8 +37,19 @@ try {
         $candidate = Join-Path $env:JAVA_HOME "bin\java.exe"
         if (Test-Path -LiteralPath $candidate) { $javaExe = $candidate }
     }
-    $jdkLine = [string]((& $javaExe -version 2>&1) | Select-Object -First 1)
-    $nodeLine = [string](& node --version)
+    # `java -version` writes its banner to stderr; under ErrorActionPreference=Stop the
+    # redirected native stderr would raise a terminating NativeCommandError, so relax the
+    # preference for these two probes only and restore it afterwards.
+    $prevEap = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try {
+        $jdkRaw = & $javaExe -version 2>&1
+        $nodeRaw = & node --version 2>&1
+    } finally {
+        $ErrorActionPreference = $prevEap
+    }
+    $jdkLine = [string]($jdkRaw | Select-Object -First 1)
+    $nodeLine = [string]($nodeRaw | Select-Object -First 1)
     if ([string]::IsNullOrWhiteSpace($jdkLine) -or [string]::IsNullOrWhiteSpace($nodeLine)) {
         throw "Unable to detect the local JDK/Node versions for the receipt."
     }
