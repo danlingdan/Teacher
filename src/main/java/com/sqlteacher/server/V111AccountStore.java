@@ -3,10 +3,6 @@ package com.sqlteacher.server;
 import com.sqlteacher.application.collaboration.AccountTaskState;
 import com.sqlteacher.application.collaboration.ActiveSession;
 
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.SecureRandom;
-import java.security.spec.KeySpec;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
@@ -17,15 +13,12 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
-import java.util.Base64;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
-import javax.crypto.SecretKeyFactory;
-import javax.crypto.spec.PBEKeySpec;
 
 /**
  * Account lifecycle store for v1.11: verified-email password reset, active-session
@@ -35,11 +28,8 @@ import javax.crypto.spec.PBEKeySpec;
  * iterations) and token hashes are SHA-256 so no plaintext token is ever stored.</p>
  */
 final class V111AccountStore {
-    private static final com.fasterxml.jackson.databind.ObjectMapper JSON = new com.fasterxml.jackson.databind.ObjectMapper().findAndRegisterModules();
-    private static final int TOKEN_BYTES = 32;
+    private static final com.fasterxml.jackson.databind.ObjectMapper JSON = CloudJsonStoreSupport.mapper();
     private static final int SALT_BYTES = 16;
-    private static final int PBKDF2_ITERATIONS = 310_000;
-    private static final int HASH_BITS = 256;
     private static final int RESET_TOKEN_MINUTES = 30;
     private static final int RESET_MAX_ATTEMPTS = 5;
     private static final int DELETE_CANCEL_DAYS = 7;
@@ -48,7 +38,6 @@ final class V111AccountStore {
     private static final Duration VERIFICATION_ACCOUNT_WINDOW = Duration.ofHours(1);
     private static final Duration VERIFICATION_EMAIL_WINDOW = Duration.ofDays(1);
     private final String url;
-    private final SecureRandom random = new SecureRandom();
     private final MailSender mail;
     private final String publicBaseUrl;
     private final AuthRateLimiter verificationMailLimiter = new AuthRateLimiter();
@@ -84,7 +73,7 @@ final class V111AccountStore {
     /** Revokes another session; the caller's own session (matched by raw token hash) is protected. */
     void revokeSession(String userId, String sessionIdHex, String currentRawToken) {
         byte[] target = hexBytes(sessionIdHex);
-        if (MessageDigest.isEqual(target, tokenHash(currentRawToken))) {
+        if (Hashes.constantTimeEquals(target, tokenHash(currentRawToken))) {
             throw new IllegalArgumentException("cannot revoke the current session");
         }
         try (Connection connection = open(); PreparedStatement statement = connection.prepareStatement(
@@ -106,7 +95,7 @@ final class V111AccountStore {
         verificationMailLimiter.recordEvent(accountKey, VERIFICATION_ACCOUNT_WINDOW);
         verificationMailLimiter.checkQuota(emailKey, VERIFICATION_MAILS_PER_EMAIL_PER_DAY);
         verificationMailLimiter.recordEvent(emailKey, VERIFICATION_EMAIL_WINDOW);
-        String token = randomToken(); Instant now = Instant.now();
+        String token = Hashes.randomToken(); Instant now = Instant.now();
         try (Connection connection = open(); PreparedStatement statement = connection.prepareStatement(
             "insert into email_verifications(id,user_id,email,token_hash,created_at,expires_at,used_at) values(?,?,?,?,?,?,null)")) {
             statement.setString(1, UUID.randomUUID().toString()); statement.setString(2, userId);
@@ -173,7 +162,7 @@ final class V111AccountStore {
             }
         } catch (SQLException error) { throw database(error); }
         if (userId == null) return; // uniform response; no account enumeration
-        String token = randomToken(); Instant now = Instant.now();
+        String token = Hashes.randomToken(); Instant now = Instant.now();
         try (Connection connection = open(); PreparedStatement statement = connection.prepareStatement(
             "insert into reset_tokens(id,user_id,token_hash,created_at,expires_at,used_at,attempts) values(?,?,?,?,?,null,0)")) {
             statement.setString(1, UUID.randomUUID().toString()); statement.setString(2, userId);
@@ -204,7 +193,7 @@ final class V111AccountStore {
             }
             try {
                 validatePassword(newPassword);
-                byte[] salt = bytes(SALT_BYTES); byte[] passwordHash = hash(newPassword, salt);
+                byte[] salt = Hashes.randomBytes(SALT_BYTES); byte[] passwordHash = Hashes.pbkdf2Hash(newPassword, salt);
                 try (PreparedStatement update = connection.prepareStatement("update users set password_hash=?,password_salt=? where id=?")) {
                     update.setBytes(1, passwordHash); update.setBytes(2, salt); update.setString(3, userId); update.executeUpdate();
                 }
@@ -352,23 +341,13 @@ final class V111AccountStore {
         }
         return connection;
     }
-    private byte[] tokenHash(String token) { return sha256(token); }
-    private static byte[] sha256(String value) {
-        try { return MessageDigest.getInstance("SHA-256").digest((value == null ? "" : value).getBytes(StandardCharsets.UTF_8)); }
-        catch (Exception error) { throw new IllegalStateException(error); }
-    }
+    private byte[] tokenHash(String token) { return Hashes.sha256Bytes(token); }
     private static byte[] hexBytes(String hex) {
         try { return HexFormat.of().parseHex(hex); }
         catch (IllegalArgumentException error) { throw new IllegalArgumentException("session id is invalid"); }
     }
-    private byte[] hash(char[] password, byte[] salt) {
-        try { KeySpec spec = new PBEKeySpec(password, salt, PBKDF2_ITERATIONS, HASH_BITS); return SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256").generateSecret(spec).getEncoded(); }
-        catch (Exception error) { throw new IllegalStateException("password hashing failed", error); }
-    }
     private void validatePassword(char[] password) {
         if (password == null || password.length < 12 || password.length > 128) throw new IllegalArgumentException("password must be 12 to 128 characters");
     }
-    private String randomToken() { return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes(TOKEN_BYTES)); }
-    private byte[] bytes(int size) { byte[] value = new byte[size]; random.nextBytes(value); return value; }
     private static IllegalStateException database(SQLException error) { return new IllegalStateException("Account database operation failed", error); }
 }

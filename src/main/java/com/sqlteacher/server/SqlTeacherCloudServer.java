@@ -3,7 +3,6 @@ package com.sqlteacher.server;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.sqlteacher.domain.SqlTeacherException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.SerializationFeature;
 import com.sqlteacher.application.collaboration.AuthenticatedUser;
 import com.sqlteacher.application.collaboration.AdminAuditEntry;
 import com.sqlteacher.application.collaboration.AdminAuditPage;
@@ -47,9 +46,6 @@ import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.security.GeneralSecurityException;
-import java.security.SecureRandom;
-import java.security.spec.KeySpec;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
@@ -68,8 +64,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.Executors;
-import javax.crypto.SecretKeyFactory;
-import javax.crypto.spec.PBEKeySpec;
 
 /**
  * Small deployable cloud API for v1.2. It intentionally exposes only account and class APIs;
@@ -77,12 +71,8 @@ import javax.crypto.spec.PBEKeySpec;
  */
 public final class SqlTeacherCloudServer {
     private static final Logger log = LoggerFactory.getLogger(SqlTeacherCloudServer.class);
-    private static final ObjectMapper JSON = new ObjectMapper().findAndRegisterModules()
-        .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
-    private static final int TOKEN_BYTES = 32;
+    private static final ObjectMapper JSON = CloudJsonStoreSupport.mapper();
     private static final int SALT_BYTES = 16;
-    private static final int PBKDF2_ITERATIONS = 310_000;
-    private static final int HASH_BITS = 256;
     private static final long ACCESS_TOKEN_HOURS = 8;
     private static final long REFRESH_TOKEN_DAYS = 30;
     private static final Duration ONE_HOUR = Duration.ofHours(1);
@@ -1319,7 +1309,6 @@ public final class SqlTeacherCloudServer {
         private static final String SUBMISSION_COLUMNS = "id,operation_id,classroom_id,assignment_id,user_id,"
             + "attempt_number,status,result_hash,error_code,client_completed_at,submitted_at";
         private final Path database;
-        private final SecureRandom random = new SecureRandom();
 
         private CloudStore(Path database) throws SQLException, IOException {
             this.database = database;
@@ -1341,11 +1330,11 @@ public final class SqlTeacherCloudServer {
                 "select password_hash,password_salt from users where id=?")) {
                 read.setString(1, actor.id());
                 try (ResultSet row = read.executeQuery()) {
-                    if (!row.next() || !constantTimeEquals(row.getBytes(1), hash(currentPassword, row.getBytes(2)))) {
+                    if (!row.next() || !Hashes.constantTimeEquals(row.getBytes(1), Hashes.pbkdf2Hash(currentPassword, row.getBytes(2)))) {
                         throw new SecurityException("current password is incorrect");
                     }
                 }
-                byte[] salt = bytes(SALT_BYTES); byte[] passwordHash = hash(newPassword, salt);
+                byte[] salt = Hashes.randomBytes(SALT_BYTES); byte[] passwordHash = Hashes.pbkdf2Hash(newPassword, salt);
                 connection.setAutoCommit(false);
                 try (PreparedStatement update = connection.prepareStatement("update users set password_hash=?,password_salt=? where id=?")) {
                     update.setBytes(1, passwordHash); update.setBytes(2, salt); update.setString(3, actor.id()); update.executeUpdate();
@@ -1366,8 +1355,8 @@ public final class SqlTeacherCloudServer {
             if (displayName == null || displayName.isBlank() || displayName.length() > 80) throw new IllegalArgumentException("displayName must be 1 to 80 characters");
             validatePassword(password);
             String id = UUID.randomUUID().toString();
-            byte[] salt = bytes(SALT_BYTES);
-            byte[] hash = hash(password, salt);
+            byte[] salt = Hashes.randomBytes(SALT_BYTES);
+            byte[] hash = Hashes.pbkdf2Hash(password, salt);
             try (Connection connection = open(); PreparedStatement statement = connection.prepareStatement(
                 "insert into users(id,email,display_name,password_hash,password_salt,disabled,created_at) values(?,?,?,?,?,0,?)")) {
                 statement.setString(1, id); statement.setString(2, normalizedEmail); statement.setString(3, displayName.trim());
@@ -1414,12 +1403,12 @@ public final class SqlTeacherCloudServer {
                     userId = exists ? result.getString("id") : null;
                     boolean hashable = exists && result.getInt("disabled") == 0;
                     boolean valid = hashable
-                        && constantTimeEquals(result.getBytes("password_hash"),
-                            hash(password, result.getBytes("password_salt")));
+                        && Hashes.constantTimeEquals(result.getBytes("password_hash"),
+                            Hashes.pbkdf2Hash(password, result.getBytes("password_salt")));
                     if (!valid && !hashable) {
                         // Match the PBKDF2 cost of an existing account so unknown or disabled
                         // accounts fail with the same response time and the identical 401 body.
-                        hash(password, bytes(SALT_BYTES));
+                        Hashes.pbkdf2Hash(password, Hashes.randomBytes(SALT_BYTES));
                     }
                     if (!valid) {
                         // Failed logins are not audited; the in-process rate limiter is the
@@ -2138,7 +2127,7 @@ public final class SqlTeacherCloudServer {
             }
             RetentionSpec spec = retentionSpec(category);
             String id = UUID.randomUUID().toString();
-            String confirmationToken = Base64.getUrlEncoder().withoutPadding().encodeToString(bytes(24));
+            String confirmationToken = Base64.getUrlEncoder().withoutPadding().encodeToString(Hashes.randomBytes(24));
             Instant now = Instant.now();
             Instant expiresAt = now.plus(15, ChronoUnit.MINUTES);
             try (Connection connection = open()) {
@@ -2175,7 +2164,7 @@ public final class SqlTeacherCloudServer {
             try (Connection validation = open()) {
                 RetentionJobState state = retentionJobState(validation, previewId);
                 if (!"PREVIEWED".equals(state.status()) || Instant.now().isAfter(state.expiresAt())
-                    || !constantTimeEquals(state.confirmationHash(), tokenHash(confirmationToken))) {
+                    || !Hashes.constantTimeEquals(state.confirmationHash(), tokenHash(confirmationToken))) {
                     audit(validation, actor.id(), "ADMIN_RETENTION_EXECUTE", "RETENTION_JOB", previewId,
                         "DENIED", "INVALID_OR_EXPIRED_CONFIRMATION");
                     throw new AdminOperationRejectedException("RETENTION_CONFIRMATION_INVALID",
@@ -2187,7 +2176,7 @@ public final class SqlTeacherCloudServer {
                 connection.setAutoCommit(false);
                 RetentionJobState state = retentionJobState(connection, previewId);
                 if (!"PREVIEWED".equals(state.status()) || Instant.now().isAfter(state.expiresAt())
-                    || !constantTimeEquals(state.confirmationHash(), tokenHash(confirmationToken))) {
+                    || !Hashes.constantTimeEquals(state.confirmationHash(), tokenHash(confirmationToken))) {
                     audit(connection, actor.id(), "ADMIN_RETENTION_EXECUTE", "RETENTION_JOB", previewId,
                         "DENIED", "INVALID_OR_EXPIRED_CONFIRMATION");
                     connection.commit();
@@ -2753,7 +2742,7 @@ public final class SqlTeacherCloudServer {
         }
         private void revoke(Connection c,String table,String token)throws SQLException{try(PreparedStatement s=c.prepareStatement("update "+table+" set revoked_at=? where token_hash=? and revoked_at is null")){s.setString(1,Instant.now().toString());s.setBytes(2,tokenHash(token));s.executeUpdate();}}
         private SessionData issue(AuthenticatedUser user) { try(Connection c=open()){return issue(c,user);}catch(SQLException e){throw database(e);} }
-        private SessionData issue(Connection c, AuthenticatedUser user) throws SQLException { String token=Base64.getUrlEncoder().withoutPadding().encodeToString(bytes(TOKEN_BYTES)); String refresh=Base64.getUrlEncoder().withoutPadding().encodeToString(bytes(TOKEN_BYTES)); Instant now=Instant.now(); Instant expiry=now.plus(ACCESS_TOKEN_HOURS, ChronoUnit.HOURS); Instant refreshExpiry=now.plus(REFRESH_TOKEN_DAYS, ChronoUnit.DAYS); try(PreparedStatement access=c.prepareStatement("insert into access_tokens(token_hash,user_id,expires_at,created_at,device_label,last_seen_at) values(?,?,?,?,?,?)");PreparedStatement refreshStatement=c.prepareStatement("insert into refresh_tokens(token_hash,user_id,expires_at,created_at) values(?,?,?,?)")){access.setBytes(1,tokenHash(token));access.setString(2,user.id());access.setString(3,expiry.toString());access.setString(4,now.toString());access.setString(5,"桌面设备");access.setString(6,now.toString());access.executeUpdate();refreshStatement.setBytes(1,tokenHash(refresh));refreshStatement.setString(2,user.id());refreshStatement.setString(3,refreshExpiry.toString());refreshStatement.setString(4,now.toString());refreshStatement.executeUpdate();} return new SessionData(token,expiry,user,refresh); }
+        private SessionData issue(Connection c, AuthenticatedUser user) throws SQLException { String token=Hashes.randomToken(); String refresh=Hashes.randomToken(); Instant now=Instant.now(); Instant expiry=now.plus(ACCESS_TOKEN_HOURS, ChronoUnit.HOURS); Instant refreshExpiry=now.plus(REFRESH_TOKEN_DAYS, ChronoUnit.DAYS); try(PreparedStatement access=c.prepareStatement("insert into access_tokens(token_hash,user_id,expires_at,created_at,device_label,last_seen_at) values(?,?,?,?,?,?)");PreparedStatement refreshStatement=c.prepareStatement("insert into refresh_tokens(token_hash,user_id,expires_at,created_at) values(?,?,?,?)")){access.setBytes(1,tokenHash(token));access.setString(2,user.id());access.setString(3,expiry.toString());access.setString(4,now.toString());access.setString(5,"桌面设备");access.setString(6,now.toString());access.executeUpdate();refreshStatement.setBytes(1,tokenHash(refresh));refreshStatement.setString(2,user.id());refreshStatement.setString(3,refreshExpiry.toString());refreshStatement.setString(4,now.toString());refreshStatement.executeUpdate();} return new SessionData(token,expiry,user,refresh); }
         private AuthenticatedUser user(String id) { try(Connection c=open(); PreparedStatement s=c.prepareStatement("select id,email,display_name from users where id=? and disabled=0")){s.setString(1,id);try(ResultSet r=s.executeQuery()){if(!r.next())throw new SecurityException("unknown user");Set<UserRole> roles=new java.util.HashSet<>();try(PreparedStatement rs=c.prepareStatement("select role from user_roles where user_id=?")){rs.setString(1,id);try(ResultSet rr=rs.executeQuery()){while(rr.next())roles.add(UserRole.valueOf(rr.getString(1)));}}return new AuthenticatedUser(r.getString(1),r.getString(2),r.getString(3),roles);}}catch(SQLException e){throw database(e);} }
         private String userIdByEmail(String email){String normalized=validateEmail(email);try(Connection c=open();PreparedStatement s=c.prepareStatement("select id from users where email=? and disabled=0")){s.setString(1,normalized);try(ResultSet r=s.executeQuery()){if(!r.next())throw new IllegalArgumentException("User email was not found");return r.getString(1);}}catch(SQLException e){throw database(e);}}
         private java.util.List<com.sqlteacher.application.collaboration.ClassroomService.RosterMember> classRoster(AuthenticatedUser actor, String classroomId) {
@@ -2907,7 +2896,7 @@ public final class SqlTeacherCloudServer {
             }
             if (!exists) statement.executeUpdate("alter table " + table + " add column " + definition);
         }
-        private byte[] bytes(int count){byte[] value=new byte[count];random.nextBytes(value);return value;} private byte[] hash(char[] password,byte[] salt){try{KeySpec spec=new PBEKeySpec(password,salt,PBKDF2_ITERATIONS,HASH_BITS);return SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256").generateSecret(spec).getEncoded();}catch(GeneralSecurityException e){throw new IllegalStateException("Password hashing unavailable",e);}} private byte[] tokenHash(String token){try{return java.security.MessageDigest.getInstance("SHA-256").digest(token.getBytes(StandardCharsets.UTF_8));}catch(GeneralSecurityException e){throw new IllegalStateException(e);}} private static boolean constantTimeEquals(byte[] a,byte[] b){return java.security.MessageDigest.isEqual(a,b);} private static String validateEmail(String e){if(e==null||!e.matches("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$")||e.length()>254)throw new IllegalArgumentException("email must be valid");return e.trim().toLowerCase(Locale.ROOT);} private static void validateLoginPassword(char[] p){if(p==null||p.length==0||p.length>128)throw new IllegalArgumentException("password must contain 1 to 128 characters");} private static void validatePassword(char[] p){if(p==null||p.length<12||p.length>128)throw new IllegalArgumentException("password must contain 12 to 128 characters");} private static IllegalStateException database(SQLException e){return new IllegalStateException("Cloud database operation failed",e);} private static CloudAuthenticationService.Session toSession(SessionData s){return new CloudAuthenticationService.Session(s.token(),s.expiresAt(),s.user(),s.refreshToken());}
+        private byte[] tokenHash(String token){return Hashes.sha256Bytes(token);} private static String validateEmail(String e){if(e==null||!e.matches("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$")||e.length()>254)throw new IllegalArgumentException("email must be valid");return e.trim().toLowerCase(Locale.ROOT);} private static void validateLoginPassword(char[] p){if(p==null||p.length==0||p.length>128)throw new IllegalArgumentException("password must contain 1 to 128 characters");} private static void validatePassword(char[] p){if(p==null||p.length<12||p.length>128)throw new IllegalArgumentException("password must contain 12 to 128 characters");} private static IllegalStateException database(SQLException e){return new IllegalStateException("Cloud database operation failed",e);} private static CloudAuthenticationService.Session toSession(SessionData s){return new CloudAuthenticationService.Session(s.token(),s.expiresAt(),s.user(),s.refreshToken());}
         private record RetentionSpec(RetentionCategory category, String table, String keyColumn,
                                      String timeColumn, List<String> columns) { }
         private record RetentionJobState(RetentionCategory category, Instant cutoff, int previewRows,

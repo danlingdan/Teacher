@@ -3,7 +3,6 @@ package com.sqlteacher.server;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.SerializationFeature;
 import com.sqlteacher.application.collaboration.AssignmentContentSnapshot;
 import com.sqlteacher.application.collaboration.AssignmentStatus;
 import com.sqlteacher.application.collaboration.AssignmentSubmission;
@@ -32,8 +31,6 @@ import com.sqlteacher.application.collaboration.CloudKnowledgeSearchHit;
 
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
@@ -55,8 +52,7 @@ import java.util.UUID;
 
 /** v1.4 course content, feedback, mastery and notification persistence. */
 final class V14CloudStore {
-    private static final ObjectMapper JSON = new ObjectMapper().findAndRegisterModules()
-        .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+    private static final ObjectMapper JSON = CloudJsonStoreSupport.mapper();
     private static final int MAX_PAGE_SIZE = 100;
     private final Path database;
 
@@ -315,12 +311,12 @@ final class V14CloudStore {
                     upsert.executeUpdate();
                 }
                 String versionId = UUID.randomUUID().toString();
-                String kpJson = writeJson(normalizeIds(knowledgePointIds));
+                String kpJson = CloudJsonStoreSupport.writeJson(normalizeIds(knowledgePointIds));
                 String normalizedTitle = required(title, "title", 160);
                 String normalizedPrompt = required(prompt, "prompt", 8_000);
                 String normalizedDataset = required(datasetVersion, "datasetVersion", 160);
                 String normalizedRule = required(evaluationRule, "evaluationRule", 4_000);
-                String hash = sha256(String.join("\n", logicalId, Integer.toString(version), normalizedTitle,
+                String hash = Hashes.sha256Hex(String.join("\n", logicalId, Integer.toString(version), normalizedTitle,
                     normalizedPrompt, normalizedDataset, normalizedRule, kpJson));
                 try (PreparedStatement insert = connection.prepareStatement(
                     "insert into shared_exercise_versions(id,exercise_id,course_id,version,title,prompt,dataset_version,"
@@ -440,8 +436,8 @@ final class V14CloudStore {
                     statement.setString(11, now.toString());
                     statement.executeUpdate();
                 }
-                String kpJson = writeJson(exercise.knowledgePointIds());
-                String snapshotHash = sha256(String.join("\n", versionId, exercise.contentHash(), normalizedTitle));
+                String kpJson = CloudJsonStoreSupport.writeJson(exercise.knowledgePointIds());
+                String snapshotHash = Hashes.sha256Hex(String.join("\n", versionId, exercise.contentHash(), normalizedTitle));
                 try (PreparedStatement snapshot = connection.prepareStatement(
                     "insert into assignment_content_snapshots(assignment_id,exercise_version_id,title,prompt,dataset_version,"
                         + "evaluation_rule,knowledge_point_ids_json,snapshot_hash,created_at) values(?,?,?,?,?,?,?,?,?)")) {
@@ -538,7 +534,7 @@ final class V14CloudStore {
                             + "author_user_id=?,updated_at=? where submission_id=? and version=?")) {
                         update.setString(1, status.name());
                         update.setString(2, normalizedComment);
-                        update.setString(3, writeJson(ids));
+                        update.setString(3, CloudJsonStoreSupport.writeJson(ids));
                         update.setString(4, actor.id());
                         update.setString(5, now.toString());
                         update.setString(6, submissionId);
@@ -721,7 +717,7 @@ final class V14CloudStore {
             bundle.put("sections", listSections(actor, courseId));
             bundle.put("knowledgePoints", listKnowledgePoints(actor, courseId));
             bundle.put("exercises", listExercises(actor, courseId, null));
-            return writeJson(bundle);
+            return CloudJsonStoreSupport.writeJson(bundle);
         } catch (SQLException error) {
             throw database(error);
         }
@@ -826,8 +822,8 @@ final class V14CloudStore {
                     String prompt = required(String.valueOf(exercise.get("prompt")), "prompt", 8_000);
                     String dataset = required(String.valueOf(exercise.get("datasetVersion")), "datasetVersion", 160);
                     String rule = required(String.valueOf(exercise.get("evaluationRule")), "evaluationRule", 4_000);
-                    String kpJson = writeJson(mappedPoints);
-                    String hash = sha256(String.join("\n", logicalId, "1", title, prompt, dataset, rule, kpJson));
+                    String kpJson = CloudJsonStoreSupport.writeJson(mappedPoints);
+                    String hash = Hashes.sha256Hex(String.join("\n", logicalId, "1", title, prompt, dataset, rule, kpJson));
                     try (PreparedStatement logical = connection.prepareStatement(
                         "insert into shared_exercises(id,course_id,current_version,status,created_by,created_at,updated_at) values(?,?,?,?,?,?,?)");
                          PreparedStatement version = connection.prepareStatement(
@@ -972,7 +968,7 @@ final class V14CloudStore {
         String id = UUID.randomUUID().toString();
         String revisionId = UUID.randomUUID().toString();
         Instant now = Instant.now();
-        String hash = sha256(normalizedContent);
+        String hash = Hashes.sha256Hex(normalizedContent);
         try (Connection connection = open()) {
             connection.setAutoCommit(false);
             try (PreparedStatement article = connection.prepareStatement("""
@@ -1002,7 +998,7 @@ final class V14CloudStore {
                     String value = chunks.get(index);
                     String chunkId = UUID.randomUUID().toString();
                     chunk.setString(1, chunkId); chunk.setString(2, id); chunk.setString(3, revisionId);
-                    chunk.setInt(4, index); chunk.setString(5, value); chunk.setString(6, sha256(value)); chunk.addBatch();
+                    chunk.setInt(4, index); chunk.setString(5, value); chunk.setString(6, Hashes.sha256Hex(value)); chunk.addBatch();
                     outbox.setString(1, UUID.randomUUID().toString()); outbox.setString(2, chunkId);
                     outbox.setString(3, now.toString()); outbox.setString(4, now.toString());
                     outbox.setString(5, now.toString()); outbox.addBatch();
@@ -1231,7 +1227,7 @@ final class V14CloudStore {
         }
         String claimed = required(String.valueOf(envelope.get("contentSha256")), "contentSha256", 64)
             .toLowerCase(Locale.ROOT);
-        if (!claimed.matches("[0-9a-f]{64}") || !claimed.equals(sha256(payload))) {
+        if (!claimed.matches("[0-9a-f]{64}") || !claimed.equals(Hashes.sha256Hex(payload))) {
             throw new IllegalArgumentException("Course package content hash is invalid");
         }
         return new SecureCoursePackage(packageId, courseVersion, license, claimed, payload);
@@ -1873,7 +1869,7 @@ final class V14CloudStore {
         statement.setString(3, studentId);
         statement.setString(4, status.name());
         statement.setString(5, comment);
-        statement.setString(6, writeJson(pointIds));
+        statement.setString(6, CloudJsonStoreSupport.writeJson(pointIds));
         statement.setLong(7, version);
         statement.setString(8, authorId);
         statement.setString(9, updatedAt.toString());
@@ -1895,23 +1891,6 @@ final class V14CloudStore {
             return JSON.readValue(json, new TypeReference<>() { });
         } catch (JsonProcessingException error) {
             throw new IllegalStateException("Stored knowledge point list is invalid", error);
-        }
-    }
-
-    private static String writeJson(Object value) {
-        try {
-            return JSON.writeValueAsString(value);
-        } catch (JsonProcessingException error) {
-            throw new IllegalStateException("JSON serialization failed", error);
-        }
-    }
-
-    private static String sha256(String value) {
-        try {
-            byte[] hash = MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8));
-            return java.util.HexFormat.of().formatHex(hash);
-        } catch (NoSuchAlgorithmException error) {
-            throw new IllegalStateException("SHA-256 is unavailable", error);
         }
     }
 

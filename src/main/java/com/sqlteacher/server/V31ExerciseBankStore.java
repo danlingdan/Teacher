@@ -251,7 +251,7 @@ final class V31ExerciseBankStore {
         statement.setString(3, id);
         statement.setInt(4, version);
         statement.setString(5, fragment);
-        statement.setString(6, ExerciseBankHashing.sha256Hex(fragment));
+        statement.setString(6, Hashes.sha256Hex(fragment));
         statement.setInt(7, bankVersion);
     }
 
@@ -474,21 +474,5 @@ final class V31ExerciseBankStore {
             }
         }
         return false;
-    }
-
-    /** Content hashing shared by publish; isolated for clarity. */
-    private static final class ExerciseBankHashing {
-        private ExerciseBankHashing() {
-        }
-
-        static String sha256Hex(String content) {
-            try {
-                java.security.MessageDigest digest = java.security.MessageDigest.getInstance("SHA-256");
-                return java.util.HexFormat.of()
-                    .formatHex(digest.digest(content.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
-            } catch (java.security.NoSuchAlgorithmException error) {
-                throw new IllegalStateException("SHA-256 is unavailable", error);
-            }
-        }
     }
 }

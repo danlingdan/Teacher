@@ -22,9 +22,6 @@ import com.sqlteacher.domain.SqlTeacherException;
 
 import java.nio.file.Path;
 import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.util.HexFormat;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
@@ -42,7 +39,7 @@ import java.util.UUID;
 
 /** v1.9 course objective graph and deterministic study-plan persistence. */
 final class V19CloudStore {
-    private static final ObjectMapper JSON = new ObjectMapper();
+    private static final ObjectMapper JSON = CloudJsonStoreSupport.mapper();
     private final Path database;
     private final DeterministicStudyPlanService plans = new DeterministicStudyPlanService();
 
@@ -316,7 +313,7 @@ final class V19CloudStore {
             """)) {
             statement.setString(1, id); statement.setString(2, classroomId); statement.setString(3, courseId);
             statement.setString(4, objectiveId); statement.setString(5, reason); statement.setString(6, normalizedAction);
-            statement.setInt(7, impact); statement.setLong(8, objective.version()); statement.setString(9, sha256(token));
+            statement.setInt(7, impact); statement.setLong(8, objective.version()); statement.setString(9, Hashes.sha256Hex(token));
             statement.setString(10, actor.id()); statement.setString(11, now.toString()); statement.executeUpdate();
             return new ObjectiveInterventionDraft(id, classroomId, courseId, objectiveId, reason, normalizedAction,
                 impact, objective.version(), token, "DRAFT", actor.id(), now, null);
@@ -335,7 +332,10 @@ final class V19CloudStore {
                 DraftRow draft = draft(connection, actor.id(), courseId, draftId);
                 requireClassTeacher(actor, draft.classroomId());
                 if (!"DRAFT".equals(draft.status())) throw new IllegalArgumentException("Intervention draft is not pending");
-                if (!MessageDigest.isEqual(sha256(confirmationToken).getBytes(StandardCharsets.US_ASCII),
+                if (confirmationToken == null || confirmationToken.isBlank()) {
+                    throw new IllegalArgumentException("confirmationToken must not be blank");
+                }
+                if (!Hashes.constantTimeEquals(Hashes.sha256Hex(confirmationToken).getBytes(StandardCharsets.US_ASCII),
                     draft.tokenHash().getBytes(StandardCharsets.US_ASCII))) {
                     throw new SecurityException("confirmation token is invalid");
                 }
@@ -694,16 +694,6 @@ final class V19CloudStore {
         String normalized = value.trim();
         if (normalized.length() > max) throw new IllegalArgumentException(name + " is too long");
         return normalized;
-    }
-
-    private static String sha256(String value) {
-        if (value == null || value.isBlank()) throw new IllegalArgumentException("confirmationToken must not be blank");
-        try {
-            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
-                .digest(value.getBytes(StandardCharsets.UTF_8)));
-        } catch (NoSuchAlgorithmException impossible) {
-            throw new IllegalStateException(impossible);
-        }
     }
 
     private static int count(Statement statement, String sql) throws SQLException {

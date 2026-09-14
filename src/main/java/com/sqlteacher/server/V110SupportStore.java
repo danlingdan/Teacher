@@ -21,7 +21,7 @@ import java.util.Set;
 import java.util.UUID;
 
 final class V110SupportStore {
-    private static final ObjectMapper JSON = new ObjectMapper().findAndRegisterModules();
+    private static final ObjectMapper JSON = CloudJsonStoreSupport.mapper();
     private static final Set<String> TYPES = Set.of("BUG", "UPDATE_PROBLEM", "USABILITY", "SUGGESTION", "OTHER");
     private static final Set<String> SEVERITIES = Set.of("DATA_OR_STARTUP_RISK", "MAIN_FLOW_BLOCKED", "PARTIAL_FAILURE", "MINOR");
     private static final int MAX_REPORTS_PER_PRINCIPAL_PER_HOUR = 5;
@@ -60,7 +60,7 @@ final class V110SupportStore {
                 existing.setString(1, principal); existing.setString(2, idempotency);
                 try (ResultSet row = existing.executeQuery()) {
                     if (row.next()) {
-                        String queryToken = randomToken();
+                        String queryToken = Hashes.randomToken();
                         try (PreparedStatement rotate = connection.prepareStatement("update problem_reports set query_token_hash=?,updated_at=? where id=?")) {
                             rotate.setString(1, digest(queryToken)); rotate.setString(2, Instant.now().toString()); rotate.setString(3, row.getString("id")); rotate.executeUpdate();
                         }
@@ -73,7 +73,7 @@ final class V110SupportStore {
             // dimension is capped separately to blunt report flooding with spoofed or rotating XFF entries.
             enforceInstallRate(digest(installId));
             String id = "FB-" + UUID.randomUUID().toString().replace("-", "").substring(0, 12).toUpperCase(Locale.ROOT);
-            String queryToken = randomToken(); Instant now = Instant.now();
+            String queryToken = Hashes.randomToken(); Instant now = Instant.now();
             connection.setAutoCommit(false);
             try (PreparedStatement statement = connection.prepareStatement(
                 "insert into problem_reports(id,principal_key,user_id,idempotency_key,install_id_hash,type,severity,summary,description,reproduction_steps,expected_result,actual_result,application_json,diagnostics_json,status,query_token_hash,created_at,updated_at,expires_at) values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")) {
@@ -151,7 +151,8 @@ final class V110SupportStore {
         try (PreparedStatement statement = connection.prepareStatement("select status,query_token_hash from problem_reports where id=?")) {
             statement.setString(1, id);
             try (ResultSet row = statement.executeQuery()) {
-                if (!row.next() || !MessageDigest.isEqual(digest(queryToken).getBytes(StandardCharsets.US_ASCII), row.getString("query_token_hash").getBytes(StandardCharsets.US_ASCII))) {
+                if (!row.next() || !Hashes.constantTimeEquals(digest(queryToken).getBytes(StandardCharsets.US_ASCII),
+                        row.getString("query_token_hash").getBytes(StandardCharsets.US_ASCII))) {
                     throw new SecurityException("report access denied");
                 }
                 return row.getString("status");
@@ -191,7 +192,8 @@ final class V110SupportStore {
             "select status,created_at,query_token_hash from problem_reports where id=?")) {
             statement.setString(1, id);
             try (ResultSet row = statement.executeQuery()) {
-                if (!row.next() || !MessageDigest.isEqual(digest(queryToken).getBytes(StandardCharsets.US_ASCII), row.getString("query_token_hash").getBytes(StandardCharsets.US_ASCII))) {
+                if (!row.next() || !Hashes.constantTimeEquals(digest(queryToken).getBytes(StandardCharsets.US_ASCII),
+                        row.getString("query_token_hash").getBytes(StandardCharsets.US_ASCII))) {
                     throw new SecurityException("report access denied");
                 }
                 return new ProblemReportReceipt(id, queryToken, ProblemReportReceipt.Status.valueOf(row.getString("status")), Instant.parse(row.getString("created_at")));
@@ -227,7 +229,6 @@ final class V110SupportStore {
     }
     private Connection open() throws SQLException { Connection connection = DriverManager.getConnection(url); try (Statement s = connection.createStatement()) { s.execute("pragma foreign_keys=on"); s.execute("pragma busy_timeout=5000"); } return connection; }
     private String digest(String value) { try { MessageDigest digest = MessageDigest.getInstance("SHA-256"); digest.update(hashSecret); return HexFormat.of().formatHex(digest.digest((value == null ? "" : value).getBytes(StandardCharsets.UTF_8))); } catch (Exception error) { throw new IllegalStateException(error); } }
-    private String randomToken() { byte[] bytes = new byte[32]; random.nextBytes(bytes); return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes); }
     private static String required(Map<String, Object> body, String key, int max) { String value = optional(body, key, max); if (value.isBlank()) throw new IllegalArgumentException(key + " is required"); return value; }
     private static String optional(Map<String, Object> body, String key, int max) { Object raw = body.get(key); String value = raw == null ? "" : String.valueOf(raw).strip(); if (value.length() > max || value.matches("(?s).*[\\p{Cntrl}&&[^\\r\\n\\t]].*")) throw new IllegalArgumentException(key + " is invalid"); return value; }
     private static String enumeration(Map<String, Object> body, String key, Set<String> allowed) { String value = required(body, key, 40).toUpperCase(Locale.ROOT); if (!allowed.contains(value)) throw new IllegalArgumentException(key + " is invalid"); return value; }
