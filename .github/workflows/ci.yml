@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows-tests:
+    name: Windows tests (Java fast + ui-web)
+    # 与本地开发一致使用 Windows runner；WSL 依赖测试（integration/runner/live 标签）
+    # 在 CI 环境不可控，因此 Java 侧跑 fast profile，不作为发布门禁。
+    runs-on: windows-latest
+    timeout-minutes: 40
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+
+      - name: Run Java tests (fast profile)
+        run: mvn -B -q test -Pfast
+
+      - name: Set up Node.js for ui-web
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: ui-web/package-lock.json
+
+      - name: Install ui-web dependencies
+        working-directory: ui-web
+        run: npm ci
+
+      - name: Run ui-web unit tests
+        run: npm --prefix ui-web test
+
+      - name: Build ui-web
+        run: npm --prefix ui-web run build

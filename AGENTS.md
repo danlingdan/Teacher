@@ -163,6 +163,8 @@ npm --prefix ui-web run build
 - Run focused tests first.
 - Use `-Pfast` for broad local feedback without `integration`, `runner`, or `live` tagged tests; it is not a release gate.
 - Run full `mvn test` for cross-module, schema, security, accumulated, or release-bound changes.
+  The full-run report count (about 432) is lower than the source `@Test` annotation count (542+)
+  because TSV/JSON data-driven `DynamicTest`s expand each data row into its own executed test.
 - Use CLI verification apps in headless environments and packaged Tauri E2E when desktop graphics are available.
 - Packaging or release changes require the current packaging script and release workflow gates.
 - Documentation-only changes need link and diff checks, not Maven, unless they affect executable

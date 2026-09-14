@@ -12,7 +12,10 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.time.Instant;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
@@ -173,6 +176,40 @@ class HttpCloudApiClientTest {
         assertDoesNotThrow(() -> new HttpCloudApiClient(URI.create("http://localhost:18080")));
         assertThrows(IllegalArgumentException.class,
             () -> new HttpCloudApiClient(URI.create("http://8.130.47.235")));
+    }
+
+    @Test
+    void shouldFailFastWithInjectedTimeoutWhenServerNeverResponds() throws IOException {
+        // 端点接收请求但一直不响应：只有注入的短超时能让调用结束。若超时退回
+        // 30s 默认值，调用会超出下方 5s 上限并使本测试失败。
+        CountDownLatch releaseHandler = new CountDownLatch(1);
+        HttpServer silent = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        silent.createContext("/api/v1/app/capabilities", exchange -> {
+            try {
+                releaseHandler.await(10, TimeUnit.SECONDS);
+            } catch (InterruptedException error) {
+                Thread.currentThread().interrupt();
+            }
+            exchange.close();
+        });
+        silent.start();
+        try {
+            var shortTimeoutClient = new HttpCloudApiClient(
+                URI.create("http://127.0.0.1:" + silent.getAddress().getPort()), Duration.ofMillis(200));
+            long startedAt = System.nanoTime();
+            var error = assertThrows(
+                com.sqlteacher.application.collaboration.CloudApiRequestException.class,
+                shortTimeoutClient::capabilities);
+            long elapsedMillis = (System.nanoTime() - startedAt) / 1_000_000;
+
+            assertEquals(503, error.statusCode());
+            assertEquals("CLOUD_UNAVAILABLE", error.code());
+            assertTrue(elapsedMillis < 5_000,
+                "injected timeout must fail the call well under 5s, took " + elapsedMillis + "ms");
+        } finally {
+            releaseHandler.countDown();
+            silent.stop(0);
+        }
     }
 
     private void assignments(HttpExchange exchange) throws IOException {

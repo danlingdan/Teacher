@@ -83,19 +83,27 @@ public final class HttpCloudApiClient implements CloudCapabilityApi, CloudAuthAp
     private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(30);
 
     private final URI baseUri;
+    private final Duration requestTimeout;
     // The shared factory pins HTTP/1.1: the JDK h2c upgrade path can deadlock POST
     // bodies against fast loopback responders, and every production call is HTTPS.
-    private final HttpClient client = HttpClients.create(REQUEST_TIMEOUT);
+    private final HttpClient client;
     private final ObjectMapper json = new ObjectMapper().findAndRegisterModules()
         .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
 
     public HttpCloudApiClient(URI baseUri) {
+        this(baseUri, REQUEST_TIMEOUT);
+    }
+
+    /** Loopback-test overload: injects a short request timeout so a non-responding server fails fast. */
+    public HttpCloudApiClient(URI baseUri, Duration requestTimeout) {
         this.baseUri = Objects.requireNonNull(baseUri, "baseUri must not be null");
+        this.requestTimeout = Objects.requireNonNull(requestTimeout, "requestTimeout must not be null");
         if (!"https".equalsIgnoreCase(baseUri.getScheme())) {
             if (!"http".equalsIgnoreCase(baseUri.getScheme()) || !isLoopback(baseUri)) {
                 throw new IllegalArgumentException("Cloud API must use HTTPS; HTTP is allowed only for loopback tests");
             }
         }
+        this.client = HttpClients.create(requestTimeout);
     }
 
     @Override
@@ -734,7 +742,7 @@ public final class HttpCloudApiClient implements CloudCapabilityApi, CloudAuthAp
     private String send(String path, String method, Object payload, String token) {
         try {
             HttpRequest.Builder builder = HttpRequest.newBuilder(baseUri.resolve("/api/v1/" + path))
-                .timeout(REQUEST_TIMEOUT)
+                .timeout(requestTimeout)
                 .header("Accept", "application/json");
             if (token != null) builder.header("Authorization", "Bearer " + token);
             if (payload == null) builder.method(method, HttpRequest.BodyPublishers.noBody());
