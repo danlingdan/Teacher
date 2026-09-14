@@ -10,7 +10,7 @@
 - 当前迭代计划：[v3.4.0 整体优化计划](plans/2026-09-14-v3.4.0-optimization-plan.md)（已发布，门禁记录见 [acceptance](acceptance/2026-09-14-v3.4.0-quality-gate.md)）
 - 最近一轮功能计划：[v3.3 SQL 教学能力全面提升计划](plans/2026-09-10-v3.3-sql-teaching-capability-plan.md)（已交付，v3.3.0–v3.3.4 均已发布）
 - 当前实施记录：[v3.0 正式版与无控制台启动](history/stages/stage27/2026-08-12-v3-ga-no-console-release-candidate.md)（v3.1 起实施要点内嵌于各发布说明与运维记录）
-- 当前生产部署记录：[v3.3.4 云端部署记录](operations/2026-09-14-v3.3.4-cloud-deployment.md)
+- 当前生产部署记录：[v3.4.0 云端部署记录](operations/2026-09-15-v3.4.0-cloud-deployment.md)
 
 > “当前”以 `pom.xml`、Git 标签和实际代码为准。计划文档记录制定时的基线，不应被当作实时状态页。
 
