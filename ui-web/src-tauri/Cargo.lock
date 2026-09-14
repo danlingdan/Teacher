@@ -3478,7 +3478,7 @@ dependencies = [
 
 [[package]]
 name = "sqlteacher-desktop"
-version = "3.4.0"
+version = "3.4.2"
 dependencies = [
  "serde",
  "serde_json",

@@ -4,10 +4,10 @@
 
 ## 当前基线
 
-- 当前代码版本：`3.4.0`（最新 tag）
-- 当前公开正式版本：[v3.4.0](releases/v3.4.0.md)（GitHub Release Latest）
-- 上一稳定版本线：v3.3（[v3.3.4](releases/v3.3.4.md)，已部署生产后被 3.4.0 接替）
-- 当前迭代计划：[v3.4.0 整体优化计划](plans/2026-09-14-v3.4.0-optimization-plan.md)（已发布，门禁记录见 [acceptance](acceptance/2026-09-14-v3.4.0-quality-gate.md)）
+- 当前代码版本：`3.4.2`（最新 tag）
+- 当前公开正式版本：[v3.4.2](releases/v3.4.2.md)（GitHub Release Latest）
+- 上一稳定版本线：[v3.4.0](releases/v3.4.0.md)（质量版本，被 3.4.2 接替；v3.4.1 计划随 v3.4.2 合并交付，未单独发布）
+- 当前迭代计划：[v3.4.2 软件合规声明与关于信息计划](plans/2026-09-15-v3.4.2-plan.md)（已发布；同批交付 [v3.4.1 设置易用性与数据完整性计划](plans/2026-09-15-v3.4.1-plan.md)）
 - 最近一轮功能计划：[v3.3 SQL 教学能力全面提升计划](plans/2026-09-10-v3.3-sql-teaching-capability-plan.md)（已交付，v3.3.0–v3.3.4 均已发布）
 - 当前实施记录：[v3.0 正式版与无控制台启动](history/stages/stage27/2026-08-12-v3-ga-no-console-release-candidate.md)（v3.1 起实施要点内嵌于各发布说明与运维记录）
 - 当前生产部署记录：[v3.4.0 云端部署记录](operations/2026-09-15-v3.4.0-cloud-deployment.md)
