@@ -36,7 +36,8 @@ final class V110SupportStore {
         if (secret == null || secret.length() < 32) {
             byte[] generated = new byte[32]; random.nextBytes(generated); hashSecret = generated;
         } else hashSecret = secret.getBytes(StandardCharsets.UTF_8);
-        initialize();
+        // v3.4.0 REF-5: schema evolution is owned by the shared versioned migrator.
+        CloudSchemaMigrator.migrate(database.toAbsolutePath().normalize());
     }
 
     ProblemReportReceipt submit(Map<String, Object> body, String authenticatedUserId, String remoteAddress) {
@@ -217,16 +218,6 @@ final class V110SupportStore {
         } catch (SQLException error) { throw database(error); }
     }
 
-    private void initialize() throws SQLException {
-        try (Connection connection = open(); Statement statement = connection.createStatement()) {
-            statement.executeUpdate("create table if not exists problem_reports(id text primary key,principal_key text not null,user_id text,idempotency_key text not null,install_id_hash text not null,type text not null,severity text not null,summary text not null,description text not null,reproduction_steps text not null,expected_result text not null,actual_result text not null,application_json text not null,diagnostics_json text not null,status text not null,query_token_hash text not null,created_at text not null,updated_at text not null,expires_at text not null,unique(principal_key,idempotency_key))");
-            statement.executeUpdate("create table if not exists problem_report_contacts(report_id text primary key references problem_reports(id) on delete cascade,contact text not null)");
-            statement.executeUpdate("create table if not exists problem_report_screenshots(report_id text primary key references problem_reports(id) on delete cascade,mime_type text not null,filename text not null,data_blob blob not null,created_at text not null)");
-            statement.executeUpdate("create table if not exists problem_report_status_history(id integer primary key autoincrement,report_id text not null references problem_reports(id) on delete cascade,status text not null,reason_code text not null,created_at text not null)");
-            statement.executeUpdate("create index if not exists idx_problem_reports_status_time on problem_reports(status,created_at desc)");
-            statement.executeUpdate("create index if not exists idx_problem_reports_expiry on problem_reports(expires_at)");
-        }
-    }
     private Connection open() throws SQLException { Connection connection = DriverManager.getConnection(url); try (Statement s = connection.createStatement()) { s.execute("pragma foreign_keys=on"); s.execute("pragma busy_timeout=5000"); } return connection; }
     private String digest(String value) { try { MessageDigest digest = MessageDigest.getInstance("SHA-256"); digest.update(hashSecret); return HexFormat.of().formatHex(digest.digest((value == null ? "" : value).getBytes(StandardCharsets.UTF_8))); } catch (Exception error) { throw new IllegalStateException(error); } }
     private static String required(Map<String, Object> body, String key, int max) { String value = optional(body, key, max); if (value.isBlank()) throw new IllegalArgumentException(key + " is required"); return value; }

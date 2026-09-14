@@ -64,7 +64,8 @@ final class V14CloudStore {
 
     V14CloudStore(Path database) throws SQLException {
         this.database = Objects.requireNonNull(database, "database must not be null").toAbsolutePath().normalize();
-        initialize();
+        // v3.4.0 REF-5: schema evolution is owned by the shared versioned migrator.
+        CloudSchemaMigrator.migrate(database);
     }
 
     CourseCatalog createCourse(AuthenticatedUser actor, String name, String description) {
@@ -1448,94 +1449,6 @@ final class V14CloudStore {
             }
         } catch (SQLException error) { throw database(error); }
         return ordered.keySet().stream().map(found::get).filter(Objects::nonNull).limit(limit).toList();
-    }
-
-    private void initialize() throws SQLException {
-        try (Connection connection = open(); Statement statement = connection.createStatement()) {
-            statement.executeUpdate("create table if not exists courses(id text primary key,name text not null,"
-                + "description text not null default '',status text not null check(status in ('ACTIVE','INACTIVE')),"
-                + "version integer not null,created_by text not null references users(id),created_at text not null,updated_at text not null)");
-            statement.executeUpdate("create table if not exists course_sections(id text primary key,course_id text not null references courses(id),"
-                + "name text not null,sort_order integer not null,status text not null check(status in ('ACTIVE','INACTIVE')),"
-                + "version integer not null,created_at text not null,updated_at text not null)");
-            statement.executeUpdate("create table if not exists knowledge_points(id text primary key,course_id text not null references courses(id),"
-                + "section_id text references course_sections(id),name text not null,description text not null default '',"
-                + "sort_order integer not null,status text not null check(status in ('ACTIVE','INACTIVE')),version integer not null,"
-                + "created_at text not null,updated_at text not null)");
-            statement.executeUpdate("create table if not exists shared_exercises(id text primary key,course_id text not null references courses(id),"
-                + "current_version integer not null,status text not null check(status in ('ACTIVE','INACTIVE')),"
-                + "created_by text not null references users(id),created_at text not null,updated_at text not null)");
-            statement.executeUpdate("create table if not exists shared_exercise_versions(id text primary key,exercise_id text not null references shared_exercises(id),"
-                + "course_id text not null references courses(id),version integer not null,title text not null,prompt text not null,"
-                + "dataset_version text not null,evaluation_rule text not null,knowledge_point_ids_json text not null,"
-                + "content_hash text not null,created_by text not null references users(id),published_at text not null,"
-                + "unique(exercise_id,version))");
-            statement.executeUpdate("create table if not exists assignment_content_snapshots(assignment_id text primary key references class_assignments(id),"
-                + "exercise_version_id text not null references shared_exercise_versions(id),title text not null,prompt text not null,"
-                + "dataset_version text not null,evaluation_rule text not null,knowledge_point_ids_json text not null,"
-                + "snapshot_hash text not null,created_at text not null)");
-            statement.executeUpdate("create table if not exists submission_feedback(submission_id text primary key references assignment_submissions(id),"
-                + "assignment_id text not null references class_assignments(id),student_user_id text not null references users(id),"
-                + "status text not null check(status in ('NEEDS_WORK','REVIEWED','RESOLVED')),comment text not null,"
-                + "knowledge_point_ids_json text not null,version integer not null,author_user_id text not null references users(id),updated_at text not null)");
-            statement.executeUpdate("create table if not exists feedback_audit(id text primary key,submission_id text not null references assignment_submissions(id),"
-                + "actor_user_id text not null references users(id),status text not null,version integer not null,created_at text not null)");
-            statement.executeUpdate("create table if not exists cloud_notifications(id text primary key,recipient_user_id text not null references users(id),"
-                + "type text not null,resource_type text not null,resource_id text not null,title text not null,message text not null,"
-                + "idempotency_key text not null,read_at text,created_at text not null,unique(recipient_user_id,idempotency_key))");
-            statement.executeUpdate("create table if not exists v14_operations(actor_user_id text not null references users(id),"
-                + "operation_id text not null,resource_type text not null,resource_id text not null,created_at text not null,"
-                + "primary key(actor_user_id,operation_id))");
-            statement.executeUpdate("create table if not exists cloud_schema_version(version integer primary key,"
-                + "description text not null,applied_at text not null)");
-            statement.executeUpdate("insert or ignore into cloud_schema_version(version,description,applied_at) values"
-                + "(1,'v1.3 cloud baseline',current_timestamp)");
-            statement.executeUpdate("insert or ignore into cloud_schema_version(version,description,applied_at) values"
-                + "(2,'v1.4 course content and feedback',current_timestamp)");
-            statement.executeUpdate("create table if not exists cloud_knowledge_articles(id text primary key,course_id text not null references courses(id),"
-                + "section_id text references course_sections(id),title text not null,visibility text not null check(visibility in ('PRIVATE','PUBLISHED','INACTIVE')),"
-                + "current_revision integer not null,content_hash text not null,created_by text not null references users(id),created_at text not null,updated_at text not null)");
-            statement.executeUpdate("create table if not exists cloud_knowledge_revisions(id text primary key,article_id text not null references cloud_knowledge_articles(id) on delete cascade,"
-                + "revision integer not null,content text not null,content_hash text not null,created_by text not null references users(id),created_at text not null,unique(article_id,revision))");
-            statement.executeUpdate("create table if not exists cloud_knowledge_chunks(id text primary key,article_id text not null references cloud_knowledge_articles(id) on delete cascade,"
-                + "revision_id text not null references cloud_knowledge_revisions(id) on delete cascade,chunk_index integer not null,content text not null,content_hash text not null,"
-                + "index_status text not null check(index_status in ('PENDING','INDEXED','FAILED')),unique(revision_id,chunk_index))");
-            statement.executeUpdate("create table if not exists cloud_knowledge_sync_cursor(user_id text not null references users(id),course_id text not null references courses(id),"
-                + "cursor_version integer not null,updated_at text not null,primary key(user_id,course_id))");
-            statement.executeUpdate("insert or ignore into cloud_schema_version(version,description,applied_at) values"
-                + "(3,'v1.8.5 shared knowledge and vector indexing metadata',current_timestamp)");
-            statement.executeUpdate("create table if not exists cloud_knowledge_index_outbox(id text primary key,"
-                + "chunk_id text not null unique references cloud_knowledge_chunks(id) on delete cascade,operation text not null check(operation in ('UPSERT','DELETE')),"
-                + "status text not null check(status in ('PENDING','FAILED','COMPLETED')),attempts integer not null default 0,next_attempt_at text not null,"
-                + "last_error text,created_at text not null,updated_at text not null)");
-            statement.executeUpdate("create table if not exists cloud_knowledge_embedding_profile(id integer primary key check(id=1),"
-                + "provider text not null,model text not null,dimension integer not null,index_version integer not null,updated_at text not null)");
-            statement.executeUpdate("insert or ignore into cloud_knowledge_index_outbox(id,chunk_id,operation,status,attempts,next_attempt_at,created_at,updated_at) "
-                + "select lower(hex(randomblob(16))),c.id,'UPSERT','PENDING',0,current_timestamp,current_timestamp,current_timestamp "
-                + "from cloud_knowledge_chunks c join cloud_knowledge_articles a on a.id=c.article_id "
-                + "join cloud_knowledge_revisions r on r.id=c.revision_id and r.revision=a.current_revision");
-            statement.executeUpdate("insert or ignore into cloud_schema_version(version,description,applied_at) values"
-                + "(4,'v1.8.5 qdrant embedding outbox and profile',current_timestamp)");
-            statement.executeUpdate("create index if not exists idx_course_sections_order on course_sections(course_id,sort_order,id)");
-            statement.executeUpdate("create index if not exists idx_knowledge_points_order on knowledge_points(course_id,sort_order,id)");
-            statement.executeUpdate("create index if not exists idx_shared_exercise_course on shared_exercises(course_id,status,updated_at desc)");
-            statement.executeUpdate("create index if not exists idx_feedback_assignment on submission_feedback(assignment_id,updated_at desc)");
-            statement.executeUpdate("create index if not exists idx_notification_recipient on cloud_notifications(recipient_user_id,created_at desc)");
-            statement.executeUpdate("create index if not exists idx_cloud_knowledge_scope on cloud_knowledge_articles(course_id,visibility,updated_at desc)");
-            statement.executeUpdate("create index if not exists idx_cloud_knowledge_chunks on cloud_knowledge_chunks(article_id,revision_id,chunk_index)");
-            statement.executeUpdate("create index if not exists idx_cloud_knowledge_outbox_pending on cloud_knowledge_index_outbox(status,next_attempt_at,created_at)");
-            statement.executeUpdate("create table if not exists v20_course_package_operations(actor_user_id text not null references users(id),"
-                + "operation_id text not null,package_id text not null,course_id text not null references courses(id),course_version text not null,"
-                + "content_sha256 text not null,license text not null,created_at text not null,primary key(actor_user_id,operation_id),"
-                + "unique(actor_user_id,package_id,course_version))");
-            statement.executeUpdate("create table if not exists v20_artifact_sync(cursor integer primary key autoincrement,"
-                + "actor_user_id text not null references users(id),operation_id text not null,aggregate_type text not null,aggregate_id text not null,"
-                + "aggregate_version integer not null,payload_sha256 text not null,summary_json text not null,occurred_at text not null,"
-                + "unique(actor_user_id,operation_id),unique(actor_user_id,aggregate_type,aggregate_id,aggregate_version))");
-            statement.executeUpdate("create index if not exists idx_v20_artifact_sync_owner_cursor on v20_artifact_sync(actor_user_id,cursor)");
-            statement.executeUpdate("insert or ignore into cloud_schema_version(version,description,applied_at) values"
-                + "(6,'v2.0 secure course packages and capability sync',current_timestamp)");
-        }
     }
 
     private boolean isCourseOwner(AuthenticatedUser actor, String courseId) {

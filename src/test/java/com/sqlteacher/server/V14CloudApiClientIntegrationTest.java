@@ -228,7 +228,8 @@ class V14CloudApiClientIntegrationTest {
         try (var connection = DriverManager.getConnection("jdbc:sqlite:" + database);
              var statement = connection.createStatement();
              var row = statement.executeQuery("select max(version) from cloud_schema_version")) {
-            assertEquals(6, row.getInt(1));
+            // v3.4.0 REF-5: the shared migrator stamps the full unified history.
+            assertEquals(CloudSchemaMigrator.latestVersion(), row.getInt(1));
         }
 
         try (var connection = DriverManager.getConnection("jdbc:sqlite:" + database);

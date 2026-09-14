@@ -45,7 +45,8 @@ final class V19CloudStore {
 
     V19CloudStore(Path database) throws SQLException {
         this.database = Objects.requireNonNull(database, "database must not be null").toAbsolutePath().normalize();
-        initialize();
+        // v3.4.0 REF-5: schema evolution is owned by the shared versioned migrator.
+        CloudSchemaMigrator.migrate(database);
     }
 
     CourseObjective createObjective(AuthenticatedUser actor, String courseId, String title, String description,
@@ -380,77 +381,6 @@ final class V19CloudStore {
                 "select coalesce(sum(feedback_count),0) from tutor_feedback_summary"), Instant.now());
         } catch (SQLException error) {
             throw database(error);
-        }
-    }
-
-    private void initialize() throws SQLException {
-        try (Connection connection = open(); Statement statement = connection.createStatement()) {
-            try (ResultSet row = statement.executeQuery("select coalesce(max(version),0) from cloud_schema_version")) {
-                if (row.next() && row.getInt(1) > 6) {
-                    throw new SQLException("Cloud database schema is newer than this SQLTeacher version");
-                }
-            }
-            statement.executeUpdate("""
-                create table if not exists course_objectives(
-                    id text primary key,course_id text not null references courses(id),title text not null,
-                    description text not null,completion_criteria text not null,sort_order integer not null,
-                    status text not null check(status in ('ACTIVE','INACTIVE')),version integer not null,
-                    created_by text not null references users(id),created_at text not null,updated_at text not null)
-                """);
-            statement.executeUpdate("create index if not exists idx_course_objectives_order on course_objectives(course_id,status,sort_order,id)");
-            statement.executeUpdate("""
-                create table if not exists objective_prerequisites(
-                    objective_id text not null references course_objectives(id) on delete cascade,
-                    prerequisite_objective_id text not null references course_objectives(id) on delete cascade,
-                    created_at text not null,primary key(objective_id,prerequisite_objective_id),
-                    check(objective_id<>prerequisite_objective_id))
-                """);
-            statement.executeUpdate("""
-                create table if not exists objective_resource_links(
-                    objective_id text not null references course_objectives(id) on delete cascade,
-                    resource_type text not null check(resource_type in ('KNOWLEDGE_POINT','KNOWLEDGE_ARTICLE','EXERCISE_VERSION')),
-                    resource_id text not null,created_at text not null,
-                    primary key(objective_id,resource_type,resource_id))
-                """);
-            statement.executeUpdate("""
-                create table if not exists teaching_cycles(
-                    id text primary key,course_id text not null references courses(id),classroom_id text,
-                    phase text not null check(phase in ('BEFORE_CLASS','IN_CLASS','AFTER_CLASS','REVIEW')),
-                    status text not null check(status in ('DRAFT','PUBLISHED','CLOSED')),version integer not null,
-                    created_by text not null references users(id),created_at text not null,updated_at text not null)
-                """);
-            statement.executeUpdate("""
-                create table if not exists study_plan_action_state(
-                    owner_id text not null references users(id),action_id text not null,course_id text not null,
-                    requested_state text not null check(requested_state in ('STARTED','COMPLETED','DISMISSED')),
-                    version integer not null,updated_at text not null,primary key(owner_id,action_id))
-                """);
-            statement.executeUpdate("""
-                create table if not exists study_plan_sync_operations(
-                    owner_id text not null references users(id),operation_id text not null,status text not null,
-                    created_at text not null,primary key(owner_id,operation_id))
-                """);
-            statement.executeUpdate("""
-                create table if not exists intervention_audit_v2(
-                    id text primary key,classroom_id text not null,student_user_id text not null,objective_id text not null,
-                    reason_code text not null,action text not null,actor_user_id text not null,created_at text not null)
-                """);
-            statement.executeUpdate("""
-                create table if not exists tutor_feedback_summary(
-                    owner_id text not null references users(id),objective_id text not null,feedback_type text not null,
-                    feedback_count integer not null,updated_at text not null,primary key(owner_id,objective_id,feedback_type))
-                """);
-            statement.executeUpdate("""
-                create table if not exists objective_intervention_drafts(
-                    id text primary key,classroom_id text not null references classrooms(id),
-                    course_id text not null references courses(id),objective_id text not null references course_objectives(id),
-                    reason_code text not null,action text not null,impact_count integer not null,
-                    objective_version integer not null,confirmation_token_hash text not null,
-                    status text not null check(status in ('DRAFT','CONFIRMED','EXPIRED')),
-                    created_by text not null references users(id),created_at text not null,confirmed_at text)
-                """);
-            statement.executeUpdate("insert or ignore into cloud_schema_version(version,description,applied_at) values"
-                + "(5,'v1.9 course objectives and deterministic study planning',current_timestamp)");
         }
     }
 

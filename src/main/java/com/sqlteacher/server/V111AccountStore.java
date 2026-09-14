@@ -47,7 +47,8 @@ final class V111AccountStore {
         this.mail = mail;
         this.publicBaseUrl = Objects.requireNonNullElse(
             publicBaseUrl, "https://api.sqlteacher.tech");
-        initialize();
+        // v3.4.0 REF-5: schema evolution is owned by the shared versioned migrator.
+        CloudSchemaMigrator.migrate(database.toAbsolutePath().normalize());
     }
 
     // ---- sessions ----
@@ -309,31 +310,6 @@ final class V111AccountStore {
 
     // ---- helpers ----
 
-    private void initialize() throws SQLException {
-        try (Connection connection = open(); Statement statement = connection.createStatement()) {
-            // Mirror the core CloudStore tables so this store can also be initialized independently (tests);
-            // in the running server these are no-ops because the tables already exist.
-            statement.executeUpdate("create table if not exists users(id text primary key,email text unique not null,display_name text not null,password_hash blob not null,password_salt blob not null,disabled integer not null default 0,created_at text not null,email_verified integer not null default 0)");
-            statement.executeUpdate("create table if not exists access_tokens(token_hash blob primary key,user_id text not null references users(id),expires_at text not null,created_at text not null,revoked_at text,device_label text,last_seen_at text)");
-            statement.executeUpdate("create table if not exists refresh_tokens(token_hash blob primary key,user_id text not null references users(id),expires_at text not null,created_at text not null,revoked_at text)");
-            statement.executeUpdate("create table if not exists email_verifications(id text primary key,user_id text not null references users(id),email text not null,token_hash blob not null,created_at text not null,expires_at text not null,used_at text)");
-            statement.executeUpdate("create table if not exists reset_tokens(id text primary key,user_id text not null references users(id),token_hash blob not null,created_at text not null,expires_at text not null,used_at text,attempts integer not null default 0)");
-            statement.executeUpdate("create table if not exists account_tasks(id text primary key,user_id text not null references users(id),kind text not null,status text not null,payload_json text,cancel_before text,created_at text not null,updated_at text not null)");
-            statement.executeUpdate("create index if not exists idx_reset_tokens_user on reset_tokens(user_id)");
-            statement.executeUpdate("create index if not exists idx_account_tasks_user on account_tasks(user_id,kind)");
-            addColumnIfMissing(connection, "access_tokens", "device_label", "text");
-            addColumnIfMissing(connection, "access_tokens", "last_seen_at", "text");
-            addColumnIfMissing(connection, "users", "email_verified", "integer not null default 0");
-        }
-    }
-    private static void addColumnIfMissing(Connection connection, String table, String column, String definition) throws SQLException {
-        try (ResultSet columns = connection.getMetaData().getColumns(null, null, table, column)) {
-            if (columns.next()) return;
-        }
-        try (Statement statement = connection.createStatement()) {
-            statement.executeUpdate("alter table " + table + " add column " + column + " " + definition);
-        }
-    }
     private Connection open() throws SQLException {
         Connection connection = DriverManager.getConnection(url);
         try (Statement statement = connection.createStatement()) {

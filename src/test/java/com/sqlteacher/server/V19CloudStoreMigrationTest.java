@@ -14,16 +14,19 @@ class V19CloudStoreMigrationTest {
     @TempDir Path directory;
 
     @Test
-    void shouldApplySchemaFiveIdempotentlyAndRejectFutureSchema() throws Exception {
+    void shouldApplyUnifiedSchemaIdempotentlyAndRejectFutureSchema() throws Exception {
         Path database = directory.resolve("cloud.db");
         new V14CloudStore(database);
         new V19CloudStore(database);
         new V19CloudStore(database);
-        assertEquals(6, maxVersion(database));
+        // v3.4.0 REF-5: the shared migrator stamps the full contiguous history (v1.10 and
+        // v1.11 steps included), not only the v1.4/v1.9 rows.
+        assertEquals(CloudSchemaMigrator.latestVersion(), maxVersion(database));
 
         try (var connection = DriverManager.getConnection("jdbc:sqlite:" + database);
              var statement = connection.createStatement()) {
-            statement.executeUpdate("insert into cloud_schema_version(version,description,applied_at) values(7,'future',current_timestamp)");
+            statement.executeUpdate("insert into cloud_schema_version(version,description,applied_at) values("
+                + (CloudSchemaMigrator.latestVersion() + 1) + ",'future',current_timestamp)");
         }
         assertThrows(SQLException.class, () -> new V19CloudStore(database));
     }
