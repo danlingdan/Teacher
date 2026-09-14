@@ -3,10 +3,13 @@ package com.sqlteacher.infrastructure.spring;
 import com.sqlteacher.application.ai.*;
 import com.sqlteacher.application.config.AppConfigurationService;
 import com.sqlteacher.application.config.SqlTeacherConfiguration;
-import com.sqlteacher.application.collaboration.CloudApiClient;
+import com.sqlteacher.application.collaboration.CloudAuthApi;
+import com.sqlteacher.application.collaboration.CloudBankApi;
+import com.sqlteacher.application.collaboration.CloudCapabilityApi;
 import com.sqlteacher.application.collaboration.CloudSessionService;
 import com.sqlteacher.application.collaboration.CloudLearningSyncService;
 import com.sqlteacher.application.collaboration.CloudArtifactSyncService;
+import com.sqlteacher.application.collaboration.CloudSyncApi;
 import com.sqlteacher.application.collaboration.FeedbackDraftEnhancer;
 import com.sqlteacher.application.event.LearningEventQueryService;
 import com.sqlteacher.application.event.LearningEventRecorder;
@@ -232,16 +235,20 @@ public class SqlTeacherApplicationConfig {
         return new WindowsManagedComponentService();
     }
 
+    /**
+     * Single cloud client instance; it implements every narrow cloud port
+     * (v3.4.0 REF-4), so consumers inject the port they need by type.
+     */
     @Bean
-    public CloudApiClient cloudApiClient(URI cloudBaseUri) {
+    public HttpCloudApiClient cloudApiClient(URI cloudBaseUri) {
         return new HttpCloudApiClient(cloudBaseUri);
     }
 
     @Bean
     public ExerciseBankSyncService exerciseBankSyncService(
-            CloudApiClient cloudApiClient, SqlTeacherConfiguration configuration) {
+            CloudBankApi bankApi, SqlTeacherConfiguration configuration) {
         return new ExerciseBankSyncService(
-            cloudApiClient, configuration.database().appDatabasePath().toString());
+            bankApi, configuration.database().appDatabasePath().toString());
     }
 
     @Bean public GeneralSoftwareService generalSoftwareService(SqlTeacherConfiguration configuration, URI cloudBaseUri) {
@@ -275,14 +282,14 @@ public class SqlTeacherApplicationConfig {
     }
 
     @Bean
-    public CloudSessionService cloudSessionService(SqlTeacherConfiguration configuration, CloudApiClient api) {
+    public CloudSessionService cloudSessionService(SqlTeacherConfiguration configuration, CloudAuthApi api) {
         return new PersistentCloudSessionService(
             new WindowsDpapiCloudSessionStore(configuration.dataDirectory().resolve("cloud-session.dat")), api
         );
     }
 
     @Bean
-    public CloudLearningSyncService cloudLearningSyncService(CloudApiClient api, CloudSessionService sessions,
+    public CloudLearningSyncService cloudLearningSyncService(CloudSyncApi api, CloudSessionService sessions,
             LearningEventQueryService query, LearningEventRecorder recorder, SqlTeacherConfiguration configuration) {
         return new DefaultCloudLearningSyncService(api, sessions, query, recorder,
             configuration.dataDirectory().resolve("cloud-state"));
@@ -290,7 +297,8 @@ public class SqlTeacherApplicationConfig {
 
     @Bean
     public CloudArtifactSyncService cloudArtifactSyncService(JdbcConnectionFactory connections,
-            LearningEventOwnerProvider owners, CloudApiClient api, CloudSessionService sessions) {
-        return new JdbcCloudArtifactSyncService(connections, owners, api, sessions);
+            LearningEventOwnerProvider owners, CloudCapabilityApi capabilities, CloudSyncApi sync,
+            CloudSessionService sessions) {
+        return new JdbcCloudArtifactSyncService(connections, owners, capabilities, sync, sessions);
     }
 }

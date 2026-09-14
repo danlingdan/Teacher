@@ -6,9 +6,16 @@ import com.sqlteacher.application.activity.ActivityLearningService;
 import com.sqlteacher.application.activity.ActivityReviewService;
 import com.sqlteacher.application.ai.AiStatusService;
 import com.sqlteacher.application.ai.NetworkAiSettingsService;
-import com.sqlteacher.application.collaboration.CloudApiClient;
+import com.sqlteacher.application.collaboration.CloudAccountApi;
+import com.sqlteacher.application.collaboration.CloudAdminApi;
+import com.sqlteacher.application.collaboration.CloudAuthApi;
+import com.sqlteacher.application.collaboration.CloudBankApi;
+import com.sqlteacher.application.collaboration.CloudCapabilityApi;
+import com.sqlteacher.application.collaboration.CloudClassroomApi;
 import com.sqlteacher.application.collaboration.CloudLearningSyncService;
+import com.sqlteacher.application.collaboration.CloudPlanningApi;
 import com.sqlteacher.application.collaboration.CloudSessionService;
+import com.sqlteacher.application.collaboration.CloudSyncApi;
 import com.sqlteacher.application.ai.AiModelSelectionService;
 import com.sqlteacher.application.config.AppConfigurationService;
 import com.sqlteacher.application.connection.ConnectionManagementService;
@@ -28,6 +35,7 @@ import com.sqlteacher.application.nl2sql.Nl2SqlSafetyService;
 import com.sqlteacher.application.risk.SqlRiskAnalysisService;
 import com.sqlteacher.application.runner.CodeRunner;
 import com.sqlteacher.application.runner.LocalCodeRunner;
+import com.sqlteacher.infrastructure.cloud.HttpCloudApiClient;
 import com.sqlteacher.infrastructure.database.JdbcLearningEventRecorder;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Tag;
@@ -36,6 +44,7 @@ import org.springframework.context.annotation.AnnotationConfigApplicationContext
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertSame;
 
 @Tag("integration")
 class SqlTeacherApplicationConfigTest {
@@ -72,7 +81,17 @@ class SqlTeacherApplicationConfigTest {
             assertNotNull(context.getBean(SqlRiskAnalysisService.class));
             assertNotNull(context.getBean(Nl2SqlSafetyService.class));
             assertNotNull(context.getBean(NetworkAiSettingsService.class));
-            assertNotNull(context.getBean(CloudApiClient.class));
+            // v3.4.0 REF-4: one HttpCloudApiClient instance backs every narrow cloud port.
+            assertNotNull(context.getBean(HttpCloudApiClient.class));
+            assertNotNull(context.getBean(CloudCapabilityApi.class));
+            assertNotNull(context.getBean(CloudAuthApi.class));
+            assertNotNull(context.getBean(CloudAccountApi.class));
+            assertNotNull(context.getBean(CloudClassroomApi.class));
+            assertNotNull(context.getBean(CloudPlanningApi.class));
+            assertNotNull(context.getBean(CloudBankApi.class));
+            assertNotNull(context.getBean(CloudSyncApi.class));
+            assertNotNull(context.getBean(CloudAdminApi.class));
+            assertSame(context.getBean(CloudClassroomApi.class), context.getBean(CloudAuthApi.class));
             assertNotNull(context.getBean(CloudSessionService.class));
             assertNotNull(context.getBean(CloudLearningSyncService.class));
             assertInstanceOf(

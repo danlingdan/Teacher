@@ -35,7 +35,7 @@ class DefaultStudentLearningQueueServiceTest {
         var diagnosis = new StubDiagnosis();
         var sessions = signInStudent();
         var api = new StubApi();
-        var service = new DefaultStudentLearningQueueService(diagnosis, api, sessions, FIXED_CLOCK);
+        var service = new DefaultStudentLearningQueueService(diagnosis, api, api, api, sessions, FIXED_CLOCK);
 
         StudentLearningQueue queue = service.refresh();
 
@@ -50,7 +50,7 @@ class DefaultStudentLearningQueueServiceTest {
         var diagnosis = new StubDiagnosis();
         var sessions = signInStudent();
         var api = new StubApi(); api.fail = true;
-        var service = new DefaultStudentLearningQueueService(diagnosis, api, sessions, FIXED_CLOCK);
+        var service = new DefaultStudentLearningQueueService(diagnosis, api, api, api, sessions, FIXED_CLOCK);
 
         StudentLearningQueue queue = service.refresh();
 
@@ -67,7 +67,7 @@ class DefaultStudentLearningQueueServiceTest {
         var planCache = new StubPlanCache(
             new PlanSyncOperation("op-1", "course-1", "action-1", StudyPlanActionState.STARTED, 1, 0),
             new PlanSyncOperation("op-2", "course-1", "action-2", StudyPlanActionState.COMPLETED, 1, 0));
-        var service = new DefaultStudentLearningQueueService(diagnosis, api, sessions, planCache, FIXED_CLOCK);
+        var service = new DefaultStudentLearningQueueService(diagnosis, api, api, api, sessions, planCache, FIXED_CLOCK);
 
         StudentLearningQueue queue = service.refresh();
 
@@ -85,7 +85,7 @@ class DefaultStudentLearningQueueServiceTest {
         api.syncFailure = new CloudApiRequestException(401, "CLOUD_AUTH_FAILED", "token rejected");
         var planCache = new StubPlanCache(
             new PlanSyncOperation("op-1", "course-1", "action-1", StudyPlanActionState.STARTED, 1, 0));
-        var service = new DefaultStudentLearningQueueService(diagnosis, api, sessions, planCache, FIXED_CLOCK);
+        var service = new DefaultStudentLearningQueueService(diagnosis, api, api, api, sessions, planCache, FIXED_CLOCK);
 
         StudentLearningQueue queue = service.refresh();
 
@@ -106,7 +106,7 @@ class DefaultStudentLearningQueueServiceTest {
             new KnowledgePoint("kp-1", "course-1", null, "Knowledge B", "", 1, ContentStatus.ACTIVE, 1, NOW, NOW));
         api.plan = new StudyPlanSnapshot("student-1", "course-1", "test",
             NOW.minusSeconds(60), NOW.plusSeconds(3600), List.of());
-        var service = new DefaultStudentLearningQueueService(diagnosis, api, sessions, FIXED_CLOCK);
+        var service = new DefaultStudentLearningQueueService(diagnosis, api, api, api, sessions, FIXED_CLOCK);
 
         StudentLearningQueue queue = assertDoesNotThrow(service::refresh);
 
@@ -160,7 +160,7 @@ class DefaultStudentLearningQueueServiceTest {
         private static UnsupportedOperationException unsupported() { return new UnsupportedOperationException(); }
     }
 
-    private static final class StubApi implements CloudApiClient {
+    private static final class StubApi implements CloudCapabilityApi, CloudClassroomApi, CloudPlanningApi {
         private boolean fail;
         private RuntimeException syncFailure;
         private List<CourseCatalog> courses = List.of();
@@ -196,10 +196,6 @@ class DefaultStudentLearningQueueServiceTest {
             return new StudyPlanActionStateRecord("student-1", courseId, actionId, state, expectedVersion + 1, NOW);
         }
         @Override public CloudNotification markNotificationRead(String token,String id){throw unsupported();}
-        @Override public CloudAuthenticationService.Session login(String e,char[] p){throw unsupported();}
-        @Override public CloudAuthenticationService.Session register(String e,String n,char[] p){throw unsupported();}
-        @Override public CloudAuthenticationService.Session refresh(String r){throw unsupported();}
-        @Override public void logout(String t){throw unsupported();}
         @Override public ClassroomService.Classroom createClass(String t,String n){throw unsupported();}
         @Override public ClassroomService.Classroom addClassMember(String t,String c,String e,UserRole r){throw unsupported();}
         @Override public ClassAssignment createAssignment(String t,String c,String e,String n){throw unsupported();}
@@ -208,8 +204,6 @@ class DefaultStudentLearningQueueServiceTest {
         @Override public ClassAssignment updateAssignment(String t,String c,String a,String n,Instant d){throw unsupported();}
         @Override public ClassLearningSummary getClassLearningSummary(String t,String c){throw unsupported();}
         @Override public String exportClassLearningCsv(String t,String c){throw unsupported();}
-        @Override public int uploadSyncItems(String t,List<CloudSyncItem> i){throw unsupported();}
-        @Override public List<CloudSyncItem> downloadSyncItems(String t,long v){throw unsupported();}
         private static UnsupportedOperationException unsupported(){return new UnsupportedOperationException();}
     }
 }

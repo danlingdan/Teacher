@@ -1,10 +1,11 @@
 package com.sqlteacher.infrastructure.cloud;
 
-import com.sqlteacher.application.collaboration.CloudApiClient;
+import com.sqlteacher.application.collaboration.CloudCapabilityApi;
 import com.sqlteacher.application.collaboration.CloudArtifactSyncItem;
 import com.sqlteacher.application.collaboration.CloudArtifactSyncResult;
 import com.sqlteacher.application.collaboration.CloudArtifactSyncService;
 import com.sqlteacher.application.collaboration.CloudSessionService;
+import com.sqlteacher.application.collaboration.CloudSyncApi;
 import com.sqlteacher.application.event.LearningEventOwnerProvider;
 import com.sqlteacher.domain.SqlTeacherException;
 import com.sqlteacher.infrastructure.database.JdbcConnectionFactory;
@@ -22,14 +23,17 @@ import java.util.Objects;
 public final class JdbcCloudArtifactSyncService implements CloudArtifactSyncService {
     private final JdbcConnectionFactory connections;
     private final LearningEventOwnerProvider owners;
-    private final CloudApiClient api;
+    private final CloudCapabilityApi capabilities;
+    private final CloudSyncApi sync;
     private final CloudSessionService sessions;
 
     public JdbcCloudArtifactSyncService(JdbcConnectionFactory connections, LearningEventOwnerProvider owners,
-                                        CloudApiClient api, CloudSessionService sessions) {
+                                        CloudCapabilityApi capabilities, CloudSyncApi sync,
+                                        CloudSessionService sessions) {
         this.connections = Objects.requireNonNull(connections);
         this.owners = Objects.requireNonNull(owners);
-        this.api = Objects.requireNonNull(api);
+        this.capabilities = Objects.requireNonNull(capabilities);
+        this.sync = Objects.requireNonNull(sync);
         this.sessions = Objects.requireNonNull(sessions);
     }
 
@@ -55,7 +59,7 @@ public final class JdbcCloudArtifactSyncService implements CloudArtifactSyncServ
 
     @Override
     public synchronized SyncReport synchronize() {
-        if (!api.capabilities().supports("ARTIFACT_SYNC_V2")) {
+        if (!capabilities.capabilities().supports("ARTIFACT_SYNC_V2")) {
             throw new IllegalStateException("CLOUD_CAPABILITY_UNAVAILABLE");
         }
         var session = sessions.refresh().or(() -> sessions.current())
@@ -64,13 +68,13 @@ public final class JdbcCloudArtifactSyncService implements CloudArtifactSyncServ
         List<CloudArtifactSyncItem> pending = pending(owner);
         List<CloudArtifactSyncResult> uploaded;
         try {
-            uploaded = api.uploadArtifactSyncItems(session.accessToken(), pending);
+            uploaded = sync.uploadArtifactSyncItems(session.accessToken(), pending);
         } catch (RuntimeException error) {
             throw new IllegalStateException("Cloud sync failed; local operations were retained", error);
         }
         int conflicts = applyResults(owner, uploaded);
         long cursor = cursor(owner);
-        var page = api.downloadArtifactSyncItems(session.accessToken(), cursor);
+        var page = sync.downloadArtifactSyncItems(session.accessToken(), cursor);
         int downloaded = importPage(owner, page.items());
         saveCursor(owner, page.cursor());
         int accepted = (int) uploaded.stream().filter(item -> item.status() != CloudArtifactSyncResult.Status.CONFLICT).count();

@@ -3,7 +3,9 @@ package com.sqlteacher.infrastructure.cloud;
 import com.sqlteacher.application.collaboration.AssignmentSubmissionStatus;
 import com.sqlteacher.application.collaboration.AssignmentTaskContext;
 import com.sqlteacher.application.collaboration.AssignmentStatus;
-import com.sqlteacher.application.collaboration.CloudApiClient;
+import com.sqlteacher.application.collaboration.CloudCapabilityApi;
+import com.sqlteacher.application.collaboration.CloudClassroomApi;
+import com.sqlteacher.application.collaboration.CloudPlanningApi;
 import com.sqlteacher.application.collaboration.CloudSessionService;
 import com.sqlteacher.application.collaboration.NotificationType;
 import com.sqlteacher.application.collaboration.UserRole;
@@ -40,29 +42,38 @@ public final class DefaultStudentLearningQueueService implements StudentLearning
     private static final Logger log = LoggerFactory.getLogger(DefaultStudentLearningQueueService.class);
 
     private final LearningDiagnosisService diagnosis;
-    private final CloudApiClient api;
+    private final CloudCapabilityApi capabilities;
+    private final CloudClassroomApi classrooms;
+    private final CloudPlanningApi planning;
     private final CloudSessionService sessions;
     private final Clock clock;
     private final StudyPlanCache planCache;
 
-    public DefaultStudentLearningQueueService(LearningDiagnosisService diagnosis, CloudApiClient api,
+    public DefaultStudentLearningQueueService(LearningDiagnosisService diagnosis, CloudCapabilityApi capabilities,
+                                              CloudClassroomApi classrooms, CloudPlanningApi planning,
                                               CloudSessionService sessions) {
-        this(diagnosis, api, sessions, null, Clock.systemUTC());
+        this(diagnosis, capabilities, classrooms, planning, sessions, null, Clock.systemUTC());
     }
 
-    public DefaultStudentLearningQueueService(LearningDiagnosisService diagnosis, CloudApiClient api,
+    public DefaultStudentLearningQueueService(LearningDiagnosisService diagnosis, CloudCapabilityApi capabilities,
+                                              CloudClassroomApi classrooms, CloudPlanningApi planning,
                                               CloudSessionService sessions, StudyPlanCache planCache) {
-        this(diagnosis, api, sessions, planCache, Clock.systemUTC());
+        this(diagnosis, capabilities, classrooms, planning, sessions, planCache, Clock.systemUTC());
     }
 
-    DefaultStudentLearningQueueService(LearningDiagnosisService diagnosis, CloudApiClient api,
+    DefaultStudentLearningQueueService(LearningDiagnosisService diagnosis, CloudCapabilityApi capabilities,
+                                       CloudClassroomApi classrooms, CloudPlanningApi planning,
                                        CloudSessionService sessions, Clock clock) {
-        this(diagnosis, api, sessions, null, clock);
+        this(diagnosis, capabilities, classrooms, planning, sessions, null, clock);
     }
 
-    DefaultStudentLearningQueueService(LearningDiagnosisService diagnosis, CloudApiClient api,
+    DefaultStudentLearningQueueService(LearningDiagnosisService diagnosis, CloudCapabilityApi capabilities,
+                                       CloudClassroomApi classrooms, CloudPlanningApi planning,
                                        CloudSessionService sessions, StudyPlanCache planCache, Clock clock) {
-        this.diagnosis = Objects.requireNonNull(diagnosis); this.api = Objects.requireNonNull(api);
+        this.diagnosis = Objects.requireNonNull(diagnosis);
+        this.capabilities = Objects.requireNonNull(capabilities);
+        this.classrooms = Objects.requireNonNull(classrooms);
+        this.planning = Objects.requireNonNull(planning);
         this.sessions = Objects.requireNonNull(sessions); this.planCache = planCache;
         this.clock = Objects.requireNonNull(clock);
     }
@@ -80,19 +91,19 @@ public final class DefaultStudentLearningQueueService implements StudentLearning
         List<StudentLearningQueueItem> cloudItems = new ArrayList<>();
         try {
             retryPending(token);
-            for (var classroom : api.listClasses(token)) {
+            for (var classroom : classrooms.listClasses(token)) {
                 boolean student = classroom.members().stream().anyMatch(member -> member.userId().equals(userId)
                     && member.role() == UserRole.STUDENT);
                 if (!student) continue;
                 // W6.2：优先走批量端点一次取回全班任务的本员通过状态，消除逐任务 N+1；
                 // 旧服务端不支持该 capability 时回退为逐任务查询，部署顺序无关。
-                var publishedAssignments = api.listAssignments(token, classroom.id()).stream()
+                var publishedAssignments = classrooms.listAssignments(token, classroom.id()).stream()
                     .filter(assignment -> assignment.status() == AssignmentStatus.PUBLISHED)
                     .toList();
                 java.util.Map<String, Boolean> passedByAssignment = null;
                 try {
-                    if (api.capabilities().supports("BATCH_SUBMISSION_STATUS")) {
-                        passedByAssignment = api.listOwnAssignmentPassedStatuses(token, classroom.id());
+                    if (capabilities.capabilities().supports("BATCH_SUBMISSION_STATUS")) {
+                        passedByAssignment = classrooms.listOwnAssignmentPassedStatuses(token, classroom.id());
                     }
                 } catch (RuntimeException unavailableBatch) {
                     passedByAssignment = null;
@@ -102,7 +113,7 @@ public final class DefaultStudentLearningQueueService implements StudentLearning
                     if (passedByAssignment != null) {
                         passed = passedByAssignment.getOrDefault(assignment.id(), false);
                     } else {
-                        passed = api.listOwnAssignmentSubmissions(token, classroom.id(), assignment.id()).stream()
+                        passed = classrooms.listOwnAssignmentSubmissions(token, classroom.id(), assignment.id()).stream()
                             .anyMatch(item -> item.status() == AssignmentSubmissionStatus.PASSED);
                     }
                     if (passed) continue;
@@ -124,7 +135,7 @@ public final class DefaultStudentLearningQueueService implements StudentLearning
             // Known boundary: only the first page (50) of notifications is inspected; the
             // cloud notification API does not yet expose the pagination contract this
             // refresh loop would need, so older unread feedback may surface late.
-            for (var notification : api.listNotifications(token, 0, 50)) {
+            for (var notification : classrooms.listNotifications(token, 0, 50)) {
                 if (!notification.unread() || notification.type() != NotificationType.FEEDBACK_PUBLISHED) continue;
                 String id = "feedback:" + notification.id();
                 if (diagnosis.isActionDismissed(id)) continue;
@@ -133,12 +144,12 @@ public final class DefaultStudentLearningQueueService implements StudentLearning
                     90, notification.createdAt(), false);
                 cloudItems.add(new StudentLearningQueueItem(action, null, notification.id()));
             }
-            for (var course : api.listCourses(token)) {
+            for (var course : planning.listCourses(token)) {
                 if (course.status() != com.sqlteacher.application.collaboration.ContentStatus.ACTIVE) continue;
-                var courseObjectives = api.listCourseObjectives(token, course.id());
+                var courseObjectives = planning.listCourseObjectives(token, course.id());
                 if (planCache != null) planCache.saveObjectives(course.id(), courseObjectives);
-                var fetchedPlan = groundPlan(api.getStudyPlan(token, course.id()),
-                    api.listKnowledgePoints(token, course.id()), dashboard);
+                var fetchedPlan = groundPlan(planning.getStudyPlan(token, course.id()),
+                    planning.listKnowledgePoints(token, course.id()), dashboard);
                 var plan = planCache == null ? fetchedPlan : planCache.save(fetchedPlan).snapshot();
                 String planCourseId = plan.courseId();
                 plan.actions().stream().filter(action -> action.state() != StudyPlanActionState.COMPLETED
@@ -179,7 +190,7 @@ public final class DefaultStudentLearningQueueService implements StudentLearning
         }
         if (!item.notificationId().isBlank()) {
             var current = sessions.current().orElseThrow(() -> new IllegalStateException("请先登录云端账号"));
-            api.markNotificationRead(current.accessToken(), item.notificationId());
+            classrooms.markNotificationRead(current.accessToken(), item.notificationId());
         }
         diagnosis.dismissAction(item.action().id());
     }
@@ -198,7 +209,7 @@ public final class DefaultStudentLearningQueueService implements StudentLearning
         var current = sessions.current();
         if (current.isEmpty()) return;
         try {
-            var delivered = api.updateStudyPlanAction(current.orElseThrow().accessToken(), context.courseId(), context.actionId(),
+            var delivered = planning.updateStudyPlanAction(current.orElseThrow().accessToken(), context.courseId(), context.actionId(),
                 state, operation == null ? context.stateVersion() : operation.expectedVersion(),
                 operation == null ? java.util.UUID.randomUUID().toString() : operation.operationId());
             if (planCache != null) planCache.markDelivered(operation.operationId(), context.actionId(), delivered.version());
@@ -225,7 +236,7 @@ public final class DefaultStudentLearningQueueService implements StudentLearning
         if (planCache == null) return;
         for (var operation : planCache.pending()) {
             try {
-                var delivered = api.updateStudyPlanAction(token, operation.courseId(), operation.actionId(),
+                var delivered = planning.updateStudyPlanAction(token, operation.courseId(), operation.actionId(),
                     operation.state(), operation.expectedVersion(), operation.operationId());
                 planCache.markDelivered(operation.operationId(), operation.actionId(), delivered.version());
             } catch (com.sqlteacher.application.collaboration.CloudApiRequestException error) {

@@ -2,7 +2,8 @@ package com.sqlteacher.desktop.bridge;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import com.sqlteacher.application.collaboration.CloudApiClient;
+import com.sqlteacher.application.collaboration.CloudAccountApi;
+import com.sqlteacher.application.collaboration.CloudAuthApi;
 import com.sqlteacher.application.collaboration.CloudSessionService;
 import com.sqlteacher.infrastructure.cloud.InMemoryLearningEventOwnerContext;
 
@@ -54,7 +55,7 @@ final class AccountApiSection extends ApiSection {
         char[] password = requiredRawText(params, "password", 1_024).toCharArray();
         try {
             var core = context();
-            var session = core.getBean(CloudApiClient.class).login(email, password);
+            var session = core.getBean(CloudAuthApi.class).login(email, password);
             cancellation.throwIfCancelled();
             core.getBean(CloudSessionService.class).signIn(session);
             core.getBean(InMemoryLearningEventOwnerContext.class).useAuthenticatedUser(session.user().id());
@@ -71,7 +72,7 @@ final class AccountApiSection extends ApiSection {
         var active = sessions.current();
         boolean remoteLogoutSucceeded = true;
         try {
-            if (active.isPresent()) core.getBean(CloudApiClient.class).logout(active.get().accessToken());
+            if (active.isPresent()) core.getBean(CloudAuthApi.class).logout(active.get().accessToken());
         } catch (RuntimeException error) {
             remoteLogoutSucceeded = false;
         } finally {
@@ -88,7 +89,7 @@ final class AccountApiSection extends ApiSection {
         char[] password = requiredRawText(params, "password", 1_024).toCharArray();
         try {
             var core = context();
-            var session = core.getBean(CloudApiClient.class).register(requiredText(params, "email", 320),
+            var session = core.getBean(CloudAuthApi.class).register(requiredText(params, "email", 320),
                 requiredText(params, "displayName", 160), password);
             core.getBean(CloudSessionService.class).signIn(session);
             core.getBean(InMemoryLearningEventOwnerContext.class).useAuthenticatedUser(session.user().id());
@@ -104,7 +105,7 @@ final class AccountApiSection extends ApiSection {
         char[] newPassword = requiredRawText(params, "newPassword", 1_024).toCharArray();
         try {
             var session = requireCloudSession();
-            context().getBean(CloudApiClient.class).changePassword(session.accessToken(), currentPassword, newPassword);
+            context().getBean(CloudAuthApi.class).changePassword(session.accessToken(), currentPassword, newPassword);
             return mapper.createObjectNode().put("changed", true);
         } finally {
             Arrays.fill(currentPassword, '\0');
@@ -114,7 +115,7 @@ final class AccountApiSection extends ApiSection {
 
     private JsonNode accountPasswordResetRequest(JsonNode params, CancellationToken cancellation) {
         cancellation.throwIfCancelled();
-        context().getBean(CloudApiClient.class).requestPasswordReset(requiredText(params, "email", 320));
+        context().getBean(CloudAuthApi.class).requestPasswordReset(requiredText(params, "email", 320));
         return mapper.createObjectNode().put("accepted", true);
     }
 
@@ -122,45 +123,45 @@ final class AccountApiSection extends ApiSection {
         cancellation.throwIfCancelled();
         var session = requireCloudSession();
         return mapper.createObjectNode().set("items", mapper.valueToTree(
-            context().getBean(CloudApiClient.class).listSessions(session.accessToken())));
+            context().getBean(CloudAccountApi.class).listSessions(session.accessToken())));
     }
 
     private JsonNode accountSessionRevoke(JsonNode params, CancellationToken cancellation) {
         cancellation.throwIfCancelled();
         var session = requireCloudSession();
         String sessionId = requiredText(params, "sessionId", 256);
-        context().getBean(CloudApiClient.class).revokeSession(session.accessToken(), sessionId);
+        context().getBean(CloudAccountApi.class).revokeSession(session.accessToken(), sessionId);
         return mapper.createObjectNode().put("revoked", true).put("sessionId", sessionId);
     }
 
     private JsonNode accountExportRequest(CancellationToken cancellation) {
         cancellation.throwIfCancelled();
         var session = requireCloudSession();
-        return mapper.valueToTree(context().getBean(CloudApiClient.class).requestAccountExport(session.accessToken()));
+        return mapper.valueToTree(context().getBean(CloudAccountApi.class).requestAccountExport(session.accessToken()));
     }
 
     private JsonNode accountExportGet(JsonNode params, CancellationToken cancellation) {
         cancellation.throwIfCancelled();
         var session = requireCloudSession();
-        return mapper.createObjectNode().put("payload", context().getBean(CloudApiClient.class)
+        return mapper.createObjectNode().put("payload", context().getBean(CloudAccountApi.class)
             .getAccountExport(session.accessToken(), requiredText(params, "taskId", 256)));
     }
 
     private JsonNode accountDeletionRequest(CancellationToken cancellation) {
         cancellation.throwIfCancelled();
         var session = requireCloudSession();
-        return mapper.valueToTree(context().getBean(CloudApiClient.class).requestAccountDeletion(session.accessToken()));
+        return mapper.valueToTree(context().getBean(CloudAccountApi.class).requestAccountDeletion(session.accessToken()));
     }
 
     private JsonNode accountDeletionCancel(CancellationToken cancellation) {
         cancellation.throwIfCancelled();
         var session = requireCloudSession();
-        return mapper.valueToTree(context().getBean(CloudApiClient.class).cancelAccountDeletion(session.accessToken()));
+        return mapper.valueToTree(context().getBean(CloudAccountApi.class).cancelAccountDeletion(session.accessToken()));
     }
 
     private JsonNode accountDeletionStatus(CancellationToken cancellation) {
         cancellation.throwIfCancelled();
         var session = requireCloudSession();
-        return mapper.valueToTree(context().getBean(CloudApiClient.class).getAccountDeletionStatus(session.accessToken()));
+        return mapper.valueToTree(context().getBean(CloudAccountApi.class).getAccountDeletionStatus(session.accessToken()));
     }
 }

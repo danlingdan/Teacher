@@ -21,7 +21,14 @@ import com.sqlteacher.application.collaboration.AssignmentAnalyticsReport;
 import com.sqlteacher.application.collaboration.AssignmentSubmission;
 import com.sqlteacher.application.collaboration.AssignmentSubmissionRequest;
 import com.sqlteacher.application.collaboration.ClassroomService;
-import com.sqlteacher.application.collaboration.CloudApiClient;
+import com.sqlteacher.application.collaboration.CloudAccountApi;
+import com.sqlteacher.application.collaboration.CloudAdminApi;
+import com.sqlteacher.application.collaboration.CloudAuthApi;
+import com.sqlteacher.application.collaboration.CloudBankApi;
+import com.sqlteacher.application.collaboration.CloudCapabilityApi;
+import com.sqlteacher.application.collaboration.CloudClassroomApi;
+import com.sqlteacher.application.collaboration.CloudPlanningApi;
+import com.sqlteacher.application.collaboration.CloudSyncApi;
 import com.sqlteacher.application.collaboration.CloudAuthenticationService;
 import com.sqlteacher.application.collaboration.CloudSyncItem;
 import com.sqlteacher.application.collaboration.ClassAssignment;
@@ -71,7 +78,8 @@ import java.util.Map;
 import java.util.Objects;
 
 /** HTTPS cloud client. HTTP is accepted only for loopback integration tests. */
-public final class HttpCloudApiClient implements CloudApiClient {
+public final class HttpCloudApiClient implements CloudCapabilityApi, CloudAuthApi, CloudAccountApi,
+        CloudClassroomApi, CloudPlanningApi, CloudBankApi, CloudSyncApi, CloudAdminApi {
     private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(30);
 
     private final URI baseUri;

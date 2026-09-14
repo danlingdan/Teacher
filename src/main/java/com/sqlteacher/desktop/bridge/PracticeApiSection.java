@@ -200,7 +200,7 @@ final class PracticeApiSection extends ApiSection {
     private JsonNode practiceBankChannels(CancellationToken cancellation) {
         cancellation.throwIfCancelled();
         try {
-            var items = context().getBean(com.sqlteacher.application.collaboration.CloudApiClient.class)
+            var items = context().getBean(com.sqlteacher.application.collaboration.CloudBankApi.class)
                 .fetchExerciseBankChannels();
             return mapper.createObjectNode().set("items", mapper.valueToTree(items));
         } catch (RuntimeException error) {

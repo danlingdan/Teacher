@@ -1,6 +1,6 @@
 package com.sqlteacher.infrastructure.database;
 
-import com.sqlteacher.application.collaboration.CloudApiClient;
+import com.sqlteacher.application.collaboration.CloudBankApi;
 import com.sqlteacher.application.collaboration.ExerciseBankBlock;
 import com.sqlteacher.application.collaboration.ExerciseBankManifest;
 import com.sqlteacher.domain.SqlTeacherException;
@@ -35,13 +35,13 @@ public final class ExerciseBankSyncService {
     private static final Logger log = LoggerFactory.getLogger(ExerciseBankSyncService.class);
     public static final String DEFAULT_CHANNEL = "network";
 
-    private final CloudApiClient cloudApiClient;
+    private final CloudBankApi bankApi;
     private final String appDatabasePath;
     private final ExerciseBankContent content = new ExerciseBankContent();
     private final ExerciseBankWriter writer = new ExerciseBankWriter();
 
-    public ExerciseBankSyncService(CloudApiClient cloudApiClient, String appDatabasePath) {
-        this.cloudApiClient = cloudApiClient;
+    public ExerciseBankSyncService(CloudBankApi bankApi, String appDatabasePath) {
+        this.bankApi = bankApi;
         this.appDatabasePath = appDatabasePath;
     }
 
@@ -62,7 +62,7 @@ public final class ExerciseBankSyncService {
     /** Checks one distribution channel; failures degrade silently to an up-to-date state. */
     public BankUpdateStatus check(String channel) {
         try {
-            ExerciseBankManifest manifest = cloudApiClient.fetchExerciseBankManifest(channel);
+            ExerciseBankManifest manifest = bankApi.fetchExerciseBankManifest(channel);
             LocalVersions local = readLocalVersions();
             int pending = countPending(manifest, local);
             int applied = appliedVersion(channel);
@@ -82,7 +82,7 @@ public final class ExerciseBankSyncService {
     }
 
     public BankUpdateResult update(String channel, Consumer<String> progress) {
-        ExerciseBankManifest manifest = cloudApiClient.fetchExerciseBankManifest(channel);
+        ExerciseBankManifest manifest = bankApi.fetchExerciseBankManifest(channel);
         LocalVersions local = readLocalVersions();
         int appliedVersion = appliedVersion(channel);
         if (manifest.bankVersion() <= appliedVersion && countPending(manifest, local) == 0) {
@@ -167,7 +167,7 @@ public final class ExerciseBankSyncService {
     private ExerciseBankBlock fetchVerifiedBlock(
         String type, ExerciseBankManifest.BlockRef ref, int bankVersion
     ) {
-        ExerciseBankBlock block = cloudApiClient.fetchExerciseBankBlock(type, ref.id());
+        ExerciseBankBlock block = bankApi.fetchExerciseBankBlock(type, ref.id());
         String actualHash = sha256Hex(block.content());
         if (!actualHash.equalsIgnoreCase(ref.sha256())) {
             throw new SqlTeacherException(

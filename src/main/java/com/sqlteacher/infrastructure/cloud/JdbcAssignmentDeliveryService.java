@@ -4,7 +4,7 @@ import com.sqlteacher.application.collaboration.AssignmentDeliveryResult;
 import com.sqlteacher.application.collaboration.AssignmentDeliveryService;
 import com.sqlteacher.application.collaboration.AssignmentSubmissionRequest;
 import com.sqlteacher.application.collaboration.AssignmentSubmissionStatus;
-import com.sqlteacher.application.collaboration.CloudApiClient;
+import com.sqlteacher.application.collaboration.CloudClassroomApi;
 import com.sqlteacher.application.collaboration.CloudAuthenticationService;
 import com.sqlteacher.application.collaboration.CloudSessionService;
 import com.sqlteacher.application.collaboration.CloudApiRequestException;
@@ -28,11 +28,11 @@ import java.util.UUID;
 
 /** Persists deterministic assignment summaries before retrying failed cloud delivery. */
 public final class JdbcAssignmentDeliveryService implements AssignmentDeliveryService {
-    private final CloudApiClient api;
+    private final CloudClassroomApi api;
     private final CloudSessionService sessions;
     private final Path database;
 
-    public JdbcAssignmentDeliveryService(CloudApiClient api, CloudSessionService sessions, Path database) {
+    public JdbcAssignmentDeliveryService(CloudClassroomApi api, CloudSessionService sessions, Path database) {
         this.api = Objects.requireNonNull(api);
         this.sessions = Objects.requireNonNull(sessions);
         this.database = Objects.requireNonNull(database).toAbsolutePath().normalize();

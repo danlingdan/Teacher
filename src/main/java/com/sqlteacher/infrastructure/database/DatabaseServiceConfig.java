@@ -52,7 +52,9 @@ import com.sqlteacher.application.risk.SqlRiskAnalysisService;
 import com.sqlteacher.application.risk.SqlSafetyModeService;
 import com.sqlteacher.application.config.SqlTeacherConfiguration;
 import com.sqlteacher.application.collaboration.AssignmentDeliveryService;
-import com.sqlteacher.application.collaboration.CloudApiClient;
+import com.sqlteacher.application.collaboration.CloudCapabilityApi;
+import com.sqlteacher.application.collaboration.CloudClassroomApi;
+import com.sqlteacher.application.collaboration.CloudPlanningApi;
 import com.sqlteacher.application.collaboration.CloudSessionService;
 import com.sqlteacher.application.collaboration.TeachingContentCache;
 import com.sqlteacher.infrastructure.cloud.JdbcAssignmentDeliveryService;
@@ -389,7 +391,7 @@ public class DatabaseServiceConfig {
     }
 
     @Bean
-    public AssignmentDeliveryService assignmentDeliveryService(ObjectProvider<CloudApiClient> apiProvider,
+    public AssignmentDeliveryService assignmentDeliveryService(ObjectProvider<CloudClassroomApi> apiProvider,
                                                                ObjectProvider<CloudSessionService> sessionProvider,
                                                                SqlTeacherConfiguration configuration) {
         return new AssignmentDeliveryService() {
@@ -417,7 +419,7 @@ public class DatabaseServiceConfig {
                 if (service != null) return service;
                 synchronized (this) {
                     if (cachedDelegate == null) {
-                        CloudApiClient api = apiProvider.getIfAvailable();
+                        CloudClassroomApi api = apiProvider.getIfAvailable();
                         CloudSessionService sessions = sessionProvider.getIfAvailable();
                         if (api == null || sessions == null) {
                             throw new IllegalStateException("Cloud assignment delivery is unavailable in this runtime");
@@ -437,7 +439,7 @@ public class DatabaseServiceConfig {
     }
 
     @Bean
-    public InterventionService interventionService(ObjectProvider<CloudApiClient> apiProvider,
+    public InterventionService interventionService(ObjectProvider<CloudClassroomApi> apiProvider,
                                                    ObjectProvider<CloudSessionService> sessionProvider,
                                                    SqlTeacherConfiguration configuration) {
         return new InterventionService() {
@@ -464,7 +466,7 @@ public class DatabaseServiceConfig {
                 if (service != null) return service;
                 synchronized (this) {
                     if (cachedDelegate == null) {
-                        CloudApiClient api = apiProvider.getIfAvailable();
+                        CloudClassroomApi api = apiProvider.getIfAvailable();
                         CloudSessionService sessions = sessionProvider.getIfAvailable();
                         if (api == null || sessions == null) {
                             throw new IllegalStateException("云端教师干预服务当前不可用");
@@ -480,7 +482,9 @@ public class DatabaseServiceConfig {
 
     @Bean
     public StudentLearningQueueService studentLearningQueueService(LearningDiagnosisService diagnosis,
-                                                                   ObjectProvider<CloudApiClient> apiProvider,
+                                                                   ObjectProvider<CloudCapabilityApi> capabilityProvider,
+                                                                   ObjectProvider<CloudClassroomApi> classroomProvider,
+                                                                   ObjectProvider<CloudPlanningApi> planningProvider,
                                                                    ObjectProvider<CloudSessionService> sessionProvider,
                                                                    StudyPlanCache planCache) {
         return new StudentLearningQueueService() {
@@ -494,9 +498,11 @@ public class DatabaseServiceConfig {
                 delegate().complete(item);
             }
             private StudentLearningQueueService delegate() {
-                CloudApiClient api = apiProvider.getIfAvailable();
+                CloudCapabilityApi capabilities = capabilityProvider.getIfAvailable();
+                CloudClassroomApi classrooms = classroomProvider.getIfAvailable();
+                CloudPlanningApi planning = planningProvider.getIfAvailable();
                 CloudSessionService sessions = sessionProvider.getIfAvailable();
-                if (api == null || sessions == null) {
+                if (capabilities == null || classrooms == null || planning == null || sessions == null) {
                     return new StudentLearningQueueService() {
                         @Override public com.sqlteacher.application.learning.StudentLearningQueue refresh() {
                             var dashboard = diagnosis.refresh();
@@ -512,7 +518,8 @@ public class DatabaseServiceConfig {
                         }
                     };
                 }
-                return new DefaultStudentLearningQueueService(diagnosis, api, sessions, planCache);
+                return new DefaultStudentLearningQueueService(diagnosis, capabilities, classrooms, planning,
+                    sessions, planCache);
             }
         };
     }

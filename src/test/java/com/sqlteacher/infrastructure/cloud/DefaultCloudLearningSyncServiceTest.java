@@ -27,7 +27,7 @@ class DefaultCloudLearningSyncServiceTest {
             event(2, now.plusSeconds(1), "user-1"),
             event(3, now.plusSeconds(2), "another-user")
         );
-        var api = new RecordingCloudApiClient();
+        var api = new RecordingCloudSyncApi();
         var sessions = new InMemoryCloudSessionService();
         sessions.signIn(new CloudAuthenticationService.Session(
             "token",
@@ -48,7 +48,7 @@ class DefaultCloudLearningSyncServiceTest {
     @Test
     void shouldRetryTransientFailuresAndExposeSuccessStatus() {
         Instant now = Instant.parse("2026-07-22T00:00:00Z");
-        var api = new RecordingCloudApiClient();
+        var api = new RecordingCloudSyncApi();
         api.failuresRemaining = 2;
         var sessions = new InMemoryCloudSessionService();
         sessions.signIn(new CloudAuthenticationService.Session(
@@ -97,7 +97,7 @@ class DefaultCloudLearningSyncServiceTest {
         }
     }
 
-    private static final class RecordingCloudApiClient implements CloudApiClient {
+    private static final class RecordingCloudSyncApi implements CloudSyncApi {
         private final List<CloudSyncItem> uploaded = new ArrayList<>();
         private int failuresRemaining;
         private int uploadAttempts;
@@ -110,22 +110,5 @@ class DefaultCloudLearningSyncServiceTest {
         }
 
         @Override public List<CloudSyncItem> downloadSyncItems(String token, long afterVersion) { return List.of(); }
-        @Override public CloudAuthenticationService.Session login(String email, char[] password) { throw unsupported(); }
-        @Override public CloudAuthenticationService.Session register(String email, String name, char[] password) { throw unsupported(); }
-        @Override public CloudAuthenticationService.Session refresh(String refreshToken) { throw unsupported(); }
-        @Override public void logout(String token) { throw unsupported(); }
-        @Override public List<ClassroomService.Classroom> listClasses(String token) { throw unsupported(); }
-        @Override public List<ClassroomService.RosterMember> listClassRoster(String token, String classroomId) { throw unsupported(); }
-        @Override public ClassroomService.Classroom createClass(String token, String name) { throw unsupported(); }
-        @Override public ClassroomService.Classroom addClassMember(String token, String classId, String email, UserRole role) { throw unsupported(); }
-        @Override public ClassAssignment createAssignment(String token, String classId, String exerciseId, String title) { throw unsupported(); }
-        @Override public ClassAssignment changeAssignmentStatus(String token, String classId, String assignmentId, AssignmentStatus status) { throw unsupported(); }
-        @Override public ClassAssignment setAssignmentDueAt(String token, String classId, String assignmentId, Instant dueAt) { throw unsupported(); }
-        @Override public ClassAssignment updateAssignment(String token, String classId, String assignmentId, String title, Instant dueAt) { throw unsupported(); }
-        @Override public List<ClassAssignment> listAssignments(String token, String classId) { throw unsupported(); }
-        @Override public ClassLearningSummary getClassLearningSummary(String token, String classId) { throw unsupported(); }
-        @Override public String exportClassLearningCsv(String token, String classId) { throw unsupported(); }
-
-        private static UnsupportedOperationException unsupported() { return new UnsupportedOperationException(); }
     }
 }

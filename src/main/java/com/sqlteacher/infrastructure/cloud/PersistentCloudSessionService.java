@@ -2,7 +2,7 @@ package com.sqlteacher.infrastructure.cloud;
 
 import com.sqlteacher.application.collaboration.CloudApiRequestException;
 import com.sqlteacher.application.collaboration.CloudAuthenticationService;
-import com.sqlteacher.application.collaboration.CloudApiClient;
+import com.sqlteacher.application.collaboration.CloudAuthApi;
 import com.sqlteacher.application.collaboration.CloudSessionService;
 
 import java.time.Instant;
@@ -12,10 +12,10 @@ import java.util.Optional;
 /** Restores only a valid session and removes expired or explicitly signed-out sessions. */
 public final class PersistentCloudSessionService implements CloudSessionService {
     private final CloudSessionStore store;
-    private final CloudApiClient api;
+    private final CloudAuthApi api;
     private CloudAuthenticationService.Session session;
 
-    public PersistentCloudSessionService(CloudSessionStore store, CloudApiClient api) {
+    public PersistentCloudSessionService(CloudSessionStore store, CloudAuthApi api) {
         this.store = Objects.requireNonNull(store, "store must not be null");
         this.api = Objects.requireNonNull(api, "api must not be null");
         this.session = store.load().orElse(null);

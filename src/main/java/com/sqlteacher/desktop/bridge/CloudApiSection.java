@@ -5,7 +5,8 @@ import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.sqlteacher.application.collaboration.AssignmentAnalyticsFilter;
 import com.sqlteacher.application.collaboration.AssignmentStatus;
-import com.sqlteacher.application.collaboration.CloudApiClient;
+import com.sqlteacher.application.collaboration.CloudClassroomApi;
+import com.sqlteacher.application.collaboration.CloudPlanningApi;
 import com.sqlteacher.application.collaboration.CloudLearningSyncService;
 import com.sqlteacher.application.collaboration.CloudSessionService;
 import com.sqlteacher.application.collaboration.DesktopAccessProfile;
@@ -110,7 +111,7 @@ final class CloudApiSection extends ApiSection {
             return result;
         }
         try {
-            core.getBean(CloudApiClient.class).listClasses(current.get().accessToken())
+            core.getBean(CloudClassroomApi.class).listClasses(current.get().accessToken())
                 .forEach(item -> classes.add(mapper.valueToTree(item)));
             result.put("message", "云端状态已刷新。");
         } catch (RuntimeException error) {
@@ -140,7 +141,7 @@ final class CloudApiSection extends ApiSection {
         var core = context();
         var session = core.getBean(CloudSessionService.class).current()
             .orElseThrow(() -> new SecurityException("Class creation requires an authenticated session"));
-        var classroom = core.getBean(CloudApiClient.class).createClass(
+        var classroom = core.getBean(CloudClassroomApi.class).createClass(
             session.accessToken(), requiredText(params, "name", 120));
         cancellation.throwIfCancelled();
         ObjectNode result = mapper.createObjectNode();
@@ -153,7 +154,7 @@ final class CloudApiSection extends ApiSection {
         requireTeacher();
         cancellation.throwIfCancelled();
         var session = requireCloudSession();
-        return mapper.valueToTree(context().getBean(CloudApiClient.class).addClassMember(session.accessToken(),
+        return mapper.valueToTree(context().getBean(CloudClassroomApi.class).addClassMember(session.accessToken(),
             requiredText(params, "classroomId", 128), requiredText(params, "email", 320),
             UserRole.valueOf(requiredText(params, "role", 32))));
     }
@@ -162,14 +163,14 @@ final class CloudApiSection extends ApiSection {
         requireTeacher();
         cancellation.throwIfCancelled();
         var session = requireCloudSession();
-        return mapper.createObjectNode().set("members", mapper.valueToTree(context().getBean(CloudApiClient.class)
+        return mapper.createObjectNode().set("members", mapper.valueToTree(context().getBean(CloudClassroomApi.class)
             .listClassRoster(session.accessToken(), requiredText(params, "classroomId", 128))));
     }
 
     private JsonNode cloudAssignments(JsonNode params, CancellationToken cancellation) {
         cancellation.throwIfCancelled();
         var session = requireCloudSession();
-        return mapper.createObjectNode().set("items", mapper.valueToTree(context().getBean(CloudApiClient.class)
+        return mapper.createObjectNode().set("items", mapper.valueToTree(context().getBean(CloudClassroomApi.class)
             .listAssignments(session.accessToken(), requiredText(params, "classroomId", 128))));
     }
 
@@ -178,7 +179,7 @@ final class CloudApiSection extends ApiSection {
         cancellation.throwIfCancelled();
         var session = requireCloudSession();
         Instant dueAt = optionalInstant(params, "dueAt");
-        return mapper.valueToTree(context().getBean(CloudApiClient.class).createAssignmentDraft(session.accessToken(),
+        return mapper.valueToTree(context().getBean(CloudClassroomApi.class).createAssignmentDraft(session.accessToken(),
             requiredText(params, "classroomId", 128), requiredText(params, "exerciseId", 128),
             requiredText(params, "title", 240), params.path("description").asText(""), dueAt));
     }
@@ -187,7 +188,7 @@ final class CloudApiSection extends ApiSection {
         requireTeacher();
         cancellation.throwIfCancelled();
         var session = requireCloudSession();
-        return mapper.valueToTree(context().getBean(CloudApiClient.class).updateAssignment(session.accessToken(),
+        return mapper.valueToTree(context().getBean(CloudClassroomApi.class).updateAssignment(session.accessToken(),
             requiredText(params, "classroomId", 128), requiredText(params, "assignmentId", 128),
             requiredText(params, "title", 240), params.path("description").asText(""),
             optionalInstant(params, "dueAt"), params.path("expectedVersion").asLong()));
@@ -197,7 +198,7 @@ final class CloudApiSection extends ApiSection {
         requireTeacher();
         cancellation.throwIfCancelled();
         var session = requireCloudSession();
-        return mapper.valueToTree(context().getBean(CloudApiClient.class).copyAssignment(session.accessToken(),
+        return mapper.valueToTree(context().getBean(CloudClassroomApi.class).copyAssignment(session.accessToken(),
             requiredText(params, "classroomId", 128), requiredText(params, "assignmentId", 128),
             params.path("expectedVersion").asLong()));
     }
@@ -206,7 +207,7 @@ final class CloudApiSection extends ApiSection {
         requireTeacher();
         cancellation.throwIfCancelled();
         var session = requireCloudSession();
-        return mapper.valueToTree(context().getBean(CloudApiClient.class).changeAssignmentStatus(session.accessToken(),
+        return mapper.valueToTree(context().getBean(CloudClassroomApi.class).changeAssignmentStatus(session.accessToken(),
             requiredText(params, "classroomId", 128), requiredText(params, "assignmentId", 128),
             AssignmentStatus.valueOf(requiredText(params, "status", 32)), params.path("expectedVersion").asLong()));
     }
@@ -215,7 +216,7 @@ final class CloudApiSection extends ApiSection {
         requireTeacher();
         cancellation.throwIfCancelled();
         var session = requireCloudSession();
-        return mapper.valueToTree(context().getBean(CloudApiClient.class).getClassLearningSummary(
+        return mapper.valueToTree(context().getBean(CloudClassroomApi.class).getClassLearningSummary(
             session.accessToken(), requiredText(params, "classroomId", 128)));
     }
 
@@ -223,7 +224,7 @@ final class CloudApiSection extends ApiSection {
         requireTeacher();
         cancellation.throwIfCancelled();
         var session = requireCloudSession();
-        return mapper.createObjectNode().put("csv", context().getBean(CloudApiClient.class).exportClassLearningCsv(
+        return mapper.createObjectNode().put("csv", context().getBean(CloudClassroomApi.class).exportClassLearningCsv(
             session.accessToken(), requiredText(params, "classroomId", 128)));
     }
 
@@ -231,7 +232,7 @@ final class CloudApiSection extends ApiSection {
         requireTeacher();
         cancellation.throwIfCancelled();
         var session = requireCloudSession();
-        return mapper.valueToTree(context().getBean(CloudApiClient.class).getAssignmentAnalytics(session.accessToken(),
+        return mapper.valueToTree(context().getBean(CloudClassroomApi.class).getAssignmentAnalytics(session.accessToken(),
             requiredText(params, "classroomId", 128), requiredText(params, "assignmentId", 128),
             assignmentAnalyticsFilter(params)));
     }
@@ -240,7 +241,7 @@ final class CloudApiSection extends ApiSection {
         requireTeacher();
         cancellation.throwIfCancelled();
         var session = requireCloudSession();
-        return mapper.createObjectNode().put("csv", context().getBean(CloudApiClient.class).exportAssignmentAnalyticsCsv(
+        return mapper.createObjectNode().put("csv", context().getBean(CloudClassroomApi.class).exportAssignmentAnalyticsCsv(
             session.accessToken(), requiredText(params, "classroomId", 128),
             requiredText(params, "assignmentId", 128), assignmentAnalyticsFilter(params)));
     }
@@ -257,7 +258,7 @@ final class CloudApiSection extends ApiSection {
     private JsonNode cloudAssignmentSnapshot(JsonNode params, CancellationToken cancellation) {
         cancellation.throwIfCancelled();
         var session = requireCloudSession();
-        return mapper.valueToTree(context().getBean(CloudApiClient.class).getAssignmentContentSnapshot(
+        return mapper.valueToTree(context().getBean(CloudPlanningApi.class).getAssignmentContentSnapshot(
             session.accessToken(), requiredText(params, "classroomId", 128),
             requiredText(params, "assignmentId", 128)));
     }
@@ -288,7 +289,7 @@ final class CloudApiSection extends ApiSection {
             items = cache.loadFeedback(session.user().id(), assignmentId);
         } else {
             try {
-                items = context().getBean(CloudApiClient.class).listSubmissionFeedback(
+                items = context().getBean(CloudClassroomApi.class).listSubmissionFeedback(
                     session.accessToken(), classroomId, assignmentId);
                 cache.saveFeedback(session.user().id(), assignmentId, items);
             } catch (RuntimeException error) {
@@ -310,7 +311,7 @@ final class CloudApiSection extends ApiSection {
             ? mapper.convertValue(params.path("knowledgePointIds"),
                 mapper.getTypeFactory().constructCollectionType(List.class, String.class))
             : List.of();
-        return mapper.valueToTree(context().getBean(CloudApiClient.class).saveSubmissionFeedback(
+        return mapper.valueToTree(context().getBean(CloudClassroomApi.class).saveSubmissionFeedback(
             session.accessToken(), requiredText(params, "classroomId", 128),
             requiredText(params, "assignmentId", 128), requiredText(params, "submissionId", 128),
             com.sqlteacher.application.collaboration.FeedbackStatus.valueOf(requiredText(params, "status", 32)),
@@ -322,7 +323,7 @@ final class CloudApiSection extends ApiSection {
         requireTeacher();
         cancellation.throwIfCancelled();
         var session = requireCloudSession();
-        return mapper.valueToTree(context().getBean(CloudApiClient.class).draftSubmissionFeedback(
+        return mapper.valueToTree(context().getBean(CloudClassroomApi.class).draftSubmissionFeedback(
             session.accessToken(), requiredText(params, "classroomId", 128),
             requiredText(params, "assignmentId", 128), requiredText(params, "submissionId", 128)));
     }
@@ -342,7 +343,7 @@ final class CloudApiSection extends ApiSection {
             items = cache.loadMastery(session.user().id(), classroomId, studentId);
         } else {
             try {
-                items = context().getBean(CloudApiClient.class).getKnowledgeMastery(
+                items = context().getBean(CloudClassroomApi.class).getKnowledgeMastery(
                     session.accessToken(), classroomId, studentId);
                 cache.saveMastery(session.user().id(), classroomId, studentId, items);
             } catch (RuntimeException error) {
@@ -369,7 +370,7 @@ final class CloudApiSection extends ApiSection {
             try {
                 int page = Math.max(0, params.path("page").asInt(0));
                 int pageSize = Math.max(1, Math.min(100, params.path("pageSize").asInt(50)));
-                items = context().getBean(CloudApiClient.class).listNotifications(
+                items = context().getBean(CloudClassroomApi.class).listNotifications(
                     session.accessToken(), page, pageSize);
                 cache.saveNotifications(session.user().id(), items);
             } catch (RuntimeException error) {
@@ -388,7 +389,7 @@ final class CloudApiSection extends ApiSection {
     private JsonNode cloudNotificationRead(JsonNode params, CancellationToken cancellation) {
         cancellation.throwIfCancelled();
         var session = requireCloudSession();
-        var notification = context().getBean(CloudApiClient.class).markNotificationRead(
+        var notification = context().getBean(CloudClassroomApi.class).markNotificationRead(
             session.accessToken(), requiredText(params, "notificationId", 128));
         var cache = context().getBean(com.sqlteacher.application.collaboration.TeachingContentCache.class);
         var items = cache.loadNotifications(session.user().id()).stream()
@@ -407,7 +408,7 @@ final class CloudApiSection extends ApiSection {
             items = cache.loadCourses(session.user().id());
         } else {
             try {
-                items = context().getBean(CloudApiClient.class).listCourses(session.accessToken());
+                items = context().getBean(CloudPlanningApi.class).listCourses(session.accessToken());
                 cache.saveCourses(session.user().id(), items);
             } catch (RuntimeException error) {
                 items = cache.loadCourses(session.user().id());
@@ -424,7 +425,7 @@ final class CloudApiSection extends ApiSection {
         requireTeacher();
         cancellation.throwIfCancelled();
         var session = requireCloudSession();
-        return mapper.valueToTree(context().getBean(CloudApiClient.class).createCourse(session.accessToken(),
+        return mapper.valueToTree(context().getBean(CloudPlanningApi.class).createCourse(session.accessToken(),
             requiredText(params, "name", 120), params.path("description").asText("")));
     }
 
@@ -439,7 +440,7 @@ final class CloudApiSection extends ApiSection {
             content = cache.loadCourseContent(session.user().id(), courseId);
         } else {
             try {
-                var api = context().getBean(CloudApiClient.class);
+                var api = context().getBean(CloudPlanningApi.class);
                 content = new com.sqlteacher.application.collaboration.CachedCourseContent(
                     api.listCourseSections(session.accessToken(), courseId),
                     api.listKnowledgePoints(session.accessToken(), courseId),
@@ -459,7 +460,7 @@ final class CloudApiSection extends ApiSection {
         requireTeacher();
         cancellation.throwIfCancelled();
         var session = requireCloudSession();
-        return mapper.valueToTree(context().getBean(CloudApiClient.class).createCourseSection(
+        return mapper.valueToTree(context().getBean(CloudPlanningApi.class).createCourseSection(
             session.accessToken(), requiredText(params, "courseId", 128), requiredText(params, "name", 120),
             Math.max(0, params.path("sortOrder").asInt(0))));
     }
@@ -468,7 +469,7 @@ final class CloudApiSection extends ApiSection {
         requireTeacher();
         cancellation.throwIfCancelled();
         var session = requireCloudSession();
-        return mapper.valueToTree(context().getBean(CloudApiClient.class).createKnowledgePoint(
+        return mapper.valueToTree(context().getBean(CloudPlanningApi.class).createKnowledgePoint(
             session.accessToken(), requiredText(params, "courseId", 128),
             requiredText(params, "sectionId", 128), requiredText(params, "name", 160),
             params.path("description").asText(""), Math.max(0, params.path("sortOrder").asInt(0))));
@@ -482,7 +483,7 @@ final class CloudApiSection extends ApiSection {
             ? mapper.convertValue(params.path("knowledgePointIds"),
                 mapper.getTypeFactory().constructCollectionType(List.class, String.class))
             : List.of();
-        return mapper.valueToTree(context().getBean(CloudApiClient.class).publishSharedExercise(
+        return mapper.valueToTree(context().getBean(CloudPlanningApi.class).publishSharedExercise(
             session.accessToken(), requiredText(params, "courseId", 128),
             requiredText(params, "exerciseId", 128), requiredText(params, "title", 240),
             requiredText(params, "prompt", 16_384), requiredText(params, "datasetVersion", 128),
@@ -493,7 +494,7 @@ final class CloudApiSection extends ApiSection {
         requireTeacher();
         cancellation.throwIfCancelled();
         var session = requireCloudSession();
-        return mapper.valueToTree(context().getBean(CloudApiClient.class).createAssignmentFromVersion(
+        return mapper.valueToTree(context().getBean(CloudPlanningApi.class).createAssignmentFromVersion(
             session.accessToken(), requiredText(params, "classroomId", 128),
             requiredText(params, "exerciseVersionId", 128), requiredText(params, "title", 240),
             params.path("description").asText(""), optionalInstant(params, "dueAt"), UUID.randomUUID().toString()));
@@ -503,7 +504,7 @@ final class CloudApiSection extends ApiSection {
         requireTeacher();
         cancellation.throwIfCancelled();
         var session = requireCloudSession();
-        return mapper.createObjectNode().put("content", context().getBean(CloudApiClient.class).exportCourseBundle(
+        return mapper.createObjectNode().put("content", context().getBean(CloudPlanningApi.class).exportCourseBundle(
             session.accessToken(), requiredText(params, "courseId", 128)));
     }
 
@@ -511,7 +512,7 @@ final class CloudApiSection extends ApiSection {
         requireTeacher();
         cancellation.throwIfCancelled();
         var session = requireCloudSession();
-        return mapper.valueToTree(context().getBean(CloudApiClient.class).importCourseBundle(session.accessToken(),
+        return mapper.valueToTree(context().getBean(CloudPlanningApi.class).importCourseBundle(session.accessToken(),
             requiredText(params, "content", 900_000), UUID.randomUUID().toString()));
     }
 
@@ -519,7 +520,7 @@ final class CloudApiSection extends ApiSection {
         requireTeacher();
         cancellation.throwIfCancelled();
         var session = requireCloudSession();
-        return mapper.valueToTree(context().getBean(CloudApiClient.class).previewCoursePackage(
+        return mapper.valueToTree(context().getBean(CloudPlanningApi.class).previewCoursePackage(
             session.accessToken(), requiredText(params, "content", 900_000)));
     }
 
@@ -530,7 +531,7 @@ final class CloudApiSection extends ApiSection {
             throw new SecurityException("Course package license confirmation is required");
         }
         var session = requireCloudSession();
-        return mapper.valueToTree(context().getBean(CloudApiClient.class).importCoursePackage(
+        return mapper.valueToTree(context().getBean(CloudPlanningApi.class).importCoursePackage(
             session.accessToken(), requiredText(params, "content", 900_000), UUID.randomUUID().toString(),
             requiredText(params, "expectedSha256", 64), true));
     }

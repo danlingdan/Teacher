@@ -2,7 +2,7 @@ package com.sqlteacher.infrastructure.cloud;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.sqlteacher.application.collaboration.CloudApiClient;
+import com.sqlteacher.application.collaboration.CloudSyncApi;
 import com.sqlteacher.application.collaboration.CloudApiRequestException;
 import com.sqlteacher.application.collaboration.CloudLearningSyncService;
 import com.sqlteacher.application.collaboration.CloudSessionService;
@@ -31,7 +31,7 @@ public final class DefaultCloudLearningSyncService implements CloudLearningSyncS
     private static final int MAX_ATTEMPTS = 3;
     private static final Duration[] RETRY_DELAYS = {Duration.ofMillis(250), Duration.ofSeconds(1)};
 
-    private final CloudApiClient api;
+    private final CloudSyncApi api;
     private final CloudSessionService sessions;
     private final LearningEventQueryService query;
     private final LearningEventRecorder recorder;
@@ -39,7 +39,7 @@ public final class DefaultCloudLearningSyncService implements CloudLearningSyncS
     private final ObjectMapper json = new ObjectMapper().findAndRegisterModules();
     private volatile SyncStatus currentStatus = SyncStatus.idle();
 
-    public DefaultCloudLearningSyncService(CloudApiClient api, CloudSessionService sessions,
+    public DefaultCloudLearningSyncService(CloudSyncApi api, CloudSessionService sessions,
             LearningEventQueryService query, LearningEventRecorder recorder, Path stateDirectory) {
         this.api = Objects.requireNonNull(api);
         this.sessions = Objects.requireNonNull(sessions);

@@ -109,24 +109,11 @@ class PersistentCloudSessionServiceTest {
         @Override public void clear() { session = null; cleared = true; }
     }
 
-    private static class NoOpCloudApi implements com.sqlteacher.application.collaboration.CloudApiClient {
+    private static class NoOpCloudApi implements com.sqlteacher.application.collaboration.CloudAuthApi {
         @Override public CloudAuthenticationService.Session login(String email, char[] password) { throw unsupported(); }
         @Override public CloudAuthenticationService.Session register(String email, String displayName, char[] password) { throw unsupported(); }
         @Override public CloudAuthenticationService.Session refresh(String refreshToken) { throw unsupported(); }
         @Override public void logout(String accessToken) { throw unsupported(); }
-        @Override public java.util.List<com.sqlteacher.application.collaboration.ClassroomService.Classroom> listClasses(String accessToken) { throw unsupported(); }
-        @Override public java.util.List<com.sqlteacher.application.collaboration.ClassroomService.RosterMember> listClassRoster(String accessToken, String classroomId) { throw unsupported(); }
-        @Override public com.sqlteacher.application.collaboration.ClassroomService.Classroom createClass(String accessToken, String name) { throw unsupported(); }
-        @Override public com.sqlteacher.application.collaboration.ClassroomService.Classroom addClassMember(String accessToken, String classroomId, String email, com.sqlteacher.application.collaboration.UserRole role) { throw unsupported(); }
-        @Override public com.sqlteacher.application.collaboration.ClassAssignment createAssignment(String accessToken, String classroomId, String exerciseId, String title) { throw unsupported(); }
-        @Override public com.sqlteacher.application.collaboration.ClassAssignment changeAssignmentStatus(String accessToken, String classroomId, String assignmentId, com.sqlteacher.application.collaboration.AssignmentStatus status) { throw unsupported(); }
-        @Override public com.sqlteacher.application.collaboration.ClassAssignment setAssignmentDueAt(String accessToken, String classroomId, String assignmentId, Instant dueAt) { throw unsupported(); }
-        @Override public com.sqlteacher.application.collaboration.ClassAssignment updateAssignment(String accessToken, String classroomId, String assignmentId, String title, Instant dueAt) { throw unsupported(); }
-        @Override public java.util.List<com.sqlteacher.application.collaboration.ClassAssignment> listAssignments(String accessToken, String classroomId) { throw unsupported(); }
-        @Override public com.sqlteacher.application.collaboration.ClassLearningSummary getClassLearningSummary(String accessToken, String classroomId) { throw unsupported(); }
-        @Override public String exportClassLearningCsv(String accessToken, String classroomId) { throw unsupported(); }
-        @Override public int uploadSyncItems(String accessToken, java.util.List<com.sqlteacher.application.collaboration.CloudSyncItem> items) { throw unsupported(); }
-        @Override public java.util.List<com.sqlteacher.application.collaboration.CloudSyncItem> downloadSyncItems(String accessToken, long afterVersion) { throw unsupported(); }
         private static UnsupportedOperationException unsupported() { return new UnsupportedOperationException(); }
     }
 

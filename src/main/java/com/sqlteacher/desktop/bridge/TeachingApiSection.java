@@ -4,7 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.sqlteacher.application.analytics.AnalyticsFilter;
 import com.sqlteacher.application.analytics.LearningAnalyticsService;
-import com.sqlteacher.application.collaboration.CloudApiClient;
+import com.sqlteacher.application.collaboration.CloudBankApi;
 import com.sqlteacher.application.exercise.ExerciseDraft;
 import com.sqlteacher.application.exercise.ExerciseManagementService;
 import com.sqlteacher.application.exercise.ExerciseProgressService;
@@ -185,7 +185,7 @@ final class TeachingApiSection extends ApiSection {
         String channel = params.path("channel").asText("network");
         int bankVersion = params.path("bankVersion").asInt(0);
         var session = requireCloudSession();
-        int applied = context().getBean(CloudApiClient.class)
+        int applied = context().getBean(CloudBankApi.class)
             .rollbackExerciseBank(session.accessToken(), channel, bankVersion);
         return mapper.createObjectNode().put("bankVersion", applied);
     }
@@ -205,7 +205,7 @@ final class TeachingApiSection extends ApiSection {
         context().getBean(ExerciseManagementService.class).parsePackage(text);
         var session = requireCloudSession();
         String channel = params.path("channel").asText("network");
-        int bankVersion = context().getBean(CloudApiClient.class)
+        int bankVersion = context().getBean(CloudBankApi.class)
             .publishExerciseBankPackage(session.accessToken(), channel, text);
         return mapper.createObjectNode().put("bankVersion", bankVersion);
     }

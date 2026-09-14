@@ -4,7 +4,7 @@ import com.sqlteacher.application.collaboration.AssignmentStatus;
 import com.sqlteacher.application.collaboration.ClassAssignment;
 import com.sqlteacher.application.collaboration.ClassLearningSummary;
 import com.sqlteacher.application.collaboration.ClassroomService;
-import com.sqlteacher.application.collaboration.CloudApiClient;
+import com.sqlteacher.application.collaboration.CloudBankApi;
 import com.sqlteacher.application.collaboration.CloudAuthenticationService;
 import com.sqlteacher.application.collaboration.CloudSyncItem;
 import com.sqlteacher.application.collaboration.ExerciseBankBlock;
@@ -212,30 +212,11 @@ class ExerciseBankSyncServiceTest {
             }
         }
 
-        private final class FakeCloudApi implements CloudApiClient {
+        private final class FakeCloudApi implements CloudBankApi {
             @Override public ExerciseBankManifest fetchExerciseBankManifest(String channel) { return manifest; }
             @Override public ExerciseBankBlock fetchExerciseBankBlock(String channel, String type, String id) {
                 return blocks.get(type + ":" + id);
             }
-            @Override public int uploadSyncItems(String token, List<CloudSyncItem> items) { return 0; }
-            @Override public List<CloudSyncItem> downloadSyncItems(String token, long afterVersion) { return List.of(); }
-            @Override public CloudAuthenticationService.Session login(String email, char[] password) { throw unsupported(); }
-            @Override public CloudAuthenticationService.Session register(String email, String name, char[] password) { throw unsupported(); }
-            @Override public CloudAuthenticationService.Session refresh(String refreshToken) { throw unsupported(); }
-            @Override public void logout(String token) { throw unsupported(); }
-            @Override public List<ClassroomService.Classroom> listClasses(String token) { throw unsupported(); }
-            @Override public List<ClassroomService.RosterMember> listClassRoster(String token, String classroomId) { throw unsupported(); }
-            @Override public ClassroomService.Classroom createClass(String token, String name) { throw unsupported(); }
-            @Override public ClassroomService.Classroom addClassMember(String token, String classId, String email, UserRole role) { throw unsupported(); }
-            @Override public ClassAssignment createAssignment(String token, String classId, String exerciseId, String title) { throw unsupported(); }
-            @Override public ClassAssignment changeAssignmentStatus(String token, String classId, String assignmentId, AssignmentStatus status) { throw unsupported(); }
-            @Override public ClassAssignment setAssignmentDueAt(String token, String classId, String assignmentId, Instant dueAt) { throw unsupported(); }
-            @Override public ClassAssignment updateAssignment(String token, String classId, String assignmentId, String title, Instant dueAt) { throw unsupported(); }
-            @Override public List<ClassAssignment> listAssignments(String token, String classId) { throw unsupported(); }
-            @Override public ClassLearningSummary getClassLearningSummary(String token, String classId) { throw unsupported(); }
-            @Override public String exportClassLearningCsv(String token, String classId) { throw unsupported(); }
-
-            private static UnsupportedOperationException unsupported() { return new UnsupportedOperationException(); }
         }
     }
 }

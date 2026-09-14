@@ -6,7 +6,7 @@ import com.sqlteacher.application.collaboration.AssignmentStatus;
 import com.sqlteacher.application.collaboration.AssignmentStudentStatus;
 import com.sqlteacher.application.collaboration.ClassAssignment;
 import com.sqlteacher.application.collaboration.ClassroomService;
-import com.sqlteacher.application.collaboration.CloudApiClient;
+import com.sqlteacher.application.collaboration.CloudClassroomApi;
 import com.sqlteacher.application.collaboration.CloudAuthenticationService;
 import com.sqlteacher.application.collaboration.CloudSessionService;
 import com.sqlteacher.application.collaboration.UserRole;
@@ -52,16 +52,16 @@ public final class DefaultInterventionService implements InterventionService {
     private static final Logger log = LoggerFactory.getLogger(DefaultInterventionService.class);
     private static final Map<InterventionStatus, Set<InterventionStatus>> ALLOWED_TRANSITIONS = allowedTransitions();
 
-    private final CloudApiClient api;
+    private final CloudClassroomApi api;
     private final CloudSessionService sessions;
     private final Path databasePath;
     private final Clock clock;
 
-    public DefaultInterventionService(CloudApiClient api, CloudSessionService sessions, Path databasePath) {
+    public DefaultInterventionService(CloudClassroomApi api, CloudSessionService sessions, Path databasePath) {
         this(api, sessions, databasePath, Clock.systemUTC());
     }
 
-    DefaultInterventionService(CloudApiClient api, CloudSessionService sessions, Path databasePath, Clock clock) {
+    DefaultInterventionService(CloudClassroomApi api, CloudSessionService sessions, Path databasePath, Clock clock) {
         this.api = Objects.requireNonNull(api); this.sessions = Objects.requireNonNull(sessions);
         this.databasePath = Objects.requireNonNull(databasePath); this.clock = Objects.requireNonNull(clock);
     }

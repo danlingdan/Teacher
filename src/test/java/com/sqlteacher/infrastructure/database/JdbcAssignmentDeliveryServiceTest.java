@@ -4,7 +4,7 @@ import com.sqlteacher.application.collaboration.AssignmentSubmission;
 import com.sqlteacher.application.collaboration.AssignmentSubmissionRequest;
 import com.sqlteacher.application.collaboration.AssignmentSubmissionStatus;
 import com.sqlteacher.application.collaboration.AuthenticatedUser;
-import com.sqlteacher.application.collaboration.CloudApiClient;
+import com.sqlteacher.application.collaboration.CloudClassroomApi;
 import com.sqlteacher.application.collaboration.CloudAuthenticationService;
 import com.sqlteacher.application.collaboration.CloudSessionService;
 import com.sqlteacher.application.collaboration.UserRole;
@@ -94,7 +94,7 @@ class JdbcAssignmentDeliveryServiceTest {
         @Override public void signOut() { session = null; }
     }
 
-    private static final class FailingSubmissionApi implements CloudApiClient {
+    private static final class FailingSubmissionApi implements CloudClassroomApi {
         private boolean available;
         private boolean reject;
         private AssignmentSubmissionRequest lastRequest;
@@ -112,10 +112,6 @@ class JdbcAssignmentDeliveryServiceTest {
                 request.clientCompletedAt(), Instant.now());
         }
 
-        @Override public CloudAuthenticationService.Session login(String email, char[] password) { throw unsupported(); }
-        @Override public CloudAuthenticationService.Session register(String email, String name, char[] password) { throw unsupported(); }
-        @Override public CloudAuthenticationService.Session refresh(String refreshToken) { throw unsupported(); }
-        @Override public void logout(String accessToken) { throw unsupported(); }
         @Override public List<com.sqlteacher.application.collaboration.ClassroomService.Classroom> listClasses(String token) { throw unsupported(); }
         @Override public List<com.sqlteacher.application.collaboration.ClassroomService.RosterMember> listClassRoster(String token, String classroomId) { throw unsupported(); }
         @Override public com.sqlteacher.application.collaboration.ClassroomService.Classroom createClass(String token, String name) { throw unsupported(); }
@@ -127,8 +123,6 @@ class JdbcAssignmentDeliveryServiceTest {
         @Override public List<com.sqlteacher.application.collaboration.ClassAssignment> listAssignments(String token, String classroomId) { throw unsupported(); }
         @Override public com.sqlteacher.application.collaboration.ClassLearningSummary getClassLearningSummary(String token, String classroomId) { throw unsupported(); }
         @Override public String exportClassLearningCsv(String token, String classroomId) { throw unsupported(); }
-        @Override public int uploadSyncItems(String token, List<com.sqlteacher.application.collaboration.CloudSyncItem> items) { throw unsupported(); }
-        @Override public List<com.sqlteacher.application.collaboration.CloudSyncItem> downloadSyncItems(String token, long version) { throw unsupported(); }
         private UnsupportedOperationException unsupported() { return new UnsupportedOperationException(); }
     }
 }

@@ -133,7 +133,7 @@ class DefaultInterventionServiceTest {
         return app;
     }
 
-    private static final class StubApi implements CloudApiClient {
+    private static final class StubApi implements CloudClassroomApi {
         private int attemptCount;
         private Instant lastSubmittedAt;
 
@@ -154,10 +154,6 @@ class DefaultInterventionServiceTest {
                 List.of(new AssignmentAnalyticsRow("student-1", "s@example.com", "Student",
                     AssignmentStudentStatus.NOT_SUBMITTED, attemptCount, 0, lastSubmittedAt)), 0, 200, 1, NOW);
         }
-        @Override public CloudAuthenticationService.Session login(String e,char[] p){throw unsupported();}
-        @Override public CloudAuthenticationService.Session register(String e,String n,char[] p){throw unsupported();}
-        @Override public CloudAuthenticationService.Session refresh(String r){throw unsupported();}
-        @Override public void logout(String t){throw unsupported();}
         @Override public ClassroomService.Classroom createClass(String t,String n){throw unsupported();}
         @Override public ClassroomService.Classroom addClassMember(String t,String c,String e,UserRole r){throw unsupported();}
         @Override public ClassAssignment createAssignment(String t,String c,String e,String n){throw unsupported();}
@@ -166,8 +162,6 @@ class DefaultInterventionServiceTest {
         @Override public ClassAssignment updateAssignment(String t,String c,String a,String n,Instant d){throw unsupported();}
         @Override public ClassLearningSummary getClassLearningSummary(String t,String c){throw unsupported();}
         @Override public String exportClassLearningCsv(String t,String c){throw unsupported();}
-        @Override public int uploadSyncItems(String t,List<CloudSyncItem> i){throw unsupported();}
-        @Override public List<CloudSyncItem> downloadSyncItems(String t,long v){throw unsupported();}
         private static UnsupportedOperationException unsupported(){return new UnsupportedOperationException();}
     }
 }
