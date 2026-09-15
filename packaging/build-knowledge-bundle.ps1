@@ -77,9 +77,9 @@ foreach ($file in $markdownFiles) {
     $content = Get-Content -LiteralPath $file.FullName -Raw -Encoding utf8
 
     # Title: first level-1 heading, else file name (matches DefaultObsidianVaultImportService).
-    $title = $segments[-1]
+    $docTitle = $segments[-1]
     $headingMatch = [regex]::Match($content, '(?m)^#\s+(.+?)\s*$')
-    if ($headingMatch.Success) { $title = $headingMatch.Groups[1].Value }
+    if ($headingMatch.Success) { $docTitle = $headingMatch.Groups[1].Value }
 
     $docAttachments = @()
     $docDirectory = $file.DirectoryName
@@ -143,7 +143,7 @@ foreach ($file in $markdownFiles) {
     $documents += [ordered]@{
         id            = $docId
         path          = $docRelative
-        title         = $title
+        title         = $docTitle
         sectionTitle  = $sectionTitle
         sha256        = (Get-Sha256Hex -Bytes $docBytes)
         attachments   = @($docAttachments)
