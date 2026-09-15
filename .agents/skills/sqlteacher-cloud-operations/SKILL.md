@@ -35,3 +35,15 @@ Use `packaging/cloud/check-cloud-operations.sh` and the current guide under `doc
 6. Record commands, pass/fail results, environment notes, backup identifier, release target, and known limitations in `docs/operations/` without recording secrets.
 
 Restores are destructive. Require an explicitly selected backup, preserve a pre-restore copy, verify integrity before and after, and do not proceed from a guessed path.
+
+## Non-interactive server access (v3.4.4)
+
+- ECS credentials live in gitignored `.secrets/ecs.env` (`SQLTEACHER_ECS_HOST` / `SQLTEACHER_ECS_USER` /
+  `SQLTEACHER_ECS_PASSWORD`, plus cloud admin console credentials). The file must stay out of Git.
+- For non-interactive deployment use Python `paramiko` (installed locally): parse `.secrets/ecs.env`
+  at runtime, connect to the ECS host, upload artifacts via SFTP, and run commands over SSH.
+  Never print, inline, or commit the password; print only command output that contains no secrets.
+- Content-file updates (e.g. knowledge bundle zip + manifest in `/opt/sqlteacher/shared/`) are read
+  per request: upload to temp names, verify SHA-256, `install` atomically with `root:sqlteacher 0640`,
+  keep the previous version for rollback, and restart `sqlteacher-cloud` only when an env value
+  (`/etc/sqlteacher/cloud.env`) changes.
