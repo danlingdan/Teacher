@@ -243,6 +243,9 @@ const FALLBACK_DIALECTS: ConnectionDialectOption[] = [
 const dialectLabel = (options: ConnectionDialectOption[], name: string) =>
   options.find((option) => option.name === name)?.displayName ?? name;
 
+// v3.4.3 CXN-1：常用类型一键直达，其余 11 种方言与通用 JDBC 收进「更多类型」。
+const QUICK_DIALECTS = ["MYSQL", "SQLITE", "POSTGRESQL"];
+
 function useConnectionDialects(): ConnectionDialectOption[] {
   const query = useQuery({
     queryKey: ["data", "connection-dialects"],
@@ -407,6 +410,36 @@ function ConnectionManager({
     setResult(undefined);
     toast("success", "已复制配置，确认后点“测试并保存”");
   };
+  // v3.4.3 CXN-1：类型选择傻瓜化——常用类型一键选中，其余收进「更多类型」；
+  // 选中后表单只保留该类型必要字段，端口自动填默认值。
+  const selectDialect = (option: ConnectionDialectOption) => {
+    setDraft((value) => ({
+      ...value,
+      dialect: option.name,
+      port: option.defaultPort > 0 ? String(option.defaultPort) : "",
+    }));
+    setResult(undefined);
+  };
+  const quickDialects = dialectOptions.filter((option) => QUICK_DIALECTS.includes(option.name));
+  const moreDialects = dialectOptions.filter((option) => !QUICK_DIALECTS.includes(option.name));
+  const createEmptyDatabaseFile = async () => {
+    try {
+      const { save } = await import("@tauri-apps/plugin-dialog");
+      const extension = draft.dialect === "H2" ? "mv.db" : draft.dialect === "DUCKDB" ? "duckdb" : "db";
+      const selection = await save({
+        title: "新建数据库文件",
+        defaultPath: `database.${extension}`,
+        filters: [{ name: "数据库文件", extensions: [extension] }],
+      });
+      if (typeof selection === "string" && selection.trim()) {
+        setDraft((value) => ({ ...value, databasePath: selection }));
+        setResult(undefined);
+        toast("success", "已选择路径，测试并保存后会创建新的空数据库");
+      }
+    } catch {
+      toast("error", "无法打开保存对话框，请直接输入文件路径");
+    }
+  };
   const missing = missingConnectionFields(draft, dialect);
   const busy = save.isPending || test.isPending;
   return (
@@ -429,25 +462,68 @@ function ConnectionManager({
             编辑所选
           </Button>
         )}
-        {current && !current.builtIn && (
-          <Button variant="secondary" onClick={copySelected}>
-            复制
-          </Button>
-        )}
-        <Button
-          variant="secondary"
-          disabled={!current?.enabled || select.isPending}
-          onClick={() => select.mutate()}
-        >
-          设为当前
-        </Button>
-        {current && !current.builtIn && (
-          <Button variant="danger" onClick={() => setDeleteOpen(true)}>
-            删除
-          </Button>
+        {current && (
+          <details className="connection-more-actions">
+            <summary>更多操作</summary>
+            <div className="button-row">
+              {!current.builtIn && (
+                <Button variant="secondary" onClick={copySelected}>
+                  复制
+                </Button>
+              )}
+              <Button
+                variant="secondary"
+                disabled={!current.enabled || select.isPending}
+                onClick={() => select.mutate()}
+              >
+                设为当前
+              </Button>
+              {!current.builtIn && (
+                <Button variant="danger" onClick={() => setDeleteOpen(true)}>
+                  删除
+                </Button>
+              )}
+            </div>
+          </details>
         )}
       </div>
       <div className="settings-grid">
+        <FormField label="数据库类型">
+          {() => (
+            <div className="dialect-picker">
+              <div className="dialect-quick-row" role="group" aria-label="常用数据库类型">
+                {quickDialects.map((option) => (
+                  <button
+                    key={option.name}
+                    type="button"
+                    className={`dialect-chip${draft.dialect === option.name ? " active" : ""}`}
+                    aria-pressed={draft.dialect === option.name}
+                    onClick={() => selectDialect(option)}
+                  >
+                    {option.displayName}
+                  </button>
+                ))}
+              </div>
+              <select
+                aria-label="更多数据库类型"
+                value={QUICK_DIALECTS.includes(draft.dialect) ? "" : draft.dialect}
+                onChange={(event) => {
+                  const next = dialectOptions.find((option) => option.name === event.target.value);
+                  if (next) selectDialect(next);
+                }}
+              >
+                <option value="" disabled>
+                  更多类型…
+                </option>
+                {moreDialects.map((option) => (
+                  <option key={option.name} value={option.name}>
+                    {option.displayName}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+        </FormField>
         <FormField label="显示名称" hint="留空会自动生成">
           {(ids) => (
             <input
@@ -456,28 +532,6 @@ function ConnectionManager({
               onChange={(event) => setDraft({ ...draft, displayName: event.target.value })}
               placeholder="留空自动生成"
             />
-          )}
-        </FormField>
-        <FormField label="数据库类型">
-          {(ids) => (
-            <select
-              {...ids}
-              value={draft.dialect}
-              onChange={(event) => {
-                const next = dialectOptions.find((option) => option.name === event.target.value);
-                setDraft({
-                  ...draft,
-                  dialect: event.target.value,
-                  port: next && next.defaultPort > 0 ? String(next.defaultPort) : "",
-                });
-              }}
-            >
-              {dialectOptions.map((option) => (
-                <option key={option.name} value={option.name}>
-                  {option.displayName}
-                </option>
-              ))}
-            </select>
           )}
         </FormField>
         {fileBased ? (
@@ -499,6 +553,13 @@ function ConnectionManager({
                   onClick={() => void browseDatabaseFile()}
                 >
                   浏览…
+                </Button>
+                <Button
+                  variant="secondary"
+                  disabled={busy}
+                  onClick={() => void createEmptyDatabaseFile()}
+                >
+                  新建空库…
                 </Button>
               </div>
             )}
@@ -596,6 +657,9 @@ function ConnectionManager({
             </FormField>
           </>
         )}
+      </div>
+      <details className="connection-advanced">
+        <summary>高级选项</summary>
         <label className="setting-toggle">
           <input
             type="checkbox"
@@ -616,9 +680,6 @@ function ConnectionManager({
             <strong>启用连接</strong>
           </span>
         </label>
-      </div>
-      <details className="connection-advanced">
-        <summary>高级</summary>
         <FormField label="连接 ID" hint="留空自动生成；仅小写字母、数字、点、横线或下划线">
           {(ids) => (
             <input
@@ -681,6 +742,7 @@ function ConnectionManager({
 
 // v3.4.1 SQL-1：表结构浏览器。每张表默认收起，支持按表名/列名过滤并显示表总数；
 // 树区域限高内滚，避免表多时侧栏被全部展开的列清单撑爆（原实现硬编码 <details open>）。
+// v3.4.3 CXN-3：整体外包一层可折叠「表结构」块，每表展开后分区显示列与索引。
 function SchemaPanel({
   tables,
   isFetching,
@@ -699,11 +761,11 @@ function SchemaPanel({
       table.columns.some((column) => column.name.toLowerCase().includes(keyword)),
   );
   return (
-    <>
-      <div className="schema-browser-head">
+    <details className="schema-browser" open>
+      <summary className="schema-browser-head">
         <strong>表结构</strong>
         {tables && <span className="schema-count">共 {tables.length} 张表</span>}
-      </div>
+      </summary>
       {tables && tables.length > 0 && (
         <input
           className="schema-filter"
@@ -724,25 +786,49 @@ function SchemaPanel({
         </Feedback>
       )}
       <div className="schema-tree">
-        {visible.map((table) => (
-          <details key={table.name}>
-            <summary>{table.name}</summary>
-            <ul>
-              {table.columns.map((column) => (
-                <li key={column.name}>
-                  <strong>{column.name}</strong>
-                  <span>
-                    {column.typeName}
-                    {column.primaryKey ? " · PK" : ""}
-                    {column.nullable ? "" : " · NOT NULL"}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </details>
-        ))}
+        {visible.map((table) => {
+          const indexes = table.indexes ?? [];
+          return (
+            <details key={table.name}>
+              <summary>{table.name}</summary>
+              <div className="schema-table-section">
+                <p className="schema-section-label">列</p>
+                <ul>
+                  {table.columns.map((column) => (
+                    <li key={column.name}>
+                      <strong>{column.name}</strong>
+                      <span>
+                        {column.typeName}
+                        {column.primaryKey ? " · PK" : ""}
+                        {column.nullable ? "" : " · NOT NULL"}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              <div className="schema-table-section">
+                <p className="schema-section-label">索引</p>
+                {indexes.length === 0 ? (
+                  <p className="muted">无</p>
+                ) : (
+                  <ul>
+                    {indexes.map((index) => (
+                      <li key={index.name}>
+                        <strong>{index.name}</strong>
+                        <span>
+                          {index.columns.join(", ")}
+                          {index.unique ? " · 唯一" : ""}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </details>
+          );
+        })}
       </div>
-    </>
+    </details>
   );
 }
 

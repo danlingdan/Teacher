@@ -34,6 +34,8 @@ fn request_timeout(method: &str) -> Duration {
         | "settings.backup.create"
         | "knowledge.index.rebuild"
         | "knowledge.import.execute"
+        | "knowledge.bundle.import"
+        | "knowledge.bundle.download"
         | "cloud.course.package.import"
         | "settings.learning.reset"
         | "settings.demo.restore"
@@ -173,6 +175,7 @@ const ALLOWED_METHODS: &[&str] = &[
     "activity.definition",
     "activity.submit",
     "knowledge.article",
+    "knowledge.article.asset",
     "knowledge.search",
     "knowledge.read.mark",
     "knowledge.index.status",
@@ -183,6 +186,10 @@ const ALLOWED_METHODS: &[&str] = &[
     "knowledge.article.delete",
     "knowledge.import.preview",
     "knowledge.import.execute",
+    "knowledge.bundle.import",
+    "knowledge.bundle.check",
+    "knowledge.bundle.download",
+    "knowledge.overview",
     "practice.catalog",
     "practice.preview",
     "practice.start",

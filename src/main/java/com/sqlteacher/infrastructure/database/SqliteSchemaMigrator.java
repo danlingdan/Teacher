@@ -1245,6 +1245,25 @@ final class SqliteSchemaMigrator {
                 "create index if not exists learning_events_owner_occurred on learning_events(owner, occurred_at desc)"
             ),
             SqliteSchemaMigrator::normalizeLegacyEventTimestamps
+        ),
+        new Migration(
+            24,
+            "Track official knowledge bundle state and mark bundle-owned articles",
+            List.of(
+                """
+                    create table knowledge_bundle_state (
+                        bundle_id text primary key,
+                        version text not null,
+                        source text not null check (source in ('builtin', 'cloud', 'manual')),
+                        archive_sha256 text,
+                        imported_at text not null
+                    )
+                    """,
+                "alter table course_knowledge_articles add column bundle_id text",
+                "alter table course_knowledge_articles add column bundle_doc_id text",
+                "create index if not exists course_knowledge_articles_bundle "
+                    + "on course_knowledge_articles(bundle_id, bundle_doc_id)"
+            )
         )
     );
 

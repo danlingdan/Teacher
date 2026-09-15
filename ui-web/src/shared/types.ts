@@ -77,6 +77,49 @@ export interface CourseWorkspace {
   articles: KnowledgeArticle[];
   articleCount: number;
 }
+// v3.4.3 KSR-1/OKB：知识页三态与官方知识库状态。
+export interface KnowledgeIndexStatus {
+  pendingJobs: number;
+  indexedChunks: number;
+  failedChunks: number;
+  mode: string;
+  message: string;
+}
+export interface KnowledgeBundleState {
+  bundleId: string;
+  version: string;
+  source: "BUILTIN" | "CLOUD" | "MANUAL" | string;
+  archiveSha256?: string | null;
+  importedAt: string;
+}
+export interface KnowledgeOverview {
+  articleCount: number;
+  articles: KnowledgeArticle[];
+  hasOfficialBundle: boolean;
+  bundle: KnowledgeBundleState | null;
+  index: KnowledgeIndexStatus;
+}
+export interface KnowledgeBundleUpdateStatus {
+  cloudAvailable: boolean;
+  updateAvailable: boolean;
+  bundleId: string;
+  cloudVersion: string;
+  localVersion: string;
+  title: string;
+  sizeBytes: number;
+  message: string;
+}
+export interface KnowledgeBundleImportReport {
+  bundleId: string;
+  version: string;
+  source: "BUILTIN" | "CLOUD" | "MANUAL" | string;
+  totalDocuments: number;
+  importedDocuments: number;
+  replacedDocuments: number;
+  failedDocuments: number;
+  failed: boolean;
+  importedAt: string;
+}
 export interface ActivityDefinition {
   id: string;
   courseId: string;
@@ -349,9 +392,16 @@ export interface DatabaseColumn {
   nullable: boolean;
   primaryKey: boolean;
 }
+export interface DatabaseIndex {
+  name: string;
+  unique: boolean;
+  columns: string[];
+}
 export interface DatabaseTable {
   name: string;
   columns: DatabaseColumn[];
+  // v3.4.3 CXN-2 起 Java 侧总是返回；可选仅为兼容旧缓存数据。
+  indexes?: DatabaseIndex[];
 }
 export interface SqlRisk {
   level: string;

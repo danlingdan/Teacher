@@ -1,6 +1,9 @@
 param(
     [string]$OutputDir = "target\installer",
-    [string]$JavaHome = $env:JAVA_HOME
+    [string]$JavaHome = $env:JAVA_HOME,
+    # v3.4.3 PUB-1: source directory of the official knowledge base markdown vault. When provided,
+    # the bundle is rebuilt here (after 'mvn clean' wipes target\) so packaging is self-contained.
+    [string]$KnowledgeSourceDirectory = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -82,6 +85,39 @@ try {
         }
     }
 
+    # v3.4.3 PUB-1: the installer must ship the official knowledge base built by
+    # build-knowledge-bundle.ps1 into target\knowledge. The Tauri-side copy is build
+    # staging only (git-ignored). Missing bundle fails packaging: it is a release promise.
+    if ($tauriConfig.bundle.resources -notcontains "knowledge/**/*") {
+        throw "tauri.conf.json bundle.resources must include 'knowledge/**/*' so the installer ships the official knowledge base."
+    }
+    if (-not [string]::IsNullOrWhiteSpace($KnowledgeSourceDirectory)) {
+        # Rebuild after 'mvn clean' (build-v3-sidecar.ps1) wiped target\knowledge.
+        & (Join-Path $PSScriptRoot "build-knowledge-bundle.ps1") -SourceDirectory $KnowledgeSourceDirectory
+        if ($LASTEXITCODE -ne 0) { throw "Unable to build the official knowledge bundle." }
+    }
+    $knowledgeSourceRoot = Join-Path $targetRoot "knowledge"
+    $bundleZip = Get-ChildItem -LiteralPath $knowledgeSourceRoot -Filter "*.zip" -File -ErrorAction SilentlyContinue |
+        Sort-Object LastWriteTime -Descending |
+        Select-Object -First 1
+    if (-not $bundleZip) {
+        throw "No knowledge bundle zip in target\knowledge. Run packaging\build-knowledge-bundle.ps1 first; the bundled knowledge base is required for this release."
+    }
+    $bundleChecksumFile = "$($bundleZip.FullName).sha256"
+    if (Test-Path -LiteralPath $bundleChecksumFile) {
+        $expectedHash = (Get-Content -LiteralPath $bundleChecksumFile -Raw).Trim().ToLowerInvariant()
+        $actualHash = (Get-FileHash -LiteralPath $bundleZip.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+        if ($expectedHash -ne $actualHash) {
+            throw "Knowledge bundle checksum mismatch: $bundleZip does not match its .sha256 sidecar."
+        }
+    }
+    $tauriKnowledgeRoot = Join-Path $projectRoot "ui-web\src-tauri\knowledge"
+    New-Item -ItemType Directory -Force -Path $tauriKnowledgeRoot | Out-Null
+    Copy-Item -LiteralPath $bundleZip.FullName -Destination $tauriKnowledgeRoot -Force
+    if (-not (Test-Path -LiteralPath (Join-Path $tauriKnowledgeRoot $bundleZip.Name))) {
+        throw "Knowledge bundle staging for the Tauri bundle is incomplete: $($bundleZip.Name)"
+    }
+
     Push-Location (Join-Path $projectRoot "ui-web")
     try {
         npm run tauri build -- --bundles nsis
@@ -127,6 +163,10 @@ try {
     if (-not $nsisContent.Contains('CreateDirectory "$INSTDIR\legal"')) {
         throw "Generated NSIS installer does not create the legal resource directory."
     }
+    # v3.4.3 PUB-1: bundled resources must place the knowledge bundle into <install dir>\knowledge.
+    if (-not $nsisContent.Contains('CreateDirectory "$INSTDIR\knowledge"')) {
+        throw "Generated NSIS installer does not create the knowledge resource directory."
+    }
     if (Test-Path -LiteralPath $portableStage) {
         Assert-ChildPath -Candidate $portableStage -Parent $targetRoot
         Remove-Item -LiteralPath $portableStage -Recurse -Force
@@ -160,6 +200,11 @@ try {
     Copy-Item -LiteralPath (Join-Path $projectRoot "src\main\resources\legal\THIRD-PARTY-LICENSES.txt") -Destination $legalRoot -Force
     Copy-Item -LiteralPath (Join-Path $projectRoot "src\main\resources\legal\PRIVACY.md") -Destination $legalRoot -Force
 
+    # v3.4.3 PUB-1: the portable package ships the same official knowledge bundle.
+    $portableKnowledgeRoot = Join-Path $portableRoot "knowledge"
+    New-Item -ItemType Directory -Force -Path $portableKnowledgeRoot | Out-Null
+    Copy-Item -LiteralPath $bundleZip.FullName -Destination $portableKnowledgeRoot -Force
+
     $generatedJavaSbom = Join-Path $targetRoot "sqlteacher-sbom.json"
     if (-not (Test-Path -LiteralPath $generatedJavaSbom)) {
         throw "Maven CycloneDX SBOM is missing: $generatedJavaSbom"
@@ -180,7 +225,8 @@ try {
     $requiredPortableFiles = @(
         (Join-Path $portableRoot "SQLTeacher.exe"),
         (Join-Path $portableRoot "sidecar\runtime\bin\java.exe"),
-        (Join-Path $portableRoot "sidecar\sidecar.json")
+        (Join-Path $portableRoot "sidecar\sidecar.json"),
+        (Join-Path $portableKnowledgeRoot $bundleZip.Name)
     )
     foreach ($file in $requiredPortableFiles) {
         if (-not (Test-Path -LiteralPath $file)) { throw "Portable package is incomplete: $file" }

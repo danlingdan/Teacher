@@ -1,4 +1,4 @@
-import { useEffect, useId, useState, type ComponentProps } from "react";
+import { useEffect, useId, useMemo, useState, type ComponentProps } from "react";
 import ReactMarkdown from "react-markdown";
 import rehypeKatex from "rehype-katex";
 import rehypeSanitize from "rehype-sanitize";
@@ -9,6 +9,7 @@ import remarkMath from "remark-math";
 import type { Root, RootContent, Text } from "mdast";
 import type { Plugin } from "unified";
 import { visit } from "unist-util-visit";
+import { localAppRequest } from "../../shared/ipc";
 import "katex/dist/katex.min.css";
 
 const remarkSqlTeacherSyntax: Plugin<[], Root> = () => (tree) => {
@@ -78,7 +79,7 @@ const remarkSqlTeacherSyntax: Plugin<[], Root> = () => (tree) => {
 
 const sanitizeSchema = {
   ...defaultSchema,
-  tagNames: [...(defaultSchema.tagNames ?? []), "aside"],
+  tagNames: [...(defaultSchema.tagNames ?? []), "aside", "img"],
   attributes: {
     ...defaultSchema.attributes,
     "*": [
@@ -88,22 +89,78 @@ const sanitizeSchema = {
       "dataFold",
       "dataTarget",
     ],
+    // v3.4.3 OKB-7: keep official-bundle image references (relative attachments/… paths);
+    // the actual bytes are swapped in at render time via the bridge, never from raw markdown.
+    img: [...(defaultSchema.attributes?.img ?? []), "src", "alt", "title", "loading"],
   },
 };
 
-export default function KnowledgeRenderer({ markdown }: { markdown: string }) {
+export default function KnowledgeRenderer({
+  markdown,
+  articleId,
+}: {
+  markdown: string;
+  articleId?: string;
+}) {
+  const components = useMemo(
+    () => ({
+      code: MarkdownCode,
+      img: (props: ComponentProps<"img">) => <KnowledgeImage {...props} articleId={articleId} />,
+    }),
+    [articleId],
+  );
   return (
     <div data-no-translate>
       <ReactMarkdown
         remarkPlugins={[remarkFrontmatter, remarkGfm, remarkMath, remarkSqlTeacherSyntax]}
         rehypePlugins={[[rehypeSanitize, sanitizeSchema], [rehypeKatex, { trust: false, maxSize: 10, maxExpand: 1000 }]]}
-        components={{ code: MarkdownCode }}
+        components={components}
         skipHtml
       >
         {markdown}
       </ReactMarkdown>
     </div>
   );
+}
+
+// v3.4.3 OKB-7: official-bundle documents reference images as attachments/<docId>/<file>.
+// The WebView cannot read local files directly, so resolve them through the Java bridge, which
+// scopes the read to the article's bundle asset root and returns image bytes as a data URL.
+function KnowledgeImage({
+  src,
+  alt,
+  articleId,
+}: {
+  src?: string;
+  alt?: string;
+  articleId?: string;
+}) {
+  const isBundleAsset = typeof src === "string" && src.startsWith("attachments/");
+  const [dataUrl, setDataUrl] = useState<string>();
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    if (!isBundleAsset || !articleId || !src) return;
+    let active = true;
+    const path = decodeURIComponent(src.slice("attachments/".length));
+    localAppRequest<{ contentType: string; dataBase64: string }>("knowledge.article.asset", {
+      articleId,
+      path,
+    })
+      .then((value) => {
+        if (active) setDataUrl(`data:${value.contentType};base64,${value.dataBase64}`);
+      })
+      .catch(() => {
+        if (active) setFailed(true);
+      });
+    return () => {
+      active = false;
+    };
+  }, [isBundleAsset, articleId, src]);
+  if (!isBundleAsset) return <img src={src} alt={alt} loading="lazy" />;
+  if (!articleId || failed)
+    return <span className="knowledge-image-missing">图片不可用：{alt || src}</span>;
+  if (!dataUrl) return <span className="knowledge-image-loading">正在加载图片…</span>;
+  return <img src={dataUrl} alt={alt} loading="lazy" />;
 }
 
 function MarkdownCode({ className, children, ...props }: ComponentProps<"code">) {

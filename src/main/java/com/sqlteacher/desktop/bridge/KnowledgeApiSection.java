@@ -5,6 +5,9 @@ import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.sqlteacher.application.knowledge.CourseKnowledgeSearchFilter;
 import com.sqlteacher.application.knowledge.CourseKnowledgeService;
+import com.sqlteacher.application.knowledge.KnowledgeBundleService;
+import com.sqlteacher.application.knowledge.KnowledgeBundleSource;
+import com.sqlteacher.application.knowledge.KnowledgeBundleUpdateService;
 import com.sqlteacher.application.knowledge.KnowledgeDocumentService;
 import com.sqlteacher.application.knowledge.KnowledgeIndexService;
 import com.sqlteacher.application.knowledge.KnowledgeReadStateService;
@@ -12,6 +15,7 @@ import com.sqlteacher.application.knowledge.KnowledgeVisibility;
 import com.sqlteacher.application.knowledge.ObsidianVaultImportService;
 
 import java.nio.file.Path;
+import java.util.Base64;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Consumer;
@@ -32,11 +36,13 @@ final class KnowledgeApiSection extends ApiSection {
     @Override
     public Set<String> supportedMethods() {
         return Set.of(
-            "knowledge.article", "knowledge.search", "knowledge.read.mark",
+            "knowledge.article", "knowledge.article.asset", "knowledge.search", "knowledge.read.mark",
             "knowledge.index.status", "knowledge.index.rebuild",
             "knowledge.article.import", "knowledge.article.revise",
             "knowledge.article.visibility", "knowledge.article.delete",
-            "knowledge.import.preview", "knowledge.import.execute"
+            "knowledge.import.preview", "knowledge.import.execute",
+            "knowledge.bundle.import", "knowledge.bundle.check", "knowledge.bundle.download",
+            "knowledge.overview"
         );
     }
 
@@ -45,6 +51,7 @@ final class KnowledgeApiSection extends ApiSection {
                            Consumer<LocalAppEvent> events) throws Exception {
         return switch (method) {
             case "knowledge.article" -> knowledgeArticle(params, cancellation);
+            case "knowledge.article.asset" -> knowledgeArticleAsset(params, cancellation);
             case "knowledge.search" -> knowledgeSearch(params, cancellation);
             case "knowledge.read.mark" -> knowledgeReadMark(params, cancellation);
             case "knowledge.index.status" -> knowledgeIndexStatus(cancellation);
@@ -55,6 +62,10 @@ final class KnowledgeApiSection extends ApiSection {
             case "knowledge.article.delete" -> knowledgeArticleDelete(params, cancellation);
             case "knowledge.import.preview" -> knowledgeImportPreview(params, cancellation);
             case "knowledge.import.execute" -> knowledgeImportExecute(params, cancellation, events);
+            case "knowledge.bundle.import" -> knowledgeBundleImport(params, cancellation, events);
+            case "knowledge.bundle.check" -> knowledgeBundleCheck(cancellation);
+            case "knowledge.bundle.download" -> knowledgeBundleDownload(cancellation, events);
+            case "knowledge.overview" -> knowledgeOverview(cancellation);
             default -> throw new IllegalStateException("Method whitelist and dispatcher are inconsistent");
         };
     }
@@ -70,6 +81,17 @@ final class KnowledgeApiSection extends ApiSection {
         result.put("revision", detail.revision().revision());
         result.put("trustedHtml", false);
         result.put("externalResourcesAllowed", false);
+        return result;
+    }
+
+    private JsonNode knowledgeArticleAsset(JsonNode params, CancellationToken cancellation) {
+        cancellation.throwIfCancelled();
+        String articleId = requiredText(params, "articleId", 128);
+        String path = requiredText(params, "path", 4096);
+        var asset = context().getBean(KnowledgeBundleService.class).readArticleAsset(articleId, path);
+        ObjectNode result = mapper.createObjectNode();
+        result.put("contentType", asset.contentType());
+        result.put("dataBase64", Base64.getEncoder().encodeToString(asset.data()));
         return result;
     }
 
@@ -183,5 +205,56 @@ final class KnowledgeApiSection extends ApiSection {
         cancellation.throwIfCancelled();
         emit(events, "import.progress", "phase", "completed");
         return mapper.valueToTree(report);
+    }
+
+    private JsonNode knowledgeBundleImport(JsonNode params, CancellationToken cancellation,
+                                           Consumer<LocalAppEvent> events) {
+        cancellation.throwIfCancelled();
+        requireTeacher();
+        emit(events, "import.progress", "phase", "bundle-importing");
+        var report = context().getBean(KnowledgeBundleService.class)
+            .importBundle(Path.of(requiredText(params, "path", 32_768)), KnowledgeBundleSource.MANUAL);
+        cancellation.throwIfCancelled();
+        emit(events, "import.progress", "phase", "completed");
+        return mapper.valueToTree(report);
+    }
+
+    private JsonNode knowledgeBundleCheck(CancellationToken cancellation) {
+        cancellation.throwIfCancelled();
+        requireTeacher();
+        return mapper.valueToTree(context().getBean(KnowledgeBundleUpdateService.class).check());
+    }
+
+    private JsonNode knowledgeBundleDownload(CancellationToken cancellation, Consumer<LocalAppEvent> events) {
+        cancellation.throwIfCancelled();
+        requireTeacher();
+        emit(events, "import.progress", "phase", "bundle-downloading");
+        var report = context().getBean(KnowledgeBundleUpdateService.class).downloadAndImport();
+        cancellation.throwIfCancelled();
+        emit(events, "import.progress", "phase", "completed");
+        return mapper.valueToTree(report);
+    }
+
+    /**
+     * v3.4.3 KSR-1: one authoritative snapshot for the knowledge page's three-state rendering, so it
+     * no longer borrows the course workspace payload (which mixes courses, activities, and articles).
+     */
+    private JsonNode knowledgeOverview(CancellationToken cancellation) {
+        cancellation.throwIfCancelled();
+        var articles = context().getBean(CourseKnowledgeService.class).listArticles();
+        var index = context().getBean(KnowledgeIndexService.class).status();
+        var states = context().getBean(KnowledgeBundleService.class).listBundleStates();
+        ObjectNode result = mapper.createObjectNode();
+        result.put("articleCount", articles.size());
+        result.set("articles", mapper.valueToTree(articles));
+        if (states.isEmpty()) {
+            result.put("hasOfficialBundle", false);
+            result.putNull("bundle");
+        } else {
+            result.put("hasOfficialBundle", true);
+            result.set("bundle", mapper.valueToTree(states.get(0)));
+        }
+        result.set("index", mapper.valueToTree(index));
+        return result;
     }
 }

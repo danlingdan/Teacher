@@ -1,6 +1,7 @@
 package com.sqlteacher.infrastructure.database;
 
 import com.sqlteacher.application.metadata.DatabaseColumn;
+import com.sqlteacher.application.metadata.DatabaseIndex;
 import com.sqlteacher.application.metadata.DatabaseMetadataService;
 import com.sqlteacher.application.metadata.DatabaseTable;
 import com.sqlteacher.domain.SqlTeacherException;
@@ -13,8 +14,11 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
@@ -61,7 +65,10 @@ public final class JdbcDatabaseMetadataService implements DatabaseMetadataServic
                     List<DatabaseColumn> columns =
                             loadColumns(metaData, catalog, schema, tableName);
 
-                    tables.add(new DatabaseTable(tableName, columns));
+                    List<DatabaseIndex> indexes =
+                            loadIndexes(metaData, catalog, schema, tableName);
+
+                    tables.add(new DatabaseTable(tableName, columns, indexes));
                 }
             }
 
@@ -128,6 +135,47 @@ public final class JdbcDatabaseMetadataService implements DatabaseMetadataServic
         }
 
         return columns;
+    }
+
+    private List<DatabaseIndex> loadIndexes(
+            DatabaseMetaData metaData,
+            String catalog,
+            String schema,
+            String tableName
+    ) {
+        // 部分方言/权限下 getIndexInfo 会抛错；索引属增强信息，单表失败降级为空列表，不让整棵 schema 失败。
+        Map<String, List<String>> columnsByIndex = new LinkedHashMap<>();
+        Map<String, Boolean> uniquenessByIndex = new HashMap<>();
+        try (ResultSet rs = metaData.getIndexInfo(
+                catalog, schema, tableName, false, true)) {
+            while (rs.next()) {
+                short type = rs.getShort("TYPE");
+                if (type == DatabaseMetaData.tableIndexStatistic) {
+                    continue;
+                }
+                String indexName = rs.getString("INDEX_NAME");
+                String columnName = rs.getString("COLUMN_NAME");
+                if (indexName == null || indexName.isBlank() || columnName == null) {
+                    continue;
+                }
+                // SQLite 为 TEXT/复合主键生成 sqlite_autoindex_* 内部索引；主键已在列上标记，展示属噪音。
+                if (indexName.startsWith("sqlite_autoindex_")) {
+                    continue;
+                }
+                columnsByIndex.computeIfAbsent(indexName, key -> new ArrayList<>()).add(columnName);
+                uniquenessByIndex.putIfAbsent(indexName, !rs.getBoolean("NON_UNIQUE"));
+            }
+        } catch (SQLException | RuntimeException e) {
+            log.debug("Index metadata unavailable for table {}: {}", tableName, e.toString());
+            return List.of();
+        }
+        List<DatabaseIndex> indexes = new ArrayList<>();
+        columnsByIndex.forEach((indexName, columns) -> indexes.add(new DatabaseIndex(
+                indexName,
+                Boolean.TRUE.equals(uniquenessByIndex.get(indexName)),
+                columns
+        )));
+        return indexes;
     }
 
     private Set<String> loadPrimaryKeys(

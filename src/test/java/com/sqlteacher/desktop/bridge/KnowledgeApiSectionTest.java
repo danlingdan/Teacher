@@ -5,6 +5,12 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sqlteacher.application.knowledge.CourseKnowledgeArticle;
 import com.sqlteacher.application.knowledge.CourseKnowledgeSearchFilter;
 import com.sqlteacher.application.knowledge.CourseKnowledgeService;
+import com.sqlteacher.application.knowledge.KnowledgeAsset;
+import com.sqlteacher.application.knowledge.KnowledgeBundleImportReport;
+import com.sqlteacher.application.knowledge.KnowledgeBundleService;
+import com.sqlteacher.application.knowledge.KnowledgeBundleSource;
+import com.sqlteacher.application.knowledge.KnowledgeBundleState;
+import com.sqlteacher.application.knowledge.KnowledgeBundleUpdateService;
 import com.sqlteacher.application.knowledge.KnowledgeIndexService;
 import com.sqlteacher.application.knowledge.KnowledgeReadStateService;
 import com.sqlteacher.application.knowledge.KnowledgeSearchResult;
@@ -150,6 +156,173 @@ class KnowledgeApiSectionTest {
             assertEquals(10, result.path("indexedChunks").asInt());
             assertEquals("local", result.path("mode").asText());
             assertTrue(result.path("message").asText().isEmpty());
+        }
+    }
+
+    @Test
+    void knowledgeArticleAssetReturnsBase64ImageData() throws Exception {
+        byte[] png = {(byte) 0x89, 'P', 'N', 'G', 9, 8, 7};
+        List<Object[]> reads = new ArrayList<>();
+        var bundles = fake(KnowledgeBundleService.class, Map.of(
+            "readArticleAsset", args -> {
+                reads.add(args);
+                return new KnowledgeAsset("image/png", png);
+            }));
+        try (var host = hostWithBeans(bundles)) {
+            KnowledgeApiSection section = new KnowledgeApiSection(host);
+
+            JsonNode result = section.handle("knowledge.article.asset", mapper.createObjectNode()
+                .put("articleId", "a-1")
+                .put("path", "chap1/intro/fig.png"), () -> false, ignored -> { });
+
+            assertEquals("image/png", result.path("contentType").asText());
+            assertEquals(java.util.Base64.getEncoder().encodeToString(png),
+                result.path("dataBase64").asText());
+        }
+        assertEquals(1, reads.size());
+        assertEquals("a-1", reads.get(0)[0]);
+        assertEquals("chap1/intro/fig.png", reads.get(0)[1]);
+    }
+
+    @Test
+    void knowledgeArticleAssetRejectsBlankPath() {
+        try (var host = hostWithBeans(fake(KnowledgeBundleService.class, Map.of()))) {
+            KnowledgeApiSection section = new KnowledgeApiSection(host);
+
+            IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+                () -> section.handle("knowledge.article.asset", mapper.createObjectNode()
+                    .put("articleId", "a-1"), () -> false, ignored -> { }));
+            assertEquals("path must contain at most 4096 characters", error.getMessage());
+        }
+    }
+
+    @Test
+    void knowledgeBundleImportRequiresTeacherRole() {
+        try (var host = hostWithBeans(new ApiSectionTestSupport.FakeCloudSessions(),
+            fake(KnowledgeBundleService.class, Map.of()))) {
+            KnowledgeApiSection section = new KnowledgeApiSection(host);
+
+            SecurityException error = assertThrows(SecurityException.class,
+                () -> section.handle("knowledge.bundle.import", mapper.createObjectNode()
+                    .put("path", "C:\\bundle.zip"), () -> false, ignored -> { }));
+            assertEquals("Teaching workspace requires teacher or administrator role", error.getMessage());
+        }
+    }
+
+    @Test
+    void knowledgeBundleImportRunsAsManualSourceForTeachers() throws Exception {
+        var sessions = new ApiSectionTestSupport.FakeCloudSessions();
+        sessions.signIn(session("t-1", "教师账号", UserRole.TEACHER));
+        List<Object[]> imports = new ArrayList<>();
+        var bundles = fake(KnowledgeBundleService.class, Map.of(
+            "importBundle", args -> {
+                imports.add(args);
+                return new KnowledgeBundleImportReport("official-db-concepts", "1.0.0",
+                    KnowledgeBundleSource.MANUAL, 8, 8, 0, 0, Instant.now());
+            }));
+        try (var host = hostWithBeans(sessions, bundles)) {
+            KnowledgeApiSection section = new KnowledgeApiSection(host);
+
+            JsonNode result = section.handle("knowledge.bundle.import", mapper.createObjectNode()
+                .put("path", "C:\\bundle.zip"), () -> false, ignored -> { });
+
+            assertEquals("1.0.0", result.path("version").asText());
+            assertEquals(8, result.path("importedDocuments").asInt());
+            assertFalse(result.path("failed").asBoolean());
+        }
+        assertEquals(1, imports.size());
+        assertEquals(java.nio.file.Path.of("C:\\bundle.zip"), imports.get(0)[0]);
+        assertEquals(KnowledgeBundleSource.MANUAL, imports.get(0)[1]);
+    }
+
+    @Test
+    void knowledgeBundleCheckRequiresTeacherRole() {
+        try (var host = hostWithBeans(new ApiSectionTestSupport.FakeCloudSessions(),
+            fake(KnowledgeBundleUpdateService.class, Map.of()))) {
+            KnowledgeApiSection section = new KnowledgeApiSection(host);
+
+            SecurityException error = assertThrows(SecurityException.class,
+                () -> section.handle("knowledge.bundle.check", mapper.createObjectNode(), () -> false, ignored -> { }));
+            assertEquals("Teaching workspace requires teacher or administrator role", error.getMessage());
+        }
+    }
+
+    @Test
+    void knowledgeBundleCheckReturnsTheUpdateStatus() throws Exception {
+        var sessions = new ApiSectionTestSupport.FakeCloudSessions();
+        sessions.signIn(session("t-1", "教师账号", UserRole.TEACHER));
+        var updates = fake(KnowledgeBundleUpdateService.class, Map.of(
+            "check", args -> new KnowledgeBundleUpdateService.KnowledgeBundleUpdateStatus(
+                true, true, "official-db-concepts", "2.0.0", "1.0.0", "数据库系统概念", 999, "云端有更新版本。")));
+        try (var host = hostWithBeans(sessions, updates)) {
+            KnowledgeApiSection section = new KnowledgeApiSection(host);
+
+            JsonNode result = section.handle("knowledge.bundle.check", mapper.createObjectNode(), () -> false, ignored -> { });
+
+            assertTrue(result.path("cloudAvailable").asBoolean());
+            assertTrue(result.path("updateAvailable").asBoolean());
+            assertEquals("2.0.0", result.path("cloudVersion").asText());
+            assertEquals("1.0.0", result.path("localVersion").asText());
+        }
+    }
+
+    @Test
+    void knowledgeBundleDownloadImportsAsCloudSource() throws Exception {
+        var sessions = new ApiSectionTestSupport.FakeCloudSessions();
+        sessions.signIn(session("t-1", "教师账号", UserRole.TEACHER));
+        var updates = fake(KnowledgeBundleUpdateService.class, Map.of(
+            "downloadAndImport", args -> new KnowledgeBundleImportReport("official-db-concepts", "2.0.0",
+                KnowledgeBundleSource.CLOUD, 8, 8, 0, 0, Instant.now())));
+        try (var host = hostWithBeans(sessions, updates)) {
+            KnowledgeApiSection section = new KnowledgeApiSection(host);
+
+            JsonNode result = section.handle("knowledge.bundle.download", mapper.createObjectNode(), () -> false, ignored -> { });
+
+            assertEquals("2.0.0", result.path("version").asText());
+            assertEquals("CLOUD", result.path("source").asText());
+        }
+    }
+
+    @Test
+    void knowledgeOverviewReportsEmptyLibraryWithoutBundle() throws Exception {
+        CourseKnowledgeService knowledge = fake(CourseKnowledgeService.class,
+            Map.of("listArticles", args -> List.of()));
+        KnowledgeIndexService index = fake(KnowledgeIndexService.class,
+            Map.of("status", args -> new KnowledgeIndexService.IndexStatus(0, 0, 0, "FTS5", "")));
+        KnowledgeBundleService bundles = fake(KnowledgeBundleService.class,
+            Map.of("listBundleStates", args -> List.of()));
+        try (var host = hostWithBeans(knowledge, index, bundles)) {
+            KnowledgeApiSection section = new KnowledgeApiSection(host);
+
+            JsonNode result = section.handle("knowledge.overview", mapper.createObjectNode(), () -> false, ignored -> { });
+
+            assertEquals(0, result.path("articleCount").asInt());
+            assertFalse(result.path("hasOfficialBundle").asBoolean());
+            assertTrue(result.path("bundle").isNull());
+            assertEquals("FTS5", result.path("index").path("mode").asText());
+        }
+    }
+
+    @Test
+    void knowledgeOverviewReportsBundleStateAndArticleCount() throws Exception {
+        CourseKnowledgeService knowledge = fake(CourseKnowledgeService.class,
+            Map.of("listArticles", args -> List.of(article("a-1", "d-1"), article("a-2", "d-2"))));
+        KnowledgeIndexService index = fake(KnowledgeIndexService.class,
+            Map.of("status", args -> new KnowledgeIndexService.IndexStatus(3, 40, 0, "HYBRID", "")));
+        KnowledgeBundleService bundles = fake(KnowledgeBundleService.class,
+            Map.of("listBundleStates", args -> List.of(new KnowledgeBundleState(
+                "official-db-concepts", "1.0.0", KnowledgeBundleSource.BUILTIN, "sha", Instant.now()))));
+        try (var host = hostWithBeans(knowledge, index, bundles)) {
+            KnowledgeApiSection section = new KnowledgeApiSection(host);
+
+            JsonNode result = section.handle("knowledge.overview", mapper.createObjectNode(), () -> false, ignored -> { });
+
+            assertEquals(2, result.path("articleCount").asInt());
+            assertTrue(result.path("hasOfficialBundle").asBoolean());
+            assertEquals("official-db-concepts", result.path("bundle").path("bundleId").asText());
+            assertEquals("1.0.0", result.path("bundle").path("version").asText());
+            assertEquals(3, result.path("index").path("pendingJobs").asInt());
+            assertEquals("HYBRID", result.path("index").path("mode").asText());
         }
     }
 }

@@ -89,15 +89,47 @@ describe("DataSqlPage connection manager", () => {
     });
   });
 
-  it("shows dialect display names and fills the default port when the dialect changes", async () => {
+  it("selects quick dialect chips and fills the default port; rare types stay in the more-types dropdown", async () => {
     renderPage();
 
-    const dialectSelect = (await screen.findByLabelText("数据库类型")) as HTMLSelectElement;
-    expect(screen.getByRole("option", { name: "达梦 DM8" })).toBeInTheDocument();
-
-    fireEvent.change(dialectSelect, { target: { value: "MYSQL" } });
+    // v3.4.3 CXN-1：常用类型（MySQL/SQLite/PostgreSQL）为快捷 chip，点击即选中并自动填端口。
+    const mysqlChip = await screen.findByRole("button", { name: "MySQL" });
+    fireEvent.click(mysqlChip);
     const port = (await screen.findByLabelText("端口")) as HTMLInputElement;
     expect(port.value).toBe("3306");
+    expect(mysqlChip).toHaveAttribute("aria-pressed", "true");
+
+    // 其余方言收进「更多类型」下拉，选择后同样自动填端口。
+    const moreSelect = screen.getByLabelText("更多数据库类型") as HTMLSelectElement;
+    expect(screen.getByRole("option", { name: "达梦 DM8" })).toBeInTheDocument();
+    fireEvent.change(moreSelect, { target: { value: "DAMENG" } });
+    expect(port.value).toBe("5236");
+    expect(mysqlChip).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("keeps generic JDBC fields behind the more-types dropdown", async () => {
+    requestMock.mockImplementation((method: string) => {
+      if (method === "data.connections") return Promise.resolve({ items: [] });
+      if (method === "data.connection.dialects") {
+        return Promise.resolve({
+          items: [
+            ...dialectItems.items,
+            { name: "GENERIC", displayName: "通用 JDBC", defaultPort: 0, fileBased: false, generic: true },
+          ],
+        });
+      }
+      throw new Error(`Unexpected request: ${method}`);
+    });
+    renderPage();
+
+    // 默认 SQLite：只有文件字段，没有 JDBC URL/驱动。
+    await screen.findByLabelText("数据库文件");
+    expect(screen.queryByLabelText("JDBC URL")).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("更多数据库类型"), { target: { value: "GENERIC" } });
+    expect(await screen.findByLabelText("JDBC URL")).toBeInTheDocument();
+    expect(screen.getByLabelText("驱动类")).toBeInTheDocument();
+    expect(screen.getByLabelText("驱动 JAR")).toBeInTheDocument();
   });
 
   it("tests the connection first and saves with a generated id and display name", async () => {
@@ -209,11 +241,13 @@ describe("DataSqlPage connection manager", () => {
     });
     renderPage();
 
+    // v3.4.3 CXN-1：复制/设为当前/删除收进「更多操作」折叠。
+    fireEvent.click(await screen.findByText("更多操作"));
     fireEvent.click(await screen.findByRole("button", { name: "复制" }));
 
     const displayName = (await screen.findByLabelText("显示名称")) as HTMLInputElement;
     expect(displayName.value).toBe("MySQL 课程库 副本");
-    expect((screen.getByLabelText("数据库类型") as HTMLSelectElement).value).toBe("MYSQL");
+    expect(screen.getByRole("button", { name: "MySQL" })).toHaveAttribute("aria-pressed", "true");
     expect((screen.getByLabelText("主机") as HTMLInputElement).value).toBe("db.school.edu");
     expect((screen.getByLabelText("端口") as HTMLInputElement).value).toBe("3306");
   });
@@ -358,12 +392,17 @@ describe("DataSqlPage connection manager", () => {
                 { name: "SNO", typeName: "TEXT", primaryKey: true, nullable: false },
                 { name: "SNAME", typeName: "TEXT", primaryKey: false, nullable: false },
               ],
+              indexes: [],
             },
             {
               name: "SPJ",
               columns: [
                 { name: "SNO", typeName: "TEXT", primaryKey: true, nullable: false },
                 { name: "QTY", typeName: "INTEGER", primaryKey: false, nullable: true },
+              ],
+              indexes: [
+                { name: "idx_spj_qty", unique: false, columns: ["QTY"] },
+                { name: "idx_spj_sno_unique", unique: true, columns: ["SNO"] },
               ],
             },
           ],
@@ -374,9 +413,23 @@ describe("DataSqlPage connection manager", () => {
     renderPage();
 
     await screen.findByText("共 2 张表");
+    // v3.4.3 CXN-3：整体折叠块默认展开，收起入口是「表结构」summary。
+    const outer = screen.getByText("表结构").closest("details");
+    expect(outer).toHaveAttribute("open");
     // v3.4.1 SQL-1：表默认收起，不再 <details open> 全量展开。
     expect(screen.getByText("S").closest("details")).not.toHaveAttribute("open");
     expect(screen.getByText("SPJ").closest("details")).not.toHaveAttribute("open");
+
+    // 每表展开后分区显示列与索引；无索引的表显示「无」。
+    fireEvent.click(screen.getByText("SPJ"));
+    expect(screen.getByText("idx_spj_qty")).toBeInTheDocument();
+    // QTY 出现两处：列清单与索引列。
+    expect(screen.getAllByText("QTY").length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByText("idx_spj_sno_unique")).toBeInTheDocument();
+    expect(screen.getByText(/SNO · 唯一/)).toBeInTheDocument();
+    fireEvent.click(screen.getByText("S"));
+    const sTable = screen.getByText("S").closest("details");
+    expect(sTable?.textContent).toContain("无");
 
     const filter = screen.getByLabelText("筛选表或列");
     fireEvent.change(filter, { target: { value: "qty" } });

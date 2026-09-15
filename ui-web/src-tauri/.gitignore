@@ -8,3 +8,7 @@
 
 # v3.4.2 LEG-5: build-time staging copied from src/main/resources/legal and root LICENSE
 /legal/
+
+# v3.4.3 PUB-1: build-time staging of the official knowledge bundle (built by
+# packaging/build-knowledge-bundle.ps1 into target/knowledge; never committed)
+/knowledge/

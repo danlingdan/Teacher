@@ -512,6 +512,41 @@ button {
   text-decoration-thickness: 1px;
   text-underline-offset: 3px;
 }
+/* v3.4.3 OKB-7：官方知识库文档内嵌图片与加载/缺失占位。 */
+.knowledge-document img {
+  max-width: 100%;
+  height: auto;
+  margin: 10px 0;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.knowledge-image-loading,
+.knowledge-image-missing {
+  display: inline-block;
+  margin: 8px 0;
+  padding: 8px 12px;
+  border: 1px dashed var(--line-strong);
+  border-radius: 10px;
+  color: var(--muted);
+  background: var(--surface-2);
+  font-size: 12px;
+}
+/* v3.4.3 KSR-2：空库引导、空侧栏与索引进行中的提示。 */
+.knowledge-empty-sidebar {
+  padding: 12px 2px;
+}
+.index-progress {
+  margin: 8px 0;
+  padding: 9px 12px;
+  border: 1px solid var(--info-line, var(--line-strong));
+  border-radius: 10px;
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: 12px;
+}
+.knowledge-empty-guide .button-row {
+  margin: 12px 0;
+}
 .callout {
   margin: 22px 0;
   padding: 16px 18px;
@@ -1060,6 +1095,31 @@ button {
 }
 .schema-tree li span {
   color: var(--muted);
+}
+/* v3.4.3 CXN-3：表结构整体折叠块与每表「列/索引」分区。 */
+.schema-browser > summary {
+  cursor: pointer;
+  list-style-position: inside;
+  border-radius: 8px;
+}
+.schema-browser > summary:focus-visible {
+  outline: 3px solid rgba(15, 118, 110, 0.25);
+  outline-offset: 2px;
+}
+.schema-table-section {
+  margin: 0 0 8px;
+}
+.schema-section-label {
+  margin: 4px 2px 2px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.schema-table-section .muted {
+  margin: 0 2px 6px;
+  font-size: 11px;
 }
 .data-main {
   min-width: 0;
@@ -2380,6 +2440,70 @@ kbd {
 }
 .connection-advanced .ui-field {
   margin: 4px 0 12px;
+}
+/* v3.4.3 CXN-1：常用类型快捷 chips + 「更多类型」下拉的类型选择器。 */
+.dialect-picker {
+  display: grid;
+  gap: 8px;
+}
+.dialect-quick-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.dialect-chip {
+  padding: 8px 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--navy);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.dialect-chip:hover {
+  border-color: var(--teal-deep);
+  color: var(--teal-deep);
+}
+.dialect-chip.active {
+  border-color: var(--teal-deep);
+  background: var(--teal-soft, rgba(15, 118, 110, 0.1));
+  color: var(--teal-deep);
+}
+.dialect-chip:focus-visible {
+  outline: 3px solid rgba(15, 118, 110, 0.25);
+  outline-offset: 2px;
+}
+.dialect-picker select {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  color: var(--navy);
+  background: var(--surface);
+}
+/* 「更多操作」（复制/设为当前/删除）收进折叠，降低表单区按钮密度。 */
+.connection-more-actions > summary {
+  display: inline-flex;
+  align-items: center;
+  padding: 8px 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 12px;
+  cursor: pointer;
+  list-style-position: inside;
+}
+.connection-more-actions > summary:hover {
+  color: var(--navy);
+}
+.connection-more-actions[open] > summary {
+  color: var(--navy);
+}
+.connection-more-actions .button-row {
+  margin-top: 8px;
+  justify-content: flex-start;
 }
 /* SQL 执行历史：本机旁路记录，条目点击回填编辑器。 */
 .sql-history {

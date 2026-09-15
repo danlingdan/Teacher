@@ -35,6 +35,9 @@ SQLTEACHER_UPDATE_MANIFEST=/opt/sqlteacher/shared/update-manifest.json
 SQLTEACHER_FEEDBACK_HASH_SECRET=<至少 32 字符的独立随机值>
 SQLTEACHER_CLOUD_BOOTSTRAP_ADMIN_EMAIL=admin@your-school.example
 SQLTEACHER_CLOUD_BOOTSTRAP_ADMIN_PASSWORD=<随机强密码>
+# v3.4.3 OKB-4：官方课程知识库分发（可选；未配置时两个端点均返回明确 404，不影响其它功能）
+SQLTEACHER_KNOWLEDGE_BUNDLE_MANIFEST=/opt/sqlteacher/shared/knowledge-bundle-manifest.json
+SQLTEACHER_KNOWLEDGE_BUNDLE_FILE=/opt/sqlteacher/shared/official-db-concepts-1.0.0.zip
 ```
 
 首次启动时，服务将创建或提升此邮箱对应的管理员账号。完成首次管理员登录后，应删除 `SQLTEACHER_CLOUD_BOOTSTRAP_ADMIN_PASSWORD` 并重启服务，避免该引导凭据持续存在。
@@ -43,6 +46,8 @@ SQLTEACHER_CLOUD_BOOTSTRAP_ADMIN_PASSWORD=<随机强密码>
 
 将构建产物部署到 `/opt/sqlteacher/releases/<version>/app/`，其中包含应用 JAR 和 `lib/` 依赖目录；将 `packaging/cloud/run-cloud.sh` 放入对应版本的 `bin/`。
 正式发布后，将 Release 生成的 `update-manifest.json` 以 `root:sqlteacher`、`0640` 原子替换到 `/opt/sqlteacher/shared/update-manifest.json`。该文件仅包含签名信封，发布私钥不得上传服务器。
+
+官方课程知识库（v3.4.3 OKB-4）为可选分发：用 `packaging/build-knowledge-bundle.ps1` 生成 `official-db-concepts-<version>.zip` 与同目录的 `<bundleId>-manifest.json`（含 `bundleId/version/sizeBytes/sha256`），把 zip 与 manifest 以 `root:sqlteacher`、`0640` 放到 `/opt/sqlteacher/shared/`，并让上面两个环境变量分别指向它们。`GET /api/v1/app/knowledge-bundle-manifest` 下发 manifest JSON，`GET /api/v1/app/knowledge-bundle` 流式下发 zip，两者均**无需认证**（公开教学内容）；桌面端下载后自行做 sha256 与大小校验再导入。未配置这两个变量时端点返回 `KNOWLEDGE_BUNDLE_UNAVAILABLE`（404），桌面端提示“云端暂未提供”，不影响随包知识库与本地功能。知识库内容属教材衍生资料，上传前须确认已获分发授权。
 
 ```bash
 ln -sfn /opt/sqlteacher/releases/<version> /opt/sqlteacher/current

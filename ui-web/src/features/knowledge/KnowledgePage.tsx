@@ -1,23 +1,34 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { courseWorkspaceQuery, sessionQuery } from "../../app/queries";
+import { sessionQuery } from "../../app/queries";
 import { localAppRequest } from "../../shared/ipc";
 import type {
   AiKnowledgeAnswer,
   ImportPreview,
   ImportReport,
+  KnowledgeArticle,
   KnowledgeArticleDetail,
+  KnowledgeBundleImportReport,
+  KnowledgeBundleUpdateStatus,
+  KnowledgeOverview,
   KnowledgeSearchResult,
 } from "../../shared/types";
-import { Button, Feedback, FormField, Stepper } from "../../shared/ui";
+import { Button, Feedback, FormField, Stepper, useToast } from "../../shared/ui";
 import KnowledgeRenderer from "./KnowledgeRenderer";
+
+// v3.4.3 KSR-2：知识页三态由 knowledge.overview 驱动，与课程活动完全解耦。
+type KnowledgeLibraryState = "empty" | "indexing" | "ready";
 
 export default function KnowledgePage() {
   const [searchParams] = useSearchParams();
   const client = useQueryClient();
-  const workspace = useQuery(courseWorkspaceQuery);
+  const toast = useToast();
   const session = useQuery(sessionQuery);
+  const overview = useQuery({
+    queryKey: ["knowledge", "overview"],
+    queryFn: () => localAppRequest<KnowledgeOverview>("knowledge.overview"),
+  });
   const index = useQuery({
     queryKey: ["knowledge", "index"],
     queryFn: () =>
@@ -64,6 +75,8 @@ export default function KnowledgePage() {
   const [question, setQuestion] = useState("");
   const [answer, setAnswer] = useState<AiKnowledgeAnswer>();
   const [articlePage, setArticlePage] = useState(0);
+  const [updateStatus, setUpdateStatus] = useState<KnowledgeBundleUpdateStatus>();
+  const [bundleReport, setBundleReport] = useState<KnowledgeBundleImportReport>();
   const article = useQuery({
     queryKey: ["knowledge", "article", selectedId],
     queryFn: () =>
@@ -101,13 +114,11 @@ export default function KnowledgePage() {
       }),
     onSuccess: (value) => {
       setReport(value);
-      void client.invalidateQueries({
-        queryKey: courseWorkspaceQuery.queryKey,
-      });
+      refresh();
     },
   });
   const refresh = () => {
-    void client.invalidateQueries({ queryKey: courseWorkspaceQuery.queryKey });
+    void client.invalidateQueries({ queryKey: ["knowledge", "overview"] });
     void client.invalidateQueries({ queryKey: ["knowledge", "index"] });
   };
   const markRead = useMutation({
@@ -170,9 +181,61 @@ export default function KnowledgePage() {
     },
     onSuccess: setAnswer,
   });
+  const checkUpdate = useMutation({
+    mutationFn: () => localAppRequest<KnowledgeBundleUpdateStatus>("knowledge.bundle.check"),
+    onSuccess: setUpdateStatus,
+    onError: (error: Error) => toast("error", `检查更新失败：${error.message}`),
+  });
+  const downloadBundle = useMutation({
+    mutationFn: () => localAppRequest<KnowledgeBundleImportReport>("knowledge.bundle.download"),
+    onSuccess: (value) => {
+      setBundleReport(value);
+      setUpdateStatus(undefined);
+      refresh();
+      toast("success", `官方知识库已更新到 ${value.version}`);
+    },
+    onError: (error: Error) => toast("error", `下载失败：${error.message}`),
+  });
+  const importBundleFile = useMutation({
+    mutationFn: async () => {
+      const { open } = await import("@tauri-apps/plugin-dialog");
+      const selection = await open({
+        multiple: false,
+        directory: false,
+        title: "选择知识库文件",
+        filters: [{ name: "知识库压缩包", extensions: ["zip"] }],
+      });
+      if (typeof selection !== "string" || !selection.trim()) return undefined;
+      return localAppRequest<KnowledgeBundleImportReport>("knowledge.bundle.import", {
+        path: selection,
+      });
+    },
+    onSuccess: (value) => {
+      if (!value) return;
+      setBundleReport(value);
+      refresh();
+      toast("success", `已导入知识库 ${value.version}`);
+    },
+    onError: (error: Error) => toast("error", `导入失败：${error.message}`),
+  });
   const currentMarkdown = article.data?.markdown;
-  const grouped = useMemo(() => workspace.data?.courses ?? [], [workspace.data]);
-  const articles = workspace.data?.articles ?? [];
+  const articles = overview.data?.articles ?? [];
+  const grouped = useMemo(() => groupArticlesByCourse(articles), [articles]);
+  // v3.4.3：首启时官方知识库由后台 bootstrap 稍后导入完成；空态页轮询刷新，
+  // 导入落地后无需手动切换页面即可看到知识库（最多轮询约 2 分钟）。
+  const emptyPolling = (overview.data?.articleCount ?? 0) === 0 && !overview.isError;
+  useEffect(() => {
+    if (!emptyPolling) return;
+    const started = Date.now();
+    const timer = window.setInterval(() => {
+      if (Date.now() - started > 120_000) {
+        window.clearInterval(timer);
+        return;
+      }
+      void client.invalidateQueries({ queryKey: ["knowledge", "overview"] });
+    }, 4000);
+    return () => window.clearInterval(timer);
+  }, [emptyPolling, client]);
   const pageSize = 8;
   const articlePageCount = Math.max(1, Math.ceil(articles.length / pageSize));
   const visibleArticles = articles.slice(articlePage * pageSize, (articlePage + 1) * pageSize);
@@ -181,211 +244,339 @@ export default function KnowledgePage() {
   }, [articlePage, articlePageCount]);
   const canManage = session.data?.role === "TEACHER" || session.data?.role === "ADMINISTRATOR";
 
-  if (workspace.isPending)
+  const indexStatus = overview.data?.index;
+  const articleCount = overview.data?.articleCount ?? 0;
+  const libraryState: KnowledgeLibraryState =
+    articleCount === 0 ? "empty" : (indexStatus?.pendingJobs ?? 0) > 0 ? "indexing" : "ready";
+  const bundle = overview.data?.bundle ?? null;
+
+  if (overview.isPending)
     return <section className="page-skeleton">正在读取课程与知识索引…</section>;
-  if (workspace.isError)
+  if (overview.isError)
     return (
-      <Feedback tone="error" title="课程工作区加载失败">
-        {workspace.error.message}
+      <Feedback tone="error" title="课程知识加载失败">
+        {overview.error.message}
       </Feedback>
     );
+
+  const guidance = (
+    <section className="content-card knowledge-empty-guide">
+      <div className="section-heading">
+        <div>
+          <p className="eyebrow">开始使用</p>
+          <h2>课程知识库还是空的</h2>
+        </div>
+      </div>
+      <p className="muted">
+        这里用于检索与阅读课程知识文档，和「练习与实验」里的课程活动是分开的。获取知识文档有两种方式：
+      </p>
+      {canManage ? (
+        <>
+          <div className="button-row">
+            <Button
+              variant="secondary"
+              disabled={checkUpdate.isPending || downloadBundle.isPending}
+              busy={checkUpdate.isPending}
+              onClick={() => checkUpdate.mutate()}
+            >
+              检查官方知识库
+            </Button>
+            <Button
+              variant="secondary"
+              disabled={importBundleFile.isPending}
+              onClick={() => importBundleFile.mutate()}
+            >
+              导入知识库文件…
+            </Button>
+          </div>
+          <p className="muted">
+            也可以展开下方「Obsidian 增量导入」或「单篇文档」把你自己的资料加进来。
+          </p>
+        </>
+      ) : (
+        <p className="muted">请联系任课教师导入或发布课程知识文档后再来查看。</p>
+      )}
+      {checkUpdate.data && !downloadBundle.isPending && (
+        <Feedback
+          tone={checkUpdate.data.updateAvailable ? "info" : "warning"}
+          title={checkUpdate.data.cloudAvailable ? "云端知识库" : "云端暂未提供"}
+        >
+          {checkUpdate.data.message}
+          {checkUpdate.data.updateAvailable && (
+            <div className="button-row">
+              <Button
+                disabled={downloadBundle.isPending}
+                busy={downloadBundle.isPending}
+                onClick={() => downloadBundle.mutate()}
+              >
+                下载并安装 {checkUpdate.data.cloudVersion}
+              </Button>
+            </div>
+          )}
+        </Feedback>
+      )}
+      {checkUpdate.isError && (
+        <Feedback tone="error" title="检查更新失败">
+          {checkUpdate.error.message}
+        </Feedback>
+      )}
+    </section>
+  );
+
   return (
     <div className="knowledge-workspace">
       <aside className="knowledge-sidebar content-card">
-        <FormField label="检索课程知识" hint="至少输入 2 个字符">
-          {(ids) => (
-            <input
-              {...ids}
-              value={queryInput}
-              onChange={(event) => setQueryInput(event.target.value)}
-              placeholder="标题、正文或知识点"
-            />
-          )}
-        </FormField>
-        {query.trim().length >= 2 && (
-          <div className="search-results" aria-live="polite">
-            {search.isFetching ? (
-              <p className="muted">正在检索课程知识…</p>
-            ) : search.isError ? (
-              <Feedback tone="error" title="检索失败">
-                {search.error.message}
-              </Feedback>
-            ) : !search.data || search.data.items.length === 0 ? (
-              <p className="muted">无匹配结果。</p>
-            ) : (
-              search.data.items.map((item) => (
-                <button
-                  type="button"
-                  key={`${item.documentId}-${item.chunkIndex}`}
-                  onClick={() => setSelectedId(item.articleId)}
-                >
-                  <strong>{item.title}</strong>
-                  <span>{item.snippet}</span>
-                </button>
-              ))
-            )}
+        {libraryState === "empty" ? (
+          <div className="knowledge-empty-sidebar">
+            <p className="muted">暂无知识文档。</p>
           </div>
-        )}
-        <div className="course-tree">
-          {grouped.map((course) => (
-            <section key={course.id}>
-              <h3>{course.title}</h3>
-              {course.sections.map((section) => {
-                // v3.4.1 KNW-1：课程树只承载知识——展开章节直接列出该节的知识文档，
-                // 不再平铺活动条目（活动的入口在「练习与实验」等页面）。
-                const sectionArticles = articles.filter(
-                  (item) => item.sectionTitle === section.title,
-                );
-                return (
-                  <details key={section.id}>
-                    <summary>
-                      {section.title}
-                      <small> · {sectionArticles.length} 篇文档</small>
-                    </summary>
-                    <ul>
-                      {sectionArticles.map((item) => (
-                        <li key={item.id}>
-                          <button type="button" onClick={() => setSelectedId(item.id)}>
-                            {item.title}
-                          </button>
-                        </li>
-                      ))}
-                      {sectionArticles.length === 0 && (
-                        <li>
-                          <small className="muted">本节暂无知识文档</small>
-                        </li>
-                      )}
-                    </ul>
-                  </details>
-                );
-              })}
-            </section>
-          ))}
-        </div>
-        <div className="article-list">
-          <h3>
-            知识文档 <small>共 {articles.length} 篇</small>
-          </h3>
-          {articles.length === 0 && (
-            <p className="muted">
-              教师发布的知识文档会显示在这里；也可以展开上方课程树按章节浏览。
-            </p>
-          )}
-          {visibleArticles.map((item) => (
-            <button
-              className={selectedId === item.id ? "selected" : ""}
-              type="button"
-              key={item.id}
-              onClick={() => setSelectedId(item.id)}
-            >
-              {item.title}
-              <small>
-                {item.sectionTitle} · 第 {item.currentRevision} 版
-              </small>
-            </button>
-          ))}
-          {articles.length > pageSize && (
-            <div className="compact-pager">
-              <Button
-                variant="secondary"
-                disabled={articlePage === 0}
-                onClick={() => setArticlePage((value) => value - 1)}
-              >
-                上一页
-              </Button>
-              <span>
-                {articlePage + 1} / {articlePageCount}
-              </span>
-              <Button
-                variant="secondary"
-                disabled={articlePage + 1 >= articlePageCount}
-                onClick={() => setArticlePage((value) => value + 1)}
-              >
-                下一页
-              </Button>
-            </div>
-          )}
-        </div>
-      </aside>
-      <main className="knowledge-main">
-        <section className="content-card knowledge-document">
-          {currentMarkdown ? (
-            <>
-              <div className="button-row">
-                <Button
-                  variant="secondary"
-                  disabled={markRead.isPending}
-                  onClick={() => markRead.mutate()}
-                >
-                  标记为已读
-                </Button>
-                {markRead.isSuccess && <span className="policy-chip">阅读进度已保存</span>}
-                {markRead.isError && (
-                  <span className="policy-chip" role="status">
-                    进度保存失败：{markRead.error?.message}
-                  </span>
+        ) : (
+          <>
+            <FormField label="检索课程知识" hint="至少输入 2 个字符">
+              {(ids) => (
+                <input
+                  {...ids}
+                  value={queryInput}
+                  onChange={(event) => setQueryInput(event.target.value)}
+                  placeholder="标题、正文或知识点"
+                />
+              )}
+            </FormField>
+            {libraryState === "indexing" && (
+              <p className="index-progress" role="status">
+                正在建立课程知识索引（剩余 {indexStatus?.pendingJobs ?? 0} 个任务）。全文检索已可用
+                {indexStatus?.mode === "FTS5" ? "；语义检索待本地向量模型就绪。" : "，语义检索稍后就绪。"}
+              </p>
+            )}
+            {query.trim().length >= 2 && (
+              <div className="search-results" aria-live="polite">
+                {search.isFetching ? (
+                  <p className="muted">正在检索课程知识…</p>
+                ) : search.isError ? (
+                  <Feedback tone="error" title="检索失败">
+                    {search.error.message}
+                  </Feedback>
+                ) : !search.data || search.data.items.length === 0 ? (
+                  <p className="muted">无匹配结果。</p>
+                ) : (
+                  search.data.items.map((item) => (
+                    <button
+                      type="button"
+                      key={`${item.documentId}-${item.chunkIndex}`}
+                      onClick={() => setSelectedId(item.articleId)}
+                    >
+                      <strong>{item.title}</strong>
+                      <span>{item.snippet}</span>
+                    </button>
+                  ))
                 )}
               </div>
-              <KnowledgeRenderer markdown={currentMarkdown} />
-            </>
-          ) : (
-            <div className="knowledge-empty">
-              <h2>选择一篇知识文档</h2>
-              <p>
-                {articles.length > 0
-                  ? "从左侧「知识文档」列表或课程树中选择一篇文档开始阅读。"
-                  : "这里还没有可阅读的知识文档；练习与测验请前往「练习与实验」。"}
-              </p>
-            </div>
-          )}
-        </section>
-        <section className="content-card knowledge-assistant">
-          <div className="section-heading">
-            <div>
-              <p className="eyebrow">引用可追溯</p>
-              <h2>知识助教</h2>
-            </div>
-            <span className="policy-chip">仅使用本地课程资料</span>
-          </div>
-          <FormField label="针对课程资料提问" hint="回答附引用来源">
-            {(ids) => (
-              <textarea
-                {...ids}
-                rows={3}
-                value={question}
-                onChange={(event) => setQuestion(event.target.value)}
-                placeholder="例如：为什么短作业优先调度能降低平均等待时间？"
-              />
             )}
-          </FormField>
-          <div className="button-row">
-            <Button
-              disabled={question.trim().length < 2 || ask.isPending}
-              onClick={() => ask.mutate()}
-            >
-              生成有引用的解释
-            </Button>
-          </div>
-          {ask.isError && (
-            <Feedback tone="error" title="知识助教不可用">
-              {ask.error.message}
-            </Feedback>
-          )}
-          {answer && (
-            <Feedback
-              tone={answer.aiGenerated ? "info" : "warning"}
-              title={answer.model || "确定性回退"}
-            >
-              <p>{answer.answer || answer.message}</p>
-              {answer.citations.map((item) => (
-                <p key={`${item.documentId}-${item.chunkIndex}`}>
-                  [{item.number}] {item.articleTitle} 第 {item.revision} 版：
-                  {item.snippet}
-                </p>
+            <div className="course-tree">
+              {grouped.map((course) => (
+                <section key={course.title}>
+                  <h3>{course.title}</h3>
+                  {course.sections.map((section) => (
+                    <details key={section.title}>
+                      <summary>
+                        {section.title}
+                        <small> · {section.articles.length} 篇文档</small>
+                      </summary>
+                      <ul>
+                        {section.articles.map((item) => (
+                          <li key={item.id}>
+                            <button type="button" onClick={() => setSelectedId(item.id)}>
+                              {item.title}
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    </details>
+                  ))}
+                </section>
               ))}
-            </Feedback>
-          )}
-        </section>
+            </div>
+            <div className="article-list">
+              <h3>
+                知识文档 <small>共 {articles.length} 篇</small>
+              </h3>
+              {visibleArticles.map((item) => (
+                <button
+                  className={selectedId === item.id ? "selected" : ""}
+                  type="button"
+                  key={item.id}
+                  onClick={() => setSelectedId(item.id)}
+                >
+                  {item.title}
+                  <small>
+                    {item.sectionTitle} · 第 {item.currentRevision} 版
+                  </small>
+                </button>
+              ))}
+              {articles.length > pageSize && (
+                <div className="compact-pager">
+                  <Button
+                    variant="secondary"
+                    disabled={articlePage === 0}
+                    onClick={() => setArticlePage((value) => value - 1)}
+                  >
+                    上一页
+                  </Button>
+                  <span>
+                    {articlePage + 1} / {articlePageCount}
+                  </span>
+                  <Button
+                    variant="secondary"
+                    disabled={articlePage + 1 >= articlePageCount}
+                    onClick={() => setArticlePage((value) => value + 1)}
+                  >
+                    下一页
+                  </Button>
+                </div>
+              )}
+            </div>
+          </>
+        )}
+      </aside>
+      <main className="knowledge-main">
+        {libraryState === "empty" ? (
+          guidance
+        ) : (
+          <section className="content-card knowledge-document">
+            {currentMarkdown ? (
+              <>
+                <div className="button-row">
+                  <Button
+                    variant="secondary"
+                    disabled={markRead.isPending}
+                    onClick={() => markRead.mutate()}
+                  >
+                    标记为已读
+                  </Button>
+                  {markRead.isSuccess && <span className="policy-chip">阅读进度已保存</span>}
+                  {markRead.isError && (
+                    <span className="policy-chip" role="status">
+                      进度保存失败：{markRead.error?.message}
+                    </span>
+                  )}
+                </div>
+                <KnowledgeRenderer markdown={currentMarkdown} articleId={selectedId} />
+              </>
+            ) : (
+              <div className="knowledge-empty">
+                <h2>选择一篇知识文档</h2>
+                <p>从左侧「知识文档」列表或课程树中选择一篇文档开始阅读。</p>
+              </div>
+            )}
+          </section>
+        )}
+        {libraryState !== "empty" && (
+          <section className="content-card knowledge-assistant">
+            <div className="section-heading">
+              <div>
+                <p className="eyebrow">引用可追溯</p>
+                <h2>知识助教</h2>
+              </div>
+              <span className="policy-chip">仅使用本地课程资料</span>
+            </div>
+            <FormField label="针对课程资料提问" hint="回答附引用来源">
+              {(ids) => (
+                <textarea
+                  {...ids}
+                  rows={3}
+                  value={question}
+                  onChange={(event) => setQuestion(event.target.value)}
+                  placeholder="例如：为什么短作业优先调度能降低平均等待时间？"
+                />
+              )}
+            </FormField>
+            <div className="button-row">
+              <Button
+                disabled={question.trim().length < 2 || ask.isPending}
+                onClick={() => ask.mutate()}
+              >
+                生成有引用的解释
+              </Button>
+            </div>
+            {ask.isError && (
+              <Feedback tone="error" title="知识助教不可用">
+                {ask.error.message}
+              </Feedback>
+            )}
+            {answer && (
+              <Feedback
+                tone={answer.aiGenerated ? "info" : "warning"}
+                title={answer.model || "确定性回退"}
+              >
+                <p>{answer.answer || answer.message}</p>
+                {answer.citations.map((item) => (
+                  <p key={`${item.documentId}-${item.chunkIndex}`}>
+                    [{item.number}] {item.articleTitle} 第 {item.revision} 版：
+                    {item.snippet}
+                  </p>
+                ))}
+              </Feedback>
+            )}
+          </section>
+        )}
+        {canManage && (
+          <section className="content-card bundle-panel">
+            <div className="section-heading">
+              <div>
+                <p className="eyebrow">官方知识库</p>
+                <h2>更新与离线导入</h2>
+              </div>
+              <span className="policy-chip">
+                {bundle ? `已安装 ${bundle.version} · ${bundleLabel(bundle.source)}` : "未安装"}
+              </span>
+            </div>
+            <div className="button-row">
+              <Button
+                variant="secondary"
+                disabled={checkUpdate.isPending}
+                onClick={() => checkUpdate.mutate()}
+              >
+                检查更新
+              </Button>
+              {updateStatus?.updateAvailable && (
+                <Button
+                  disabled={downloadBundle.isPending}
+                  busy={downloadBundle.isPending}
+                  onClick={() => downloadBundle.mutate()}
+                >
+                  下载并安装 {updateStatus.cloudVersion}
+                </Button>
+              )}
+              <Button
+                variant="secondary"
+                disabled={importBundleFile.isPending}
+                onClick={() => importBundleFile.mutate()}
+              >
+                导入知识库文件…
+              </Button>
+            </div>
+            {updateStatus && (
+              <Feedback
+                tone={updateStatus.updateAvailable ? "info" : "success"}
+                title={updateStatus.cloudAvailable ? "云端知识库" : "云端暂未提供"}
+              >
+                {updateStatus.message}
+              </Feedback>
+            )}
+            {bundleReport && (
+              <Feedback tone={bundleReport.failed ? "warning" : "success"} title="知识库导入完成">
+                版本 {bundleReport.version}，共 {bundleReport.totalDocuments} 篇：新增{" "}
+                {bundleReport.importedDocuments}，替换 {bundleReport.replacedDocuments}，失败{" "}
+                {bundleReport.failedDocuments}。
+              </Feedback>
+            )}
+            {(checkUpdate.isError || downloadBundle.isError || importBundleFile.isError) && (
+              <Feedback tone="error" title="知识库操作失败">
+                {(checkUpdate.error ?? downloadBundle.error ?? importBundleFile.error)?.message}
+              </Feedback>
+            )}
+          </section>
+        )}
         {canManage && (
           <section className="content-card import-panel">
             <div className="section-heading">
@@ -572,6 +763,32 @@ export default function KnowledgePage() {
       </main>
     </div>
   );
+}
+
+function bundleLabel(source: string): string {
+  return source === "BUILTIN" ? "随包" : source === "CLOUD" ? "云端" : source === "MANUAL" ? "手动" : source;
+}
+
+// v3.4.3 KSR-2：课程树直接从知识文档自身的 courseTitle/sectionTitle 归组，
+// 不再依赖 course.workspace（其中的 courses 混有课程活动），从数据层与活动切开。
+function groupArticlesByCourse(
+  articles: KnowledgeArticle[],
+): Array<{ title: string; sections: Array<{ title: string; articles: KnowledgeArticle[] }> }> {
+  const courses = new Map<string, Map<string, KnowledgeArticle[]>>();
+  for (const article of articles) {
+    const sections = courses.get(article.courseTitle) ?? new Map<string, KnowledgeArticle[]>();
+    const list = sections.get(article.sectionTitle) ?? [];
+    list.push(article);
+    sections.set(article.sectionTitle, list);
+    courses.set(article.courseTitle, sections);
+  }
+  return Array.from(courses.entries()).map(([title, sections]) => ({
+    title,
+    sections: Array.from(sections.entries()).map(([sectionTitle, list]) => ({
+      title: sectionTitle,
+      articles: list,
+    })),
+  }));
 }
 
 function splitPoints(value: string) {

@@ -9,10 +9,12 @@ public final class LocalAppContract {
     public static final int REQUEST_TIMEOUT_MILLIS = 30_000;
     public static final Set<String> API_METHODS = Set.of(
         "system.health", "session.current", "home.summary", "home.action.dismiss",
-        "course.workspace", "activity.definition", "activity.submit", "knowledge.article", "knowledge.search",
+        "course.workspace", "activity.definition", "activity.submit", "knowledge.article", "knowledge.article.asset",
+        "knowledge.search",
         "knowledge.read.mark", "knowledge.index.status", "knowledge.index.rebuild", "knowledge.article.import",
         "knowledge.article.revise", "knowledge.article.visibility", "knowledge.article.delete",
-        "knowledge.import.preview", "knowledge.import.execute",
+        "knowledge.import.preview", "knowledge.import.execute", "knowledge.bundle.import",
+        "knowledge.bundle.check", "knowledge.bundle.download", "knowledge.overview",
         "practice.catalog", "practice.preview", "practice.start", "practice.run", "practice.submit",
         "practice.hint", "practice.reset", "practice.close",
         "practice.bank.check", "practice.bank.update",

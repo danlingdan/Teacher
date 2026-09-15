@@ -1,6 +1,7 @@
 package com.sqlteacher.infrastructure.database;
 
 import com.sqlteacher.application.config.DatabaseConfiguration;
+import com.sqlteacher.application.metadata.DatabaseIndex;
 import com.sqlteacher.application.metadata.DatabaseTable;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -12,6 +13,7 @@ import java.sql.Statement;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class JdbcDatabaseMetadataServiceTest {
@@ -52,5 +54,40 @@ class JdbcDatabaseMetadataServiceTest {
             .filter(table -> table.name().equals("spj"))
             .findFirst().orElseThrow()
             .columns().stream().anyMatch(column -> column.primaryKey()));
+    }
+
+    @Test
+    void shouldListExplicitIndexesWithUniquenessAndOrderedColumns() throws Exception {
+        Path database = tempDir.resolve("indexes.db");
+        SqliteDriver.ensureLoaded();
+        try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + database);
+             Statement statement = connection.createStatement()) {
+            statement.executeUpdate("create table student(id integer primary key, email text, city text, name text)");
+            statement.executeUpdate("create unique index idx_student_email on student(email)");
+            statement.executeUpdate("create index idx_student_city_name on student(city, name)");
+        }
+
+        JdbcDatabaseMetadataService service = new JdbcDatabaseMetadataService((connectionId, timeout) -> {
+            if (!"demo".equals(connectionId)) {
+                throw new IllegalArgumentException("Unexpected connectionId: " + connectionId);
+            }
+            return DriverManager.getConnection("jdbc:sqlite:" + database);
+        });
+
+        DatabaseTable table = service.listTables("demo").stream()
+            .filter(candidate -> candidate.name().equals("student"))
+            .findFirst().orElseThrow();
+
+        assertEquals(2, table.indexes().size());
+        DatabaseIndex emailIndex = table.indexes().stream()
+            .filter(index -> index.name().equals("idx_student_email"))
+            .findFirst().orElseThrow();
+        assertTrue(emailIndex.unique());
+        assertEquals(List.of("email"), emailIndex.columns());
+        DatabaseIndex compositeIndex = table.indexes().stream()
+            .filter(index -> index.name().equals("idx_student_city_name"))
+            .findFirst().orElseThrow();
+        assertFalse(compositeIndex.unique());
+        assertEquals(List.of("city", "name"), compositeIndex.columns());
     }
 }

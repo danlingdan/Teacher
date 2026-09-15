@@ -11,8 +11,10 @@ import com.sqlteacher.application.config.SqlTeacherConfiguration;
 import com.sqlteacher.application.event.LearningEventOwnerProvider;
 import com.sqlteacher.application.event.LearningEventQueryService;
 import com.sqlteacher.application.event.LearningEventRecorder;
+import com.sqlteacher.application.knowledge.KnowledgeBundleCatalog;
 import com.sqlteacher.infrastructure.cloud.DefaultCloudLearningSyncService;
 import com.sqlteacher.infrastructure.cloud.HttpCloudApiClient;
+import com.sqlteacher.infrastructure.cloud.HttpKnowledgeBundleCatalog;
 import com.sqlteacher.infrastructure.cloud.JdbcCloudArtifactSyncService;
 import com.sqlteacher.infrastructure.cloud.PersistentCloudSessionService;
 import com.sqlteacher.infrastructure.cloud.WindowsDpapiCloudSessionStore;
@@ -47,6 +49,11 @@ public class CloudCollaborationServiceConfig {
     @Bean
     public HttpCloudApiClient cloudApiClient(URI cloudBaseUri) {
         return new HttpCloudApiClient(cloudBaseUri);
+    }
+
+    @Bean
+    public KnowledgeBundleCatalog knowledgeBundleCatalog(URI cloudBaseUri) {
+        return new HttpKnowledgeBundleCatalog(cloudBaseUri);
     }
 
     @Bean

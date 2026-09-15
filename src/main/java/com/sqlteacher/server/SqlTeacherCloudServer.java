@@ -1032,6 +1032,49 @@ public final class SqlTeacherCloudServer {
             }
             return;
         }
+        if ("/api/v1/app/knowledge-bundle-manifest".equals(path) && "GET".equals(exchange.getRequestMethod())) {
+            try {
+                String configured = System.getenv("SQLTEACHER_KNOWLEDGE_BUNDLE_MANIFEST");
+                if (configured == null || configured.isBlank()) {
+                    respond(exchange, 404, errorResponse("KNOWLEDGE_BUNDLE_UNAVAILABLE", "No official knowledge bundle is published."));
+                    return;
+                }
+                Path manifest = Path.of(configured).toAbsolutePath().normalize();
+                if (!Files.isRegularFile(manifest) || Files.size(manifest) > 128 * 1024) {
+                    respond(exchange, 503, errorResponse("KNOWLEDGE_BUNDLE_UNAVAILABLE", "Knowledge bundle metadata is unavailable."));
+                    return;
+                }
+                byte[] bytes = Files.readAllBytes(manifest);
+                var node = JSON.readTree(bytes);
+                if (!node.isObject() || !node.hasNonNull("bundleId") || !node.hasNonNull("version") || !node.hasNonNull("sha256")) {
+                    throw new IOException("Knowledge bundle manifest is invalid");
+                }
+                respondJsonBytes(exchange, 200, bytes, "public, max-age=300");
+            } catch (RuntimeException | IOException error) {
+                log.warn("Knowledge bundle manifest could not be served: {}", error.getClass().getSimpleName());
+                respond(exchange, 503, errorResponse("KNOWLEDGE_BUNDLE_UNAVAILABLE", "Knowledge bundle metadata is unavailable."));
+            }
+            return;
+        }
+        if ("/api/v1/app/knowledge-bundle".equals(path) && "GET".equals(exchange.getRequestMethod())) {
+            try {
+                String configured = System.getenv("SQLTEACHER_KNOWLEDGE_BUNDLE_FILE");
+                if (configured == null || configured.isBlank()) {
+                    respond(exchange, 404, errorResponse("KNOWLEDGE_BUNDLE_UNAVAILABLE", "No official knowledge bundle is published."));
+                    return;
+                }
+                Path bundle = Path.of(configured).toAbsolutePath().normalize();
+                if (!Files.isRegularFile(bundle)) {
+                    respond(exchange, 503, errorResponse("KNOWLEDGE_BUNDLE_UNAVAILABLE", "Knowledge bundle file is unavailable."));
+                    return;
+                }
+                respondFile(exchange, bundle, "application/zip", "knowledge-bundle.zip");
+            } catch (RuntimeException | IOException error) {
+                log.warn("Knowledge bundle could not be served: {}", error.getClass().getSimpleName());
+                respond(exchange, 503, errorResponse("KNOWLEDGE_BUNDLE_UNAVAILABLE", "Knowledge bundle file is unavailable."));
+            }
+            return;
+        }
         respond(exchange, 404, errorResponse("NOT_FOUND", "Application service endpoint not found."));
     }
 
@@ -1406,6 +1449,21 @@ public final class SqlTeacherCloudServer {
 
     private static Map<String, Object> errorResponse(String code, String message) {
         return Map.of("code", code, "message", message);
+    }
+
+    /** Streams a file from disk as an attachment (v3.4.3 OKB-4 knowledge bundle download). */
+    private static void respondFile(HttpExchange exchange, Path file, String contentType, String filename)
+        throws IOException {
+        long length = Files.size(file);
+        exchange.getResponseHeaders().set("Content-Type", contentType);
+        exchange.getResponseHeaders().set("Content-Disposition", "attachment; filename=" + filename);
+        exchange.getResponseHeaders().set("Cache-Control", "public, max-age=300");
+        exchange.getResponseHeaders().set("X-Content-Type-Options", "nosniff");
+        exchange.sendResponseHeaders(200, length);
+        try (var body = exchange.getResponseBody(); var in = Files.newInputStream(file)) {
+            in.transferTo(body);
+        }
+        exchange.close();
     }
 
     private static Map<String, Object> sessionResponse(SessionData session) {
