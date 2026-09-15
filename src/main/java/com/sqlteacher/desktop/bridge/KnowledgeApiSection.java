@@ -210,7 +210,8 @@ final class KnowledgeApiSection extends ApiSection {
     private JsonNode knowledgeBundleImport(JsonNode params, CancellationToken cancellation,
                                            Consumer<LocalAppEvent> events) {
         cancellation.throwIfCancelled();
-        requireTeacher();
+        // v3.4.4：官方知识库是分发内容，检查/下载/手动导入对所有角色开放（用户 2026-09-16 确认）；
+        // 人工导入/修订/删除等教学管理操作仍限教师。
         emit(events, "import.progress", "phase", "bundle-importing");
         var report = context().getBean(KnowledgeBundleService.class)
             .importBundle(Path.of(requiredText(params, "path", 32_768)), KnowledgeBundleSource.MANUAL);
@@ -221,13 +222,11 @@ final class KnowledgeApiSection extends ApiSection {
 
     private JsonNode knowledgeBundleCheck(CancellationToken cancellation) {
         cancellation.throwIfCancelled();
-        requireTeacher();
         return mapper.valueToTree(context().getBean(KnowledgeBundleUpdateService.class).check());
     }
 
     private JsonNode knowledgeBundleDownload(CancellationToken cancellation, Consumer<LocalAppEvent> events) {
         cancellation.throwIfCancelled();
-        requireTeacher();
         emit(events, "import.progress", "phase", "bundle-downloading");
         var report = context().getBean(KnowledgeBundleUpdateService.class).downloadAndImport();
         cancellation.throwIfCancelled();

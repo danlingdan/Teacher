@@ -235,6 +235,241 @@ function BankRollbackControl({ channels }: { channels: BankChannelInfo[] }) {
 }
 
 /** 关于（v3.4.2 LEG-1）：版本、制作团队与法律信息。名单与权属为用户确认的静态事实；隐私正文保持 Java 单一事实源，经 settings.help 拉取后在本面板内渲染。 */
+// v3.4.4 AIS-2：本地/网络 AI 模型面板——恢复 v1.x 的供应商配置能力（Tauri 版首次提供）。
+// 凭据只写不读：保存/测试时随请求提交，DPAPI 加密存储在 Java 侧；列表与测试响应不回传密钥。
+type AiProviderView = {
+  id: string;
+  displayName: string;
+  kind: string;
+  endpoint: string;
+  model: string;
+  enabled: boolean;
+  active: boolean;
+};
+
+type AiProviderDraft = {
+  id?: string;
+  displayName: string;
+  endpoint: string;
+  model: string;
+  credential: string;
+};
+
+const emptyAiProviderDraft = (): AiProviderDraft => ({
+  displayName: "",
+  endpoint: "https://",
+  model: "",
+  credential: "",
+});
+
+function AiModelSettings() {
+  const client = useQueryClient();
+  const toast = useToast();
+  const providers = useQuery({
+    queryKey: ["ai", "providers"],
+    queryFn: () =>
+      localAppRequest<{ items: AiProviderView[]; activeProfileId: string }>("ai.provider.list"),
+  });
+  const refresh = () => void client.invalidateQueries({ queryKey: ["ai", "providers"] });
+  const [editing, setEditing] = useState<AiProviderDraft>();
+  const test = useMutation({
+    mutationFn: (draft: AiProviderDraft) =>
+      localAppRequest<{ success: boolean; message: string; models: string[] }>(
+        "ai.provider.test",
+        {
+          displayName: draft.displayName,
+          kind: "OPENAI_COMPATIBLE",
+          endpoint: draft.endpoint,
+          model: draft.model,
+          credential: draft.credential,
+        },
+      ),
+  });
+  const save = useMutation({
+    mutationFn: (draft: AiProviderDraft) =>
+      localAppRequest("ai.provider.save", {
+        id: draft.id,
+        displayName: draft.displayName,
+        kind: "OPENAI_COMPATIBLE",
+        endpoint: draft.endpoint,
+        model: draft.model,
+        enabled: true,
+        credential: draft.credential,
+      }),
+    onSuccess: () => {
+      setEditing(undefined);
+      refresh();
+      toast("success", "AI 供应商已保存");
+    },
+    onError: (error: Error) => toast("error", `保存失败：${error.message}`),
+  });
+  const activate = useMutation({
+    mutationFn: (id: string) => localAppRequest("ai.provider.activate", { id }),
+    onSuccess: () => {
+      refresh();
+      toast("success", "已切换到网络 AI；网络不可用时会自动回落本地 Ollama");
+    },
+  });
+  const deactivate = useMutation({
+    mutationFn: () => localAppRequest("ai.provider.deactivate", {}),
+    onSuccess: () => {
+      refresh();
+      toast("success", "已停用网络 AI，使用本地 Ollama");
+    },
+  });
+  const remove = useMutation({
+    mutationFn: (id: string) => localAppRequest("ai.provider.remove", { id }),
+    onSuccess: () => {
+      refresh();
+      toast("success", "AI 供应商已删除");
+    },
+  });
+  const active = providers.data?.items.find((item) => item.active);
+  const editField = (field: keyof AiProviderDraft) => (event: React.ChangeEvent<HTMLInputElement>) =>
+    setEditing((value) => (value ? { ...value, [field]: event.target.value } : value));
+
+  return (
+    <details className="content-card settings-panel">
+      <summary>
+        <span className="settings-symbol">✦</span>
+        <span>
+          <strong>AI 模型</strong>
+          <small>{active ? `网络 AI · ${active.displayName}` : "本地 Ollama"}</small>
+        </span>
+        <span className="settings-chevron">›</span>
+      </summary>
+      <div className="settings-panel-body">
+        <p className="muted">
+          未配置网络供应商时使用本地 Ollama（http://localhost:11434），AI 功能失败不会影响本地学习主流程；
+          启用网络供应商后 AI 功能优先使用它。API Key 经 Windows DPAPI 加密存储，只写不回显。
+        </p>
+        {providers.data && providers.data.items.length > 0 && (
+          <div className="ai-provider-list">
+            {providers.data.items.map((item) => (
+              <article key={item.id} className="subtle-card ai-provider-row">
+                <strong>
+                  {item.displayName}
+                  {item.active && <span className="policy-chip"> 使用中</span>}
+                </strong>
+                <small>
+                  {item.endpoint} · {item.model}
+                </small>
+                <div className="button-row">
+                  {item.active ? (
+                    <Button variant="secondary" busy={deactivate.isPending} onClick={() => deactivate.mutate()}>
+                      停用（回本地）
+                    </Button>
+                  ) : (
+                    <Button variant="secondary" onClick={() => activate.mutate(item.id)}>
+                      启用
+                    </Button>
+                  )}
+                  <Button
+                    variant="secondary"
+                    onClick={() =>
+                      setEditing({
+                        id: item.id,
+                        displayName: item.displayName,
+                        endpoint: item.endpoint,
+                        model: item.model,
+                        credential: "",
+                      })
+                    }
+                  >
+                    编辑
+                  </Button>
+                  <Button
+                    variant="danger"
+                    onClick={() => {
+                      if (window.confirm(`删除“${item.displayName}”？其加密密钥会一并清除。`)) {
+                        remove.mutate(item.id);
+                      }
+                    }}
+                  >
+                    删除
+                  </Button>
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
+        {providers.data && providers.data.items.length === 0 && (
+          <p className="muted">还没有网络 AI 供应商。添加后即可在本地 Ollama 与网络 AI 之间切换。</p>
+        )}
+        {providers.isError && (
+          <Feedback tone="error" title="读取 AI 供应商失败">
+            {providers.error.message}
+          </Feedback>
+        )}
+        <div className="button-row">
+          <Button onClick={() => setEditing(emptyAiProviderDraft())}>新建网络 AI 供应商</Button>
+        </div>
+      </div>
+      <Dialog
+        open={Boolean(editing)}
+        title={editing?.id ? "编辑网络 AI 供应商" : "新建网络 AI 供应商"}
+        onClose={() => setEditing(undefined)}
+      >
+        {editing && (
+          <>
+            <FormField label="显示名称">
+              {(ids) => <input {...ids} value={editing.displayName} onChange={editField("displayName")} />}
+            </FormField>
+            <FormField label="API 端点" hint="仅支持 https；本机服务可用 http://localhost">
+              {(ids) => <input {...ids} value={editing.endpoint} onChange={editField("endpoint")} />}
+            </FormField>
+            <FormField label="模型名称">
+              {(ids) => <input {...ids} value={editing.model} onChange={editField("model")} />}
+            </FormField>
+            <FormField
+              label="API Key"
+              hint={editing.id ? "已保存过密钥，留空表示沿用原值" : "只保存在本机（DPAPI 加密），不会回显"}
+            >
+              {(ids) => (
+                <input
+                  {...ids}
+                  type="password"
+                  autoComplete="new-password"
+                  value={editing.credential}
+                  onChange={editField("credential")}
+                />
+              )}
+            </FormField>
+            {test.data && (
+              <Feedback tone={test.data.success ? "success" : "warning"} title={test.data.success ? "连接成功" : "连接失败"}>
+                <p>{test.data.message}</p>
+                {test.data.models.length > 0 && <p>可用模型：{test.data.models.join("、")}</p>}
+              </Feedback>
+            )}
+            {test.isError && (
+              <Feedback tone="error" title="测试失败">
+                {test.error.message}
+              </Feedback>
+            )}
+            <div className="button-row">
+              <Button
+                variant="secondary"
+                busy={test.isPending}
+                disabled={!editing.endpoint || !editing.model}
+                onClick={() => test.mutate(editing)}
+              >
+                测试连接
+              </Button>
+              <Button
+                busy={save.isPending}
+                disabled={!editing.displayName || !editing.endpoint || !editing.model}
+                onClick={() => save.mutate(editing)}
+              >
+                保存
+              </Button>
+            </div>
+          </>
+        )}
+      </Dialog>
+    </details>
+  );
+}
+
 function AboutPanel({ onCheckUpdate, checkingUpdate, onOpenReport }: { onCheckUpdate: () => void; checkingUpdate: boolean; onOpenReport: () => void }) {
   const version = useAppVersion();
   const [privacy, setPrivacy] = useState("");
@@ -702,6 +937,7 @@ export function SettingsPage() {
           )}
         </div>
       </details>
+      <AiModelSettings />
       <details
         className="content-card settings-panel"
         onToggle={(event) => {

@@ -3,7 +3,10 @@ import { MemoryRouter } from "react-router-dom";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import DataSqlPage from "./DataSqlPage";
+import { subscribeConnectionPanel } from "./connectionPanel";
 
+// v3.4.4 CTB：连接管理表单上移到顶栏（ConnectionManager/TopbarConnection 各自的测试文件），
+// 本文件聚焦数据页自身：纯表结构侧栏、空态引导、深链、SQL 工作台与安全模式。
 const requestMock = vi.fn();
 vi.mock("../../shared/ipc", () => ({
   localAppRequest: (...args: unknown[]) => requestMock(...args),
@@ -30,13 +33,6 @@ const dialectItems = {
   items: [
     { name: "SQLITE", displayName: "SQLite", defaultPort: 0, fileBased: true, generic: false },
     { name: "MYSQL", displayName: "MySQL", defaultPort: 3306, fileBased: false, generic: false },
-    {
-      name: "DAMENG",
-      displayName: "达梦 DM8",
-      defaultPort: 5236,
-      fileBased: false,
-      generic: false,
-    },
   ],
 };
 
@@ -68,18 +64,42 @@ const preferences = {
   helpTopics: [],
 };
 
-function renderPage() {
+const demoConnection = {
+  id: "sqlite-demo",
+  displayName: "SQLite 演示数据库",
+  dialect: "SQLITE",
+  readOnly: true,
+  enabled: true,
+  builtIn: true,
+  selected: true,
+  databasePath: "C:\\data\\school.db",
+};
+const courseConnection = {
+  id: "mysql.course",
+  displayName: "MySQL 课程库",
+  dialect: "MYSQL",
+  readOnly: false,
+  enabled: true,
+  builtIn: false,
+  selected: false,
+  host: "db.school.edu",
+  port: 3306,
+  databaseName: "course",
+  username: "teacher",
+};
+
+function renderPage(initialEntry = "/data") {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
-      <MemoryRouter>
+      <MemoryRouter initialEntries={[initialEntry]}>
         <DataSqlPage />
       </MemoryRouter>
     </QueryClientProvider>,
   );
 }
 
-describe("DataSqlPage connection manager", () => {
+describe("DataSqlPage schema sidebar", () => {
   beforeEach(() => {
     requestMock.mockReset();
     requestMock.mockImplementation((method: string) => {
@@ -89,101 +109,56 @@ describe("DataSqlPage connection manager", () => {
     });
   });
 
-  it("selects quick dialect chips and fills the default port; rare types stay in the more-types dropdown", async () => {
-    renderPage();
-
-    // v3.4.3 CXN-1：常用类型（MySQL/SQLite/PostgreSQL）为快捷 chip，点击即选中并自动填端口。
-    const mysqlChip = await screen.findByRole("button", { name: "MySQL" });
-    fireEvent.click(mysqlChip);
-    const port = (await screen.findByLabelText("端口")) as HTMLInputElement;
-    expect(port.value).toBe("3306");
-    expect(mysqlChip).toHaveAttribute("aria-pressed", "true");
-
-    // 其余方言收进「更多类型」下拉，选择后同样自动填端口。
-    const moreSelect = screen.getByLabelText("更多数据库类型") as HTMLSelectElement;
-    expect(screen.getByRole("option", { name: "达梦 DM8" })).toBeInTheDocument();
-    fireEvent.change(moreSelect, { target: { value: "DAMENG" } });
-    expect(port.value).toBe("5236");
-    expect(mysqlChip).toHaveAttribute("aria-pressed", "false");
-  });
-
-  it("keeps generic JDBC fields behind the more-types dropdown", async () => {
+  it("renders a compact current-connection indicator and delegates management to the topbar panel", async () => {
     requestMock.mockImplementation((method: string) => {
-      if (method === "data.connections") return Promise.resolve({ items: [] });
-      if (method === "data.connection.dialects") {
-        return Promise.resolve({
-          items: [
-            ...dialectItems.items,
-            { name: "GENERIC", displayName: "通用 JDBC", defaultPort: 0, fileBased: false, generic: true },
-          ],
-        });
-      }
-      throw new Error(`Unexpected request: ${method}`);
-    });
-    renderPage();
-
-    // 默认 SQLite：只有文件字段，没有 JDBC URL/驱动。
-    await screen.findByLabelText("数据库文件");
-    expect(screen.queryByLabelText("JDBC URL")).not.toBeInTheDocument();
-
-    fireEvent.change(screen.getByLabelText("更多数据库类型"), { target: { value: "GENERIC" } });
-    expect(await screen.findByLabelText("JDBC URL")).toBeInTheDocument();
-    expect(screen.getByLabelText("驱动类")).toBeInTheDocument();
-    expect(screen.getByLabelText("驱动 JAR")).toBeInTheDocument();
-  });
-
-  it("tests the connection first and saves with a generated id and display name", async () => {
-    requestMock.mockImplementation((method: string) => {
-      if (method === "data.connections") return Promise.resolve({ items: [] });
+      if (method === "data.connections") return Promise.resolve({ items: [demoConnection] });
       if (method === "data.connection.dialects") return Promise.resolve(dialectItems);
-      if (method === "data.connection.test") {
-        return Promise.resolve({
-          successful: true,
-          message: "连接成功。",
-          databaseProduct: "SQLite",
-          databaseVersion: "3.45",
-          elapsed: 1,
-        });
-      }
-      if (method === "data.connection.save") {
-        return Promise.resolve({
-          id: "sqlite-school-ab12",
-          displayName: "SQLite school.db",
-          dialect: "SQLITE",
-          readOnly: false,
-          enabled: true,
-          builtIn: false,
-          selected: true,
-          databasePath: "C:\\data\\school.db",
-        });
-      }
+      if (method === "data.schema") return Promise.resolve({ tables: [] });
       throw new Error(`Unexpected request: ${method}`);
     });
+    const opened = vi.fn();
+    const unsubscribe = subscribeConnectionPanel(opened);
     renderPage();
 
-    const fileInput = await screen.findByLabelText("数据库文件");
-    fireEvent.change(fileInput, { target: { value: "C:\\data\\school.db" } });
-    fireEvent.click(screen.getByRole("button", { name: "测试并保存" }));
+    // v3.4.4 CTB-2：侧栏只保留当前连接指示与表结构；管理表单不再出现在页面里。
+    expect(await screen.findByText("当前连接")).toBeInTheDocument();
+    expect(screen.getByText("SQLite 演示数据库")).toBeInTheDocument();
+    expect(screen.queryByText("管理连接")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "测试并保存" })).not.toBeInTheDocument();
 
-    await screen.findByText("连接成功");
+    fireEvent.click(screen.getByRole("button", { name: "管理" }));
+    expect(opened).toHaveBeenCalledTimes(1);
+    unsubscribe();
+  });
+
+  it("shows a connect guide with no connections and requests the shared panel", async () => {
+    const opened = vi.fn();
+    const unsubscribe = subscribeConnectionPanel(opened);
+    renderPage();
+
+    expect(await screen.findByText(/还没有数据库连接/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "连接数据库" }));
+    expect(opened).toHaveBeenCalledTimes(1);
+    unsubscribe();
+  });
+
+  it("writes the ?connection= deep link through to the global selection", async () => {
+    requestMock.mockImplementation((method: string) => {
+      if (method === "data.connections")
+        return Promise.resolve({ items: [demoConnection, courseConnection] });
+      if (method === "data.connection.dialects") return Promise.resolve(dialectItems);
+      if (method === "data.connection.select") return Promise.resolve(courseConnection);
+      if (method === "data.schema") return Promise.resolve({ tables: [] });
+      throw new Error(`Unexpected request: ${method}`);
+    });
+    renderPage("/data?connection=mysql.course");
+
+    // v3.4.4 CTB-3：深链不再只改页面本地视图，而是统一写后端选中。
     await waitFor(() =>
-      expect(requestMock).toHaveBeenCalledWith(
-        "data.connection.save",
-        expect.objectContaining({
-          id: expect.stringMatching(/^[a-z0-9][a-z0-9._-]{0,63}$/),
-          displayName: "SQLite school.db",
-          port: 0,
-        }),
-      ),
+      expect(requestMock).toHaveBeenCalledWith("data.connection.select", {
+        connectionId: "mysql.course",
+      }),
     );
-    const testIndex = requestMock.mock.calls.findIndex(
-      (call) => call[0] === "data.connection.test",
-    );
-    const saveIndex = requestMock.mock.calls.findIndex(
-      (call) => call[0] === "data.connection.save",
-    );
-    expect(testIndex).toBeGreaterThanOrEqual(0);
-    expect(saveIndex).toBeGreaterThan(testIndex);
   });
 
   it("loads and renders the SQL execution history when expanded", async () => {
@@ -215,95 +190,18 @@ describe("DataSqlPage connection manager", () => {
     expect(screen.getByText(/SQLite 演示数据库/)).toBeInTheDocument();
   });
 
-  it("duplicates the selected connection into the form with a fresh id", async () => {
-    requestMock.mockImplementation((method: string) => {
-      if (method === "data.connections") {
-        return Promise.resolve({
-          items: [
-            {
-              id: "mysql.course",
-              displayName: "MySQL 课程库",
-              dialect: "MYSQL",
-              readOnly: false,
-              enabled: true,
-              builtIn: false,
-              selected: true,
-              host: "db.school.edu",
-              port: 3306,
-              databaseName: "course",
-              username: "teacher",
-            },
-          ],
-        });
-      }
-      if (method === "data.connection.dialects") return Promise.resolve(dialectItems);
-      throw new Error(`Unexpected request: ${method}`);
-    });
-    renderPage();
-
-    // v3.4.3 CXN-1：复制/设为当前/删除收进「更多操作」折叠。
-    fireEvent.click(await screen.findByText("更多操作"));
-    fireEvent.click(await screen.findByRole("button", { name: "复制" }));
-
-    const displayName = (await screen.findByLabelText("显示名称")) as HTMLInputElement;
-    expect(displayName.value).toBe("MySQL 课程库 副本");
-    expect(screen.getByRole("button", { name: "MySQL" })).toHaveAttribute("aria-pressed", "true");
-    expect((screen.getByLabelText("主机") as HTMLInputElement).value).toBe("db.school.edu");
-    expect((screen.getByLabelText("端口") as HTMLInputElement).value).toBe("3306");
-  });
-
-  it("does not save when the connection test fails", async () => {
-    requestMock.mockImplementation((method: string) => {
-      if (method === "data.connections") return Promise.resolve({ items: [] });
-      if (method === "data.connection.dialects") return Promise.resolve(dialectItems);
-      if (method === "data.connection.test") {
-        return Promise.resolve({
-          successful: false,
-          message: "连接失败，请检查数据库地址、凭据和服务状态。",
-          databaseProduct: "",
-          databaseVersion: "",
-          elapsed: 1,
-        });
-      }
-      throw new Error(`Unexpected request: ${method}`);
-    });
-    renderPage();
-
-    const fileInput = await screen.findByLabelText("数据库文件");
-    fireEvent.change(fileInput, { target: { value: "C:\\data\\school.db" } });
-    fireEvent.click(screen.getByRole("button", { name: "测试并保存" }));
-
-    expect(await screen.findAllByText(/连接失败，请检查数据库地址/)).not.toHaveLength(0);
-    expect(requestMock).not.toHaveBeenCalledWith("data.connection.save", expect.anything());
-  });
-
   it("does not prompt for an SQL safety mode when the backend reports no first-run state", async () => {
     // 默认 mock 没有 settings.preferences（旧版后端/字段缺失）——不弹选择框。
     renderPage();
 
-    await screen.findByText("管理连接");
+    await screen.findByText(/还没有数据库连接/);
     expect(screen.queryByText("选择 SQL 安全模式")).not.toBeInTheDocument();
     expect(requestMock).not.toHaveBeenCalledWith("settings.update", expect.anything());
   });
 
   it("analyzes the wrapped EXPLAIN statement before executing the execution plan", async () => {
     requestMock.mockImplementation((method: string) => {
-      if (method === "data.connections") {
-        return Promise.resolve({
-          items: [
-            {
-              id: "sqlite-demo",
-              displayName: "SQLite 演示数据库",
-              dialect: "SQLITE",
-              readOnly: true,
-              enabled: true,
-              builtIn: true,
-              selected: true,
-              databasePath: "C:\\data\\school.db",
-            },
-          ],
-        });
-      }
+      if (method === "data.connections") return Promise.resolve({ items: [demoConnection] });
       if (method === "data.connection.dialects") return Promise.resolve(dialectItems);
       if (method === "data.schema") return Promise.resolve({ tables: [] });
       if (method === "sql.analyze") {
@@ -366,22 +264,7 @@ describe("DataSqlPage connection manager", () => {
 
   it("renders collapsed schema tables with a working filter and table count", async () => {
     requestMock.mockImplementation((method: string) => {
-      if (method === "data.connections") {
-        return Promise.resolve({
-          items: [
-            {
-              id: "sqlite-demo",
-              displayName: "SQLite 演示数据库",
-              dialect: "SQLITE",
-              readOnly: true,
-              enabled: true,
-              builtIn: true,
-              selected: true,
-              databasePath: "C:\\data\\school.db",
-            },
-          ],
-        });
-      }
+      if (method === "data.connections") return Promise.resolve({ items: [demoConnection] });
       if (method === "data.connection.dialects") return Promise.resolve(dialectItems);
       if (method === "data.schema") {
         return Promise.resolve({
@@ -438,6 +321,47 @@ describe("DataSqlPage connection manager", () => {
 
     fireEvent.change(filter, { target: { value: "不存在" } });
     expect(screen.getByText(/没有匹配/)).toBeInTheDocument();
+  });
+
+  it("generates an NL2SQL draft in one step with locally assembled context details", async () => {
+    requestMock.mockImplementation((method: string) => {
+      if (method === "data.connections") return Promise.resolve({ items: [demoConnection] });
+      if (method === "data.connection.dialects") return Promise.resolve(dialectItems);
+      if (method === "data.schema") return Promise.resolve({ tables: [] });
+      if (method === "ai.sql.preview") {
+        return Promise.resolve({
+          taskType: "NL2SQL",
+          categories: ["USER_REQUEST", "DATABASE_SCHEMA"],
+          sources: ["用户当前请求", "所选数据库结构"],
+          characterCount: 467,
+          redactions: [],
+        });
+      }
+      if (method === "ai.sql.generate") {
+        return Promise.resolve({
+          accepted: true,
+          plan: { sqlDraft: "SELECT 1;", explanation: "草稿" },
+          riskAnalysis: { level: "LOW", statementType: "SELECT", reasons: [] },
+        });
+      }
+      throw new Error(`Unexpected request: ${method}`);
+    });
+    renderPage();
+
+    // v3.4.4：预览与生成合并为一步；上下文明细折叠收纳，不再横向撑爆屏幕。
+    await screen.findByText("当前连接");
+    const input = screen.getByLabelText(/查询目标/);
+    fireEvent.change(input, { target: { value: "查询全部学生" } });
+    fireEvent.click(screen.getByRole("button", { name: "生成 SQL 草稿" }));
+
+    expect(await screen.findByText("SELECT 1;")).toBeInTheDocument();
+    const previewIndex = requestMock.mock.calls.findIndex((call) => call[0] === "ai.sql.preview");
+    const generateIndex = requestMock.mock.calls.findIndex((call) => call[0] === "ai.sql.generate");
+    expect(previewIndex).toBeGreaterThanOrEqual(0);
+    expect(generateIndex).toBeGreaterThan(previewIndex);
+    fireEvent.click(screen.getByText(/本次使用的上下文/));
+    expect(screen.getByText(/467 个字符/)).toBeInTheDocument();
+    expect(screen.getByText(/无需额外脱敏/)).toBeInTheDocument();
   });
 
   it("prompts first-run users to choose an SQL safety mode and persists the choice", async () => {

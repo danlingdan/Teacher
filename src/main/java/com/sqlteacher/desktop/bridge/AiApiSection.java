@@ -3,6 +3,11 @@ package com.sqlteacher.desktop.bridge;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.sqlteacher.application.ai.AiProviderKind;
+import com.sqlteacher.application.ai.AiProviderProfile;
+import com.sqlteacher.application.ai.AiProviderProfileDraft;
+import com.sqlteacher.application.ai.AiProviderProfileService;
+import com.sqlteacher.application.ai.AiProviderProbeService;
 import com.sqlteacher.application.connection.ConnectionManagementService;
 import com.sqlteacher.application.exercise.ExerciseExplainRequest;
 import com.sqlteacher.application.exercise.ExerciseTextDraftingService;
@@ -11,8 +16,11 @@ import com.sqlteacher.application.knowledge.GroundedKnowledgeExplanationService;
 import com.sqlteacher.application.nl2sql.Nl2SqlRequest;
 import com.sqlteacher.application.nl2sql.Nl2SqlSafetyService;
 
+import java.net.URI;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
+import java.util.UUID;
 import java.util.function.Consumer;
 
 /** v3.4.0 REF-8: AI assistance methods. AI only drafts; deterministic services stay authoritative. */
@@ -24,7 +32,9 @@ final class AiApiSection extends ApiSection {
 
     @Override
     public Set<String> supportedMethods() {
-        return Set.of("ai.knowledge.ask", "ai.sql.preview", "ai.sql.generate", "ai.exercise.explain");
+        return Set.of("ai.knowledge.ask", "ai.sql.preview", "ai.sql.generate", "ai.exercise.explain",
+            "ai.provider.list", "ai.provider.save", "ai.provider.activate", "ai.provider.deactivate",
+            "ai.provider.remove", "ai.provider.test");
     }
 
     @Override
@@ -35,6 +45,12 @@ final class AiApiSection extends ApiSection {
             case "ai.sql.preview" -> aiSqlPreview(params, cancellation);
             case "ai.sql.generate" -> aiSqlGenerate(params, cancellation, events);
             case "ai.exercise.explain" -> aiExerciseExplain(params, cancellation);
+            case "ai.provider.list" -> aiProviderList(cancellation);
+            case "ai.provider.save" -> aiProviderSave(params, cancellation);
+            case "ai.provider.activate" -> aiProviderActivate(params, cancellation);
+            case "ai.provider.deactivate" -> aiProviderDeactivate(cancellation);
+            case "ai.provider.remove" -> aiProviderRemove(params, cancellation);
+            case "ai.provider.test" -> aiProviderTest(params, cancellation);
             default -> throw new IllegalStateException("Method whitelist and dispatcher are inconsistent");
         };
     }
@@ -93,5 +109,94 @@ final class AiApiSection extends ApiSection {
         );
         // 展示型讲解草稿：只返回文本，不写入任何学习状态。
         return mapper.valueToTree(context().getBean(ExerciseTextDraftingService.class).explainFailure(request));
+    }
+
+
+    // ---- v3.4.4 AIS：本地/网络 AI 模型配置。凭据只写不读（DPAPI 加密存储在 Java 侧），
+    // 列表与测试响应不含任何密钥材料；端点校验沿用 AiProviderProfile 的 HTTPS/回环规则。 ----
+
+    private JsonNode aiProviderList(CancellationToken cancellation) {
+        cancellation.throwIfCancelled();
+        return providerPayload();
+    }
+
+    private JsonNode aiProviderSave(JsonNode params, CancellationToken cancellation) {
+        cancellation.throwIfCancelled();
+        AiProviderProfileDraft draft = providerDraft(params);
+        char[] credential = params.path("credential").asText("").toCharArray();
+        try {
+            context().getBean(AiProviderProfileService.class).save(draft, credential);
+        } finally {
+            Arrays.fill(credential, '\u0000');
+        }
+        cancellation.throwIfCancelled();
+        return providerPayload();
+    }
+
+    private JsonNode aiProviderActivate(JsonNode params, CancellationToken cancellation) {
+        cancellation.throwIfCancelled();
+        context().getBean(AiProviderProfileService.class).activate(requiredText(params, "id", 64));
+        return providerPayload();
+    }
+
+    private JsonNode aiProviderDeactivate(CancellationToken cancellation) {
+        cancellation.throwIfCancelled();
+        context().getBean(AiProviderProfileService.class).deactivate();
+        return providerPayload();
+    }
+
+    private JsonNode aiProviderRemove(JsonNode params, CancellationToken cancellation) {
+        cancellation.throwIfCancelled();
+        context().getBean(AiProviderProfileService.class).remove(requiredText(params, "id", 64));
+        return providerPayload();
+    }
+
+    private JsonNode aiProviderTest(JsonNode params, CancellationToken cancellation) {
+        cancellation.throwIfCancelled();
+        AiProviderProfileDraft draft = providerDraft(params);
+        char[] credential = params.path("credential").asText("").toCharArray();
+        try {
+            var result = context().getBean(AiProviderProbeService.class).probe(draft, credential);
+            ObjectNode node = mapper.createObjectNode();
+            node.put("success", result.success());
+            node.put("message", result.message());
+            node.set("models", mapper.valueToTree(result.models()));
+            return node;
+        } finally {
+            Arrays.fill(credential, '\u0000');
+        }
+    }
+
+    private AiProviderProfileDraft providerDraft(JsonNode params) {
+        String id = params.path("id").asText("").trim();
+        if (id.isEmpty()) {
+            id = "network-" + UUID.randomUUID().toString().substring(0, 8);
+        }
+        return new AiProviderProfileDraft(
+            id,
+            requiredText(params, "displayName", 120),
+            AiProviderKind.valueOf(requiredText(params, "kind", 32)),
+            URI.create(requiredText(params, "endpoint", 512)),
+            requiredText(params, "model", 120),
+            params.path("enabled").asBoolean(true));
+    }
+
+    private JsonNode providerPayload() {
+        AiProviderProfileService service = context().getBean(AiProviderProfileService.class);
+        String activeId = service.activeProfile().map(AiProviderProfile::id).orElse("");
+        ObjectNode payload = mapper.createObjectNode();
+        ArrayNode items = payload.putArray("items");
+        service.profiles().forEach(profile -> {
+            ObjectNode item = items.addObject();
+            item.put("id", profile.id());
+            item.put("displayName", profile.displayName());
+            item.put("kind", profile.kind().name());
+            item.put("endpoint", profile.endpoint().toString());
+            item.put("model", profile.model());
+            item.put("enabled", profile.enabled());
+            item.put("active", profile.id().equals(activeId));
+        });
+        payload.put("activeProfileId", activeId);
+        return payload;
     }
 }

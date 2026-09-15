@@ -414,4 +414,68 @@ describe("SettingsPage", () => {
 
     expect(screen.queryByRole("button", { name: "回滚上一版本" })).not.toBeInTheDocument();
   });
+
+  it("manages AI providers in the settings panel without ever echoing the key", async () => {
+    requestMock.mockImplementation((method: string) => {
+      if (method === "settings.preferences") return Promise.resolve(preferences);
+      if (method === "settings.environment")
+        return Promise.resolve({ connectivity: "未连接", manualPathPolicy: "PATH", runnerCapabilities: [], components: [] });
+      if (method === "ai.provider.list") {
+        return Promise.resolve({
+          items: [
+            {
+              id: "deepseek",
+              displayName: "DeepSeek",
+              kind: "OPENAI_COMPATIBLE",
+              endpoint: "https://api.deepseek.com",
+              model: "deepseek-chat",
+              enabled: true,
+              active: false,
+            },
+          ],
+          activeProfileId: "",
+        });
+      }
+      if (method === "ai.provider.activate") return Promise.resolve({ items: [], activeProfileId: "deepseek" });
+      if (method === "ai.provider.save") return Promise.resolve({ items: [], activeProfileId: "" });
+      if (method === "ai.provider.test") {
+        return Promise.resolve({ success: true, message: "连接成功。", models: ["deepseek-chat"] });
+      }
+      throw new Error(`Unexpected request: ${method}`);
+    });
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <Toaster>
+          <SettingsPage />
+        </Toaster>
+      </QueryClientProvider>,
+    );
+
+    // v3.4.4 AIS-2：面板显示当前生效通道与供应商清单。
+    fireEvent.click(await screen.findByText(/AI 模型/));
+    expect(await screen.findByText(/本地 Ollama（http:\/\/localhost:11434）/)).toBeInTheDocument();
+    expect(await screen.findByText("DeepSeek")).toBeInTheDocument();
+
+    // 新建 → 填表 → 测试连接成功 → 保存；密钥只在请求里出现，界面上永不回显。
+    fireEvent.click(screen.getByRole("button", { name: "新建网络 AI 供应商" }));
+    fireEvent.change(await screen.findByLabelText("显示名称"), { target: { value: "新建供应商" } });
+    fireEvent.change(screen.getByLabelText("API 端点"), { target: { value: "https://api.example.com" } });
+    fireEvent.change(screen.getByLabelText("模型名称"), { target: { value: "example-chat" } });
+    const keyInput = screen.getByLabelText("API Key");
+    expect((keyInput as HTMLInputElement).type).toBe("password");
+    fireEvent.change(keyInput, { target: { value: "sk-test" } });
+    fireEvent.click(screen.getByRole("button", { name: "测试连接" }));
+
+    expect(await screen.findByText("连接成功。")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "保存" }));
+
+    await waitFor(() =>
+      expect(requestMock).toHaveBeenCalledWith(
+        "ai.provider.save",
+        expect.objectContaining({ displayName: "新建供应商", credential: "sk-test" }),
+      ),
+    );
+    expect(screen.getByText("AI 供应商已保存")).toBeInTheDocument();
+  });
 });

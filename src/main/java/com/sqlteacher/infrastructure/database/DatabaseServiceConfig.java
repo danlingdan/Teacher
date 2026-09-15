@@ -1,6 +1,7 @@
 package com.sqlteacher.infrastructure.database;
 
 import com.sqlteacher.application.connection.ConnectionManagementService;
+import com.sqlteacher.application.connection.DatabaseCatalogService;
 import com.sqlteacher.application.connection.DatabaseConnectionTestService;
 import com.sqlteacher.application.connection.DatabaseCredentialSession;
 import com.sqlteacher.application.event.LearningEventService;
@@ -62,6 +63,11 @@ public class DatabaseServiceConfig {
     public DatabaseConnectionTestService databaseConnectionTestService(
             JdbcConnectionFactory connectionFactory) {
         return new JdbcDatabaseConnectionTestService(connectionFactory, Duration.ofSeconds(5));
+    }
+
+    @Bean
+    public DatabaseCatalogService databaseCatalogService(JdbcConnectionFactory connectionFactory) {
+        return new JdbcDatabaseCatalogService(connectionFactory, Duration.ofSeconds(5));
     }
 
     @Bean(destroyMethod = "close")

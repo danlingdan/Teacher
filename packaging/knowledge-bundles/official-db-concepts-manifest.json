@@ -1,8 +1,8 @@
 {
   "bundleId": "official-db-concepts",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "title": "数据库系统概念",
-  "sizeBytes": 21084518,
-  "sha256": "0b258109cd1b99a4512eefd96bfbb9411db203031bb13b760865bc6c85fdd23b",
-  "generatedAt": "2026-09-15T13:14:52.7130076Z"
+  "sizeBytes": 21084531,
+  "sha256": "f738f729afcd14f41b3921d4bf6b0f025c4873c8cb9d226f15d99acbeaf5fbb3",
+  "generatedAt": "2026-09-15T16:34:37.8668723Z"
 }

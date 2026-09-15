@@ -3,18 +3,17 @@ import Editor, { loader } from "@monaco-editor/react";
 import * as monaco from "monaco-editor/editor/editor.api";
 import EditorWorker from "monaco-editor/editor/editor.worker?worker";
 import "monaco-editor/languages/definitions/sql/register";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Button, Dialog, Feedback, FormField, useToast } from "../../shared/ui";
 import { cancelLocalAppRequest, localAppRequest, localAppRequestWithId } from "../../shared/ipc";
 import { useMonacoEditorTheme } from "../../shared/monacoTheme";
 import { formatInstant } from "../../shared/instant";
-import { settingsPreferencesQuery } from "../../app/queries";
+import { connectionsQuery, settingsPreferencesQuery } from "../../app/queries";
+import { dialectLabel, useConnectionDialects } from "./ConnectionManager";
+import { openConnectionPanel } from "./connectionPanel";
 import type {
   AiContextPreview,
-  ConnectionDialectOption,
-  ConnectionSummary,
-  ConnectionTestResult,
   DatabaseTable,
   Nl2SqlSafetyResult,
   SettingsPreferences,
@@ -59,25 +58,28 @@ const initialSql =
 export default function DataSqlPage() {
   const client = useQueryClient();
   const [searchParams] = useSearchParams();
-  const connections = useQuery({
-    queryKey: ["data", "connections"],
-    queryFn: () => localAppRequest<{ items: ConnectionSummary[] }>("data.connections"),
-  });
-  const dialectOptions = useConnectionDialects();
-  // 命令面板等入口通过 ?connection= 深链到指定连接。
-  const [connectionId, setConnectionId] = useState(() => searchParams.get("connection") ?? "");
-  const [sql, setSql] = useState(initialSql);
-  useEffect(() => {
-    const selected =
-      connections.data?.items.find((item) => item.selected) ?? connections.data?.items[0];
-    if (!connectionId && selected) setConnectionId(selected.id);
-  }, [connectionId, connections.data]);
-  // 命令面板深链 ?connection=：页面已挂载时参数变化也要切换连接。
+  const connections = useQuery(connectionsQuery);
+  const dialects = useConnectionDialects();
+  // 稳定数组身份：深链 effect 依赖它，避免列表未变时重复触发。
+  const items = useMemo(() => connections.data?.items ?? [], [connections.data]);
+  const selected = items.find((item) => item.selected);
+  // v3.4.4 CTB-3：视图连接只认后端 selected（无选中时回退第一条，兼容旧数据），
+  // 顶栏切换与页内视图不再双轨。
+  const connectionId = selected?.id ?? items[0]?.id ?? "";
+  const current = items.find((item) => item.id === connectionId);
+  // 命令面板等入口通过 ?connection= 深链：统一写全局选中（data.connection.select）。
+  // ref 记录已处理过的深链值：写入选中到列表刷新之间可能存在窗口期，避免重复提交。
+  const deepLinkApplied = useRef<string | undefined>(undefined);
   useEffect(() => {
     const fromUrl = searchParams.get("connection");
-    if (fromUrl && connections.data?.items.some((item) => item.id === fromUrl))
-      setConnectionId(fromUrl);
-  }, [searchParams, connections.data]);
+    if (!fromUrl || fromUrl === deepLinkApplied.current) return;
+    if (!items.some((item) => item.id === fromUrl)) return;
+    deepLinkApplied.current = fromUrl;
+    localAppRequest("data.connection.select", { connectionId: fromUrl })
+      .then(() => client.invalidateQueries({ queryKey: connectionsQuery.queryKey }))
+      .catch(() => undefined);
+  }, [searchParams, items, selected?.id, client]);
+  const [sql, setSql] = useState(initialSql);
   const schema = useQuery({
     queryKey: ["data", "schema", connectionId],
     queryFn: () => localAppRequest<{ tables: DatabaseTable[] }>("data.schema", { connectionId }),
@@ -108,38 +110,34 @@ export default function DataSqlPage() {
   return (
     <div className="data-workspace">
       <aside className="content-card schema-panel">
-        <p className="eyebrow">数据库连接</p>
-        <select
-          aria-label="数据库连接"
-          value={connectionId}
-          onChange={(event) => setConnectionId(event.target.value)}
-        >
-          {connections.data?.items.map((item) => (
-            <option key={item.id} value={item.id}>
-              {item.displayName} · {dialectLabel(dialectOptions, item.dialect)}
-              {item.readOnly ? " · 只读" : ""}
-            </option>
-          ))}
-        </select>
-        {connections.isError && (
-          <Feedback tone="error" title="连接列表读取失败">
-            {connections.error?.message}
-          </Feedback>
+        {items.length === 0 ? (
+          <div className="schema-empty">
+            <p className="eyebrow">表结构</p>
+            <p className="muted">还没有数据库连接。连接后即可在这里查看表结构与执行 SQL。</p>
+            <Button onClick={() => openConnectionPanel()}>连接数据库</Button>
+          </div>
+        ) : (
+          <>
+            <div className="schema-connection">
+              <div>
+                <p className="eyebrow">当前连接</p>
+                <strong>{current?.displayName}</strong>
+                <small>
+                  {dialectLabel(dialects, current?.dialect ?? "")}
+                  {current?.readOnly ? " · 只读" : ""}
+                </small>
+              </div>
+              <Button variant="secondary" onClick={() => openConnectionPanel()}>
+                管理
+              </Button>
+            </div>
+            <SchemaPanel
+              tables={schema.data?.tables}
+              isFetching={schema.isFetching}
+              errorMessage={schema.isError ? schema.error.message : undefined}
+            />
+          </>
         )}
-        <ConnectionManager
-          items={connections.data?.items ?? []}
-          selectedId={connectionId}
-          dialectOptions={dialectOptions}
-          onSelected={(id) => {
-            setConnectionId(id);
-            void client.invalidateQueries({ queryKey: ["data", "connections"] });
-          }}
-        />
-        <SchemaPanel
-          tables={schema.data?.tables}
-          isFetching={schema.isFetching}
-          errorMessage={schema.isError ? schema.error.message : undefined}
-        />
       </aside>
       <main className="data-main">
         <SqlWorkbench
@@ -170,573 +168,6 @@ export default function DataSqlPage() {
         </div>
       </Dialog>
     </div>
-  );
-}
-
-type ConnectionDraft = {
-  id: string;
-  displayName: string;
-  dialect: string;
-  databasePath: string;
-  host: string;
-  port: string;
-  databaseName: string;
-  username: string;
-  password: string;
-  jdbcUrl: string;
-  driverClass: string;
-  driverJar: string;
-  readOnly: boolean;
-  enabled: boolean;
-};
-const emptyConnection = (): ConnectionDraft => ({
-  id: "",
-  displayName: "",
-  dialect: "SQLITE",
-  databasePath: "",
-  host: "localhost",
-  port: "",
-  databaseName: "",
-  username: "",
-  password: "",
-  jdbcUrl: "",
-  driverClass: "",
-  driverJar: "",
-  readOnly: false,
-  enabled: true,
-});
-// 方言元数据由 Java 侧 data.connection.dialects 提供；请求失败时退化为裸枚举名，表单仍可用。
-const FALLBACK_DIALECTS: ConnectionDialectOption[] = [
-  { name: "SQLITE", displayName: "SQLite", defaultPort: 0, fileBased: true, generic: false },
-  { name: "DUCKDB", displayName: "DuckDB", defaultPort: 0, fileBased: true, generic: false },
-  { name: "H2", displayName: "H2", defaultPort: 0, fileBased: true, generic: false },
-  { name: "MYSQL", displayName: "MySQL", defaultPort: 3306, fileBased: false, generic: false },
-  { name: "MARIADB", displayName: "MariaDB", defaultPort: 3306, fileBased: false, generic: false },
-  {
-    name: "POSTGRESQL",
-    displayName: "PostgreSQL",
-    defaultPort: 5432,
-    fileBased: false,
-    generic: false,
-  },
-  {
-    name: "SQL_SERVER",
-    displayName: "SQL Server",
-    defaultPort: 1433,
-    fileBased: false,
-    generic: false,
-  },
-  { name: "ORACLE", displayName: "Oracle", defaultPort: 1521, fileBased: false, generic: false },
-  { name: "DB2", displayName: "Db2", defaultPort: 50000, fileBased: false, generic: false },
-  { name: "DAMENG", displayName: "达梦 DM8", defaultPort: 5236, fileBased: false, generic: false },
-  { name: "TIDB", displayName: "TiDB", defaultPort: 4000, fileBased: false, generic: false },
-  {
-    name: "OCEANBASE",
-    displayName: "OceanBase",
-    defaultPort: 2881,
-    fileBased: false,
-    generic: false,
-  },
-  { name: "GAUSSDB", displayName: "GaussDB", defaultPort: 5432, fileBased: false, generic: false },
-  { name: "GENERIC", displayName: "通用 JDBC", defaultPort: 0, fileBased: false, generic: true },
-];
-const dialectLabel = (options: ConnectionDialectOption[], name: string) =>
-  options.find((option) => option.name === name)?.displayName ?? name;
-
-// v3.4.3 CXN-1：常用类型一键直达，其余 11 种方言与通用 JDBC 收进「更多类型」。
-const QUICK_DIALECTS = ["MYSQL", "SQLITE", "POSTGRESQL"];
-
-function useConnectionDialects(): ConnectionDialectOption[] {
-  const query = useQuery({
-    queryKey: ["data", "connection-dialects"],
-    queryFn: () =>
-      localAppRequest<{ items: ConnectionDialectOption[] }>("data.connection.dialects"),
-    staleTime: Infinity,
-  });
-  return query.data?.items.length ? query.data.items : FALLBACK_DIALECTS;
-}
-
-// 连接 ID 由显示名生成小写别名加随机后缀，匹配 Java 侧 [a-z0-9][a-z0-9._-]{0,63}。
-function connectionIdFrom(displayName: string): string {
-  const slug = displayName
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 48);
-  const token = Math.random().toString(36).slice(2, 6);
-  return `${slug || "connection"}-${token}`;
-}
-
-function defaultDisplayName(draft: ConnectionDraft, dialect?: ConnectionDialectOption): string {
-  const label = dialect?.displayName ?? draft.dialect;
-  const detail = dialect?.fileBased
-    ? draft.databasePath.split(/[\\/]/).pop()
-    : draft.databaseName.trim() || draft.host.trim();
-  return detail ? `${label} ${detail}` : `${label} 连接`;
-}
-
-function missingConnectionFields(
-  draft: ConnectionDraft,
-  dialect?: ConnectionDialectOption,
-): string {
-  if (dialect?.fileBased) return draft.databasePath.trim() ? "" : "数据库文件路径";
-  if (dialect?.generic)
-    return [draft.jdbcUrl, draft.driverClass, draft.driverJar].every((value) => value.trim())
-      ? ""
-      : "JDBC URL、驱动类与驱动 JAR";
-  return [draft.host, draft.databaseName, draft.username].every((value) => value.trim())
-    ? ""
-    : "主机、数据库与用户名";
-}
-
-function ConnectionManager({
-  items,
-  selectedId,
-  dialectOptions,
-  onSelected,
-}: {
-  items: ConnectionSummary[];
-  selectedId: string;
-  dialectOptions: ConnectionDialectOption[];
-  onSelected: (id: string) => void;
-}) {
-  const client = useQueryClient();
-  const toast = useToast();
-  const [draft, setDraft] = useState<ConnectionDraft>(emptyConnection);
-  const [result, setResult] = useState<ConnectionTestResult>();
-  const [deleteOpen, setDeleteOpen] = useState(false);
-  const [panelOpen, setPanelOpen] = useState(items.length === 0);
-  // 一个连接都没有时自动展开，避免新用户找不到入口。
-  useEffect(() => {
-    if (items.length === 0) setPanelOpen(true);
-  }, [items.length]);
-  const current = items.find((item) => item.id === selectedId);
-  const dialect = dialectOptions.find((option) => option.name === draft.dialect);
-  const fileBased = dialect?.fileBased ?? false;
-  const generic = dialect?.generic ?? false;
-  const refresh = () => client.invalidateQueries({ queryKey: ["data", "connections"] });
-  // 连接 ID 与显示名称留空时自动生成并回写表单：同一次提交里测试与保存必须用同一个 ID，
-  // 否则测试成功暂存的凭据会挂在另一个 ID 下。
-  const submitPayload = () => {
-    const displayName = draft.displayName.trim() || defaultDisplayName(draft, dialect);
-    const id = draft.id.trim() || connectionIdFrom(displayName);
-    if (id !== draft.id || displayName !== draft.displayName) {
-      setDraft((value) => ({ ...value, id, displayName }));
-    }
-    return { ...draft, id, displayName, port: Number(draft.port || 0) };
-  };
-  const save = useMutation({
-    mutationFn: async () => {
-      const payload = submitPayload();
-      // 保存前强制真实连接测试：失败的连接不会被保存。
-      const tested = await localAppRequest<ConnectionTestResult>("data.connection.test", {
-        ...payload,
-        password: draft.password,
-      });
-      if (!tested.successful) {
-        setResult(tested);
-        throw new Error(tested.message);
-      }
-      setResult(tested);
-      return localAppRequest<ConnectionSummary>("data.connection.save", payload);
-    },
-    onSuccess: (value) => {
-      setDraft(valueToDraft(value));
-      onSelected(value.id);
-      void refresh();
-      toast("success", "连接已保存");
-    },
-    onError: (error: Error) => toast("error", `连接保存失败：${error.message}`),
-    onSettled: () => setDraft((value) => ({ ...value, password: "" })),
-  });
-  // 测试成功后清空表单密码是刻意的：Java 侧 DatabaseCredentialSession 已记住本次凭据，
-  // 保存时用空密码即可；避免密码长期留在前端表单状态里。
-  const test = useMutation({
-    mutationFn: () =>
-      localAppRequest<ConnectionTestResult>("data.connection.test", {
-        ...submitPayload(),
-        password: draft.password,
-      }),
-    onSuccess: setResult,
-    onSettled: () => setDraft((value) => ({ ...value, password: "" })),
-    onError: (error: Error) => toast("error", `连接测试失败：${error.message}`),
-  });
-  const select = useMutation({
-    mutationFn: () =>
-      localAppRequest<ConnectionSummary>("data.connection.select", { connectionId: selectedId }),
-    onSuccess: (value) => {
-      onSelected(value.id);
-      void refresh();
-    },
-  });
-  const remove = useMutation({
-    mutationFn: () => localAppRequest("data.connection.delete", { connectionId: selectedId }),
-    onSuccess: async () => {
-      setDeleteOpen(false);
-      setDraft(emptyConnection());
-      await refresh();
-      const remaining = items.find((item) => item.id !== selectedId);
-      if (remaining) onSelected(remaining.id);
-    },
-  });
-  const browseDatabaseFile = async () => {
-    try {
-      const { open } = await import("@tauri-apps/plugin-dialog");
-      const selection = await open({
-        multiple: false,
-        directory: false,
-        title: "选择数据库文件",
-        filters: [
-          { name: "数据库文件", extensions: ["db", "sqlite", "sqlite3", "duckdb", "mv.db"] },
-          { name: "所有文件", extensions: ["*"] },
-        ],
-      });
-      if (typeof selection === "string" && selection.trim()) {
-        setDraft((value) => ({ ...value, databasePath: selection }));
-        setResult(undefined);
-      }
-    } catch {
-      toast("error", "无法打开文件选择器，请直接输入文件路径");
-    }
-  };
-  const edit = (item?: ConnectionSummary) => {
-    setDraft(item ? valueToDraft(item) : emptyConnection());
-    setResult(undefined);
-  };
-  const copySelected = () => {
-    if (!current) return;
-    const copied = valueToDraft(current);
-    setDraft({ ...copied, id: "", displayName: `${copied.displayName} 副本` });
-    setResult(undefined);
-    toast("success", "已复制配置，确认后点“测试并保存”");
-  };
-  // v3.4.3 CXN-1：类型选择傻瓜化——常用类型一键选中，其余收进「更多类型」；
-  // 选中后表单只保留该类型必要字段，端口自动填默认值。
-  const selectDialect = (option: ConnectionDialectOption) => {
-    setDraft((value) => ({
-      ...value,
-      dialect: option.name,
-      port: option.defaultPort > 0 ? String(option.defaultPort) : "",
-    }));
-    setResult(undefined);
-  };
-  const quickDialects = dialectOptions.filter((option) => QUICK_DIALECTS.includes(option.name));
-  const moreDialects = dialectOptions.filter((option) => !QUICK_DIALECTS.includes(option.name));
-  const createEmptyDatabaseFile = async () => {
-    try {
-      const { save } = await import("@tauri-apps/plugin-dialog");
-      const extension = draft.dialect === "H2" ? "mv.db" : draft.dialect === "DUCKDB" ? "duckdb" : "db";
-      const selection = await save({
-        title: "新建数据库文件",
-        defaultPath: `database.${extension}`,
-        filters: [{ name: "数据库文件", extensions: [extension] }],
-      });
-      if (typeof selection === "string" && selection.trim()) {
-        setDraft((value) => ({ ...value, databasePath: selection }));
-        setResult(undefined);
-        toast("success", "已选择路径，测试并保存后会创建新的空数据库");
-      }
-    } catch {
-      toast("error", "无法打开保存对话框，请直接输入文件路径");
-    }
-  };
-  const missing = missingConnectionFields(draft, dialect);
-  const busy = save.isPending || test.isPending;
-  return (
-    <details
-      className="connection-manager"
-      open={panelOpen}
-      onToggle={(event) => setPanelOpen((event.target as HTMLDetailsElement).open)}
-    >
-      <summary>
-        <strong>管理连接</strong>
-        {items.length === 0 && <small> · 暂无连接</small>}
-      </summary>
-      {items.length === 0 && <p className="muted">选择数据库类型，填好地址后点“测试并保存”。</p>}
-      <div className="button-row">
-        <Button variant="secondary" onClick={() => edit()}>
-          新建
-        </Button>
-        {current && (
-          <Button variant="secondary" onClick={() => edit(current)}>
-            编辑所选
-          </Button>
-        )}
-        {current && (
-          <details className="connection-more-actions">
-            <summary>更多操作</summary>
-            <div className="button-row">
-              {!current.builtIn && (
-                <Button variant="secondary" onClick={copySelected}>
-                  复制
-                </Button>
-              )}
-              <Button
-                variant="secondary"
-                disabled={!current.enabled || select.isPending}
-                onClick={() => select.mutate()}
-              >
-                设为当前
-              </Button>
-              {!current.builtIn && (
-                <Button variant="danger" onClick={() => setDeleteOpen(true)}>
-                  删除
-                </Button>
-              )}
-            </div>
-          </details>
-        )}
-      </div>
-      <div className="settings-grid">
-        <FormField label="数据库类型">
-          {() => (
-            <div className="dialect-picker">
-              <div className="dialect-quick-row" role="group" aria-label="常用数据库类型">
-                {quickDialects.map((option) => (
-                  <button
-                    key={option.name}
-                    type="button"
-                    className={`dialect-chip${draft.dialect === option.name ? " active" : ""}`}
-                    aria-pressed={draft.dialect === option.name}
-                    onClick={() => selectDialect(option)}
-                  >
-                    {option.displayName}
-                  </button>
-                ))}
-              </div>
-              <select
-                aria-label="更多数据库类型"
-                value={QUICK_DIALECTS.includes(draft.dialect) ? "" : draft.dialect}
-                onChange={(event) => {
-                  const next = dialectOptions.find((option) => option.name === event.target.value);
-                  if (next) selectDialect(next);
-                }}
-              >
-                <option value="" disabled>
-                  更多类型…
-                </option>
-                {moreDialects.map((option) => (
-                  <option key={option.name} value={option.name}>
-                    {option.displayName}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
-        </FormField>
-        <FormField label="显示名称" hint="留空会自动生成">
-          {(ids) => (
-            <input
-              {...ids}
-              value={draft.displayName}
-              onChange={(event) => setDraft({ ...draft, displayName: event.target.value })}
-              placeholder="留空自动生成"
-            />
-          )}
-        </FormField>
-        {fileBased ? (
-          <FormField
-            label="数据库文件"
-            hint={draft.dialect === "SQLITE" ? "文件不存在时会创建新的空数据库" : undefined}
-          >
-            {(ids) => (
-              <div className="button-row">
-                <input
-                  {...ids}
-                  value={draft.databasePath}
-                  onChange={(event) => setDraft({ ...draft, databasePath: event.target.value })}
-                  placeholder="选择或输入文件路径"
-                />
-                <Button
-                  variant="secondary"
-                  disabled={busy}
-                  onClick={() => void browseDatabaseFile()}
-                >
-                  浏览…
-                </Button>
-                <Button
-                  variant="secondary"
-                  disabled={busy}
-                  onClick={() => void createEmptyDatabaseFile()}
-                >
-                  新建空库…
-                </Button>
-              </div>
-            )}
-          </FormField>
-        ) : generic ? (
-          <>
-            <FormField label="JDBC URL">
-              {(ids) => (
-                <input
-                  {...ids}
-                  value={draft.jdbcUrl}
-                  onChange={(event) => setDraft({ ...draft, jdbcUrl: event.target.value })}
-                />
-              )}
-            </FormField>
-            <FormField label="驱动类">
-              {(ids) => (
-                <input
-                  {...ids}
-                  value={draft.driverClass}
-                  onChange={(event) => setDraft({ ...draft, driverClass: event.target.value })}
-                />
-              )}
-            </FormField>
-            <FormField label="驱动 JAR">
-              {(ids) => (
-                <input
-                  {...ids}
-                  value={draft.driverJar}
-                  onChange={(event) => setDraft({ ...draft, driverJar: event.target.value })}
-                />
-              )}
-            </FormField>
-          </>
-        ) : (
-          <>
-            <FormField label="主机">
-              {(ids) => (
-                <input
-                  {...ids}
-                  value={draft.host}
-                  onChange={(event) => setDraft({ ...draft, host: event.target.value })}
-                />
-              )}
-            </FormField>
-            <FormField label="端口" hint="通常保持默认即可">
-              {(ids) => (
-                <input
-                  {...ids}
-                  type="number"
-                  value={draft.port}
-                  onChange={(event) => setDraft({ ...draft, port: event.target.value })}
-                  placeholder={
-                    dialect && dialect.defaultPort > 0 ? `默认 ${dialect.defaultPort}` : "默认"
-                  }
-                />
-              )}
-            </FormField>
-            <FormField label="数据库">
-              {(ids) => (
-                <input
-                  {...ids}
-                  value={draft.databaseName}
-                  onChange={(event) => setDraft({ ...draft, databaseName: event.target.value })}
-                />
-              )}
-            </FormField>
-          </>
-        )}
-        {!fileBased && (
-          <>
-            <FormField label="用户名">
-              {(ids) => (
-                <input
-                  {...ids}
-                  autoComplete="username"
-                  value={draft.username}
-                  onChange={(event) => setDraft({ ...draft, username: event.target.value })}
-                />
-              )}
-            </FormField>
-            <FormField
-              label="本次测试密码"
-              hint="只保存在当前 Java 进程内存中；编辑时留空会复用已验证的密码"
-            >
-              {(ids) => (
-                <input
-                  {...ids}
-                  type="password"
-                  autoComplete="new-password"
-                  value={draft.password}
-                  onChange={(event) => setDraft({ ...draft, password: event.target.value })}
-                />
-              )}
-            </FormField>
-          </>
-        )}
-      </div>
-      <details className="connection-advanced">
-        <summary>高级选项</summary>
-        <label className="setting-toggle">
-          <input
-            type="checkbox"
-            checked={draft.readOnly}
-            onChange={(event) => setDraft({ ...draft, readOnly: event.target.checked })}
-          />
-          <span>
-            <strong>只读连接</strong>
-          </span>
-        </label>
-        <label className="setting-toggle">
-          <input
-            type="checkbox"
-            checked={draft.enabled}
-            onChange={(event) => setDraft({ ...draft, enabled: event.target.checked })}
-          />
-          <span>
-            <strong>启用连接</strong>
-          </span>
-        </label>
-        <FormField label="连接 ID" hint="留空自动生成；仅小写字母、数字、点、横线或下划线">
-          {(ids) => (
-            <input
-              {...ids}
-              disabled={current?.builtIn}
-              value={draft.id}
-              onChange={(event) => setDraft({ ...draft, id: event.target.value })}
-              placeholder="留空自动生成"
-            />
-          )}
-        </FormField>
-      </details>
-      {missing && <p className="field-gap-note">还需填写：{missing}</p>}
-      <div className="button-row">
-        <Button
-          variant="secondary"
-          busy={test.isPending}
-          disabled={busy || Boolean(missing)}
-          onClick={() => test.mutate()}
-        >
-          仅测试
-        </Button>
-        <Button
-          busy={save.isPending}
-          disabled={busy || Boolean(missing)}
-          onClick={() => save.mutate()}
-        >
-          测试并保存
-        </Button>
-      </div>
-      {result && (
-        <Feedback
-          tone={result.successful ? "success" : "warning"}
-          title={result.successful ? "连接成功" : "连接失败"}
-        >
-          {result.message}
-          {result.databaseProduct ? ` · ${result.databaseProduct} ${result.databaseVersion}` : ""}
-          {result.successful && !fileBased ? " 密码已暂存，可直接保存。" : ""}
-        </Feedback>
-      )}
-      {(save.isError || test.isError || select.isError || remove.isError) && (
-        <Feedback tone="error" title="连接操作失败">
-          {(save.error ?? test.error ?? select.error ?? remove.error)?.message}
-        </Feedback>
-      )}
-      <Dialog open={deleteOpen} title="删除数据库连接" onClose={() => setDeleteOpen(false)}>
-        <p>确认删除“{current?.displayName}”？密码缓存会同时清除。</p>
-        <div className="button-row">
-          <Button variant="secondary" onClick={() => setDeleteOpen(false)}>
-            取消
-          </Button>
-          <Button variant="danger" onClick={() => remove.mutate()}>
-            确认删除
-          </Button>
-        </div>
-      </Dialog>
-    </details>
   );
 }
 
@@ -830,22 +261,6 @@ function SchemaPanel({
       </div>
     </details>
   );
-}
-
-function valueToDraft(item: ConnectionSummary): ConnectionDraft {
-  return {
-    ...emptyConnection(),
-    ...item,
-    port: item.port ? String(item.port) : "",
-    databasePath: item.databasePath ?? "",
-    host: item.host ?? "localhost",
-    databaseName: item.databaseName ?? "",
-    username: item.username ?? "",
-    jdbcUrl: item.jdbcUrl ?? "",
-    driverClass: item.driverClass ?? "",
-    driverJar: item.driverJar ?? "",
-    password: "",
-  };
 }
 
 function SqlWorkbench({
@@ -1241,25 +656,26 @@ function AiAssistant({
   const [preview, setPreview] = useState<AiContextPreview>();
   const [requestId, setRequestId] = useState<string>();
   const [result, setResult] = useState<Nl2SqlSafetyResult>();
-  const inspect = useMutation({
-    mutationFn: () =>
-      localAppRequest<AiContextPreview>("ai.sql.preview", { connectionId, question }),
-    onSuccess: (value) => {
-      setPreview(value);
-      setResult(undefined);
-    },
-  });
+  // v3.4.4：生成一步完成——先在本地构建上下文（不发任何网络请求），再生成草稿；
+  // 组装明细折叠收纳，未配置 AI 时由本地确定性生成兜底。
   const generate = useMutation({
     mutationFn: async () => {
       const id = crypto.randomUUID();
       setRequestId(id);
+      const context = await localAppRequest<AiContextPreview>("ai.sql.preview", {
+        connectionId,
+        question,
+      });
+      setPreview(context);
       return localAppRequestWithId<Nl2SqlSafetyResult>(
         "ai.sql.generate",
         { connectionId, question },
         id,
       );
     },
-    onSuccess: setResult,
+    onSuccess: (value) => {
+      setResult(value);
+    },
     onSettled: () => setRequestId(undefined),
   });
   return (
@@ -1275,7 +691,7 @@ function AiAssistant({
           </Button>
         )}
       </div>
-      <FormField label="查询目标" hint="生成前先预览上下文">
+      <FormField label="查询目标" hint="生成时在本地组装上下文（仅结构信息，不含表数据）；未配置 AI 时由本地确定性生成">
         {(ids) => (
           <textarea
             {...ids}
@@ -1291,28 +707,24 @@ function AiAssistant({
       </FormField>
       <div className="button-row">
         <Button
-          variant="secondary"
-          disabled={!connectionId || question.trim().length < 2 || inspect.isPending}
-          onClick={() => inspect.mutate()}
+          disabled={!connectionId || question.trim().length < 2 || generate.isPending}
+          busy={generate.isPending}
+          onClick={() => generate.mutate()}
         >
-          预览 AI 上下文
+          生成 SQL 草稿
         </Button>
-        {preview && (
-          <Button disabled={generate.isPending} onClick={() => generate.mutate()}>
-            确认并生成草稿
-          </Button>
-        )}
       </div>
       {preview && (
-        <Feedback tone="info" title={`将发送 ${preview.characterCount} 个字符`}>
+        <details className="ai-context-details">
+          <summary>本次使用的上下文：{preview.characterCount} 个字符（本地组装，不会外发）</summary>
           <p>类别：{preview.categories.join("、") || "无"}</p>
           <p>来源：{preview.sources.join("、") || "无"}</p>
           <p>脱敏：{preview.redactions.join("、") || "无需额外脱敏"}</p>
-        </Feedback>
+        </details>
       )}
-      {(inspect.isError || generate.isError) && (
+      {generate.isError && (
         <Feedback tone="error" title="AI SQL 未生成，数据库未执行">
-          {(inspect.error ?? generate.error)?.message}
+          {generate.error?.message}
         </Feedback>
       )}
       {result && (

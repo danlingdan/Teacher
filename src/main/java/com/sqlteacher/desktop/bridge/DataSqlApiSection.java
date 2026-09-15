@@ -61,7 +61,8 @@ final class DataSqlApiSection extends ApiSection {
     public Set<String> supportedMethods() {
         return Set.of(
             "data.connections", "data.connection.dialects", "data.connection.save",
-            "data.connection.test", "data.connection.select", "data.connection.delete", "data.schema",
+            "data.connection.test", "data.connection.select", "data.connection.delete",
+            "data.connection.databases", "data.schema",
             "sql.analyze", "sql.execute", "sql.result.page", "sql.history", "sql.history.clear",
             "sql.result.export"
         );
@@ -77,6 +78,7 @@ final class DataSqlApiSection extends ApiSection {
             case "data.connection.test" -> dataConnectionTest(params, cancellation);
             case "data.connection.select" -> dataConnectionSelect(params, cancellation);
             case "data.connection.delete" -> dataConnectionDelete(params, cancellation);
+            case "data.connection.databases" -> dataConnectionDatabases(params, cancellation);
             case "data.schema" -> dataSchema(params, cancellation);
             case "sql.analyze" -> sqlAnalyze(params, cancellation);
             case "sql.execute" -> sqlExecute(params, cancellation);
@@ -174,6 +176,63 @@ final class DataSqlApiSection extends ApiSection {
         core.getBean(DatabaseCredentialSession.class).forget(connectionId);
         core.getBean(ConnectionManagementService.class).removeProfile(connectionId);
         return mapper.createObjectNode().put("deleted", true).put("connectionId", connectionId);
+    }
+
+    /**
+     * v3.4.4：连接表单「列出数据库」。复用测试连接的凭据解析（空密码回退会话凭据），
+     * 成功后同样暂存凭据，让下一次列库无需重输密码；失败返回空列表 + 提示，不抛错阻塞表单。
+     */
+    private JsonNode dataConnectionDatabases(JsonNode params, CancellationToken cancellation) {
+        cancellation.throwIfCancelled();
+        DatabaseConnectionProfile profile = catalogProbeProfile(params);
+        char[] password = params.path("password").asText("").toCharArray();
+        char[] working = resolveTestPassword(context().getBean(DatabaseCredentialSession.class), profile, password);
+        try {
+            var core = context();
+            var catalog = core.getBean(com.sqlteacher.application.connection.DatabaseCatalogService.class)
+                .listDatabases(profile, working);
+            if (!catalog.databases().isEmpty() && !profile.dialect().fileBased()) {
+                core.getBean(DatabaseCredentialSession.class).remember(profile.id(), working);
+            }
+            ObjectNode result = mapper.createObjectNode();
+            result.set("items", mapper.valueToTree(catalog.databases()));
+            result.put("message", catalog.message());
+            return result;
+        } finally {
+            Arrays.fill(password, '\0');
+            if (working != password) {
+                Arrays.fill(working, '\0');
+            }
+        }
+    }
+
+    /**
+     * 目录探测只关心「能不能连上服务器」：不走 connectionProfile 的完整校验，
+     * databaseName 允许为空——它正是用户想通过列库填上的字段。id 沿用表单里的连接 ID
+     * （submitPayload 已生成），resolveTestPassword 才能命中本进程已验证的会话凭据。
+     */
+    private DatabaseConnectionProfile catalogProbeProfile(JsonNode params) {
+        DatabaseDialect dialect = DatabaseDialect.valueOf(requiredText(params, "dialect", 32));
+        String id = params.path("id").asText("");
+        if (id.isBlank()) {
+            id = "catalog-probe";
+        } else if (id.length() > 64) {
+            id = id.substring(0, 64);
+        }
+        DatabaseConnectionTarget target;
+        if (dialect.fileBased()) {
+            target = new FileDatabaseConnectionTarget(dialect,
+                Path.of(params.path("databasePath").asText(".")));
+        } else if (dialect.generic()) {
+            target = new GenericJdbcConnectionTarget(params.path("jdbcUrl").asText("jdbc:invalid"),
+                params.path("driverClass").asText(""),
+                Path.of(params.path("driverJar").asText(".")), params.path("username").asText(""));
+        } else {
+            target = new ServerConnectionTarget(dialect, requiredText(params, "host", 512),
+                params.path("port").asInt(dialect.defaultPort()), params.path("databaseName").asText(""),
+                requiredText(params, "username", 512));
+        }
+        return new DatabaseConnectionProfile(id, "catalog-probe", target, false, true, false);
     }
 
     private DatabaseConnectionProfile connectionProfile(JsonNode params) {

@@ -1,0 +1,9 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "assistant",
+  "description": "Capability for the knowledge assistant child window (v3.4.4)",
+  "windows": ["assistant-*"],
+  "permissions": [
+    "core:default"
+  ]
+}

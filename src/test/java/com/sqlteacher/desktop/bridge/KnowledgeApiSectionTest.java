@@ -197,20 +197,29 @@ class KnowledgeApiSectionTest {
     }
 
     @Test
-    void knowledgeBundleImportRequiresTeacherRole() {
-        try (var host = hostWithBeans(new ApiSectionTestSupport.FakeCloudSessions(),
-            fake(KnowledgeBundleService.class, Map.of()))) {
+    void knowledgeBundleImportIsOpenToEveryRole() throws Exception {
+        // v3.4.4：官方知识库是分发内容，学生/访客也可手动导入（用户 2026-09-16 确认）。
+        var sessions = new ApiSectionTestSupport.FakeCloudSessions();
+        List<Object[]> imports = new ArrayList<>();
+        var bundles = fake(KnowledgeBundleService.class, Map.of(
+            "importBundle", args -> {
+                imports.add(args);
+                return new KnowledgeBundleImportReport("official-db-concepts", "1.0.1",
+                    KnowledgeBundleSource.MANUAL, 8, 8, 0, 0, Instant.now());
+            }));
+        try (var host = hostWithBeans(sessions, bundles)) {
             KnowledgeApiSection section = new KnowledgeApiSection(host);
 
-            SecurityException error = assertThrows(SecurityException.class,
-                () -> section.handle("knowledge.bundle.import", mapper.createObjectNode()
-                    .put("path", "C:\\bundle.zip"), () -> false, ignored -> { }));
-            assertEquals("Teaching workspace requires teacher or administrator role", error.getMessage());
+            JsonNode result = section.handle("knowledge.bundle.import", mapper.createObjectNode()
+                .put("path", "C:\\bundle.zip"), () -> false, ignored -> { });
+
+            assertEquals("1.0.1", result.path("version").asText());
+            assertEquals(KnowledgeBundleSource.MANUAL, imports.get(0)[1]);
         }
     }
 
     @Test
-    void knowledgeBundleImportRunsAsManualSourceForTeachers() throws Exception {
+    void knowledgeBundleImportRunsAsManualSource() throws Exception {
         var sessions = new ApiSectionTestSupport.FakeCloudSessions();
         sessions.signIn(session("t-1", "教师账号", UserRole.TEACHER));
         List<Object[]> imports = new ArrayList<>();
@@ -236,14 +245,19 @@ class KnowledgeApiSectionTest {
     }
 
     @Test
-    void knowledgeBundleCheckRequiresTeacherRole() {
-        try (var host = hostWithBeans(new ApiSectionTestSupport.FakeCloudSessions(),
-            fake(KnowledgeBundleUpdateService.class, Map.of()))) {
+    void knowledgeBundleCheckIsOpenToEveryRole() throws Exception {
+        // v3.4.4：更新检查对未登录/学生会话同样可用。
+        var sessions = new ApiSectionTestSupport.FakeCloudSessions();
+        var updates = fake(KnowledgeBundleUpdateService.class, Map.of(
+            "check", args -> new KnowledgeBundleUpdateService.KnowledgeBundleUpdateStatus(
+                false, false, "official-db-concepts", "", "1.0.1", "数据库系统概念", 0, "已是最新。")));
+        try (var host = hostWithBeans(sessions, updates)) {
             KnowledgeApiSection section = new KnowledgeApiSection(host);
 
-            SecurityException error = assertThrows(SecurityException.class,
-                () -> section.handle("knowledge.bundle.check", mapper.createObjectNode(), () -> false, ignored -> { }));
-            assertEquals("Teaching workspace requires teacher or administrator role", error.getMessage());
+            JsonNode result = section.handle("knowledge.bundle.check", mapper.createObjectNode(), () -> false, ignored -> { });
+
+            assertFalse(result.path("updateAvailable").asBoolean());
+            assertEquals("1.0.1", result.path("localVersion").asText());
         }
     }
 

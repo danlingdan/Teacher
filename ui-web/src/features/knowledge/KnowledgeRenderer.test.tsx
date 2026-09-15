@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import KnowledgeRenderer from "./KnowledgeRenderer";
+import KnowledgeRenderer, { normalizeMarkdown } from "./KnowledgeRenderer";
 
 const requestMock = vi.fn();
 vi.mock("../../shared/ipc", () => ({
@@ -76,7 +76,8 @@ TABLE status
 
     render(<KnowledgeRenderer markdown={markdown} articleId="a-1" />);
 
-    expect(await screen.findByText(/图片不可用：缺失图/)).toBeInTheDocument();
+    // v3.4.4：失败占位直接显示桥端错误码，便于区分未打包/缺失/权限等原因。
+    expect(await screen.findByText(/图片不可用：KNOWLEDGE_ASSET_NOT_FOUND/)).toBeInTheDocument();
   });
 
   it("does not call the bridge for bundle images when no article context is present", () => {
@@ -86,5 +87,31 @@ TABLE status
 
     expect(screen.getByText(/图片不可用/)).toBeInTheDocument();
     expect(requestMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("normalizeMarkdown", () => {
+  it.each([
+    ["\\(E=mc^2\\)", "$E=mc^2$"],
+    ["\\[\nE=mc^2\n\\]", "$$\nE=mc^2\n$$"],
+  ])("converts Obsidian math delimiters to dollar syntax (%s)", (input, expected) => {
+    expect(normalizeMarkdown(input)).toBe(expected);
+  });
+
+  it("collapses stray spaces before closing bold markers", () => {
+    expect(normalizeMarkdown("由**表 (table) **构成")).toBe("由**表 (table)**构成");
+    expect(normalizeMarkdown("**正常加粗**保持不变")).toBe("**正常加粗**保持不变");
+  });
+
+  it("leaves dollar math and plain text untouched", () => {
+    expect(normalizeMarkdown("$x$ 与 $y$")).toBe("$x$ 与 $y$");
+    expect(normalizeMarkdown("普通文本")).toBe("普通文本");
+  });
+
+  it("never rewrites backslash brackets inside fenced or inline code", () => {
+    const fenced = "```\n\\(not math\\)\n\\[also not\\]\n```";
+    expect(normalizeMarkdown(fenced)).toBe(fenced);
+    const inline = "行内代码 `\\(x\\)` 与 \\(y\\)";
+    expect(normalizeMarkdown(inline)).toBe("行内代码 `\\(x\\)` 与 $y$");
   });
 });

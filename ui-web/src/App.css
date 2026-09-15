@@ -837,9 +837,10 @@ button {
   display: grid;
   gap: 18px;
 }
+/* v3.4.4：阅读卡吃满工作区高度（原先 70vh 上限在下方留出一大块空白）。 */
 .knowledge-main .knowledge-document {
-  min-height: 440px;
-  max-height: 70vh;
+  min-height: 480px;
+  max-height: calc(100vh - 136px);
   overflow: auto;
 }
 .import-panel {
@@ -3111,4 +3112,407 @@ kbd {
 }
 .report-diagnostics .setting-toggle small {
   display: block;
+}
+
+/* ---- v3.4.4 CTB：顶栏数据库连接入口 ---- */
+.connection-anchor {
+  position: relative;
+}
+.connection-trigger {
+  min-height: 38px;
+  max-width: 300px;
+  padding: 8px 11px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  color: var(--navy);
+  background: var(--surface);
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
+}
+.connection-trigger > span:first-child {
+  color: var(--teal);
+  font-size: 10px;
+}
+.connection-trigger .connection-chip-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 700;
+}
+.connection-trigger small {
+  color: var(--muted);
+  font-size: 10px;
+  white-space: nowrap;
+}
+/* 无连接时高对比引导：让新用户第一眼看到入口。 */
+.connection-trigger.missing {
+  border-color: var(--teal-line);
+  background: var(--teal-wash);
+  color: var(--teal-deep);
+}
+.connection-trigger.missing .connection-chip-label {
+  color: var(--teal-deep);
+}
+.connection-popover {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 10px);
+  right: 0;
+  width: min(430px, calc(100vw - 40px));
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface);
+  box-shadow: 0 20px 50px rgba(16, 24, 40, 0.2);
+}
+.connection-popover header strong,
+.connection-popover header small {
+  display: block;
+}
+.connection-popover header small {
+  margin-top: 3px;
+  color: var(--muted);
+}
+.connection-popover ul {
+  max-height: 340px;
+  margin: 12px 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+  overflow: auto;
+  list-style: none;
+}
+.connection-popover li {
+  padding: 7px 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-subtle);
+}
+.connection-popover li.current {
+  border-color: var(--teal-line);
+  background: var(--teal-wash);
+}
+.connection-popover li.connection-empty {
+  display: block;
+  padding: 12px;
+}
+.connection-row {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 2px;
+  border: 0;
+  color: var(--text-body);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+.connection-row strong {
+  display: block;
+  color: var(--navy);
+  font-size: 13px;
+}
+.connection-row small {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 10px;
+}
+.connection-row:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+.connection-current-chip {
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 8px;
+  color: var(--on-accent);
+  background: var(--teal-deep);
+  font-size: 9px;
+}
+.connection-row-actions {
+  display: grid;
+  gap: 4px;
+}
+.connection-row-actions .ui-button {
+  min-height: 0;
+  padding: 4px 8px;
+  font-size: 11px;
+}
+.connection-popover .connection-popover-footer {
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* ---- v3.4.4 CTB-2：数据页侧栏纯表结构 ---- */
+.schema-connection {
+  padding-bottom: 12px;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border-bottom: 1px solid var(--line-soft);
+}
+.schema-connection strong {
+  display: block;
+  margin-top: 2px;
+  color: var(--navy);
+  font-size: 14px;
+}
+.schema-connection small {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 10px;
+}
+.schema-empty {
+  display: grid;
+  gap: 10px;
+  justify-items: start;
+}
+
+/* ---- v3.4.4 KUI：阅读双栏、助教会话、检索强化、教师管理收拢 ---- */
+/* v3.4.4：知识助教独立子窗口。 */
+.assistant-window-page {
+  height: 100vh;
+  padding: 16px;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
+  background: var(--surface-2);
+}
+.assistant-window-page .knowledge-assistant {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.assistant-context-line {
+  margin: 0;
+  font-size: 12px;
+}
+.assistant-turns {
+  flex: 0 1 auto;
+  display: grid;
+  gap: 12px;
+  max-height: 46vh;
+  overflow: auto;
+  padding-right: 2px;
+}
+.assistant-turn {
+  padding: 12px;
+  display: grid;
+  gap: 8px;
+  border: 1px solid var(--line-soft);
+  border-radius: 12px;
+  background: var(--surface-subtle);
+}
+.assistant-turn .assistant-question {
+  margin: 0;
+  color: var(--navy);
+  font-size: 13px;
+  font-weight: 700;
+}
+.assistant-turn .ui-feedback {
+  margin: 0;
+}
+.assistant-pending {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.assistant-pending p {
+  margin: 0;
+}
+.assistant-citation {
+  width: 100%;
+  margin: 0;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 8px;
+  color: var(--navy);
+  background: var(--teal-soft);
+  text-align: left;
+  font-size: 12px;
+  line-height: 1.5;
+  cursor: pointer;
+}
+p.assistant-citation {
+  cursor: default;
+}
+.knowledge-doc-header {
+  margin-bottom: 10px;
+}
+.knowledge-doc-header h2 {
+  margin: 0 0 4px;
+  color: var(--navy);
+}
+.knowledge-doc-header p {
+  margin: 0;
+  font-size: 12px;
+}
+.search-results-head {
+  margin-bottom: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--muted);
+  font-size: 11px;
+}
+.search-results-head .search-clear {
+  padding: 2px 4px;
+  border: 0;
+  color: var(--teal-deep);
+  background: transparent;
+  font-size: 11px;
+  cursor: pointer;
+}
+.search-results mark {
+  padding: 0 1px;
+  border-radius: 3px;
+  color: var(--teal-deep);
+  background: var(--teal-wash);
+}
+.search-results button small {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 10px;
+}
+.teacher-admin {
+  border: 1px dashed var(--line-strong);
+  border-radius: 15px;
+  background: var(--surface);
+}
+.teacher-admin > summary {
+  padding: 14px 18px;
+  color: var(--navy);
+  font-weight: 800;
+  cursor: pointer;
+}
+.teacher-admin > summary small {
+  margin-left: 8px;
+  color: var(--muted);
+  font-weight: 400;
+}
+.teacher-admin-body {
+  padding: 0 18px 18px;
+  display: grid;
+  gap: 14px;
+}
+
+/* v3.4.4：课程节点折叠树与当前文档高亮。 */
+.course-tree .course-node {
+  border-top: 1px solid var(--line-soft);
+}
+.course-tree .course-node > summary {
+  padding: 10px 2px;
+  color: var(--navy);
+  font-size: 14px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.course-tree .course-node > summary small {
+  margin-left: 4px;
+  color: var(--muted);
+  font-weight: 400;
+}
+.course-tree li button:not(.ui-button).selected {
+  color: var(--navy);
+  background: var(--teal-soft);
+}
+.course-tree li button:not(.ui-button) small {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+/* v3.4.4：NL2SQL 上下文明细折叠与长内容换行，杜绝横向溢出。 */
+.ai-context-details {
+  padding: 8px 12px;
+  border: 1px solid var(--line-soft);
+  border-radius: 10px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.ai-context-details summary {
+  cursor: pointer;
+}
+.ai-context-details p {
+  margin: 4px 0 0;
+  overflow-wrap: anywhere;
+}
+.ai-panel .ui-feedback p {
+  overflow-wrap: anywhere;
+}
+.ai-panel pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* v3.4.4：连接清单行展示目标详情（文件名 / 主机）。 */
+.connection-row-target {
+  overflow: hidden;
+  max-width: 100%;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* v3.4.4：侧栏「知识库更新」入口（全角色可见）。 */
+.knowledge-bundle-update {
+  margin-top: 14px;
+  border-top: 1px solid var(--line-soft);
+}
+.knowledge-bundle-update > summary {
+  padding: 10px 2px;
+  color: var(--navy);
+  font-weight: 800;
+  cursor: pointer;
+}
+.knowledge-bundle-update > summary small {
+  margin-left: 6px;
+  color: var(--muted);
+  font-weight: 400;
+}
+.knowledge-bundle-update .bundle-update-body {
+  display: grid;
+  gap: 10px;
+  padding-bottom: 12px;
+}
+.knowledge-bundle-update .bundle-update-body > p {
+  margin: 0;
+  font-size: 11px;
+}
+.database-picker {
+  display: grid;
+  gap: 8px;
+}
+.database-picker select {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  color: var(--navy);
+  background: var(--surface);
+}
+
+/* v3.4.4 AIS：设置页 AI 供应商列表。 */
+.ai-provider-list {
+  display: grid;
+  gap: 10px;
+}
+.ai-provider-row {
+  display: grid;
+  gap: 8px;
+  justify-items: start;
+}
+.ai-provider-row .button-row {
+  justify-content: flex-start;
 }

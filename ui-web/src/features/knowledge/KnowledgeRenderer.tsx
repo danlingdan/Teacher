@@ -117,10 +117,58 @@ export default function KnowledgeRenderer({
         components={components}
         skipHtml
       >
-        {markdown}
+        {normalizeMarkdown(markdown)}
       </ReactMarkdown>
     </div>
   );
+}
+
+const STASH_PREFIX = "\u0000SQLTEACHER-STASH-";
+
+// v3.4.4：渲染前对 Obsidian 源做轻量归一化——
+// ① \(…\) 与 \[…\] 数学定界符转 $…$ / $$…$$（remark-math 只认 $ 定界，否则公式原样漏出）；
+// ② 「**加粗 **」闭合前的多余空格（CommonMark 不识别，粗体会失效）。
+// 围栏/行内代码先摘出再还原，避免误改代码内容。
+export function normalizeMarkdown(markdown: string): string {
+  if (!markdown.includes("\\(") && !markdown.includes("\\[") && !/\*\*[^*\n]+\s+\*\*/.test(markdown)) {
+    return markdown;
+  }
+  const stashed: string[] = [];
+  const stash = (value: string) => {
+    stashed.push(value);
+    return `${STASH_PREFIX}${stashed.length - 1}\u0000`;
+  };
+  const withoutCode = markdown
+    .replace(/```[\s\S]*?```|~~~[\s\S]*?~~~/g, stash)
+    .replace(/`[^`\n]*`/g, stash);
+  const normalized = withoutCode
+    .replace(/\\\(([\s\S]*?)\\\)/g, (_match, body: string) => `$${body}$`)
+    .replace(/\\\[([\s\S]*?)\\\]/g, (_match, body: string) => `$$${body}$$`)
+    .replace(/\*\*([^*\n]+?)\s+\*\*/g, (_match, body: string) => `**${body}**`);
+  return normalized.replace(
+    /\u0000SQLTEACHER-STASH-(\d+)\u0000/g,
+    (_match, index: string) => stashed[Number(index)] ?? "",
+  );
+}
+
+// v3.4.4：Java 桥并发许可有限（超限返回 BUSY），图片资产请求走小并发队列串行放行。
+const ASSET_CONCURRENCY = 2;
+const assetWaiters: Array<() => void> = [];
+let activeAssetRequests = 0;
+function acquireAssetSlot(): Promise<void> {
+  return new Promise((resolve) => {
+    if (activeAssetRequests < ASSET_CONCURRENCY) {
+      activeAssetRequests += 1;
+      resolve();
+    } else {
+      assetWaiters.push(resolve);
+    }
+  });
+}
+function releaseAssetSlot() {
+  const next = assetWaiters.shift();
+  if (next) next();
+  else activeAssetRequests -= 1;
 }
 
 // v3.4.3 OKB-7: official-bundle documents reference images as attachments/<docId>/<file>.
@@ -138,27 +186,47 @@ function KnowledgeImage({
   const isBundleAsset = typeof src === "string" && src.startsWith("attachments/");
   const [dataUrl, setDataUrl] = useState<string>();
   const [failed, setFailed] = useState(false);
+  const [failReason, setFailReason] = useState("");
   useEffect(() => {
     if (!isBundleAsset || !articleId || !src) return;
     let active = true;
+    let released = false;
     const path = decodeURIComponent(src.slice("attachments/".length));
-    localAppRequest<{ contentType: string; dataBase64: string }>("knowledge.article.asset", {
-      articleId,
-      path,
-    })
-      .then((value) => {
-        if (active) setDataUrl(`data:${value.contentType};base64,${value.dataBase64}`);
+    void acquireAssetSlot().then(() => {
+      // 卸载后才拿到配额：立刻归还，不发请求。
+      if (!active) {
+        releaseAssetSlot();
+        released = true;
+        return;
+      }
+      localAppRequest<{ contentType: string; dataBase64: string }>("knowledge.article.asset", {
+        articleId,
+        path,
       })
-      .catch(() => {
-        if (active) setFailed(true);
-      });
+        .then((value) => {
+          if (active) setDataUrl(`data:${value.contentType};base64,${value.dataBase64}`);
+        })
+        .catch((error: Error) => {
+          if (active) {
+            setFailed(true);
+            setFailReason(error.message);
+          }
+        })
+        .finally(() => {
+          if (!released) releaseAssetSlot();
+        });
+    });
     return () => {
       active = false;
     };
   }, [isBundleAsset, articleId, src]);
   if (!isBundleAsset) return <img src={src} alt={alt} loading="lazy" />;
   if (!articleId || failed)
-    return <span className="knowledge-image-missing">图片不可用：{alt || src}</span>;
+    return (
+      <span className="knowledge-image-missing">
+        图片不可用{failReason ? `：${failReason}` : `：${alt || src}`}
+      </span>
+    );
   if (!dataUrl) return <span className="knowledge-image-loading">正在加载图片…</span>;
   return <img src={dataUrl} alt={alt} loading="lazy" />;
 }

@@ -5,6 +5,12 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.sqlteacher.application.ai.AiContextCategory;
 import com.sqlteacher.application.ai.AiContextPreview;
+import com.sqlteacher.application.ai.AiProviderKind;
+import com.sqlteacher.application.ai.AiProviderProfile;
+import com.sqlteacher.application.ai.AiProviderProfileDraft;
+import com.sqlteacher.application.ai.AiProviderProfileService;
+import com.sqlteacher.application.ai.AiProviderProbeResult;
+import com.sqlteacher.application.ai.AiProviderProbeService;
 import com.sqlteacher.application.ai.AiTaskType;
 import com.sqlteacher.application.connection.ConnectionManagementService;
 import com.sqlteacher.application.connection.DatabaseConnectionProfile;
@@ -20,6 +26,7 @@ import com.sqlteacher.application.nl2sql.Nl2SqlRequest;
 import com.sqlteacher.application.nl2sql.Nl2SqlSafetyService;
 import org.junit.jupiter.api.Test;
 
+import java.net.URI;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -33,6 +40,7 @@ import static com.sqlteacher.desktop.bridge.ApiSectionTestSupport.hostWithoutCor
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * v3.4.0 REF-9: the AI section only drafts: grounded answers stream in bounded deltas, NL2SQL
@@ -177,5 +185,119 @@ class AiApiSectionTest {
         assertEquals("SELECT * FROM a", request.studentSql());
         assertEquals("QUERY", request.exerciseType());
         assertEquals(List.of("行数不一致"), request.feedback());
+    }
+
+    @Test
+    void aiProviderListShapesProfilesWithoutCredentialMaterial() throws Exception {
+        var profiles = List.of(new AiProviderProfile("deepseek", "DeepSeek",
+            AiProviderKind.OPENAI_COMPATIBLE, URI.create("https://api.deepseek.com"),
+            "deepseek-chat", true, "dpapi:device-reference"));
+        var service = fake(AiProviderProfileService.class, Map.of(
+            "profiles", args -> profiles,
+            "activeProfile", args -> Optional.of(profiles.get(0))));
+        try (var host = hostWithBeans(service)) {
+            AiApiSection section = new AiApiSection(host);
+
+            JsonNode result = section.handle("ai.provider.list", mapper.createObjectNode(),
+                () -> false, ignored -> { });
+
+            assertEquals(1, result.path("items").size());
+            assertEquals("deepseek", result.path("items").get(0).path("id").asText());
+            assertEquals(true, result.path("items").get(0).path("active").asBoolean());
+            assertEquals("deepseek", result.path("activeProfileId").asText());
+            // 安全校验：列表响应不携带任何密钥材料（凭据引用也不出桥）。
+            assertFalse(result.toString().toLowerCase().contains("credential"));
+            assertFalse(result.toString().contains("dpapi"));
+        }
+    }
+
+    @Test
+    void aiProviderSavePassesDraftAndZeroesTheCredential() throws Exception {
+        List<Object[]> saves = new ArrayList<>();
+        var service = fake(AiProviderProfileService.class, Map.of(
+            "save", args -> {
+                saves.add(args);
+                return null;
+            },
+            "profiles", args -> List.of(),
+            "activeProfile", args -> Optional.empty()));
+        try (var host = hostWithBeans(service)) {
+            AiApiSection section = new AiApiSection(host);
+            ObjectNode params = mapper.createObjectNode();
+            params.put("displayName", "DeepSeek");
+            params.put("kind", "OPENAI_COMPATIBLE");
+            params.put("endpoint", "https://api.deepseek.com");
+            params.put("model", "deepseek-chat");
+            params.put("credential", "sk-secret");
+
+            section.handle("ai.provider.save", params, () -> false, ignored -> { });
+
+            assertEquals(1, saves.size());
+            AiProviderProfileDraft draft = (AiProviderProfileDraft) saves.get(0)[0];
+            assertEquals("DeepSeek", draft.displayName());
+            assertEquals(URI.create("https://api.deepseek.com"), draft.endpoint());
+            char[] credential = (char[]) saves.get(0)[1];
+            // 调用返回后凭据数组被清零，不在前端可达的任何缓冲区残留。
+            assertEquals("\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000", new String(credential));
+        }
+    }
+
+    @Test
+    void aiProviderActivateDeactivateAndRemoveDispatchToTheService() throws Exception {
+        List<String> calls = new ArrayList<>();
+        var service = fake(AiProviderProfileService.class, Map.of(
+            "activate", args -> {
+                calls.add("activate:" + args[0]);
+                return null;
+            },
+            "deactivate", args -> {
+                calls.add("deactivate");
+                return null;
+            },
+            "remove", args -> {
+                calls.add("remove:" + args[0]);
+                return null;
+            },
+            "profiles", args -> List.of(),
+            "activeProfile", args -> Optional.empty()));
+        try (var host = hostWithBeans(service)) {
+            AiApiSection section = new AiApiSection(host);
+
+            section.handle("ai.provider.activate", mapper.createObjectNode().put("id", "p1"),
+                () -> false, ignored -> { });
+            section.handle("ai.provider.deactivate", mapper.createObjectNode(),
+                () -> false, ignored -> { });
+            section.handle("ai.provider.remove", mapper.createObjectNode().put("id", "p1"),
+                () -> false, ignored -> { });
+
+            assertEquals(List.of("activate:p1", "deactivate", "remove:p1"), calls);
+        }
+    }
+
+    @Test
+    void aiProviderTestProbesAndNeverEchoesTheCredential() throws Exception {
+        var probe = fake(AiProviderProbeService.class, Map.of(
+            "probe", args -> {
+                char[] credential = (char[]) args[1];
+                if (!new String(credential).equals("sk-live")) {
+                    throw new IllegalArgumentException("probe must receive the typed credential");
+                }
+                return new AiProviderProbeResult(true, List.of("deepseek-chat"), "连接成功。", null);
+            }));
+        try (var host = hostWithBeans(probe)) {
+            AiApiSection section = new AiApiSection(host);
+            ObjectNode params = mapper.createObjectNode();
+            params.put("displayName", "DeepSeek");
+            params.put("kind", "OPENAI_COMPATIBLE");
+            params.put("endpoint", "https://api.deepseek.com");
+            params.put("model", "deepseek-chat");
+            params.put("credential", "sk-live");
+
+            JsonNode result = section.handle("ai.provider.test", params, () -> false, ignored -> { });
+
+            assertTrue(result.path("success").asBoolean());
+            assertEquals(1, result.path("models").size());
+            assertFalse(result.toString().contains("sk-live"));
+        }
     }
 }

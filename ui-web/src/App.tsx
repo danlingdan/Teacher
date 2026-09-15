@@ -11,7 +11,6 @@ import {
   useNavigate,
 } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import "./App.css";
 import { healthQuery, homeQuery, sessionQuery, settingsPreferencesQuery } from "./app/queries";
 import { ErrorBoundary } from "./app/ErrorBoundary";
 import { RoleGuard } from "./app/RoleGuard";
@@ -19,12 +18,10 @@ import { Button, EmptyState, Feedback } from "./shared/ui";
 import { measure } from "./shared/telemetry";
 import { localAppRequest } from "./shared/ipc";
 import { formatInstant } from "./shared/instant";
-import type {
-  CloudNotification,
-  LearningActionSummary,
-} from "./shared/types";
+import type { CloudNotification, LearningActionSummary } from "./shared/types";
 import { deliverNativeNotifications } from "./shared/nativeNotifications";
-import { installEnglishUi } from "./shared/uiI18n";
+import TopbarConnection from "./features/data-sql/TopbarConnection";
+import { useAppearanceEffects } from "./shared/useAppearanceEffects";
 import {
   buildPaletteSections,
   usePaletteClasses,
@@ -92,10 +89,38 @@ export default function App() {
         />
         <Route element={<Shell />}>
           <Route index element={<Navigate to="/today" replace />} />
-          <Route path="today" element={<ErrorBoundary><TodayPage /></ErrorBoundary>} />
-          <Route path="knowledge" element={<ErrorBoundary><KnowledgePage /></ErrorBoundary>} />
-          <Route path="practice" element={<ErrorBoundary><EditorPage /></ErrorBoundary>} />
-          <Route path="data" element={<ErrorBoundary><DataSqlPage /></ErrorBoundary>} />
+          <Route
+            path="today"
+            element={
+              <ErrorBoundary>
+                <TodayPage />
+              </ErrorBoundary>
+            }
+          />
+          <Route
+            path="knowledge"
+            element={
+              <ErrorBoundary>
+                <KnowledgePage />
+              </ErrorBoundary>
+            }
+          />
+          <Route
+            path="practice"
+            element={
+              <ErrorBoundary>
+                <EditorPage />
+              </ErrorBoundary>
+            }
+          />
+          <Route
+            path="data"
+            element={
+              <ErrorBoundary>
+                <DataSqlPage />
+              </ErrorBoundary>
+            }
+          />
           <Route
             path="teaching"
             element={
@@ -106,8 +131,22 @@ export default function App() {
               </RoleGuard>
             }
           />
-          <Route path="cloud" element={<ErrorBoundary><CloudPage /></ErrorBoundary>} />
-          <Route path="settings" element={<ErrorBoundary><SettingsPage /></ErrorBoundary>} />
+          <Route
+            path="cloud"
+            element={
+              <ErrorBoundary>
+                <CloudPage />
+              </ErrorBoundary>
+            }
+          />
+          <Route
+            path="settings"
+            element={
+              <ErrorBoundary>
+                <SettingsPage />
+              </ErrorBoundary>
+            }
+          />
           <Route path="*" element={<Navigate to="/today" replace />} />
         </Route>
       </Routes>
@@ -117,59 +156,19 @@ export default function App() {
 
 function AppEffects() {
   const queryClient = useQueryClient();
-  const appearance = useQuery(settingsPreferencesQuery);
-  useEffect(() => {
-    const general = appearance.data?.general;
-    if (!general) return;
-    const media = window.matchMedia("(prefers-color-scheme: dark)");
-    const apply = () => {
-      const dark =
-        general.theme === "dark" ||
-        (general.theme === "system" && media.matches);
-      document.documentElement.classList.toggle("theme-dark", dark);
-      document.documentElement.classList.toggle(
-        "high-contrast",
-        general.highContrast,
-      );
-      document.documentElement.classList.toggle(
-        "reduced-motion",
-        general.reducedMotion,
-      );
-      document.documentElement.classList.toggle(
-        "density-compact",
-        general.density === "compact",
-      );
-      document.documentElement.classList.remove(
-        "font-modern",
-        "font-system",
-        "font-classic",
-      );
-      document.documentElement.classList.add(`font-${general.font}`);
-      document.documentElement.lang =
-        general.language === "en" ? "en" : "zh-CN";
-      document.documentElement.style.colorScheme = dark ? "dark" : "light";
-    };
-    apply();
-    media.addEventListener("change", apply);
-    return () => media.removeEventListener("change", apply);
-  }, [appearance.data]);
-  useEffect(
-    () =>
-      appearance.data?.general.language === "en"
-        ? installEnglishUi()
-        : undefined,
-    [appearance.data?.general.language],
-  );
+  // v3.4.4：外观类应用逻辑抽到 shared/useAppearanceEffects，与知识助教子窗口共用。
+  const appearance = useAppearanceEffects();
   useEffect(() => {
     const data = appearance.data;
     if (!data?.general.nativeNotificationsEnabled) return;
     void deliverNativeNotifications(data.notifications).then((delivered) => {
       if (delivered > 0)
-        void localAppRequest("settings.notifications.read").then(() =>
-          // 已读状态在后端偏好里，必须失效缓存让通知徽标与列表立即更新。
-          void queryClient.invalidateQueries({
-            queryKey: settingsPreferencesQuery.queryKey,
-          }),
+        void localAppRequest("settings.notifications.read").then(
+          () =>
+            // 已读状态在后端偏好里，必须失效缓存让通知徽标与列表立即更新。
+            void queryClient.invalidateQueries({
+              queryKey: settingsPreferencesQuery.queryKey,
+            }),
         );
     });
   }, [appearance.data, queryClient]);
@@ -219,8 +218,7 @@ function Shell() {
         unread: number;
         cached: boolean;
       }>("cloud.notifications", { refreshRemote: true }),
-    onSuccess: (data) =>
-      queryClient.setQueryData(["cloud", "notifications"], data),
+    onSuccess: (data) => queryClient.setQueryData(["cloud", "notifications"], data),
   });
   const markNotificationsRead = useMutation({
     mutationFn: async () => {
@@ -247,17 +245,13 @@ function Shell() {
   const visibleNavigation = useMemo(
     () =>
       navigation.filter(
-        (item) =>
-          !item.roles ||
-          (session.data && item.roles.includes(session.data.role)),
+        (item) => !item.roles || (session.data && item.roles.includes(session.data.role)),
       ),
     [session.data],
   );
   useEffect(() => {
     const started = performance.now();
-    requestAnimationFrame(() =>
-      measure("route.render", started, { route: location.pathname }),
-    );
+    requestAnimationFrame(() => measure("route.render", started, { route: location.pathname }));
   }, [location.pathname]);
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -281,9 +275,7 @@ function Shell() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [navigate, visibleNavigation]);
-  const active = navigation.find((item) =>
-    location.pathname.startsWith(item.to),
-  );
+  const active = navigation.find((item) => location.pathname.startsWith(item.to));
   return (
     <main className="app-shell">
       <aside className="sidebar">
@@ -300,9 +292,7 @@ function Shell() {
             <NavLink
               key={item.to}
               to={item.to}
-              className={({ isActive }) =>
-                isActive ? "nav-item active" : "nav-item"
-              }
+              className={({ isActive }) => (isActive ? "nav-item active" : "nav-item")}
             >
               <span className="nav-icon" aria-hidden="true">
                 {item.icon}
@@ -323,15 +313,11 @@ function Shell() {
           }
         >
           <span className="account-avatar">
-            {session.data?.authenticated
-              ? session.data.displayName.slice(0, 1).toUpperCase()
-              : "↗"}
+            {session.data?.authenticated ? session.data.displayName.slice(0, 1).toUpperCase() : "↗"}
           </span>
           <span>
             <strong>
-              {session.data?.authenticated
-                ? session.data.displayName
-                : "登录或创建账号"}
+              {session.data?.authenticated ? session.data.displayName : "登录或创建账号"}
             </strong>
             <small>
               {session.data?.authenticated
@@ -343,9 +329,7 @@ function Shell() {
         <div className="sidebar-status">
           <span className={health.data ? "status-dot ready" : "status-dot"} />
           <div>
-            <strong>
-              {health.data ? "本地核心已就绪" : "正在连接本地核心"}
-            </strong>
+            <strong>{health.data ? "本地核心已就绪" : "正在连接本地核心"}</strong>
             <small>离线可用</small>
           </div>
         </div>
@@ -357,6 +341,7 @@ function Shell() {
             <h1>{active?.label ?? "SQLTeacher"}</h1>
           </div>
           <div className="topbar-actions">
+            <TopbarConnection />
             <div className="notification-anchor">
               <button
                 type="button"
@@ -366,22 +351,15 @@ function Shell() {
                 onClick={() => {
                   const next = !notificationsOpen;
                   setNotificationsOpen(next);
-                  if (next && session.data?.authenticated)
-                    refreshCloudNotifications.mutate();
+                  if (next && session.data?.authenticated) refreshCloudNotifications.mutate();
                 }}
               >
                 <span aria-hidden="true">●</span>
                 <span>通知</span>
-                {unreadCount > 0 && (
-                  <b>{unreadCount > 99 ? "99+" : unreadCount}</b>
-                )}
+                {unreadCount > 0 && <b>{unreadCount > 99 ? "99+" : unreadCount}</b>}
               </button>
               {notificationsOpen && (
-                <section
-                  className="notification-popover"
-                  role="dialog"
-                  aria-label="通知中心"
-                >
+                <section className="notification-popover" role="dialog" aria-label="通知中心">
                   <header>
                     <div>
                       <strong>通知中心</strong>
@@ -404,9 +382,7 @@ function Shell() {
                     )}
                   </header>
                   {notifications.length === 0 ? (
-                    <p className="muted">
-                      暂无通知
-                    </p>
+                    <p className="muted">暂无通知</p>
                   ) : (
                     <ul>
                       {notifications.slice(0, 8).map((item) => (
@@ -441,11 +417,7 @@ function Shell() {
                 </section>
               )}
             </div>
-            <button
-              type="button"
-              className="palette-trigger"
-              onClick={() => setPaletteOpen(true)}
-            >
+            <button type="button" className="palette-trigger" onClick={() => setPaletteOpen(true)}>
               <span>搜索与跳转</span>
               <kbd>Ctrl K</kbd>
             </button>
@@ -513,19 +485,9 @@ function CommandPalette({
         classes: classes.data?.signedIn ? classes.data.classes : undefined,
         connections: connections.data?.items,
       }),
-    [
-      items,
-      deferredQuery,
-      exercises.data,
-      knowledge.data,
-      classes.data,
-      connections.data,
-    ],
+    [items, deferredQuery, exercises.data, knowledge.data, classes.data, connections.data],
   );
-  const flatEntries = useMemo(
-    () => sections.flatMap((section) => section.entries),
-    [sections],
-  );
+  const flatEntries = useMemo(() => sections.flatMap((section) => section.entries), [sections]);
   useEffect(() => {
     if (activeIndex >= flatEntries.length) setActiveIndex(0);
   }, [activeIndex, flatEntries.length]);
@@ -540,12 +502,7 @@ function CommandPalette({
         if (event.target === event.currentTarget) onClose();
       }}
     >
-      <section
-        className="command-palette"
-        role="dialog"
-        aria-modal="true"
-        aria-label="搜索与跳转"
-      >
+      <section className="command-palette" role="dialog" aria-modal="true" aria-label="搜索与跳转">
         <input
           autoFocus
           aria-label="搜索页面、题目、知识文档、班级与连接"
@@ -555,15 +512,10 @@ function CommandPalette({
           onKeyDown={(event) => {
             if (event.key === "ArrowDown" && flatEntries.length > 0) {
               event.preventDefault();
-              setActiveIndex(
-                (index) => (index + 1) % flatEntries.length,
-              );
+              setActiveIndex((index) => (index + 1) % flatEntries.length);
             } else if (event.key === "ArrowUp" && flatEntries.length > 0) {
               event.preventDefault();
-              setActiveIndex(
-                (index) =>
-                  (index - 1 + flatEntries.length) % flatEntries.length,
-              );
+              setActiveIndex((index) => (index - 1 + flatEntries.length) % flatEntries.length);
             } else if (event.key === "Enter" && activeEntry) {
               onNavigate(activeEntry.path);
             }
@@ -580,9 +532,7 @@ function CommandPalette({
                     type="button"
                     key={entry.key}
                     className={active ? "active" : ""}
-                    onMouseEnter={() =>
-                      setActiveIndex(flatEntries.indexOf(entry))
-                    }
+                    onMouseEnter={() => setActiveIndex(flatEntries.indexOf(entry))}
                     onClick={() => onNavigate(entry.path)}
                   >
                     <span>{entry.title}</span>
@@ -611,10 +561,8 @@ function TodayPage() {
   const navigate = useNavigate();
   const summary = useQuery(homeQuery);
   const dismiss = useMutation({
-    mutationFn: (actionId: string) =>
-      localAppRequest("home.action.dismiss", { actionId }),
-    onSuccess: () =>
-      void queryClient.invalidateQueries({ queryKey: homeQuery.queryKey }),
+    mutationFn: (actionId: string) => localAppRequest("home.action.dismiss", { actionId }),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: homeQuery.queryKey }),
   });
   function continueAction(action: LearningActionSummary) {
     if (action.type === "REVIEW_KNOWLEDGE" || action.knowledgePoint)
@@ -623,10 +571,7 @@ function TodayPage() {
       navigate(`/practice?activity=${encodeURIComponent(action.exerciseId)}`);
     else if (action.exerciseId)
       navigate(`/practice?exercise=${encodeURIComponent(action.exerciseId)}`);
-    else if (
-      action.type === "COMPLETE_ASSIGNMENT" ||
-      action.type === "REVIEW_FEEDBACK"
-    )
+    else if (action.type === "COMPLETE_ASSIGNMENT" || action.type === "REVIEW_FEEDBACK")
       navigate("/cloud");
     else navigate("/practice");
   }
@@ -641,11 +586,7 @@ function TodayPage() {
       </Feedback>
     );
   if (!summary.data)
-    return (
-      <EmptyState title="尚未连接">
-        请从 SQLTeacher 桌面应用打开。
-      </EmptyState>
-    );
+    return <EmptyState title="尚未连接">请从 SQLTeacher 桌面应用打开。</EmptyState>;
   const data = summary.data;
   const nextAction = data.actions[0];
   return (
@@ -654,19 +595,11 @@ function TodayPage() {
         <div>
           <p className="eyebrow">下一步学习</p>
           <h2>{data.actions[0]?.title ?? "当前没有待办动作"}</h2>
-          {data.actions[0]?.description && (
-            <p>{data.actions[0].description}</p>
-          )}
+          {data.actions[0]?.description && <p>{data.actions[0].description}</p>}
         </div>
         <div className="button-row">
-          {nextAction && (
-            <Button onClick={() => continueAction(nextAction)}>
-              继续学习
-            </Button>
-          )}
-          {!nextAction && (
-            <Button onClick={() => navigate("/practice")}>去练习一题</Button>
-          )}
+          {nextAction && <Button onClick={() => continueAction(nextAction)}>继续学习</Button>}
+          {!nextAction && <Button onClick={() => navigate("/practice")}>去练习一题</Button>}
           <Button
             variant="secondary"
             onClick={() =>
@@ -711,10 +644,7 @@ function TodayPage() {
                   <strong>{action.title}</strong>
                   <p>{action.description}</p>
                   <div className="button-row">
-                    <Button
-                      variant="secondary"
-                      onClick={() => continueAction(action)}
-                    >
+                    <Button variant="secondary" onClick={() => continueAction(action)}>
                       继续
                     </Button>
                     <Button
