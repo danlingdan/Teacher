@@ -4,13 +4,13 @@
 
 ## 当前基线
 
-- 当前代码版本：`3.4.4`（最新 tag）
-- 当前公开正式版本：[v3.4.4](releases/v3.4.4.md)（GitHub Release Latest）
-- 上一稳定版本线：[v3.4.0](releases/v3.4.0.md)（质量版本，被 3.4.2 接替；v3.4.1 计划随 v3.4.2 合并交付，未单独发布）
-- 当前迭代计划：[v3.4.4 知识页与助教体验、连接入口顶栏化与 AI 设置回归计划](plans/2026-09-15-v3.4.4-plan.md)（已实施，含三轮预览反馈修复，见 [v3.4.4 发布说明](releases/v3.4.4.md)；上一轮 [v3.4.3 知识检索重做、连接傻瓜化与官方知识库分发计划](plans/2026-09-15-v3.4.3-plan.md) 已发布）
+- 当前代码版本：`3.5.0`（最新 tag）
+- 当前公开正式版本：[v3.5.0](releases/v3.5.0.md)（GitHub Release Latest）
+- 上一稳定版本线：[v3.4.4](releases/v3.4.4.md)（体验补齐版本；v3.4.0–v3.4.4 均已公开发布）
+- 当前迭代计划：[v3.5.0 SQL 教学体验提升计划](plans/2026-09-16-v3.5.0-sql-teaching-experience-plan.md)（已发布，见 [v3.5.0 发布说明](releases/v3.5.0.md)；上一轮 [v3.4.4 计划](plans/2026-09-15-v3.4.4-plan.md) 已发布）
 - 最近一轮功能计划：[v3.3 SQL 教学能力全面提升计划](plans/2026-09-10-v3.3-sql-teaching-capability-plan.md)（已交付，v3.3.0–v3.3.4 均已发布）
 - 当前实施记录：[v3.0 正式版与无控制台启动](history/stages/stage27/2026-08-12-v3-ga-no-console-release-candidate.md)（v3.1 起实施要点内嵌于各发布说明与运维记录）
-- 当前生产部署记录：[v3.4.3 云端部署记录](operations/2026-09-15-v3.4.3-cloud-deployment.md)
+- 当前生产部署记录：[v3.4.3 云端部署记录](operations/2026-09-15-v3.4.3-cloud-deployment.md)（v3.5.0 无云端 API 变更；更新清单已随发布部署并经公网验证）
 
 > “当前”以 `pom.xml`、Git 标签和实际代码为准。计划文档记录制定时的基线，不应被当作实时状态页。
 
