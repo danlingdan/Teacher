@@ -29,6 +29,16 @@ infrastructure -> application/domain
 
 For SQLite or Cloud schema changes, update migration, persistence behavior, and tests together. Cover an empty database, the oldest supported schema, repeated startup, failed migration rollback, and rejection of a future schema. Keep derived learning state recomputable from authoritative events.
 
+## Iterate UI changes at the narrowest scope
+
+Do not run full packaging to preview UI effects. Pick the loop that matches the change:
+
+1. Pure UI (React/TypeScript/CSS/layout): run `npm --prefix ui-web run tauri dev` once and iterate through Vite HMR. Debug builds use the repository dev sidecar `ui-web/src-tauri/sidecar/` (see `sidecar_root` in `ui-web/src-tauri/src/lib.rs`), so the window talks to the real Java core and local data. Browser access to `http://localhost:1420` is intentionally refused (`DESKTOP_HOST_REQUIRED`); always preview from the Tauri shell.
+2. UI plus Java: `mvn -q -DskipTests package`, copy `target/Teacher-<pom.xml version>.jar` into `ui-web/src-tauri/sidecar/app/`, and restart `tauri dev`. Remove the previous version's jar first when the version changed; run `packaging/build-v3-sidecar.ps1` only when dependencies or the JDK change, and note it recreates the sidecar directory.
+3. Cloud-facing changes: verify server logic locally against the loopbound cloud API (`127.0.0.1:18080`); never point UI previews at production `https://api.sqlteacher.tech` and never edit the production server to preview an effect.
+
+`ui-web/src-tauri/sidecar/` is untracked; generate it once with `packaging/build-v3-sidecar.ps1` after a clean checkout. Full `packaging/package-v3.ps1` remains a release gate. Details: `docs/guide/24-v3-tauri-only.md`.
+
 ## Implement and verify
 
 1. Add or update focused tests with the behavior change.
