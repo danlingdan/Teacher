@@ -101,7 +101,27 @@ try {
         Sort-Object LastWriteTime -Descending |
         Select-Object -First 1
     if (-not $bundleZip) {
-        throw "No knowledge bundle zip in target\knowledge. Run packaging\build-knowledge-bundle.ps1 first; the bundled knowledge base is required for this release."
+        # v3.4.3: CI has no Obsidian source vault, so fall back to the versioned bundle committed
+        # under packaging/knowledge-bundles (the official distribution artifact). A locally
+        # rebuilt bundle in target\knowledge (or -KnowledgeSourceDirectory) always wins.
+        $committedRoot = Join-Path $projectRoot "packaging\knowledge-bundles"
+        $committedZip = Get-ChildItem -LiteralPath $committedRoot -Filter "*.zip" -File -ErrorAction SilentlyContinue |
+            Sort-Object LastWriteTime -Descending |
+            Select-Object -First 1
+        if ($committedZip) {
+            New-Item -ItemType Directory -Force -Path $knowledgeSourceRoot | Out-Null
+            Copy-Item -LiteralPath $committedZip.FullName -Destination $knowledgeSourceRoot -Force
+            $committedSha = "$($committedZip.FullName).sha256"
+            if (Test-Path -LiteralPath $committedSha) {
+                Copy-Item -LiteralPath $committedSha -Destination $knowledgeSourceRoot -Force
+            }
+            $bundleZip = Get-ChildItem -LiteralPath $knowledgeSourceRoot -Filter "*.zip" -File |
+                Sort-Object LastWriteTime -Descending |
+                Select-Object -First 1
+        }
+    }
+    if (-not $bundleZip) {
+        throw "No knowledge bundle zip in target\knowledge or packaging\knowledge-bundles. Run packaging\build-knowledge-bundle.ps1 first; the bundled knowledge base is required for this release."
     }
     $bundleChecksumFile = "$($bundleZip.FullName).sha256"
     if (Test-Path -LiteralPath $bundleChecksumFile) {
