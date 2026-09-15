@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button, Dialog, useToast } from "../../shared/ui";
 import { localAppRequest } from "../../shared/ipc";
 import { connectionsQuery } from "../../app/queries";
@@ -44,6 +44,18 @@ export default function TopbarConnection() {
 
   // 数据页侧栏「管理」按钮与空态「连接数据库」按钮都走这个通道唤起面板。
   useEffect(() => subscribeConnectionPanel(() => setOpen(true)), []);
+  // v3.5.0 反馈：面板点击外部即关闭；表单/删除确认对话框打开时不抢它们的交互。
+  const anchorRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open || editing || deleteTarget) return;
+    const onPointerDown = (event: MouseEvent) => {
+      if (!anchorRef.current?.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", onPointerDown);
+    return () => document.removeEventListener("mousedown", onPointerDown);
+  }, [open, editing, deleteTarget]);
 
   const refresh = () => client.invalidateQueries({ queryKey: connectionsQuery.queryKey });
   const select = useMutation({
@@ -76,7 +88,7 @@ export default function TopbarConnection() {
       ? "数据库连接…"
       : "连接数据库";
   return (
-    <div className="connection-anchor">
+    <div className="connection-anchor" ref={anchorRef}>
       <button
         type="button"
         className={`connection-trigger${current ? "" : " missing"}`}

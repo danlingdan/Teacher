@@ -14,6 +14,18 @@ vi.mock("../../shared/ipc", () => ({
   cancelLocalAppRequest: vi.fn(),
 }));
 
+// v3.5.0 SCH-2/WBE：假 Monaco 编辑器实例，捕获插入/格式化的 executeEdits 调用。
+const monacoEditorFake = vi.hoisted(() => ({
+  focus: vi.fn(),
+  getSelection: vi.fn(() => null),
+  getPosition: vi.fn(() => ({ lineNumber: 1, column: 1 })),
+  executeEdits: vi.fn(),
+  getModel: vi.fn(() => ({
+    getValue: () => "select sno from sc",
+    getFullModelRange: () => ({ start: 1 }),
+  })),
+}));
+
 vi.mock("monaco-editor/editor/editor.api", () => {
   const languages = {
     registerCompletionItemProvider: vi.fn(),
@@ -25,8 +37,17 @@ vi.mock("monaco-editor/editor/editor.api", () => {
 vi.mock("monaco-editor/editor/editor.worker?worker", () => ({ default: class {} }));
 vi.mock("monaco-editor/languages/definitions/sql/register", () => ({}));
 vi.mock("@monaco-editor/react", () => ({
-  default: () => <div data-testid="monaco-mock" />,
+  default: (props: { onMount?: (editor: unknown) => void }) => {
+    queueMicrotask(() => props.onMount?.(monacoEditorFake));
+    return <div data-testid="monaco-mock" />;
+  },
   loader: { config: vi.fn() },
+}));
+vi.mock("mermaid", () => ({
+  default: {
+    initialize: vi.fn(),
+    render: vi.fn(async () => ({ svg: "<svg role=\"img\" />" })),
+  },
 }));
 
 const dialectItems = {
@@ -259,7 +280,10 @@ describe("DataSqlPage schema sidebar", () => {
     const executeIndex = requestMock.mock.calls.findIndex((call) => call[0] === "sql.execute");
     expect(analyzeIndex).toBeGreaterThanOrEqual(0);
     expect(executeIndex).toBeGreaterThan(analyzeIndex);
-    expect(await screen.findByText("SCAN student")).toBeInTheDocument();
+    // v3.5.0 SFE-3：计划原文出现在结果表与解读块；解读块给出白话结论。
+    const occurrences = await screen.findAllByText("SCAN student");
+    expect(occurrences.length).toBeGreaterThanOrEqual(2);
+    expect(await screen.findByText(/对 student 全表扫描/)).toBeInTheDocument();
   });
 
   it("renders collapsed schema tables with a working filter and table count", async () => {
@@ -390,5 +414,130 @@ describe("DataSqlPage schema sidebar", () => {
     // 选择完成后选择框关闭，且不会因刷新回来的旧载荷再次弹出。
     await waitFor(() => expect(screen.queryByText("选择 SQL 安全模式")).not.toBeInTheDocument());
     expect(screen.queryByRole("button", { name: /教学模式（推荐）/ })).not.toBeInTheDocument();
+  });
+});
+
+// v3.5.0 SCH/WBE：表结构助学交互、关系图、格式化与模板。
+describe("DataSqlPage schema teaching interactions", () => {
+  const teachingSchema = {
+    tables: [
+      {
+        name: "Student",
+        columns: [
+          { name: "Sno", typeName: "INTEGER", primaryKey: true, nullable: false },
+          { name: "Sname", typeName: "TEXT", primaryKey: false, nullable: false },
+        ],
+        indexes: [],
+        foreignKeys: [],
+      },
+      {
+        name: "SC",
+        columns: [{ name: "Grade", typeName: "INTEGER", primaryKey: false, nullable: true }],
+        indexes: [],
+        foreignKeys: [
+          { columns: ["Sno"], referencedTable: "Student", referencedColumns: ["Sno"] },
+        ],
+      },
+    ],
+  };
+
+  beforeEach(() => {
+    requestMock.mockReset();
+    monacoEditorFake.focus.mockClear();
+    monacoEditorFake.executeEdits.mockClear();
+    requestMock.mockImplementation((method: string) => {
+      if (method === "data.connections") return Promise.resolve({ items: [demoConnection] });
+      if (method === "data.connection.dialects") return Promise.resolve(dialectItems);
+      if (method === "data.schema") return Promise.resolve(teachingSchema);
+      if (method === "data.table.sample") {
+        return Promise.resolve({
+          columns: ["Sno", "Sname"],
+          rows: [{ Sno: 20180001, Sname: "李勇" }],
+        });
+      }
+      throw new Error(`Unexpected request: ${method}`);
+    });
+  });
+
+  it("inserts table and column names into the editor on click (SCH-2)", async () => {
+    renderPage();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Sname" }));
+    expect(monacoEditorFake.focus).toHaveBeenCalled();
+    expect(monacoEditorFake.executeEdits).toHaveBeenCalledWith(
+      "sqlteacher-schema-insert",
+      [expect.objectContaining({ text: "Student.Sname" })],
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Student" }));
+    expect(monacoEditorFake.executeEdits).toHaveBeenCalledWith(
+      "sqlteacher-schema-insert",
+      [expect.objectContaining({ text: "Student" })],
+    );
+  });
+
+  it("previews five read-only sample rows per table via data.table.sample (SCH-2)", async () => {
+    renderPage();
+
+    // 每张表都有自己的「样例数据」动作；这里取第一张（Student）。
+    fireEvent.click((await screen.findAllByRole("button", { name: "样例数据" }))[0]!);
+    await waitFor(() =>
+      expect(requestMock).toHaveBeenCalledWith("data.table.sample", {
+        connectionId: "sqlite-demo",
+        table: "Student",
+      }),
+    );
+    expect(await screen.findByText("李勇")).toBeInTheDocument();
+    expect(screen.getByText("样例数据（前 5 行 · 只读）")).toBeInTheDocument();
+  });
+
+  it("renders foreign keys in the table section and opens the read-only diagram (SCH-1/3)", async () => {
+    renderPage();
+
+    // SC 表的外键分区展示「→ Student(Sno)」。
+    expect(await screen.findByText(/→ Student\(Sno\)/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "关系图" }));
+    expect(await screen.findByText("外键关系图（只读）")).toBeInTheDocument();
+  });
+
+  it("shows the no-foreign-key hint for connections without FKs (SCH-3)", async () => {
+    requestMock.mockImplementation((method: string) => {
+      if (method === "data.connections") return Promise.resolve({ items: [demoConnection] });
+      if (method === "data.connection.dialects") return Promise.resolve(dialectItems);
+      if (method === "data.schema") {
+        return Promise.resolve({ tables: [teachingSchema.tables[0]] });
+      }
+      throw new Error(`Unexpected request: ${method}`);
+    });
+    renderPage();
+
+    expect(await screen.findByText(/该连接没有外键关系/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "关系图" })).toBeDisabled();
+  });
+
+  it("formats the editor content through Monaco so undo restores it (WBE-1)", async () => {
+    renderPage();
+
+    const formatButton = await screen.findByRole("button", { name: "格式化" });
+    await waitFor(() => expect(formatButton).toBeEnabled());
+    fireEvent.click(formatButton);
+
+    expect(monacoEditorFake.executeEdits).toHaveBeenCalledWith(
+      "sqlteacher-format",
+      [expect.objectContaining({ text: "SELECT sno\nFROM sc" })],
+    );
+  });
+
+  it("inserts teaching templates at the cursor (WBE-2)", async () => {
+    renderPage();
+
+    fireEvent.click(await screen.findByText("模板"));
+    fireEvent.click(screen.getByRole("menuitem", { name: /三表 JOIN/ }));
+
+    expect(monacoEditorFake.executeEdits).toHaveBeenCalledWith(
+      "sqlteacher-schema-insert",
+      [expect.objectContaining({ text: expect.stringContaining("JOIN Course c ON sc.Cno = c.Cno") })],
+    );
   });
 });

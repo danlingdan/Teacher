@@ -172,7 +172,7 @@ public final class JdbcExercisePracticeService implements ExercisePracticeServic
         SqlExecutionResult execution = executeStudentSubmission(session.id(), sql, exercise);
         ExerciseEvaluationResult evaluation = execution.success()
             ? evaluationService.evaluate(exercise, dataset, sql)
-            : failedExecutionEvaluation(execution.duration());
+            : failedExecutionEvaluation(execution.duration(), execution.message());
         ExerciseAttemptStatus status = evaluation.passed()
             ? ExerciseAttemptStatus.PASSED
             : ExerciseAttemptStatus.FAILED;
@@ -306,7 +306,9 @@ public final class JdbcExercisePracticeService implements ExercisePracticeServic
         } catch (SQLException error) {
             return new SqlExecutionResult(
                 false, List.of(), List.of(), affectedRows, false,
-                "SQL 执行失败，请检查语法、表名和字段名；需要时可重置练习恢复初始数据。",
+                // v3.5.0 SFE-2：沙盒失败消息附带教学解读（submit 失败判分时会引用）。
+                SqlErrorTeachingAdvisor.append(
+                    "SQL 执行失败，请检查语法、表名和字段名；需要时可重置练习恢复初始数据。", error),
                 Duration.ofNanos(System.nanoTime() - started)
             );
         }
@@ -352,7 +354,7 @@ public final class JdbcExercisePracticeService implements ExercisePracticeServic
         } catch (SQLException error) {
             return new SqlExecutionResult(
                 false, List.of(), List.of(), 0, false,
-                "SQL 执行失败，请检查语法、表名和字段名。",
+                SqlErrorTeachingAdvisor.append("SQL 执行失败，请检查语法、表名和字段名。", error),
                 Duration.ofNanos(System.nanoTime() - started)
             );
         }
@@ -423,10 +425,16 @@ public final class JdbcExercisePracticeService implements ExercisePracticeServic
         return List.copyOf(messages);
     }
 
-    private static ExerciseEvaluationResult failedExecutionEvaluation(Duration duration) {
+    private static ExerciseEvaluationResult failedExecutionEvaluation(Duration duration, String executionMessage) {
+        // v3.5.0 SFE-2：提交失败的判分文案带上沙盒附带的 teaching note，前端反馈区才有解读可渲染。
+        String note = SqlErrorTeachingAdvisor.embeddedNote(executionMessage);
+        String criterion = "SQL 未能成功执行，请先修正语法或字段。";
+        if (!note.isBlank()) {
+            criterion = criterion + SqlErrorTeachingAdvisor.MARKER + note;
+        }
         return new ExerciseEvaluationResult(
             false,
-            List.of(new EvaluationCriterionResult("execution", false, "SQL 未能成功执行，请先修正语法或字段。")),
+            List.of(new EvaluationCriterionResult("execution", false, criterion)),
             "本次提交未通过：SQL 执行失败。",
             duration,
             "SQL_EXECUTION_FAILED",

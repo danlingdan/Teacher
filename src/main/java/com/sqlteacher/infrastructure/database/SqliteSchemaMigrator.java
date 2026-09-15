@@ -1264,6 +1264,21 @@ final class SqliteSchemaMigrator {
                 "create index if not exists course_knowledge_articles_bundle "
                     + "on course_knowledge_articles(bundle_id, bundle_doc_id)"
             )
+        ),
+        new Migration(
+            25,
+            "Store v3.5.0 chapter learning paths distributed with the exercise bank",
+            List.of(
+                """
+                    create table exercise_paths (
+                        id text primary key,
+                        name text not null,
+                        version integer not null check (version > 0),
+                        chapters_json text not null check (json_valid(chapters_json)),
+                        updated_at text not null default current_timestamp
+                    )
+                    """
+            )
         )
     );
 

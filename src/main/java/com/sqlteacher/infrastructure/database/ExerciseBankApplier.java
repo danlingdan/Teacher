@@ -1,6 +1,7 @@
 package com.sqlteacher.infrastructure.database;
 
 import com.sqlteacher.domain.SqlTeacherException;
+import com.sqlteacher.domain.exercise.ExerciseChapterPath;
 import com.sqlteacher.domain.exercise.ExerciseDataset;
 import com.sqlteacher.domain.exercise.ExerciseDefinition;
 import org.slf4j.Logger;
@@ -62,6 +63,12 @@ final class ExerciseBankApplier {
             }
             for (ExerciseDefinition exercise : bank.exercises()) {
                 if (writer.upsertExercise(connection, exercise) != ExerciseBankWriter.ExerciseOutcome.SKIPPED) {
+                    applied++;
+                }
+            }
+            // v3.5.0 EPATH-1：内置章节路径随题库一起应用；旧包没有路径块时为空列表。
+            for (ExerciseChapterPath path : bank.paths()) {
+                if (writer.upsertPath(connection, path) != ExerciseBankWriter.PathOutcome.SKIPPED) {
                     applied++;
                 }
             }

@@ -1,14 +1,20 @@
 package com.sqlteacher.infrastructure.database;
 
 import com.sqlteacher.domain.SqlTeacherException;
+import com.sqlteacher.domain.exercise.ExerciseChapterPath;
 import com.sqlteacher.domain.exercise.ExerciseDataset;
 import com.sqlteacher.domain.exercise.ExerciseDefinition;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 
 /**
  * Version-based upsert of exercise bank content into the stored catalog. Shared by the
@@ -90,6 +96,60 @@ final class ExerciseBankWriter {
                 );
             }
             return ExerciseOutcome.UPDATED;
+        }
+    }
+
+    /** v3.5.0 EPATH-1：章节路径按版本覆盖写入（高版本胜出），章节结构整体序列化为 JSON。 */
+    PathOutcome upsertPath(Connection connection, ExerciseChapterPath path) throws SQLException {
+        Integer storedVersion = null;
+        try (PreparedStatement statement = connection.prepareStatement(
+            "select version from exercise_paths where id = ?"
+        )) {
+            statement.setString(1, path.id());
+            try (ResultSet row = statement.executeQuery()) {
+                if (row.next()) {
+                    storedVersion = row.getInt("version");
+                }
+            }
+        }
+        if (storedVersion != null && storedVersion >= path.version()) {
+            return PathOutcome.SKIPPED;
+        }
+        try (PreparedStatement statement = connection.prepareStatement(
+            "insert into exercise_paths(id, name, version, chapters_json, updated_at)"
+                + " values (?, ?, ?, ?, ?)"
+                + " on conflict(id) do update set name = excluded.name,"
+                + " version = excluded.version, chapters_json = excluded.chapters_json,"
+                + " updated_at = excluded.updated_at"
+        )) {
+            statement.setString(1, path.id());
+            statement.setString(2, path.name());
+            statement.setInt(3, path.version());
+            statement.setString(4, encodeChaptersJson(path.chapters()));
+            statement.setString(5, Instant.now().toString());
+            statement.executeUpdate();
+            return storedVersion == null ? PathOutcome.INSERTED : PathOutcome.UPDATED;
+        }
+    }
+
+    enum PathOutcome {
+        INSERTED, UPDATED, SKIPPED
+    }
+
+    private static String encodeChaptersJson(List<ExerciseChapterPath.Chapter> chapters) {
+        List<Map<String, Object>> payload = new ArrayList<>();
+        for (ExerciseChapterPath.Chapter chapter : chapters) {
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("order", chapter.order());
+            item.put("title", chapter.title());
+            item.put("knowledgeTags", chapter.knowledgeTags());
+            item.put("exerciseIds", chapter.exerciseIds());
+            payload.add(item);
+        }
+        try {
+            return new ObjectMapper().writeValueAsString(payload);
+        } catch (com.fasterxml.jackson.core.JsonProcessingException error) {
+            throw new IllegalStateException("Chapter JSON encoding failed", error);
         }
     }
 }

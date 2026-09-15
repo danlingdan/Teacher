@@ -68,7 +68,7 @@ class DefaultSqlRiskAnalysisServiceTest {
         assertEquals(SqlRiskLevel.HIGH, result.level());
         assertTrue(result.confirmationRequired());
         assertEquals(2, result.reasons().size());
-        assertTrue(result.reasons().get(1).contains("backup"));
+        assertTrue(result.reasons().get(1).contains("备份"));
     }
 
     @Test

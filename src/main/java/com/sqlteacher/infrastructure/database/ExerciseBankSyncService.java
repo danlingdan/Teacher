@@ -90,7 +90,8 @@ public final class ExerciseBankSyncService {
         }
         List<ExerciseBankManifest.BlockRef> pendingDatasets = pendingRefs(manifest.datasets(), local.datasets());
         List<ExerciseBankManifest.BlockRef> pendingExercises = pendingRefs(manifest.exercises(), local.exercises());
-        int total = pendingDatasets.size() + pendingExercises.size();
+        List<ExerciseBankManifest.BlockRef> pendingPaths = pendingRefs(manifest.paths(), local.paths());
+        int total = pendingDatasets.size() + pendingExercises.size() + pendingPaths.size();
         if (total == 0) {
             try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + appDatabasePath)) {
                 recordAppliedVersion(connection, channel, manifest.bankVersion());
@@ -112,6 +113,11 @@ public final class ExerciseBankSyncService {
             done++;
             if (progress != null) progress.accept("已下载 " + done + "/" + total + " 项");
         }
+        for (ExerciseBankManifest.BlockRef ref : pendingPaths) {
+            packageText.append(fetchVerifiedBlock("PATH", ref, manifest.bankVersion()).content()).append('\n');
+            done++;
+            if (progress != null) progress.accept("已下载 " + done + "/" + total + " 项");
+        }
         if (progress != null) progress.accept("正在校验题库内容");
 
         ExerciseBankContent.ParsedBank bank = content.parse(packageText.toString());
@@ -130,6 +136,7 @@ public final class ExerciseBankSyncService {
         }
         int updatedDatasets = 0;
         int updatedExercises = 0;
+        int updatedPaths = 0;
         try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + appDatabasePath)) {
             connection.setAutoCommit(false);
             try {
@@ -145,6 +152,11 @@ public final class ExerciseBankSyncService {
                 for (var exercise : bank.exercises()) {
                     if (writer.upsertExercise(connection, exercise) != ExerciseBankWriter.ExerciseOutcome.SKIPPED) {
                         updatedExercises++;
+                    }
+                }
+                for (var path : bank.paths()) {
+                    if (writer.upsertPath(connection, path) != ExerciseBankWriter.PathOutcome.SKIPPED) {
+                        updatedPaths++;
                     }
                 }
                 recordAppliedVersion(connection, channel, manifest.bankVersion());
@@ -197,16 +209,21 @@ public final class ExerciseBankSyncService {
 
     private int countPending(ExerciseBankManifest manifest, LocalVersions local) {
         return pendingRefs(manifest.datasets(), local.datasets()).size()
-            + pendingRefs(manifest.exercises(), local.exercises()).size();
+            + pendingRefs(manifest.exercises(), local.exercises()).size()
+            + pendingRefs(manifest.paths(), local.paths()).size();
     }
 
-    private record LocalVersions(Map<String, Integer> datasets, Map<String, Integer> exercises) {
+    private record LocalVersions(
+        Map<String, Integer> datasets, Map<String, Integer> exercises, Map<String, Integer> paths
+    ) {
     }
 
     private LocalVersions readLocalVersions() {
         return new LocalVersions(
             localVersionsByTable("exercise_datasets"),
-            localVersionsByTable("exercises")
+            localVersionsByTable("exercises"),
+            // v3.5.0 EPATH-1：迁移 25 之前的本地库没有 exercise_paths 表，视为空集。
+            localVersionsByTableOrNull("exercise_paths")
         );
     }
 
@@ -221,6 +238,14 @@ public final class ExerciseBankSyncService {
             return versions;
         } catch (SQLException error) {
             throw new SqlTeacherException("EXERCISE_BANK_READ_FAILED", "无法读取本地题库版本。", error);
+        }
+    }
+
+    private Map<String, Integer> localVersionsByTableOrNull(String table) {
+        try {
+            return localVersionsByTable(table);
+        } catch (SqlTeacherException error) {
+            return Map.of();
         }
     }
 

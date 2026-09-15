@@ -194,7 +194,7 @@ public final class JdbcSqlExecutionService implements SqlExecutionService {
                     JdbcFailureClassifier.sqlState(exception),
                     JdbcFailureClassifier.vendorCode(exception)
             );
-            
+
             // Record failed SQL execution event
             Duration duration = Duration.between(start, Instant.now());
             eventService.recordSqlExecution(
@@ -205,10 +205,15 @@ public final class JdbcSqlExecutionService implements SqlExecutionService {
                     0,
                     failure.errorCode()
             );
-            
+
+            // v3.5.0 SFE-2：SQL 类失败追加教学解读；其余分类（连接/权限等）不掺教学文案。
+            String userMessage = failure.userMessage() + JdbcFailureClassifier.localDetail(exception);
+            if (failure == JdbcFailureClassifier.JdbcFailure.SQL) {
+                userMessage = SqlErrorTeachingAdvisor.append(userMessage, exception);
+            }
             throw new SqlTeacherException(
                     failure.errorCode(),
-                    failure.userMessage() + JdbcFailureClassifier.localDetail(exception)
+                    userMessage
             );
 
         } catch (RuntimeException exception) {

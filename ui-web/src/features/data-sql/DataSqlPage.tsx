@@ -12,6 +12,12 @@ import { formatInstant } from "../../shared/instant";
 import { connectionsQuery, settingsPreferencesQuery } from "../../app/queries";
 import { dialectLabel, useConnectionDialects } from "./ConnectionManager";
 import { openConnectionPanel } from "./connectionPanel";
+import { splitTeachingNote } from "../../shared/teachingNote";
+import { formatSql } from "./formatSql";
+import { buildErDiagramSource, hasForeignKeys } from "./erDiagram";
+import { SQL_TEMPLATES } from "./sqlTemplates";
+import { extractExplainDetails, interpretExplainRows } from "./explainPlan";
+import { MermaidDiagram } from "../knowledge/KnowledgeRenderer";
 import type {
   AiContextPreview,
   DatabaseTable,
@@ -80,6 +86,22 @@ export default function DataSqlPage() {
       .catch(() => undefined);
   }, [searchParams, items, selected?.id, client]);
   const [sql, setSql] = useState(initialSql);
+  // v3.5.0 SCH-2/WBE-1：侧栏插入与格式化都要操作 Monaco 实例（光标插入、保留撤销栈）。
+  const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
+  const insertIntoEditor = (fragment: string) => {
+    const editor = editorRef.current;
+    if (!editor) return;
+    editor.focus();
+    const selection = editor.getSelection();
+    const position = editor.getPosition();
+    const range =
+      selection ??
+      (position
+        ? new monaco.Range(position.lineNumber, position.column, position.lineNumber, position.column)
+        : new monaco.Range(1, 1, 1, 1));
+    // executeEdits 走 Monaco 的撤销栈，格式化与插入都可 Ctrl+Z 恢复。
+    editor.executeEdits("sqlteacher-schema-insert", [{ range, text: fragment, forceMoveMarkers: true }]);
+  };
   const schema = useQuery({
     queryKey: ["data", "schema", connectionId],
     queryFn: () => localAppRequest<{ tables: DatabaseTable[] }>("data.schema", { connectionId }),
@@ -135,6 +157,8 @@ export default function DataSqlPage() {
               tables={schema.data?.tables}
               isFetching={schema.isFetching}
               errorMessage={schema.isError ? schema.error.message : undefined}
+              connectionId={connectionId}
+              onInsert={insertIntoEditor}
             />
           </>
         )}
@@ -146,6 +170,10 @@ export default function DataSqlPage() {
           tables={schema.data?.tables ?? []}
           sql={sql}
           onSqlChange={setSql}
+          onEditorMount={(editor) => {
+            editorRef.current = editor;
+          }}
+          insertAtCursor={insertIntoEditor}
         />
         <AiAssistant connectionId={connectionId} onDraft={setSql} />
       </main>
@@ -174,16 +202,24 @@ export default function DataSqlPage() {
 // v3.4.1 SQL-1：表结构浏览器。每张表默认收起，支持按表名/列名过滤并显示表总数；
 // 树区域限高内滚，避免表多时侧栏被全部展开的列清单撑爆（原实现硬编码 <details open>）。
 // v3.4.3 CXN-3：整体外包一层可折叠「表结构」块，每表展开后分区显示列与索引。
+// v3.5.0 SCH-1/2/3：分区新增外键；表名/列名可点击插入编辑器光标处；表节点追加
+// 「样例数据」（Java 侧构造 SELECT，走既有只读路径）；头部新增「关系图」入口。
 function SchemaPanel({
   tables,
   isFetching,
   errorMessage,
+  connectionId,
+  onInsert,
 }: {
   tables?: DatabaseTable[];
   isFetching: boolean;
   errorMessage?: string;
+  connectionId: string;
+  onInsert: (fragment: string) => void;
 }) {
   const [filter, setFilter] = useState("");
+  const [sampleTable, setSampleTable] = useState<string>();
+  const [diagramOpen, setDiagramOpen] = useState(false);
   const keyword = filter.trim().toLowerCase();
   const visible = (tables ?? []).filter(
     (table) =>
@@ -191,6 +227,16 @@ function SchemaPanel({
       table.name.toLowerCase().includes(keyword) ||
       table.columns.some((column) => column.name.toLowerCase().includes(keyword)),
   );
+  const sample = useQuery({
+    queryKey: ["data", "table-sample", connectionId, sampleTable],
+    queryFn: () =>
+      localAppRequest<{ columns: string[]; rows: Array<Record<string, unknown>> }>(
+        "data.table.sample",
+        { connectionId, table: sampleTable },
+      ),
+    enabled: Boolean(connectionId && sampleTable),
+  });
+  // preventDefault 阻止 summary 的默认折叠行为，让按钮点击只做插入/预览。
   return (
     <details className="schema-browser" open>
       <summary className="schema-browser-head">
@@ -198,13 +244,32 @@ function SchemaPanel({
         {tables && <span className="schema-count">共 {tables.length} 张表</span>}
       </summary>
       {tables && tables.length > 0 && (
-        <input
-          className="schema-filter"
-          aria-label="筛选表或列"
-          placeholder="输入表名或列名筛选"
-          value={filter}
-          onChange={(event) => setFilter(event.target.value)}
-        />
+        <>
+          <input
+            className="schema-filter"
+            aria-label="筛选表或列"
+            placeholder="输入表名或列名筛选"
+            value={filter}
+            onChange={(event) => setFilter(event.target.value)}
+          />
+          <div className="button-row">
+            <Button
+              variant="secondary"
+              disabled={!hasForeignKeys(tables)}
+              title={
+                hasForeignKeys(tables)
+                  ? "按外键元数据生成只读 ER 简图"
+                  : "该连接没有外键关系"
+              }
+              onClick={() => setDiagramOpen(true)}
+            >
+              关系图
+            </Button>
+          </div>
+        </>
+      )}
+      {tables && tables.length > 0 && !hasForeignKeys(tables) && (
+        <p className="muted">该连接没有外键关系，暂无法生成关系图。</p>
       )}
       {isFetching && <p className="muted">正在读取表结构…</p>}
       {tables && tables.length === 0 && <p className="muted">当前连接没有表。</p>}
@@ -219,15 +284,48 @@ function SchemaPanel({
       <div className="schema-tree">
         {visible.map((table) => {
           const indexes = table.indexes ?? [];
+          const foreignKeys = table.foreignKeys ?? [];
           return (
             <details key={table.name}>
-              <summary>{table.name}</summary>
+              <summary>
+                <button
+                  type="button"
+                  className="schema-insert"
+                  title={`点击插入 ${table.name} 到编辑器`}
+                  onClick={(event) => {
+                    event.preventDefault();
+                    onInsert(table.name);
+                  }}
+                >
+                  {table.name}
+                </button>
+                <button
+                  type="button"
+                  className="schema-sample"
+                  title="预览 5 行样例数据（只读）"
+                  onClick={(event) => {
+                    event.preventDefault();
+                    setSampleTable((current) =>
+                      current === table.name ? undefined : table.name,
+                    );
+                  }}
+                >
+                  样例数据
+                </button>
+              </summary>
               <div className="schema-table-section">
                 <p className="schema-section-label">列</p>
                 <ul>
                   {table.columns.map((column) => (
                     <li key={column.name}>
-                      <strong>{column.name}</strong>
+                      <button
+                        type="button"
+                        className="schema-insert"
+                        title={`点击插入 ${table.name}.${column.name} 到编辑器`}
+                        onClick={() => onInsert(`${table.name}.${column.name}`)}
+                      >
+                        {column.name}
+                      </button>
                       <span>
                         {column.typeName}
                         {column.primaryKey ? " · PK" : ""}
@@ -255,10 +353,84 @@ function SchemaPanel({
                   </ul>
                 )}
               </div>
+              <div className="schema-table-section">
+                <p className="schema-section-label">外键</p>
+                {foreignKeys.length === 0 ? (
+                  <p className="muted">无</p>
+                ) : (
+                  <ul>
+                    {foreignKeys.map((foreignKey, index) => (
+                      <li key={index}>
+                        <strong>{foreignKey.columns.join(", ")}</strong>
+                        <span>
+                          → {foreignKey.referencedTable}({foreignKey.referencedColumns.join(", ")})
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+              {sampleTable === table.name && (
+                <div className="schema-table-section">
+                  <p className="schema-section-label">样例数据（前 5 行 · 只读）</p>
+                  {sample.isPending && <p className="muted">正在读取样例…</p>}
+                  {sample.isError && (
+                    <Feedback tone="error" title="样例读取失败">
+                      {sample.error.message}
+                    </Feedback>
+                  )}
+                  {sample.data &&
+                    (sample.data.columns.length === 0 ? (
+                      <p className="muted">该表没有可展示的数据。</p>
+                    ) : (
+                      <div
+                        className="virtual-table schema-sample-table"
+                        role="region"
+                        aria-label={`${table.name} 样例数据`}
+                        tabIndex={0}
+                      >
+                        <table>
+                          <thead>
+                            <tr>
+                              {sample.data.columns.map((column) => (
+                                <th key={column}>{column}</th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {sample.data.rows.map((row, rowIndex) => (
+                              <tr key={rowIndex}>
+                                {sample.data!.columns.map((column) => (
+                                  <td key={column}>{String(row[column] ?? "NULL")}</td>
+                                ))}
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    ))}
+                </div>
+              )}
             </details>
           );
         })}
       </div>
+      {/* v3.5.0 反馈：关系图需要大画布，wide 弹窗 + 限高滚动，SVG 按容器宽度缩放。 */}
+      <Dialog
+        open={diagramOpen}
+        title="外键关系图（只读）"
+        onClose={() => setDiagramOpen(false)}
+        wide
+      >
+        <div className="diagram-dialog-body">
+          {tables && hasForeignKeys(tables) ? (
+            <MermaidDiagram source={buildErDiagramSource(tables)} />
+          ) : (
+            <p className="muted">该连接没有外键关系。</p>
+          )}
+        </div>
+        <p className="muted">简图由外键元数据生成：箭头从子表指向被引用的父表，标签为子表侧列名。</p>
+      </Dialog>
     </details>
   );
 }
@@ -269,12 +441,16 @@ function SqlWorkbench({
   tables,
   sql,
   onSqlChange,
+  onEditorMount,
+  insertAtCursor,
 }: {
   connectionId: string;
   dialect: string;
   tables: DatabaseTable[];
   sql: string;
   onSqlChange: (sql: string) => void;
+  onEditorMount: (editor: monaco.editor.IStandaloneCodeEditor) => void;
+  insertAtCursor: (fragment: string) => void;
 }) {
   const client = useQueryClient();
   const toast = useToast();
@@ -284,6 +460,10 @@ function SqlWorkbench({
   const [historyOpen, setHistoryOpen] = useState(false);
   // 待确认执行的语句：常规流程是编辑器里的 sql；执行计划兜底确认时为 explain 包裹语句。
   const [confirmStatement, setConfirmStatement] = useState<string>();
+  // v3.5.0 SFE-3：最近一次执行计划的白话解读；普通执行会清掉，避免和普通结果混淆。
+  const [explainReading, setExplainReading] = useState<
+    ReturnType<typeof interpretExplainRows>
+  >([]);
   const execute = useMutation<SqlPage, Error, { statement: string; confirmationToken: string }>({
     mutationFn: ({ statement, confirmationToken }) =>
       localAppRequest<SqlPage>("sql.execute", {
@@ -296,7 +476,13 @@ function SqlWorkbench({
     onSuccess: (value) => {
       setPage(value);
       setConfirmOpen(false);
+      setExplainReading([]);
       void client.invalidateQueries({ queryKey: ["sql", "history"] });
+    },
+    // v3.5.0 反馈：执行失败时错误已在页面反馈区展示，弹窗不能停留在打开状态。
+    onSettled: () => {
+      setConfirmOpen(false);
+      setConfirmStatement(undefined);
     },
   });
   // 执行计划（W3.1）：对当前语句自动包裹 EXPLAIN QUERY PLAN，只读展示计划行。
@@ -331,6 +517,7 @@ function SqlWorkbench({
     onSuccess: (value) => {
       if (!value) return;
       setPage(value);
+      setExplainReading(interpretExplainRows(extractExplainDetails(value.rows)));
       void client.invalidateQueries({ queryKey: ["sql", "history"] });
     },
   });
@@ -375,6 +562,41 @@ function SqlWorkbench({
     sqlWorkbenchSymbols = names;
   }, [names]);
   const [editorTheme, syncEditorTheme] = useMonacoEditorTheme();
+  const editorRefForWorkbench = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
+  // v3.5.0 反馈：模板下拉点击外部自动收起，与其他弹层行为一致。
+  const templateMenuRef = useRef<HTMLDetailsElement>(null);
+  useEffect(() => {
+    const menu = templateMenuRef.current;
+    if (!menu) return;
+    const onPointerDown = (event: MouseEvent) => {
+      if (menu.open && !menu.contains(event.target as Node)) {
+        menu.removeAttribute("open");
+      }
+    };
+    document.addEventListener("mousedown", onPointerDown);
+    return () => document.removeEventListener("mousedown", onPointerDown);
+  }, []);
+  // v3.5.0 WBE-1：格式化走 Monaco executeEdits 整体替换，Ctrl+Z 一步恢复；
+  // 编辑器不可用时退化为直接替换文本状态。
+  const formatInEditor = () => {
+    const editor = editorRefForWorkbench.current;
+    if (!editor) {
+      onSqlChange(formatSql(sql));
+      return;
+    }
+    const model = editor.getModel();
+    if (!model) return;
+    const formatted = formatSql(model.getValue());
+    if (formatted === model.getValue()) return;
+    editor.focus();
+    editor.executeEdits("sqlteacher-format", [
+      { range: model.getFullModelRange(), text: formatted },
+    ]);
+    onSqlChange(formatted);
+  };
+  // v3.5.0 SFE-2：执行错误可能附带教学解读（Java 侧映射），拆分后独立成块渲染。
+  const executionError = analyze.error ?? execute.error ?? explainPlan.error;
+  const { main: errorMessage, note: errorNote } = splitTeachingNote(executionError?.message);
   return (
     <section className="content-card sql-workbench">
       <header className="editor-toolbar">
@@ -384,6 +606,34 @@ function SqlWorkbench({
         </div>
         <div className="button-row">
           <span className="policy-chip">最多 500 行 · 10 秒</span>
+          <Button
+            variant="secondary"
+            disabled={!sql.trim()}
+            title="本地格式化：关键字大写、子句换行缩进（纯文本重排，不改语义，可撤销）"
+            onClick={() => formatInEditor()}
+          >
+            格式化
+          </Button>
+          <details className="template-menu" ref={templateMenuRef}>
+            <summary>模板</summary>
+            <div className="template-list" role="menu" aria-label="教学语句模板">
+              {SQL_TEMPLATES.map((template) => (
+                <button
+                  key={template.label}
+                  type="button"
+                  role="menuitem"
+                  title={template.hint}
+                  onClick={(event) => {
+                    insertAtCursor(template.template);
+                    event.currentTarget.closest("details")?.removeAttribute("open");
+                  }}
+                >
+                  <strong>{template.label}</strong>
+                  <span>{template.hint}</span>
+                </button>
+              ))}
+            </div>
+          </details>
           <Button
             variant="secondary"
             disabled={
@@ -411,6 +661,10 @@ function SqlWorkbench({
           height="100%"
           theme={editorTheme}
           beforeMount={syncEditorTheme}
+          onMount={(editor) => {
+            onEditorMount(editor);
+            editorRefForWorkbench.current = editor;
+          }}
           language="sql"
           path={`sqlteacher://sql/${connectionId || "none"}`}
           value={sql}
@@ -443,15 +697,37 @@ function SqlWorkbench({
         </div>
       )}
       {(analyze.isError || execute.isError || explainPlan.isError) && (
-        <Feedback tone="error" title="SQL 未执行">
-          {(analyze.error ?? execute.error ?? explainPlan.error)?.message}
-        </Feedback>
+        <>
+          <Feedback tone="error" title="SQL 未执行">
+            {errorMessage}
+          </Feedback>
+          {errorNote && (
+            <Feedback tone="info" title="教学解读（常见原因，供参考）">
+              {errorNote}
+            </Feedback>
+          )}
+        </>
       )}
       <SqlResults
         page={page}
         pending={execute.isPending || nextPage.isPending}
         onPage={(value) => nextPage.mutate(value)}
       />
+      {explainReading.length > 0 && (
+        <section className="explain-reading">
+          <p className="eyebrow">执行计划解读（白话结论，仅供理解）</p>
+          <ul>
+            {explainReading.map((item) => (
+              <li key={item.detail}>
+                <code>{item.detail}</code>
+                <span>
+                  {item.reading}。{item.hint}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
       <details
         className="sql-history"
         open={historyOpen}

@@ -186,4 +186,11 @@ public class DatabaseExerciseServiceConfig {
                                                            LearningEventOwnerProvider ownerProvider) {
         return new JdbcExerciseProgressService(connectionFactory, ownerProvider);
     }
+
+    @Bean
+    public com.sqlteacher.application.exercise.ExercisePathService exercisePathService(
+            JdbcConnectionFactory connectionFactory,
+            LearningEventOwnerProvider ownerProvider) {
+        return new com.sqlteacher.infrastructure.database.JdbcExercisePathService(connectionFactory, ownerProvider);
+    }
 }

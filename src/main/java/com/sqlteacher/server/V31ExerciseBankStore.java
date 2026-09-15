@@ -83,6 +83,12 @@ final class V31ExerciseBankStore {
                             content.encodeExerciseBlock(exercise), bankVersion);
                         insert.addBatch();
                     }
+                    // v3.5.0 EPATH-1：章节路径块随版本一起分发。
+                    for (var path : bank.paths()) {
+                        bindBlock(insert, normalizedChannel, "PATH", path.id(), path.version(),
+                            content.encodePathBlock(path), bankVersion);
+                        insert.addBatch();
+                    }
                     insert.executeBatch();
                 }
                 snapshotHistory(connection, normalizedChannel, bankVersion);
@@ -203,6 +209,7 @@ final class V31ExerciseBankStore {
             result.put("bankVersion", currentVersion(connection, normalizedChannel));
             result.put("datasets", blockRefs(connection, normalizedChannel, "DATASET"));
             result.put("exercises", blockRefs(connection, normalizedChannel, "EXERCISE"));
+            result.put("paths", blockRefs(connection, normalizedChannel, "PATH"));
             return result;
         } catch (SQLException error) {
             throw new SqlTeacherException("EXERCISE_BANK_READ_FAILED", "Failed to read the exercise bank.", error);
@@ -215,7 +222,7 @@ final class V31ExerciseBankStore {
 
     Map<String, Object> block(String channel, String type, String id) {
         String normalizedChannel = normalizeChannel(channel);
-        if (!"DATASET".equals(type) && !"EXERCISE".equals(type)) {
+        if (!"DATASET".equals(type) && !"EXERCISE".equals(type) && !"PATH".equals(type)) {
             throw new SqlTeacherException("EXERCISE_BANK_INVALID", "Unknown exercise bank block type.");
         }
         try (Connection connection = open();

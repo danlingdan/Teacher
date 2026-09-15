@@ -49,7 +49,8 @@ export function EmptyState({ title, children, action }: { title: string; childre
   return <section className="ui-empty"><h2>{title}</h2>{children && <div>{children}</div>}{action}</section>;
 }
 
-export function Dialog({ open, title, onClose, children }: { open: boolean; title: string; onClose: () => void; children: ReactNode }) {
+// v3.5.0 反馈：wide 变体给图表类内容（如外键关系图）更宽的画布。
+export function Dialog({ open, title, onClose, children, wide = false }: { open: boolean; title: string; onClose: () => void; children: ReactNode; wide?: boolean }) {
   const titleId = useId();
   const closeRef = useRef<HTMLButtonElement>(null);
   useEffect(() => { if (open) closeRef.current?.focus(); }, [open]);
@@ -60,7 +61,7 @@ export function Dialog({ open, title, onClose, children }: { open: boolean; titl
     return () => window.removeEventListener("keydown", close);
   }, [open, onClose]);
   if (!open) return null;
-  return <div className="ui-dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><section className="ui-dialog" role="dialog" aria-modal="true" aria-labelledby={titleId}><header><h2 id={titleId}>{title}</h2><button ref={closeRef} aria-label="关闭对话框" onClick={onClose}>×</button></header>{children}</section></div>;
+  return <div className="ui-dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><section className={wide ? "ui-dialog ui-dialog-wide" : "ui-dialog"} role="dialog" aria-modal="true" aria-labelledby={titleId}><header><h2 id={titleId}>{title}</h2><button ref={closeRef} aria-label="关闭对话框" onClick={onClose}>×</button></header>{children}</section></div>;
 }
 
 export function DataTable<T>({ caption, rows, columns, rowKey }: { caption: string; rows: T[]; columns: Array<{ key: string; title: string; render: (row: T) => ReactNode }>; rowKey?: (row: T) => string }) {

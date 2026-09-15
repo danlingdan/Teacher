@@ -1,6 +1,7 @@
 package com.sqlteacher.infrastructure.database;
 
 import com.sqlteacher.domain.SqlTeacherException;
+import com.sqlteacher.domain.exercise.ExerciseChapterPath;
 import com.sqlteacher.domain.exercise.ExerciseDataset;
 import com.sqlteacher.domain.exercise.ExerciseDefinition;
 import com.sqlteacher.domain.exercise.ExerciseDifficulty;
@@ -25,8 +26,13 @@ final class ExerciseTextCodec {
     private static final String FORMAT_MARKER = "# SQLTeacherExercisePackage";
     private static final String DATASET_HEADER = "===[DATASET]===";
     private static final String EXERCISE_HEADER = "===[EXERCISE]===";
+    // v3.5.0 EPATH-1：章节路径块。旧客户端不认识这个头部时会把其中的行当噪音拒绝，
+    // 但同步通道只下发各自清单里的块，旧清单没有 PATH 引用，旧客户端永远不会见到它。
+    private static final String PATH_HEADER = "===[PATH]===";
     private static final Pattern MARKER_PATTERN = Pattern.compile("^# SQLTeacherExercisePackage\\s+(\\d+)$");
     private static final Pattern LABEL_PATTERN = Pattern.compile("^([A-Z][A-Z0-9_]*):(.*)$");
+    /** CHAPTERS 行格式：序号|章节名|知识点标签（逗号分隔）|题目 ID（逗号分隔）。 */
+    private static final Pattern CHAPTER_LINE_PATTERN = Pattern.compile("(\\d+)\\|([^|]+)\\|([^|]*)\\|(.*)");
 
     private static final Set<String> DATASET_LABELS = Set.of("ID", "NAME", "VERSION", "SQL");
     private static final Set<String> EXERCISE_LABELS = Set.of(
@@ -36,7 +42,8 @@ final class ExerciseTextCodec {
         "TYPE", "VERIFY", "ALLOWED", "AFFECTED", "TXN", "PROBE",
         "WEIGHTS", "REVEAL", "EXPECT_COLUMNS", "PLAN_KEYWORDS"
     );
-    private static final Set<String> MULTILINE_LABELS = Set.of("SQL", "DESCRIPTION", "HINTS", "VERIFY", "PROBE");
+    private static final Set<String> PATH_LABELS = Set.of("ID", "NAME", "VERSION", "CHAPTERS");
+    private static final Set<String> MULTILINE_LABELS = Set.of("SQL", "DESCRIPTION", "HINTS", "VERIFY", "PROBE", "CHAPTERS");
 
     String encode(List<ExerciseDataset> datasets, List<ExerciseDefinition> exercises) {
         StringBuilder out = new StringBuilder();
@@ -61,6 +68,22 @@ final class ExerciseTextCodec {
     String encodeExerciseBlock(ExerciseDefinition exercise) {
         StringBuilder out = new StringBuilder();
         encodeExercise(out, exercise);
+        return out.toString();
+    }
+
+    /** v3.5.0 EPATH-1：把章节路径编码为独立分发块。 */
+    String encodePathBlock(ExerciseChapterPath path) {
+        StringBuilder out = new StringBuilder();
+        out.append('\n').append(PATH_HEADER).append('\n')
+            .append("ID: ").append(path.id()).append('\n')
+            .append("NAME: ").append(path.name()).append('\n')
+            .append("VERSION: ").append(path.version()).append('\n')
+            .append("CHAPTERS:\n");
+        for (ExerciseChapterPath.Chapter chapter : path.chapters()) {
+            out.append(chapter.order()).append('|').append(chapter.title()).append('|')
+                .append(String.join(",", chapter.knowledgeTags())).append('|')
+                .append(String.join(",", chapter.exerciseIds())).append('\n');
+        }
         return out.toString();
     }
 
@@ -161,10 +184,13 @@ final class ExerciseTextCodec {
         List<Block> blocks = tokenize(lines, start);
         List<ExerciseDataset> datasets = new ArrayList<>();
         List<ExerciseDefinition> exercises = new ArrayList<>();
+        List<ExerciseChapterPath> paths = new ArrayList<>();
         for (Block block : blocks) {
             try {
                 if (block.type == BlockType.DATASET) {
                     datasets.add(toDataset(block));
+                } else if (block.type == BlockType.PATH) {
+                    paths.add(toPath(block));
                 } else {
                     exercises.add(toExercise(block));
                 }
@@ -174,7 +200,8 @@ final class ExerciseTextCodec {
         }
         rejectDuplicateIds(datasets.stream().map(ExerciseDataset::id).toList(), "dataset");
         rejectDuplicateIds(exercises.stream().map(ExerciseDefinition::id).toList(), "exercise");
-        return new DecodedPackage(datasets, exercises);
+        rejectDuplicateIds(paths.stream().map(ExerciseChapterPath::id).toList(), "path");
+        return new DecodedPackage(datasets, exercises, paths);
     }
 
     private static List<Block> tokenize(List<String> lines, int start) {
@@ -187,11 +214,10 @@ final class ExerciseTextCodec {
             if (trimmed.isEmpty()) {
                 continue;
             }
-            if (DATASET_HEADER.equals(trimmed) || EXERCISE_HEADER.equals(trimmed)) {
-                current = new Block(
-                    DATASET_HEADER.equals(trimmed) ? BlockType.DATASET : BlockType.EXERCISE,
-                    lineNumber
-                );
+            if (DATASET_HEADER.equals(trimmed) || EXERCISE_HEADER.equals(trimmed) || PATH_HEADER.equals(trimmed)) {
+                BlockType type = DATASET_HEADER.equals(trimmed) ? BlockType.DATASET
+                    : PATH_HEADER.equals(trimmed) ? BlockType.PATH : BlockType.EXERCISE;
+                current = new Block(type, lineNumber);
                 blocks.add(current);
                 continue;
             }
@@ -201,7 +227,8 @@ final class ExerciseTextCodec {
                     throw invalid("Content appears before any block", lineNumber);
                 }
                 String name = label.group(1);
-                Set<String> allowed = current.type == BlockType.DATASET ? DATASET_LABELS : EXERCISE_LABELS;
+                Set<String> allowed = current.type == BlockType.DATASET ? DATASET_LABELS
+                    : current.type == BlockType.PATH ? PATH_LABELS : EXERCISE_LABELS;
                 if (!allowed.contains(name)) {
                     throw invalid(
                         "Unknown field " + name + " in " + current.type.name().toLowerCase() + " block",
@@ -226,6 +253,46 @@ final class ExerciseTextCodec {
             }
         }
         return blocks;
+    }
+
+    /** v3.5.0 EPATH-1：解析章节路径块；CHAPTERS 每行为「序号|章节名|标签|题目ID」。 */
+    private static ExerciseChapterPath toPath(Block block) {
+        String id = required(block, "ID");
+        String name = required(block, "NAME");
+        int version = intField(block, "VERSION", 1);
+        Field chaptersField = find(block, "CHAPTERS");
+        if (chaptersField == null || chaptersField.value.isBlank()) {
+            throw invalid("Path block requires CHAPTERS", block.startLine);
+        }
+        List<ExerciseChapterPath.Chapter> chapters = new ArrayList<>();
+        for (String line : chaptersField.value.split("\n")) {
+            String trimmed = line.trim();
+            if (trimmed.isEmpty()) {
+                continue;
+            }
+            Matcher chapter = CHAPTER_LINE_PATTERN.matcher(trimmed);
+            if (!chapter.matches()) {
+                throw invalid("CHAPTERS lines must be 序号|章节名|标签|题目ID", block.startLine);
+            }
+            chapters.add(new ExerciseChapterPath.Chapter(
+                Integer.parseInt(chapter.group(1)),
+                chapter.group(2).trim(),
+                splitCsv(chapter.group(3)),
+                splitCsv(chapter.group(4))
+            ));
+        }
+        return new ExerciseChapterPath(id, name, version, chapters);
+    }
+
+    private static List<String> splitCsv(String value) {
+        List<String> values = new ArrayList<>();
+        for (String part : value.split(",")) {
+            String item = part.trim();
+            if (!item.isEmpty()) {
+                values.add(item);
+            }
+        }
+        return values;
     }
 
     private static ExerciseDataset toDataset(Block block) {
@@ -502,14 +569,20 @@ final class ExerciseTextCodec {
         );
     }
 
-    record DecodedPackage(List<ExerciseDataset> datasets, List<ExerciseDefinition> exercises) {
+    record DecodedPackage(List<ExerciseDataset> datasets, List<ExerciseDefinition> exercises,
+                          List<ExerciseChapterPath> paths) {
         DecodedPackage {
             datasets = List.copyOf(datasets);
             exercises = List.copyOf(exercises);
+            paths = List.copyOf(paths);
+        }
+
+        DecodedPackage(List<ExerciseDataset> datasets, List<ExerciseDefinition> exercises) {
+            this(datasets, exercises, List.of());
         }
     }
 
-    private enum BlockType { DATASET, EXERCISE }
+    private enum BlockType { DATASET, EXERCISE, PATH }
 
     private static final class Block {
         final BlockType type;

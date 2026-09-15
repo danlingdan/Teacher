@@ -115,7 +115,8 @@ public final class SecureUpdateService implements UpdateService {
                 && !RolloutDecider.visible(loadInstallId(), manifest.version().toString(), current.platform(), manifest.rollout())) {
                 return new UpdateCheckResult(UpdateCheckResult.Status.UP_TO_DATE, current, null, "更新将分批开放，当前批次暂未包含此版本");
             }
-            system.notify(AppNotification.Category.UPDATE, "更新可用", "SQLTeacher " + manifest.version() + " 已准备好，可查看说明后下载。", "updates");
+            // 通知目标是应用内路由：设置页承载“下载并安装”，不能再发非路由目标。
+            system.notify(AppNotification.Category.UPDATE, "更新可用", "SQLTeacher " + manifest.version() + " 已发布，可在设置页下载安装。", "/settings");
             return new UpdateCheckResult(UpdateCheckResult.Status.AVAILABLE, current, manifest, "发现新版本 " + manifest.version());
         } catch (InterruptedException error) {
             Thread.currentThread().interrupt(); system.failTask(task, "UPDATE_CHECK_CANCELLED", true);

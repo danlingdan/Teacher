@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { UpdateDialog } from "./shared/UpdateDialog";
 import { useAppVersion } from "./shared/appVersion";
 import {
@@ -184,6 +184,18 @@ function Shell() {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [paletteQuery, setPaletteQuery] = useState("");
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  // v3.5.0 反馈：通知弹层点击外部即关闭，不再要求再点一次触发按钮。
+  const notificationAnchorRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!notificationsOpen) return;
+    const onPointerDown = (event: MouseEvent) => {
+      if (!notificationAnchorRef.current?.contains(event.target as Node)) {
+        setNotificationsOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", onPointerDown);
+    return () => document.removeEventListener("mousedown", onPointerDown);
+  }, [notificationsOpen]);
   const preferences = useQuery(settingsPreferencesQuery);
   const cloudNotifications = useQuery({
     queryKey: ["cloud", "notifications"],
@@ -342,7 +354,7 @@ function Shell() {
           </div>
           <div className="topbar-actions">
             <TopbarConnection />
-            <div className="notification-anchor">
+            <div className="notification-anchor" ref={notificationAnchorRef}>
               <button
                 type="button"
                 className="notification-trigger"
@@ -394,7 +406,11 @@ function Shell() {
                             <Button
                               variant="secondary"
                               onClick={() => {
-                                navigate(item.target);
+                                // 历史通知可能存了非路由目标（如 "updates"）；
+                                // 统一回落到设置页的更新入口，避免跳空。
+                                navigate(
+                                  item.target.startsWith("/") ? item.target : "/settings",
+                                );
                                 setNotificationsOpen(false);
                               }}
                             >

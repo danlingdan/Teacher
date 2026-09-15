@@ -599,6 +599,20 @@ button {
   max-width: 100%;
   height: auto;
 }
+/* v3.5.0 反馈：外键关系图需要大画布——宽弹窗 + 限高滚动 + SVG 撑满容器宽度。 */
+.ui-dialog-wide {
+  width: min(1080px, 100%);
+}
+.diagram-dialog-body {
+  max-height: 72vh;
+  overflow: auto;
+}
+.diagram-dialog-body .mermaid-diagram {
+  padding: 8px;
+}
+.diagram-dialog-body .mermaid-diagram svg {
+  width: 100%;
+}
 .editor-workspace {
   height: calc(100vh - 138px);
   min-height: 520px;
@@ -1120,6 +1134,93 @@ button {
 }
 .schema-table-section .muted {
   margin: 0 2px 6px;
+  font-size: 11px;
+}
+/* v3.5.0 SCH-2：表名/列名可点击插入编辑器；表节点「样例数据」动作。 */
+.schema-tree button.schema-insert {
+  border: none;
+  background: none;
+  padding: 0;
+  font: inherit;
+  font-weight: 800;
+  color: var(--teal-deep, #0f766e);
+  cursor: pointer;
+  text-align: left;
+}
+.schema-tree button.schema-insert:hover {
+  text-decoration: underline;
+}
+.schema-tree summary button.schema-sample {
+  margin-left: auto;
+  border: 1px solid var(--line);
+  background: none;
+  border-radius: 6px;
+  padding: 1px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--navy);
+  cursor: pointer;
+}
+.schema-tree summary button.schema-sample:hover {
+  border-color: var(--teal-deep, #0f766e);
+  color: var(--teal-deep, #0f766e);
+}
+.schema-sample-table {
+  max-height: 180px;
+  overflow: auto;
+  font-size: 11px;
+}
+/* v3.5.0 WBE-2：编辑器工具栏「模板」下拉。 */
+.template-menu {
+  position: relative;
+}
+.template-menu > summary {
+  list-style: none;
+  cursor: pointer;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 6px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--navy);
+}
+.template-menu > summary::-webkit-details-marker {
+  display: none;
+}
+.template-menu[open] > summary,
+.template-menu > summary:hover {
+  border-color: var(--teal-deep, #0f766e);
+  color: var(--teal-deep, #0f766e);
+}
+.template-list {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 30;
+  min-width: 220px;
+  background: var(--surface, #fff);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.14);
+  padding: 6px;
+  display: grid;
+  gap: 2px;
+}
+.template-list button {
+  border: none;
+  background: none;
+  border-radius: 8px;
+  padding: 8px 10px;
+  text-align: left;
+  cursor: pointer;
+  display: grid;
+  gap: 1px;
+}
+.template-list button:hover {
+  background: rgba(15, 118, 110, 0.08);
+}
+.template-list button span {
+  color: var(--muted);
   font-size: 11px;
 }
 .data-main {
@@ -3059,6 +3160,136 @@ kbd {
   flex-direction: column;
   gap: 6px;
 }
+/* v3.5.0 SFE-1：差异摘要行。 */
+.comparison-summary {
+  margin: 0;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: rgba(217, 119, 6, 0.1);
+  color: var(--navy);
+  font-size: 12px;
+}
+/* v3.5.0 SFE-3：执行计划白话解读。 */
+.explain-reading {
+  margin-top: 8px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 8px 12px;
+}
+.explain-reading ul {
+  margin: 4px 0 0;
+  padding-left: 0;
+  list-style: none;
+  display: grid;
+  gap: 6px;
+}
+.explain-reading li {
+  display: grid;
+  gap: 2px;
+  font-size: 12px;
+}
+.explain-reading code {
+  font-size: 11px;
+  color: var(--muted);
+}
+/* v3.5.0 EPATH-2/3：练习页学习路径。反馈修订：头部做成醒目的可点击卡——箭头、
+   强调边框与 hover 变色，展开时箭头旋转。 */
+.learning-path {
+  padding: 0;
+}
+.learning-path > summary {
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  border-radius: 12px;
+  border: 1px solid rgba(15, 118, 110, 0.35);
+  background: rgba(15, 118, 110, 0.07);
+}
+.learning-path > summary::-webkit-details-marker {
+  display: none;
+}
+.learning-path > summary:hover {
+  border-color: var(--teal-deep, #0f766e);
+  background: rgba(15, 118, 110, 0.12);
+}
+.learning-path-caret {
+  display: inline-block;
+  color: var(--teal-deep, #0f766e);
+  font-size: 14px;
+  transition: transform 0.15s ease;
+}
+.learning-path[open] > summary .learning-path-caret {
+  transform: rotate(90deg);
+}
+.learning-path-title {
+  display: grid;
+  gap: 1px;
+}
+.learning-path-title strong {
+  color: var(--teal-deep, #0f766e);
+}
+.learning-path-title small {
+  color: var(--muted);
+}
+.learning-path-block {
+  margin-top: 12px;
+  padding: 0 4px;
+  display: grid;
+  gap: 8px;
+}
+.learning-path-chapter {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 8px 12px;
+}
+.learning-path-chapter header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.related-reading {
+  font-size: 12px;
+  color: var(--teal-deep, #0f766e);
+}
+.learning-path-chapter ul {
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 2px;
+}
+.learning-path-chapter li button {
+  width: 100%;
+  border: none;
+  background: none;
+  border-radius: 8px;
+  padding: 6px 8px;
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  cursor: pointer;
+  text-align: left;
+  font-size: 13px;
+}
+.learning-path-chapter li button:hover {
+  background: rgba(15, 118, 110, 0.08);
+}
+.path-status {
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.path-status.ok {
+  color: var(--teal-deep, #0f766e);
+  font-weight: 700;
+}
+.path-status.tried {
+  color: #b45309;
+}
 .comparison-tables {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
@@ -3074,6 +3305,12 @@ kbd {
   background: rgba(220, 38, 38, 0.14);
   color: var(--danger, #b91c1c);
   font-weight: 600;
+}
+
+/* v3.5.0 SFE-2：分项反馈里的教学解读，独立成行弱化展示。 */
+.teaching-note {
+  display: block;
+  margin-top: 2px;
 }
 
 /* v3.4.2 LEG-1：设置页"关于"面板的制作团队名单。 */

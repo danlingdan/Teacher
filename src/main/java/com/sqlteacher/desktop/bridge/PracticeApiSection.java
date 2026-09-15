@@ -26,6 +26,7 @@ final class PracticeApiSection extends ApiSection {
         return Set.of(
             "practice.catalog", "practice.preview", "practice.start", "practice.run", "practice.submit",
             "practice.hint", "practice.reset", "practice.close", "practice.wrongbook", "practice.recommend",
+            "practice.paths",
             "practice.bank.check", "practice.bank.update", "practice.bank.channels", "practice.bank.notice"
         );
     }
@@ -44,12 +45,20 @@ final class PracticeApiSection extends ApiSection {
             case "practice.close" -> practiceClose(params, cancellation);
             case "practice.wrongbook" -> practiceWrongBook(cancellation);
             case "practice.recommend" -> practiceRecommend(cancellation);
+            case "practice.paths" -> practicePaths(cancellation);
             case "practice.bank.check" -> practiceBankCheck(cancellation);
             case "practice.bank.update" -> practiceBankUpdate(cancellation, events);
             case "practice.bank.channels" -> practiceBankChannels(cancellation);
             case "practice.bank.notice" -> practiceBankNotice(cancellation);
             default -> throw new IllegalStateException("Method whitelist and dispatcher are inconsistent");
         };
+    }
+
+    /** v3.5.0 EPATH-2：章节学习路径（含当前学习者进度）；无路径数据时返回空列表。 */
+    private JsonNode practicePaths(CancellationToken cancellation) {
+        cancellation.throwIfCancelled();
+        var paths = context().getBean(com.sqlteacher.application.exercise.ExercisePathService.class).listPaths();
+        return mapper.createObjectNode().set("items", mapper.valueToTree(paths));
     }
 
     private JsonNode practiceCatalog(JsonNode params, CancellationToken cancellation) {

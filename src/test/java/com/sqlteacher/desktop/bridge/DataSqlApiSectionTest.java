@@ -2,7 +2,13 @@ package com.sqlteacher.desktop.bridge;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.sqlteacher.application.connection.ConnectionManagementService;
+import com.sqlteacher.application.connection.DatabaseConnectionProfile;
+import com.sqlteacher.application.connection.DatabaseDialect;
+import com.sqlteacher.application.connection.SqliteConnectionTarget;
+import com.sqlteacher.application.execution.SqlExecutionRequest;
 import com.sqlteacher.application.execution.SqlExecutionResult;
+import com.sqlteacher.application.execution.SqlExecutionService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -12,6 +18,8 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -99,9 +107,46 @@ class DataSqlApiSectionTest {
         assertEquals("SQL result page has expired", error.getMessage());
     }
 
+    /** v3.5.0 SCH-2：样例预览只收表名，SQL 由 Java 侧构造为只读 SELECT LIMIT，参数可控可断言。 */
     @Test
-    void sqlResultExportEnforcesCsvExtensionAndExistingParentDirectory() throws Exception {
-        DataSqlApiSection section = sectionWithCachedResult(new SqlConfirmationCache(), "result-1");
+    void dataTableSampleBuildsReadOnlySelectFromTableNameOnly() throws Exception {
+        AtomicReference<SqlExecutionRequest> captured = new AtomicReference<>();
+        SqlExecutionServiceFake execution = new SqlExecutionServiceFake(request -> {
+            captured.set(request);
+            return result(2);
+        });
+        ConnectionManagementService connections = new ConnectionManagementService() {
+            @Override public List<DatabaseConnectionProfile> listProfiles() { return List.of(); }
+            @Override public Optional<DatabaseConnectionProfile> findProfile(String connectionId) {
+                return Optional.of(new DatabaseConnectionProfile(
+                    "demo", "演示库", new SqliteConnectionTarget(Path.of("demo.db")), false, true, true));
+            }
+            @Override public DatabaseConnectionProfile saveProfile(DatabaseConnectionProfile profile) { return profile; }
+            @Override public void removeProfile(String connectionId) { }
+            @Override public Optional<DatabaseConnectionProfile> currentProfile() { return Optional.empty(); }
+            @Override public DatabaseConnectionProfile selectProfile(String connectionId) { throw new UnsupportedOperationException(); }
+        };
+        DataSqlApiSection section = new DataSqlApiSection(
+            ApiSectionTestSupport.hostWithBeans(connections, execution), new SqlConfirmationCache());
+
+        JsonNode sample = section.handle("data.table.sample", mapper.createObjectNode()
+            .put("connectionId", "demo").put("table", "Student"), () -> false, ignored -> { });
+
+        SqlExecutionRequest request = captured.get();
+        assertEquals("SELECT * FROM \"Student\" LIMIT 5", request.sql());
+        assertEquals(5, request.maxRows());
+        assertTrue(request.riskConfirmed());
+        assertEquals(2, sample.path("rows").size());
+        assertEquals(2, sample.path("columns").size());
+        // 越界字符的表名在到达执行服务前就被拒绝。
+        var rejected = assertThrows(IllegalArgumentException.class,
+            () -> section.handle("data.table.sample", mapper.createObjectNode()
+                .put("connectionId", "demo").put("table", "Student; DROP TABLE Student"), () -> false, ignored -> { }));
+        assertEquals("Table name contains unsupported characters", rejected.getMessage());
+    }
+
+    @Test
+    void sqlResultExportEnforcesCsvExtensionAndExistingParentDirectory() throws Exception {        DataSqlApiSection section = sectionWithCachedResult(new SqlConfirmationCache(), "result-1");
 
         var notCsv = assertThrows(IllegalArgumentException.class,
             () -> section.handle("sql.result.export", mapper.createObjectNode()
@@ -129,5 +174,15 @@ class DataSqlApiSectionTest {
         assertEquals(2, exported.path("columns").asInt());
         // The exporter writes a UTF-8 BOM before the header (see SqlResultExportFlowTest).
         assertTrue(Files.readString(target).startsWith("\uFEFFSno,Sname"));
+    }
+
+    /** 捕获请求的假执行服务：断言 Java 侧构造的语句与限额，而不真正连接数据库。 */
+    private record SqlExecutionServiceFake(
+        java.util.function.Function<SqlExecutionRequest, SqlExecutionResult> handler
+    ) implements SqlExecutionService {
+        @Override
+        public SqlExecutionResult execute(SqlExecutionRequest request) {
+            return handler.apply(request);
+        }
     }
 }

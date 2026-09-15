@@ -59,6 +59,37 @@ class DeterministicSqlExerciseEvaluationServiceTest {
         assertFalse(result.feedback().contains("Alice"));
     }
 
+    /** v3.5.0 SFE-1：差异摘要给出行数、首个差异定位与多重集合差，学生不用肉眼对表。 */
+    @Test
+    void shouldSummarizeRowAndCellDifferences() {
+        Fixture fixture = fixture();
+
+        // 行差一：少一行（score >= 80 期望 2 行，提交 1 行）；列差一：多查 id 列。
+        ExerciseEvaluationResult missingRow = fixture.evaluator().evaluate(
+            exercise(ExerciseEvaluationRule.exactResult(true)),
+            fixture.dataset(),
+            "select name from student where score >= 80 order by name limit 1"
+        );
+        var missingSummary = java.util.Objects.requireNonNull(
+            java.util.Objects.requireNonNull(missingRow.comparison()).summary());
+        assertEquals(2, missingSummary.expectedRowCount());
+        assertEquals(1, missingSummary.actualRowCount());
+        assertFalse(missingSummary.columnCountDiffers());
+        assertEquals(1, missingSummary.expectedOnlyRows());
+        assertEquals(0, missingSummary.actualOnlyRows());
+        assertFalse(missingSummary.truncated());
+
+        ExerciseEvaluationResult extraColumn = fixture.evaluator().evaluate(
+            exercise(ExerciseEvaluationRule.exactResult(true)),
+            fixture.dataset(),
+            "select id, name from student where score >= 80 order by name"
+        );
+        var columnSummary = java.util.Objects.requireNonNull(
+            java.util.Objects.requireNonNull(extraColumn.comparison()).summary());
+        assertTrue(columnSummary.columnCountDiffers());
+        assertTrue(columnSummary.firstDiffLocation().startsWith("第 "));
+    }
+
     @Test
     void shouldEnforceRequiredStructureAndRejectMutation() {
         Fixture fixture = fixture();

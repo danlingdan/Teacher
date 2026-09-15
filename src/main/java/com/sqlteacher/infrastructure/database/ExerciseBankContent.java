@@ -1,6 +1,7 @@
 package com.sqlteacher.infrastructure.database;
 
 import com.sqlteacher.domain.SqlTeacherException;
+import com.sqlteacher.domain.exercise.ExerciseChapterPath;
 import com.sqlteacher.domain.exercise.ExerciseDataset;
 import com.sqlteacher.domain.exercise.ExerciseDefinition;
 
@@ -11,6 +12,7 @@ import java.util.Optional;
  * Public entry point for parsing and self-testing text-DSL exercise packages. It lets the
  * cloud server and the network bank sync validate distributed content through exactly the
  * same deterministic rules as teacher import, without widening the internal codec types.
+ * v3.5.0 EPATH-1 adds chapter paths as a third, additive block kind.
  */
 public final class ExerciseBankContent {
     private final ExerciseTextCodec textCodec = new ExerciseTextCodec();
@@ -18,16 +20,25 @@ public final class ExerciseBankContent {
         new ExercisePackageValidator(new DefaultSqlRiskAnalysisService());
 
     /** Parsed and validated package content. */
-    public record ParsedBank(List<ExerciseDataset> datasets, List<ExerciseDefinition> exercises) {
+    public record ParsedBank(
+        List<ExerciseDataset> datasets,
+        List<ExerciseDefinition> exercises,
+        List<ExerciseChapterPath> paths
+    ) {
         public ParsedBank {
             datasets = List.copyOf(datasets);
             exercises = List.copyOf(exercises);
+            paths = List.copyOf(paths);
+        }
+
+        public ParsedBank(List<ExerciseDataset> datasets, List<ExerciseDefinition> exercises) {
+            this(datasets, exercises, List.of());
         }
     }
 
     public ParsedBank parse(String packageText) {
         ExerciseTextCodec.DecodedPackage decoded = textCodec.decode(packageText);
-        return new ParsedBank(decoded.datasets(), decoded.exercises());
+        return new ParsedBank(decoded.datasets(), decoded.exercises(), decoded.paths());
     }
 
     /** Returns the self-test failure messages; empty when the bank is ready for distribution. */
@@ -54,5 +65,9 @@ public final class ExerciseBankContent {
 
     public String encodeExerciseBlock(ExerciseDefinition exercise) {
         return textCodec.encodeExerciseBlock(exercise);
+    }
+
+    public String encodePathBlock(ExerciseChapterPath path) {
+        return textCodec.encodePathBlock(path);
     }
 }

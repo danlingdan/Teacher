@@ -22,13 +22,13 @@ public final class DefaultSqlRiskAnalysisService implements SqlRiskAnalysisServi
         Objects.requireNonNull(dialect, "dialect must not be null");
 
         if (sql == null || sql.isBlank()) {
-            return forbidden("UNKNOWN", false, "SQL must not be blank");
+            return forbidden("UNKNOWN", false, "SQL 不能为空。");
         }
 
         String normalized = removeComments(sql, dialect).strip();
 
         if (normalized.isBlank()) {
-            return forbidden("UNKNOWN", false, "SQL must contain a statement");
+            return forbidden("UNKNOWN", false, "SQL 必须包含可执行的语句。");
         }
 
         boolean multiStatement = hasMultipleStatements(normalized);
@@ -37,7 +37,7 @@ public final class DefaultSqlRiskAnalysisService implements SqlRiskAnalysisServi
 
         if (isForbiddenAdministrativeStatement(normalized, statementType)) {
             return forbidden(statementType + "_ADMIN", false,
-                statementType + " administrative statements are not allowed.");
+                statementType + " 用户/角色管理语句不允许执行。");
         }
 
         if (multiStatement) {
@@ -47,7 +47,7 @@ public final class DefaultSqlRiskAnalysisService implements SqlRiskAnalysisServi
                     true,
                     true,
                     statementType,
-                    List.of("Multiple SQL statements are not allowed.")
+                    List.of("不允许一次执行多条 SQL 语句。")
             );
         }
 
@@ -58,7 +58,7 @@ public final class DefaultSqlRiskAnalysisService implements SqlRiskAnalysisServi
                     true,
                     true,
                     "MULTI_STATEMENT",
-                    List.of("Multiple SQL statements detected. Execute only one statement at a time.")
+                    List.of("检测到多条 SQL 语句；一次只能执行一条。")
             );
         }
 
@@ -75,7 +75,7 @@ public final class DefaultSqlRiskAnalysisService implements SqlRiskAnalysisServi
                 false,
                 false,
                 statementType,
-                List.of("Read-only query plan inspection.")
+                List.of("只读的执行计划检查。")
             );
         }
 
@@ -87,8 +87,8 @@ public final class DefaultSqlRiskAnalysisService implements SqlRiskAnalysisServi
                     false,
                     statementType,
                     List.of(
-                            "This statement deletes an entire database and cannot be undone.",
-                            "Confirm that a recent backup exists before executing."
+                            "该语句会删除整个数据库，且无法撤销。",
+                            "执行前请确认已有近期备份。"
                     )
             );
         }
@@ -101,7 +101,7 @@ public final class DefaultSqlRiskAnalysisService implements SqlRiskAnalysisServi
                     false,
                     false,
                     statementType,
-                    List.of("Read-only query.")
+                    List.of("只读查询。")
             );
 
             case "INSERT" -> new SqlRiskAnalysis(
@@ -110,7 +110,7 @@ public final class DefaultSqlRiskAnalysisService implements SqlRiskAnalysisServi
                     true,
                     false,
                     statementType,
-                    List.of("This statement modifies data.")
+                    List.of("该语句会写入数据。")
             );
 
             case "UPDATE", "DELETE" -> new SqlRiskAnalysis(
@@ -119,7 +119,7 @@ public final class DefaultSqlRiskAnalysisService implements SqlRiskAnalysisServi
                     true,
                     false,
                     statementType,
-                    List.of("This statement modifies or deletes existing data and requires explicit confirmation.")
+                    List.of("该语句会修改或删除现有数据，需要明确确认。")
             );
 
             case "CREATE", "ALTER" -> new SqlRiskAnalysis(
@@ -128,7 +128,7 @@ public final class DefaultSqlRiskAnalysisService implements SqlRiskAnalysisServi
                     true,
                     false,
                     statementType,
-                    List.of("This statement modifies database schema.")
+                    List.of("该语句会修改数据库结构。")
             );
 
             case "DROP", "TRUNCATE" -> new SqlRiskAnalysis(
@@ -137,7 +137,7 @@ public final class DefaultSqlRiskAnalysisService implements SqlRiskAnalysisServi
                     true,
                     false,
                     statementType,
-                    List.of(statementType + " is irreversible and requires explicit confirmation.")
+                    List.of(statementType + " 不可撤销，需要明确确认。")
             );
 
             case "GRANT", "REVOKE" -> new SqlRiskAnalysis(
@@ -146,13 +146,13 @@ public final class DefaultSqlRiskAnalysisService implements SqlRiskAnalysisServi
                     true,
                     false,
                     statementType,
-                    List.of(statementType + " changes database permissions and requires explicit confirmation.")
+                    List.of(statementType + " 会更改数据库权限，需要明确确认。")
             );
 
             default -> forbidden(
                     statementType,
                     false,
-                    "Unsupported SQL statement."
+                    "不支持执行的 SQL 语句类型。"
             );
         };
     }
@@ -167,19 +167,19 @@ public final class DefaultSqlRiskAnalysisService implements SqlRiskAnalysisServi
         // machine outside anything the preview can show, regardless of the safety mode.
         if (MYSQL_FILE_OUTPUT.matcher(tokens).find()) {
             return forbidden(statementType, false,
-                    "Writing query output to files (INTO OUTFILE/DUMPFILE) is not allowed.");
+                    "不允许把查询结果写入文件（INTO OUTFILE/DUMPFILE）。");
         }
         if (isDestructiveCopyTarget(tokens)) {
             return forbidden(statementType, false,
-                    "Copying data to files or programs (COPY ... TO FILE/PROGRAM) is not allowed.");
+                    "不允许把数据复制到文件或程序（COPY ... TO FILE/PROGRAM）。");
         }
         if (dialect.family() == DatabaseDialect.Family.MYSQL && "SELECT".equals(statementType)
                 && MYSQL_LOCKING_SELECT.matcher(tokens).find()) {
-            return forbidden(statementType, false, "MySQL locking queries are not allowed.");
+            return forbidden(statementType, false, "不允许执行 MySQL 锁查询。");
         }
         if (dialect.family() == DatabaseDialect.Family.MYSQL
                 && MYSQL_DELAY_LOCK_FUNCTION.matcher(tokens).find()) {
-            return forbidden(statementType, false, "MySQL delay or lock functions are not allowed.");
+            return forbidden(statementType, false, "不允许使用 MySQL 延迟/锁函数。");
         }
         // Read-class file functions expose local file content; allowed only behind an explicit
         // confirmation because the file belongs to the user's own machine.
@@ -190,8 +190,7 @@ public final class DefaultSqlRiskAnalysisService implements SqlRiskAnalysisServi
                     true,
                     false,
                     statementType,
-                    List.of("This statement reads local files through a database file function "
-                            + "and requires explicit confirmation.")
+                    List.of("该语句通过数据库文件函数读取本机文件，需要明确确认。")
             );
         }
         if (("COPY".equals(statementType))
@@ -203,8 +202,7 @@ public final class DefaultSqlRiskAnalysisService implements SqlRiskAnalysisServi
                     true,
                     false,
                     statementType,
-                    List.of("COPY imports data from a file or standard input "
-                            + "and requires explicit confirmation.")
+                    List.of("COPY 会从文件或标准输入导入数据，需要明确确认。")
             );
         }
         return null;

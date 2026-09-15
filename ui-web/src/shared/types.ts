@@ -268,10 +268,22 @@ export interface ComparisonRow {
   cells: unknown[];
   cellDiff: boolean[];
 }
+// v3.5.0 SFE-1：Java 计算的差异摘要（行列计数、首个差异定位、多重集合差）。
+export interface ComparisonSummary {
+  expectedRowCount: number;
+  actualRowCount: number;
+  columnCountDiffers: boolean;
+  firstDiffLocation: string;
+  expectedOnlyRows: number;
+  actualOnlyRows: number;
+  truncated: boolean;
+}
 export interface ResultComparison {
   columns: string[];
   expectedRows: ComparisonRow[];
   actualRows: ComparisonRow[];
+  // v3.5.0 SFE-1 起 Java 侧总是计算；可选仅为兼容旧缓存记录。
+  summary?: ComparisonSummary | null;
 }
 export interface WrongBookItem {
   exerciseId: string;
@@ -291,6 +303,27 @@ export interface RecommendationView {
   difficulty: string;
   exerciseType: ExerciseKind;
   reason: string;
+}
+// v3.5.0 EPATH-1/2：题库分发的章节学习路径（进度由 Java 侧联接当前学习者数据）。
+export interface PathExerciseView {
+  exerciseId: string;
+  title: string;
+  knowledgePoint: string;
+  attempts: number;
+  passed: boolean;
+  masteryPercent: number | null;
+}
+export interface PathChapterView {
+  order: number;
+  title: string;
+  knowledgeTags: string[];
+  exercises: PathExerciseView[];
+}
+export interface LearningPathView {
+  id: string;
+  name: string;
+  version: number;
+  chapters: PathChapterView[];
 }
 export interface ExerciseSession {
   id: string;
@@ -397,11 +430,19 @@ export interface DatabaseIndex {
   unique: boolean;
   columns: string[];
 }
+// v3.5.0 SCH-1：外键（出向）元数据；columns 与 referencedColumns 按位对齐。
+export interface DatabaseForeignKey {
+  columns: string[];
+  referencedTable: string;
+  referencedColumns: string[];
+}
 export interface DatabaseTable {
   name: string;
   columns: DatabaseColumn[];
   // v3.4.3 CXN-2 起 Java 侧总是返回；可选仅为兼容旧缓存数据。
   indexes?: DatabaseIndex[];
+  // v3.5.0 SCH-1 起 Java 侧总是返回；可选仅为兼容旧缓存数据。
+  foreignKeys?: DatabaseForeignKey[];
 }
 export interface SqlRisk {
   level: string;

@@ -258,3 +258,12 @@ VERSION: 1
 ENABLED: true
 CREATED: 2026-09-10T00:00:00Z
 UPDATED: 2026-09-10T00:00:00Z
+
+===[PATH]===
+ID: spj-path-v1
+NAME: SPJ 供应商零件数据库练习路径
+VERSION: 1
+CHAPTERS:
+1|单表查询与筛选|基础查询,条件筛选,去重与排序|spj-01,spj-02,spj-03
+2|分组与聚合|分组聚合,分组与过滤,分组统计|spj-04,spj-07,spj-09
+3|连接与子查询综合|连接查询,连接与筛选,子查询,综合聚合|spj-05,spj-06,spj-08,spj-10

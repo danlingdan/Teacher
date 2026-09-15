@@ -18,6 +18,7 @@ import type {
 import { Button, Dialog, Feedback, FormField, useToast } from "../../shared/ui";
 import { Loading, Toggle } from "./shared";
 import { ProblemReportDialog, ReportStatusDialog } from "./ProblemReportDialogs";
+import { formatManifestVersion, useUpdateInstaller } from "../../shared/useUpdateInstaller";
 
 type SettingsDraft = SettingsPreferences["general"] & {
   developerMode: boolean;
@@ -1077,6 +1078,14 @@ export function SettingsPage() {
               {updateResult.message}
             </Feedback>
           )}
+          {/* v3.5.0 反馈：手动检查发现新版本时，直接在这里提供下载/安装闭环，
+              不再只有一行状态文本（此前用户"没下载的地方"）。 */}
+          {updateResult?.status === "AVAILABLE" && updateResult.available && (
+            <UpdateInstallPanel
+              version={updateResult.available.version}
+              releaseNotesUrl={updateResult.available.releaseNotesUrl}
+            />
+          )}
           <ul className="plain-list">
             {data.notifications.map((item) => (
               <li key={item.id}>
@@ -1157,5 +1166,43 @@ function helpTopicLabel(value: string) {
         troubleshooting: "故障排查",
       } as Record<string, string>
     )[value] ?? value
+  );
+}
+
+/** v3.5.0 反馈：设置页内的更新下载/安装闭环（与启动弹窗共用 useUpdateInstaller）。 */
+function UpdateInstallPanel({
+  version,
+  releaseNotesUrl,
+}: {
+  version?: string | { major: number; minor: number; patch: number };
+  releaseNotesUrl?: string;
+}) {
+  const installer = useUpdateInstaller();
+  const downloading = installer.phase === "downloading";
+  const launching = installer.phase === "launching";
+  const ready = installer.phase === "ready";
+  const busy = downloading || launching;
+  const versionLabel = version ? formatManifestVersion(version) : "";
+  return (
+    <section className="update-install-panel">
+      <Feedback tone="info" title={`新版本 SQLTeacher ${versionLabel} 可安装`}>
+        <p>下载官方安装包后即可启动升级；{releaseNotesUrl ? "发布说明见 Release 页面。" : "安装过程中应用保持运行。"}</p>
+        {downloading && <p>正在下载更新… {Math.round(installer.fraction * 100)}%</p>}
+        {installer.error && <p className="muted">{installer.error}</p>}
+        <div className="button-row">
+          {!ready ? (
+            <Button busy={downloading} disabled={busy} onClick={installer.download}>
+              {downloading
+                ? `下载中 ${Math.round(installer.fraction * 100)}%`
+                : "立即下载并安装"}
+            </Button>
+          ) : (
+            <Button busy={launching} disabled={launching} onClick={installer.launch}>
+              启动安装程序
+            </Button>
+          )}
+        </div>
+      </Feedback>
+    </section>
   );
 }

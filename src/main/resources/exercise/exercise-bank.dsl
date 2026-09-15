@@ -460,3 +460,14 @@ VERSION: 3
 ENABLED: true
 CREATED: 2026-07-21T00:00:00Z
 UPDATED: 2026-09-08T00:00:00Z
+
+===[PATH]===
+ID: core-path-v1
+NAME: SQL 查询学习路径
+VERSION: 1
+CHAPTERS:
+1|入门查询：选列与排序|基础查询,选择列,排序|query-01,query-02,query-03,query-04
+2|条件筛选：WHERE|WHERE 筛选,比较条件,文本条件,区间条件|filter-01,filter-02,filter-03,filter-04
+3|聚合与分组|COUNT 聚合,AVG 聚合,GROUP BY,HAVING|aggregate-01,aggregate-02,aggregate-03,aggregate-04
+4|连接查询|内连接,连接与筛选,左连接,连接与聚合|join-01,join-02,join-03,join-04
+5|子查询|标量子查询,IN 子查询,NOT EXISTS,相关子查询|subquery-01,subquery-02,subquery-03,subquery-04

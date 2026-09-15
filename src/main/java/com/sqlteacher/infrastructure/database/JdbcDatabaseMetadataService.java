@@ -1,6 +1,7 @@
 package com.sqlteacher.infrastructure.database;
 
 import com.sqlteacher.application.metadata.DatabaseColumn;
+import com.sqlteacher.application.metadata.DatabaseForeignKey;
 import com.sqlteacher.application.metadata.DatabaseIndex;
 import com.sqlteacher.application.metadata.DatabaseMetadataService;
 import com.sqlteacher.application.metadata.DatabaseTable;
@@ -14,6 +15,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -68,7 +70,10 @@ public final class JdbcDatabaseMetadataService implements DatabaseMetadataServic
                     List<DatabaseIndex> indexes =
                             loadIndexes(metaData, catalog, schema, tableName);
 
-                    tables.add(new DatabaseTable(tableName, columns, indexes));
+                    List<DatabaseForeignKey> foreignKeys =
+                            loadForeignKeys(metaData, catalog, schema, tableName);
+
+                    tables.add(new DatabaseTable(tableName, columns, indexes, foreignKeys));
                 }
             }
 
@@ -178,13 +183,92 @@ public final class JdbcDatabaseMetadataService implements DatabaseMetadataServic
         return indexes;
     }
 
+    /**
+     * v3.5.0 SCH-1: imported keys per table. 外键属增强信息，部分方言/权限下
+     * getImportedKeys 行为不一，单表失败降级为空列表，不让整棵结构树失败
+     * （沿用 CXN-2 索引降级模式）；演示库/SQLite 为主要验证对象。
+     */
+    private List<DatabaseForeignKey> loadForeignKeys(
+            DatabaseMetaData metaData,
+            String catalog,
+            String schema,
+            String tableName
+    ) {
+        List<FkRow> rows = new ArrayList<>();
+        try (ResultSet rs = metaData.getImportedKeys(catalog, schema, tableName)) {
+            while (rs.next()) {
+                String column = rs.getString("FKCOLUMN_NAME");
+                String referencedTable = rs.getString("PKTABLE_NAME");
+                String referencedColumn = rs.getString("PKCOLUMN_NAME");
+                if (column == null || column.isBlank()
+                        || referencedTable == null || referencedColumn == null) {
+                    continue;
+                }
+                rows.add(new FkRow(
+                        rs.getInt("KEY_SEQ"),
+                        column,
+                        referencedTable,
+                        referencedColumn,
+                        rs.getString("FK_NAME")));
+            }
+        } catch (SQLException | RuntimeException error) {
+            log.debug("Foreign key metadata unavailable for table {}: {}", tableName, error.toString());
+            return List.of();
+        }
+        return groupForeignKeys(rows);
+    }
+
+    /**
+     * 命名约束按 FK_NAME 聚合；未命名（SQLite 不提供约束名）按连续段聚合：KEY_SEQ
+     * 回退或引用表变化即视为新约束。段内按 KEY_SEQ 排序，保证列与引用列按位对齐。
+     */
+    private static List<DatabaseForeignKey> groupForeignKeys(List<FkRow> rows) {
+        if (rows.isEmpty()) {
+            return List.of();
+        }
+        List<DatabaseForeignKey> keys = new ArrayList<>();
+        int index = 0;
+        while (index < rows.size()) {
+            FkRow first = rows.get(index);
+            List<FkRow> group = new ArrayList<>();
+            if (first.fkName() != null && !first.fkName().isBlank()) {
+                String constraint = first.fkName();
+                while (index < rows.size() && constraint.equals(rows.get(index).fkName())) {
+                    group.add(rows.get(index++));
+                }
+            } else {
+                String referencedTable = first.referencedTable();
+                int previousSeq = Integer.MIN_VALUE;
+                while (index < rows.size()) {
+                    FkRow row = rows.get(index);
+                    boolean unnamed = row.fkName() == null || row.fkName().isBlank();
+                    if (!unnamed || row.seq() <= previousSeq
+                            || !row.referencedTable().equals(referencedTable)) {
+                        break;
+                    }
+                    group.add(row);
+                    previousSeq = row.seq();
+                    index++;
+                }
+            }
+            group.sort(Comparator.comparingInt(FkRow::seq));
+            keys.add(new DatabaseForeignKey(
+                    group.stream().map(FkRow::column).toList(),
+                    group.getFirst().referencedTable(),
+                    group.stream().map(FkRow::referencedColumn).toList()));
+        }
+        return List.copyOf(keys);
+    }
+
+    private record FkRow(int seq, String column, String referencedTable, String referencedColumn, String fkName) {
+    }
+
     private Set<String> loadPrimaryKeys(
             DatabaseMetaData metaData,
             String catalog,
             String schema,
             String tableName
     ) throws SQLException {
-
         Set<String> primaryKeys = new HashSet<>();
 
         try (ResultSet rs =

@@ -241,7 +241,8 @@ function MarkdownCode({ className, children, ...props }: ComponentProps<"code">)
   return <code className={className} {...props}>{children}</code>;
 }
 
-function MermaidDiagram({ source }: { source: string }) {
+// v3.5.0 SCH-3：导出供数据页「外键关系图」复用；严格模式渲染保持只读。
+export function MermaidDiagram({ source }: { source: string }) {
   const id = `mermaid-${useId().replace(/:/g, "")}`;
   const [svg, setSvg] = useState<string>();
   const [failed, setFailed] = useState(false);

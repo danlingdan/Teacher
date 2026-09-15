@@ -3,6 +3,7 @@ import { memo, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { localAppRequest } from "../../shared/ipc";
 import { clearDraft, loadDraft, saveDraft } from "../../shared/practiceDraft";
+import { splitTeachingNote } from "../../shared/teachingNote";
 import type {
   AssignmentDelivery,
   AssignmentSnapshot,
@@ -21,6 +22,7 @@ import type {
 import { difficultyLabel, exerciseTypeTitleLabel } from "../../shared/labels";
 import { Button, Dialog, EmptyState, Feedback, Stepper, useToast } from "../../shared/ui";
 import { ExerciseCatalogPanel } from "./ExerciseCatalog";
+import { LearningPathPanel } from "./LearningPath";
 import { CodeEditor } from "./EditorPage";
 
 const defaultSqlAnswer = "SELECT *\nFROM ";
@@ -372,6 +374,8 @@ export function ExerciseFlow() {
             </Button>
           </section>
         )}
+        {/* v3.5.0 EPATH-2：学习路径入口；无路径数据时组件自身隐藏，保持现状。 */}
+        <LearningPathPanel onSelect={handleCatalogSelect} />
         <Stepper steps={["选题", "预览确认", "作答", "反馈"]} current={step} />
         {bankNotice.data?.notice && (
           <Feedback tone="info" title="题库有可用更新">
@@ -530,11 +534,20 @@ export function ExerciseFlow() {
                 得分：{feedback.evaluation.score} / 100 （仅用于反馈，通过仍需全部分项达标）
               </p>
             )}
-            {feedback.evaluation?.criteria.map((item) => (
-              <p key={item.criterion}>
-                {item.passed ? "✓" : "×"} {item.criterion}：{item.feedback}
-              </p>
-            ))}
+            {feedback.evaluation?.criteria.map((item) => {
+              // v3.5.0 SFE-2：失败分项可能附带教学解读，拆出来弱化展示。
+              const { main, note } = splitTeachingNote(item.feedback);
+              return (
+                <p key={item.criterion}>
+                  {item.passed ? "✓" : "×"} {item.criterion}：{main}
+                  {note && (
+                    <span className="teaching-note muted">
+                      {note}
+                    </span>
+                  )}
+                </p>
+              );
+            })}
             {feedback.evaluation &&
               !feedback.evaluation.passed &&
               feedback.evaluation.comparison && (
@@ -640,15 +653,32 @@ export function ExerciseFlow() {
   );
 }
 
-/** 期望/实际并排对比视图（W2.4）：期望行受教师 REVEAL 控制，diff 由 Java 计算。 */
+/** 期望/实际并排对比视图（W2.4）：期望行受教师 REVEAL 控制，diff 由 Java 计算。
+ * v3.5.0 SFE-1：顶部追加 Java 摘要行——差几行/差一列/首个差异位置，一眼定位。 */
 const ComparisonView = memo(function ComparisonView({
   comparison,
 }: {
   comparison: ResultComparison;
 }) {
+  const summary = comparison.summary;
+  const summaryParts = summary
+    ? [
+        `行数：期望 ${summary.expectedRowCount} / 实际 ${summary.actualRowCount}`,
+        summary.columnCountDiffers ? "列数不一致（差一列）" : "",
+        summary.firstDiffLocation ? `首个差异：${summary.firstDiffLocation}` : "",
+        summary.expectedOnlyRows > 0 ? `仅期望结果有 ${summary.expectedOnlyRows} 行` : "",
+        summary.actualOnlyRows > 0 ? `你的结果多出 ${summary.actualOnlyRows} 行` : "",
+      ].filter(Boolean)
+    : [];
   return (
     <section className="comparison-view">
       <p className="eyebrow">期望 / 实际对比（差异单元格已标红）</p>
+      {summaryParts.length > 0 && (
+        <p className="comparison-summary">
+          {summaryParts.join("；")}
+          {summary?.truncated ? "（结果过大，仅对比前 200 行）" : ""}
+        </p>
+      )}
       <div className="comparison-tables">
         <div className="virtual-table" role="region" aria-label="期望结果" tabIndex={0}>
           <p className="muted">期望结果</p>

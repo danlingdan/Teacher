@@ -1,6 +1,7 @@
 package com.sqlteacher.infrastructure.database;
 
 import com.sqlteacher.domain.SqlTeacherException;
+import com.sqlteacher.domain.exercise.ExerciseChapterPath;
 import com.sqlteacher.domain.exercise.ExerciseDataset;
 import com.sqlteacher.domain.exercise.ExerciseDefinition;
 import com.sqlteacher.domain.exercise.ExerciseDifficulty;
@@ -239,5 +240,43 @@ class ExerciseTextCodecTest {
 
         assertThrows(SqlTeacherException.class, () -> codec.decode(badType));
         assertThrows(SqlTeacherException.class, () -> codec.decode(badAllowed));
+    }
+
+    /** v3.5.0 EPATH-1：路径块解析与编码往返；不认识路径头的包仍按旧语义解析。 */
+    @Test
+    void shouldParseAndRoundTripChapterPathBlocks() {
+        ExerciseChapterPath path = new ExerciseChapterPath(
+            "core-path-v1", "SQL 查询学习路径", 1,
+            List.of(
+                new ExerciseChapterPath.Chapter(
+                    1, "入门查询", List.of("基础查询", "选择列"), List.of("query-01", "query-02")),
+                new ExerciseChapterPath.Chapter(
+                    2, "连接查询", List.of(), List.of("join-01"))
+            )
+        );
+
+        ExerciseTextCodec.DecodedPackage decoded =
+            codec.decode(codec.encode(List.of(), List.of()) + codec.encodePathBlock(path));
+
+        assertEquals(1, decoded.paths().size());
+        assertEquals(path, decoded.paths().get(0));
+        assertEquals(0, decoded.datasets().size());
+        assertEquals(0, decoded.exercises().size());
+
+        // 旧格式包（无路径块）：paths 为空，原行为不变。
+        String legacy = String.join("\n",
+            "===[DATASET]===", "ID: d1", "NAME: 数据集", "SQL:", "create table t(x int);"
+        );
+        assertEquals(List.of(), codec.decode(legacy).paths());
+    }
+
+    @Test
+    void shouldRejectMalformedChapterLines() {
+        String malformed = String.join("\n",
+            "===[PATH]===", "ID: p1", "NAME: 路径", "VERSION: 1", "CHAPTERS:",
+            "第一章|题目列表"
+        );
+
+        assertThrows(SqlTeacherException.class, () -> codec.decode(malformed));
     }
 }

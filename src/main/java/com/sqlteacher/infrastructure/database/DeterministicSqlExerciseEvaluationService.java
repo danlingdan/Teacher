@@ -125,7 +125,10 @@ public final class DeterministicSqlExerciseEvaluationService implements SqlExerc
             return failure(
                 started,
                 "SQL_EXECUTION_FAILED",
-                new EvaluationCriterionResult("execution", false, "SQL 未能在评测数据集上执行，请检查语法和字段。")
+                // v3.5.0 SFE-2：评测失败同样附带教学解读，学生先看懂错因再改。
+                new EvaluationCriterionResult(
+                    "execution", false,
+                    SqlErrorTeachingAdvisor.append("SQL 未能在评测数据集上执行，请检查语法和字段。", error))
             );
         } catch (IOException error) {
             return failure(
@@ -190,7 +193,9 @@ public final class DeterministicSqlExerciseEvaluationService implements SqlExerc
                     "SQL_EXECUTION_FAILED",
                     new EvaluationCriterionResult(
                         "execution", false,
-                        "第 " + outcome.failedIndex() + " 条语句未能执行，请检查语法、表名和字段名。"
+                        SqlErrorTeachingAdvisor.append(
+                            "第 " + outcome.failedIndex() + " 条语句未能执行，请检查语法、表名和字段名。",
+                            outcome.errorMessage())
                     )
                 );
             }
@@ -297,7 +302,7 @@ public final class DeterministicSqlExerciseEvaluationService implements SqlExerc
             for (int index = 0; index < statements.size(); index++) {
                 long remaining = deadline - System.nanoTime();
                 if (remaining <= 0) {
-                    return new ScriptOutcome(false, index + 1, affectedRows);
+                    return new ScriptOutcome(false, index + 1, affectedRows, "");
                 }
                 statement.setQueryTimeout(Math.max(1, (int) (remaining / 1_000_000_000L)));
                 try {
@@ -306,11 +311,12 @@ public final class DeterministicSqlExerciseEvaluationService implements SqlExerc
                         affectedRows += Math.max(0, statement.getUpdateCount());
                     }
                 } catch (SQLException error) {
-                    return new ScriptOutcome(false, index + 1, affectedRows);
+                    // v3.5.0 SFE-2：带出失败语句的原始错误，供教学解读映射。
+                    return new ScriptOutcome(false, index + 1, affectedRows, error.getMessage());
                 }
             }
         }
-        return new ScriptOutcome(true, 0, affectedRows);
+        return new ScriptOutcome(true, 0, affectedRows, "");
     }
 
     /** Deterministic 0-100 display score plus the reveal-controlled comparison view. */
@@ -378,12 +384,15 @@ public final class DeterministicSqlExerciseEvaluationService implements SqlExerc
     /**
      * Pairs expected and actual rows deterministically: each expected row takes the first
      * unused actual row with the smallest per-cell difference count. Paired cells are
-     * marked where they differ; unpaired rows are marked entirely.
+     * marked where they differ; unpaired rows are marked entirely. v3.5.0 SFE-1 adds the
+     * row/column/first-diff/multiset summary so a student learns 差在哪 without
+     * eyeballing two tables; rows stay capped and {@code truncated} marks that view.
      */
     static ResultComparison compareResults(QueryResult expected, QueryResult actual, int rowLimit) {
         List<String> columns = expected.columns().isEmpty() ? actual.columns() : expected.columns();
         List<List<Object>> expectedRows = expected.rows();
         List<List<Object>> actualRows = actual.rows();
+        boolean truncated = expectedRows.size() > rowLimit || actualRows.size() > rowLimit;
         int expectedCapped = Math.min(expectedRows.size(), rowLimit);
         int actualCapped = Math.min(actualRows.size(), rowLimit);
         // One uniform cell width keeps every cells/cellDiff pair aligned even when the
@@ -432,7 +441,54 @@ public final class DeterministicSqlExerciseEvaluationService implements SqlExerc
             List<Boolean> diff = actualDiffs.get(index);
             actualOut.add(new ResultComparison.ComparisonRow(cells, diff != null ? diff : allTrue(width)));
         }
-        return new ResultComparison(columns, expectedOut, actualOut);
+        return new ResultComparison(
+            columns, expectedOut, actualOut,
+            buildSummary(expectedRows, actualRows,
+                expected.columns().size() != actual.columns().size(),
+                expectedOut, truncated));
+    }
+
+    /**
+     * 首个差异定位按「第 N 行第 M 列」（1-based，相对展示行序）报告；行多重集合差异
+     * 统计两侧各自多出来的行数（重复行按次数计），列数差异单独给出。
+     */
+    private static ResultComparison.ComparisonSummary buildSummary(
+        List<List<Object>> expectedRows,
+        List<List<Object>> actualRows,
+        boolean columnCountDiffers,
+        List<ResultComparison.ComparisonRow> expectedOut,
+        boolean truncated
+    ) {
+        String firstDiffLocation = "";
+        findFirstDiff:
+        for (int rowIndex = 0; rowIndex < expectedOut.size(); rowIndex++) {
+            List<Boolean> diffs = expectedOut.get(rowIndex).cellDiff();
+            for (int cellIndex = 0; cellIndex < diffs.size(); cellIndex++) {
+                if (Boolean.TRUE.equals(diffs.get(cellIndex))) {
+                    firstDiffLocation = "第 " + (rowIndex + 1) + " 行第 " + (cellIndex + 1) + " 列";
+                    break findFirstDiff;
+                }
+            }
+        }
+        Map<List<Object>, Long> expectedCounts = rowMultiset(expectedRows);
+        Map<List<Object>, Long> actualCounts = rowMultiset(actualRows);
+        long expectedOnly = 0;
+        long actualOnly = 0;
+        for (Map.Entry<List<Object>, Long> entry : expectedCounts.entrySet()) {
+            expectedOnly += Math.max(0, entry.getValue() - actualCounts.getOrDefault(entry.getKey(), 0L));
+        }
+        for (Map.Entry<List<Object>, Long> entry : actualCounts.entrySet()) {
+            actualOnly += Math.max(0, entry.getValue() - expectedCounts.getOrDefault(entry.getKey(), 0L));
+        }
+        return new ResultComparison.ComparisonSummary(
+            expectedRows.size(),
+            actualRows.size(),
+            columnCountDiffers,
+            firstDiffLocation,
+            (int) Math.min(expectedOnly, Integer.MAX_VALUE),
+            (int) Math.min(actualOnly, Integer.MAX_VALUE),
+            truncated
+        );
     }
 
     private static long rowDistance(List<Object> expectedRow, List<Object> actualRow) {
@@ -492,7 +548,7 @@ public final class DeterministicSqlExerciseEvaluationService implements SqlExerc
         );
     }
 
-    private record ScriptOutcome(boolean success, int failedIndex, int affectedRows) {
+    private record ScriptOutcome(boolean success, int failedIndex, int affectedRows, String errorMessage) {
     }
 
     private static List<EvaluationCriterionResult> evaluateCriteria(

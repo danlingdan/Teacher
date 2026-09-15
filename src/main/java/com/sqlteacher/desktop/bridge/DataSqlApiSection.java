@@ -62,7 +62,7 @@ final class DataSqlApiSection extends ApiSection {
         return Set.of(
             "data.connections", "data.connection.dialects", "data.connection.save",
             "data.connection.test", "data.connection.select", "data.connection.delete",
-            "data.connection.databases", "data.schema",
+            "data.connection.databases", "data.schema", "data.table.sample",
             "sql.analyze", "sql.execute", "sql.result.page", "sql.history", "sql.history.clear",
             "sql.result.export"
         );
@@ -80,6 +80,7 @@ final class DataSqlApiSection extends ApiSection {
             case "data.connection.delete" -> dataConnectionDelete(params, cancellation);
             case "data.connection.databases" -> dataConnectionDatabases(params, cancellation);
             case "data.schema" -> dataSchema(params, cancellation);
+            case "data.table.sample" -> dataTableSample(params, cancellation);
             case "sql.analyze" -> sqlAnalyze(params, cancellation);
             case "sql.execute" -> sqlExecute(params, cancellation);
             case "sql.result.page" -> sqlResultPage(params, cancellation);
@@ -281,6 +282,49 @@ final class DataSqlApiSection extends ApiSection {
         String connectionId = requiredText(params, "connectionId", 64);
         var tables = context().getBean(DatabaseMetadataService.class).listTables(connectionId);
         return mapper.createObjectNode().set("tables", mapper.valueToTree(tables));
+    }
+
+    /** v3.5.0 SCH-2 允许出现在样例预览表名里的字符：字母/数字/下划线（含 Unicode 字母）。 */
+    private static final java.util.regex.Pattern SAMPLE_TABLE_NAME =
+        java.util.regex.Pattern.compile("[\\p{L}\\p{N}_]+");
+
+    /**
+     * v3.5.0 SCH-2：表结构侧栏的「样例数据」。前端只传表名，SQL 一律由 Java 侧构造为
+     * 带 5 行上限的只读 SELECT（标识符按方言加引号 + 白名单字符双保险），并沿用
+     * sql.execute 同一条风险分析/执行路径；只读查询无需确认，也不写入执行历史。
+     */
+    private JsonNode dataTableSample(JsonNode params, CancellationToken cancellation) {
+        cancellation.throwIfCancelled();
+        String connectionId = requiredText(params, "connectionId", 64);
+        String tableName = requiredText(params, "table", 128);
+        if (!SAMPLE_TABLE_NAME.matcher(tableName).matches()) {
+            throw new IllegalArgumentException("Table name contains unsupported characters");
+        }
+        ConnectionManagementService connections = context().getBean(ConnectionManagementService.class);
+        var profile = connections.findProfile(connectionId)
+            .orElseThrow(() -> new IllegalArgumentException("Database connection does not exist"));
+        String sql = sampleStatement(quotedIdentifier(tableName, profile.dialect()), profile.dialect());
+        SqlExecutionResult execution = context().getBean(SqlExecutionService.class).execute(
+            new SqlExecutionRequest(connectionId, sql, 5, Duration.ofSeconds(10), true));
+        ObjectNode result = mapper.createObjectNode();
+        result.set("columns", mapper.valueToTree(execution.columns()));
+        result.set("rows", mapper.valueToTree(execution.rows()));
+        result.put("durationMillis", execution.duration().toMillis());
+        return result;
+    }
+
+    private static String quotedIdentifier(String name, DatabaseDialect dialect) {
+        String quote = dialect.family() == DatabaseDialect.Family.MYSQL ? "`" : "\"";
+        return quote + name.replace(quote, quote + quote) + quote;
+    }
+
+    /** 5 行样例的取行子句按方言选择；其余方言一律走 LIMIT 5。 */
+    private static String sampleStatement(String quotedName, DatabaseDialect dialect) {
+        return switch (dialect.family()) {
+            case SQL_SERVER -> "SELECT TOP 5 * FROM " + quotedName;
+            case ORACLE, DB2 -> "SELECT * FROM " + quotedName + " FETCH FIRST 5 ROWS ONLY";
+            default -> "SELECT * FROM " + quotedName + " LIMIT 5";
+        };
     }
 
     private JsonNode sqlAnalyze(JsonNode params, CancellationToken cancellation) {
