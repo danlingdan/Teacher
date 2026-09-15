@@ -9,6 +9,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { localAppRequest } from "../../shared/ipc";
 import { assignmentStatusLabel, syncStateLabel } from "../../shared/labels";
+import { datetimeLocalFromDate } from "../../shared/datetime";
+import { copyToClipboard } from "../../shared/clipboard";
 import { downloadText } from "../../shared/download";
 import { formatInstant } from "../../shared/instant";
 import type {
@@ -389,12 +391,14 @@ export function CloudPage() {
                   <Button
                     variant="secondary"
                     disabled={!joinCodeQuery.data?.joinCode}
-                    onClick={() => {
-                      void navigator.clipboard
-                        ?.writeText(joinCodeQuery.data?.joinCode ?? "")
-                        .then(() => toast("success", "班级码已复制"))
-                        .catch(() => toast("error", "复制失败，请手动记录班级码"));
-                    }}
+                    onClick={() =>
+                      copyToClipboard(
+                        joinCodeQuery.data?.joinCode ?? "",
+                        "班级码已复制",
+                        "复制失败，请手动记录班级码",
+                        toast,
+                      )
+                    }
                   >
                     复制
                   </Button>
@@ -1430,8 +1434,7 @@ function datetimeLocalAt(offsetDays: number, hour: number): string {
   const date = new Date();
   date.setDate(date.getDate() + offsetDays);
   date.setHours(hour, 0, 0, 0);
-  const pad = (value: number) => String(value).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  return datetimeLocalFromDate(date);
 }
 
 const deadlinePresetLabels: Array<{ label: string; value: () => string }> = [

@@ -1,6 +1,8 @@
 package com.sqlteacher.infrastructure.database;
 
 import java.util.Locale;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 import java.util.regex.Pattern;
 
 /**
@@ -8,6 +10,9 @@ import java.util.regex.Pattern;
  * exercise evaluator and the package self-test so both enforce identical rules.
  */
 final class SqlStructureMatcher {
+    /** Compiled keyword patterns are cached because evaluators loop over keyword lists. */
+    private static final ConcurrentMap<String, Pattern> KEYWORD_PATTERNS = new ConcurrentHashMap<>();
+
     private SqlStructureMatcher() {
     }
 
@@ -17,9 +22,14 @@ final class SqlStructureMatcher {
 
     static boolean containsKeyword(String normalizedSql, String keyword) {
         String phrase = keyword.toUpperCase(Locale.ROOT).trim().replaceAll("\\s+", " ");
-        return Pattern.compile("(?<![A-Z0-9_])" + Pattern.quote(phrase) + "(?![A-Z0-9_])")
+        return KEYWORD_PATTERNS
+            .computeIfAbsent(phrase, SqlStructureMatcher::compileKeywordPattern)
             .matcher(normalizedSql)
             .find();
+    }
+
+    private static Pattern compileKeywordPattern(String phrase) {
+        return Pattern.compile("(?<![A-Z0-9_])" + Pattern.quote(phrase) + "(?![A-Z0-9_])");
     }
 
     private static String maskCommentsAndLiterals(String sql) {

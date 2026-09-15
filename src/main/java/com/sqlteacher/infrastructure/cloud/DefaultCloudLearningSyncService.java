@@ -14,8 +14,10 @@ import com.sqlteacher.application.event.LearningEventRecorder;
 import com.sqlteacher.application.event.LearningEventType;
 
 import java.io.IOException;
+import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -216,7 +218,15 @@ public final class DefaultCloudLearningSyncService implements CloudLearningSyncS
     private void write(String name, String value) {
         try {
             Files.createDirectories(stateDirectory);
-            Files.writeString(stateDirectory.resolve(name), value);
+            Path target = stateDirectory.resolve(name);
+            Path temporary = target.resolveSibling(target.getFileName() + ".tmp");
+            Files.writeString(temporary, value);
+            // Crash-safe replace: a truncated half-written state file must never survive.
+            try {
+                Files.move(temporary, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+            } catch (AtomicMoveNotSupportedException error) {
+                Files.move(temporary, target, StandardCopyOption.REPLACE_EXISTING);
+            }
         } catch (IOException error) {
             throw new IllegalStateException("无法保存同步状态", error);
         }

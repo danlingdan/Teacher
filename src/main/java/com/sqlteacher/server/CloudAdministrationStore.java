@@ -69,11 +69,24 @@ final class CloudAdministrationStore extends CloudStoreBase {
 
     List<AdminUserSummary> adminUsers(AuthenticatedUser actor) {
         requireAdmin(actor);
-        List<AdminUserSummary> users = new ArrayList<>();
-        try (Connection connection = open(); PreparedStatement statement = connection.prepareStatement(
-            "select id,email,display_name,disabled,created_at from users order by created_at,id")) {
-            try (ResultSet rows = statement.executeQuery()) {
-                while (rows.next()) users.add(adminUser(connection, rows));
+        try (Connection connection = open()) {
+            // One grouped role query instead of one role query per user row.
+            Map<String, Set<UserRole>> rolesByUser = new java.util.HashMap<>();
+            try (PreparedStatement roles = connection.prepareStatement(
+                "select user_id, role from user_roles order by user_id, role");
+                 ResultSet roleRows = roles.executeQuery()) {
+                while (roleRows.next()) {
+                    rolesByUser
+                        .computeIfAbsent(roleRows.getString("user_id"), key -> new java.util.LinkedHashSet<>())
+                        .add(UserRole.valueOf(roleRows.getString("role")));
+                }
+            }
+            List<AdminUserSummary> users = new ArrayList<>();
+            try (PreparedStatement statement = connection.prepareStatement(
+                "select id,email,display_name,disabled,created_at from users order by created_at,id")) {
+                try (ResultSet rows = statement.executeQuery()) {
+                    while (rows.next()) users.add(adminUser(rows, rolesByUser));
+                }
             }
             return List.copyOf(users);
         } catch (SQLException error) { throw database(error); }
@@ -484,6 +497,12 @@ final class CloudAdministrationStore extends CloudStoreBase {
                 return adminUser(connection, row);
             }
         }
+    }
+
+    private AdminUserSummary adminUser(ResultSet row, Map<String, Set<UserRole>> rolesByUser) throws SQLException {
+        return new AdminUserSummary(row.getString("id"), row.getString("email"), row.getString("display_name"),
+            rolesByUser.getOrDefault(row.getString("id"), Set.of()),
+            row.getInt("disabled") != 0, Instant.parse(row.getString("created_at")));
     }
 
     private AdminUserSummary adminUser(Connection connection, ResultSet row) throws SQLException {

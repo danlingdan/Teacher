@@ -185,8 +185,12 @@ public final class SecureUpdateService implements UpdateService {
             requireAllowed(current);
             response = client.send(builder.uri(current).build(), HttpResponse.BodyHandlers.ofInputStream());
             if (response.statusCode() / 100 != 3) break;
-            String location = response.headers().firstValue("Location").orElseThrow(() -> new IllegalStateException("更新下载重定向无效"));
-            current = uri.resolve(location);
+            // 关闭被跳过的 3xx 响应体，否则每次重定向都会泄漏一个未关闭的流和连接。
+            try (InputStream skipped = response.body()) {
+                String location = response.headers().firstValue("Location")
+                    .orElseThrow(() -> new IllegalStateException("更新下载重定向无效"));
+                current = uri.resolve(location);
+            }
         }
         if (response == null || (response.statusCode() != 200 && response.statusCode() != 206)) throw new IllegalStateException("更新下载失败");
         ResumeMode mode = resumeMode(existing, response.statusCode());

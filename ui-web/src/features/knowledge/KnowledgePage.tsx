@@ -797,13 +797,22 @@ function splitPoints(value: string) {
 
 // v3.4.4 KUI-2：snippet 按不可信文本处理——只做分片高亮渲染，绝不使用
 // dangerouslySetInnerHTML，脚本内容经 React 默认转义按纯文本显示。
+// 编译结果按 query 缓存：同一搜索词会在大量摘要上重复使用；split 不受 g 标志
+// lastIndex 状态影响，缓存共享安全。上限防止逐字输入时无限增长。
+const highlightPatternCache = new Map<string, RegExp>();
+
 function highlightParts(text: string, query: string): Array<{ text: string; hit: boolean }> {
   const tokens = [...new Set(query.trim().split(/\s+/).filter(Boolean))];
   if (tokens.length === 0) return [{ text, hit: false }];
   const lowered = new Set(tokens.map((token) => token.toLowerCase()));
-  const pattern = tokens.map(escapeRegExp).join("|");
+  let pattern = highlightPatternCache.get(query);
+  if (!pattern) {
+    if (highlightPatternCache.size >= 50) highlightPatternCache.clear();
+    pattern = new RegExp(`(${tokens.map(escapeRegExp).join("|")})`, "gi");
+    highlightPatternCache.set(query, pattern);
+  }
   return text
-    .split(new RegExp(`(${pattern})`, "gi"))
+    .split(pattern)
     .filter((part) => part !== "")
     .map((part) => ({ text: part, hit: lowered.has(part.toLowerCase()) }));
 }

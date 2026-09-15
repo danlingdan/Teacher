@@ -1,6 +1,8 @@
 package com.sqlteacher.infrastructure.system;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.nio.channels.FileChannel;
@@ -11,6 +13,7 @@ import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 
 public final class AtomicJsonFile {
+    private static final Logger log = LoggerFactory.getLogger(AtomicJsonFile.class);
     private static final ObjectMapper JSON = new ObjectMapper().findAndRegisterModules();
     private AtomicJsonFile() { }
 
@@ -19,7 +22,7 @@ public final class AtomicJsonFile {
         try { return JSON.readValue(Files.readAllBytes(path), type); }
         catch (IOException | RuntimeException error) {
             try { Files.move(path, path.resolveSibling(path.getFileName() + ".corrupt"), StandardCopyOption.REPLACE_EXISTING); }
-            catch (IOException ignored) { }
+            catch (IOException quarantineError) { log.debug("Unable to quarantine corrupted file {}", path, quarantineError); }
             return fallback;
         }
     }

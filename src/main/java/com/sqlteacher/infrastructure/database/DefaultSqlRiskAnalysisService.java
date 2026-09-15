@@ -8,6 +8,7 @@ import com.sqlteacher.application.risk.SqlRiskLevel;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
 import java.util.regex.Pattern;
 
@@ -208,25 +209,29 @@ public final class DefaultSqlRiskAnalysisService implements SqlRiskAnalysisServi
         return null;
     }
 
-    private static Pattern fileReadFunctionPattern(DatabaseDialect dialect) {
-        return switch (dialect.family()) {
-            case MYSQL -> Pattern.compile("\\bLOAD_FILE\\s*\\(");
-            case H2 -> Pattern.compile("\\b(FILE_READ|CSVREAD)\\s*\\(");
-            case DUCKDB -> Pattern.compile("\\b(READ_TEXT|READ_CSV|READ_JSON|READ_PARQUET)\\s*\\(");
-            case POSTGRESQL -> Pattern.compile("\\b(PG_READ_FILE|PG_READ_BINARY_FILE)\\s*\\(");
-            case GENERIC -> Pattern.compile(
+    private static final Pattern MYSQL_FILE_READ_FUNCTIONS = Pattern.compile("\\bLOAD_FILE\\s*\\(");
+    /** Compiled once per family; analyze() runs on every SQL execution. */
+    private static final Map<DatabaseDialect.Family, Pattern> FILE_READ_FUNCTION_PATTERNS = Map.ofEntries(
+            Map.entry(DatabaseDialect.Family.MYSQL, MYSQL_FILE_READ_FUNCTIONS),
+            Map.entry(DatabaseDialect.Family.H2, Pattern.compile("\\b(FILE_READ|CSVREAD)\\s*\\(")),
+            Map.entry(DatabaseDialect.Family.DUCKDB,
+                    Pattern.compile("\\b(READ_TEXT|READ_CSV|READ_JSON|READ_PARQUET)\\s*\\(")),
+            Map.entry(DatabaseDialect.Family.POSTGRESQL,
+                    Pattern.compile("\\b(PG_READ_FILE|PG_READ_BINARY_FILE)\\s*\\(")),
+            Map.entry(DatabaseDialect.Family.GENERIC, Pattern.compile(
                     "\\b(LOAD_FILE|FILE_READ|CSVREAD|READ_TEXT|READ_CSV|READ_JSON|READ_PARQUET"
-                            + "|PG_READ_FILE|PG_READ_BINARY_FILE)\\s*\\(");
-            default -> Pattern.compile("\\bLOAD_FILE\\s*\\(");
-        };
+                            + "|PG_READ_FILE|PG_READ_BINARY_FILE)\\s*\\(")));
+
+    private static Pattern fileReadFunctionPattern(DatabaseDialect dialect) {
+        return FILE_READ_FUNCTION_PATTERNS.getOrDefault(dialect.family(), MYSQL_FILE_READ_FUNCTIONS);
     }
 
     private static boolean isForbiddenAdministrativeStatement(String sql, String statementType) {
         String tokens = maskQuotedText(sql).toUpperCase(Locale.ROOT);
         return switch (statementType) {
-            case "DROP" -> tokens.matches("(?s)^DROP\\s+(USER|ROLE)\\b.*");
-            case "CREATE" -> tokens.matches("(?s)^CREATE\\s+(USER|ROLE)\\b.*");
-            case "ALTER" -> tokens.matches("(?s)^ALTER\\s+USER\\b.*");
+            case "DROP" -> ADMIN_DROP_USER_ROLE.matcher(tokens).matches();
+            case "CREATE" -> ADMIN_CREATE_USER_ROLE.matcher(tokens).matches();
+            case "ALTER" -> ADMIN_ALTER_USER.matcher(tokens).matches();
             default -> false;
         };
     }
@@ -250,7 +255,7 @@ public final class DefaultSqlRiskAnalysisService implements SqlRiskAnalysisServi
             return false;
         }
         String tokens = maskQuotedText(sql).toUpperCase(Locale.ROOT);
-        return tokens.matches("(?s)^DROP\\s+(DATABASE|SCHEMA)\\b.*");
+        return DROP_WHOLE_DATABASE.matcher(tokens).matches();
     }
 
     private SqlRiskAnalysis forbidden(
@@ -283,6 +288,17 @@ public final class DefaultSqlRiskAnalysisService implements SqlRiskAnalysisServi
             "\\b(SLEEP|BENCHMARK|GET_LOCK|RELEASE_LOCK)\\s*\\("
     );
     private static final Pattern COPY_TO_TARGET = Pattern.compile("\\bCOPY\\b(?s).*\\bTO\\s+(\\S*)\\s*$");
+    private static final Pattern TRIGGER_BODY_HEADER =
+            Pattern.compile("(?s)^CREATE\\s+(?:TEMP|TEMPORARY)?\\s*TRIGGER\\b.*?\\bBEGIN\\b");
+    private static final Pattern TRIGGER_BODY_END = Pattern.compile("\\bEND\\b");
+    private static final Pattern BLOCK_COMMENT_TEXT = Pattern.compile("(?s)/\\*.*?\\*/");
+    private static final Pattern LINE_COMMENT_TEXT = Pattern.compile("--[^\\r\\n]*");
+    private static final Pattern ADMIN_DROP_USER_ROLE = Pattern.compile("(?s)^DROP\\s+(USER|ROLE)\\b.*");
+    private static final Pattern ADMIN_CREATE_USER_ROLE = Pattern.compile("(?s)^CREATE\\s+(USER|ROLE)\\b.*");
+    private static final Pattern ADMIN_ALTER_USER = Pattern.compile("(?s)^ALTER\\s+USER\\b.*");
+    private static final Pattern TRIGGER_DEFINITION =
+            Pattern.compile("(?s)^CREATE\\s+(?:TEMP|TEMPORARY)?\\s*TRIGGER\\b.*");
+    private static final Pattern DROP_WHOLE_DATABASE = Pattern.compile("(?s)^DROP\\s+(DATABASE|SCHEMA)\\b.*");
 
     private boolean containsAiSeparatedStatement(String sql) {
         return AI_MULTI_STATEMENT.matcher(sql).find();
@@ -351,7 +367,7 @@ public final class DefaultSqlRiskAnalysisService implements SqlRiskAnalysisServi
     /** True when the (comment-stripped) text is a single CREATE TRIGGER definition. */
     private static boolean isCreateTriggerStatement(String normalizedSql) {
         String tokens = maskQuotedText(normalizedSql).toUpperCase(Locale.ROOT).trim();
-        return tokens.matches("(?s)^CREATE\\s+(?:TEMP|TEMPORARY)?\\s*TRIGGER\\b.*");
+        return TRIGGER_DEFINITION.matcher(tokens).matches();
     }
 
     /**
@@ -360,15 +376,13 @@ public final class DefaultSqlRiskAnalysisService implements SqlRiskAnalysisServi
      */
     private static boolean contentAfterTriggerBody(String sql) {
         String tokens = maskQuotedText(sql).toUpperCase(Locale.ROOT);
-        java.util.regex.Matcher header = java.util.regex.Pattern
-            .compile("(?s)^CREATE\\s+(?:TEMP|TEMPORARY)?\\s*TRIGGER\\b.*?\\bBEGIN\\b")
-            .matcher(tokens);
+        java.util.regex.Matcher header = TRIGGER_BODY_HEADER.matcher(tokens);
         if (!header.find()) {
             // Malformed header without a body; fall back to plain semicolon counting.
             return true;
         }
         String tail = tokens.substring(header.end());
-        java.util.regex.Matcher end = java.util.regex.Pattern.compile("\\bEND\\b").matcher(tail);
+        java.util.regex.Matcher end = TRIGGER_BODY_END.matcher(tail);
         if (!end.find()) {
             return false;
         }
@@ -380,9 +394,9 @@ public final class DefaultSqlRiskAnalysisService implements SqlRiskAnalysisServi
     }
 
     private boolean hasStatementContent(String sql, int start) {
-        String remainder = sql.substring(start)
-                .replaceAll("(?s)/\\*.*?\\*/", "")
-                .replaceAll("--[^\\r\\n]*", "")
+        String remainder = LINE_COMMENT_TEXT.matcher(
+                        BLOCK_COMMENT_TEXT.matcher(sql.substring(start)).replaceAll(""))
+                .replaceAll("")
                 .replace(";", "")
                 .strip();
         return !remainder.isEmpty();

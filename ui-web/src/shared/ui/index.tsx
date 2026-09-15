@@ -6,7 +6,7 @@ export function Button({ variant = "primary", busy = false, children, disabled, 
   return <button className={`ui-button ${variant}`} disabled={disabled || busy} aria-busy={busy} {...props}>{busy ? "处理中…" : children}</button>;
 }
 
-type ToastTone = "success" | "error";
+export type ToastTone = "success" | "error";
 type ToastItem = { id: number; tone: ToastTone; message: string };
 const ToastContext = createContext<(tone: ToastTone, message: string) => void>(() => {});
 
@@ -17,10 +17,17 @@ export function useToast() {
 
 export function Toaster({ children }: { children: ReactNode }) {
   const [items, setItems] = useState<ToastItem[]>([]);
+  const timers = useRef(new Set<number>());
+  // 卸载时清理未到期的 toast 定时器，避免卸载后 setState。
+  useEffect(() => () => timers.current.forEach(id => window.clearTimeout(id)), []);
   const push = useCallback((tone: ToastTone, message: string) => {
     const id = Date.now() + Math.random();
     setItems(current => [...current.slice(-3), { id, tone, message }]);
-    window.setTimeout(() => setItems(current => current.filter(item => item.id !== id)), 4200);
+    const timer = window.setTimeout(() => {
+      timers.current.delete(timer);
+      setItems(current => current.filter(item => item.id !== id));
+    }, 4200);
+    timers.current.add(timer);
   }, []);
   return <ToastContext.Provider value={push}>
     {children}
@@ -74,8 +81,6 @@ export type TreeNode = { id: string; label: string; children?: TreeNode[] };
 function TreeItem({ node }: { node: TreeNode }) {
   const [expanded, setExpanded] = useState(true);
   const branch = Boolean(node.children?.length);
-  return <li role="treeitem" aria-expanded={branch ? expanded : undefined}><div>{branch && <button aria-label={`${expanded ? "折叠" : "展开"}${node.label}`} onClick={() => setExpanded(value => !value)}>{expanded ? "−" : "+"}</button>}<span>{node.label}</span></div>{branch && expanded && <ul role="group">{node.children!.map(child => <TreeItem key={child.id} node={child} />)}</ul>}</li>;
+  return <li role="treeitem" aria-expanded={branch ? expanded : undefined}><div>{branch && <button aria-label={`${expanded ? "折叠" : "展开"}${node.label}`} onClick={() => setExpanded(value => !value)}>{expanded ? "−" : "+"}</button>}<span>{node.label}</span></div>{branch && expanded && <ul role="group">{node.children?.map(child => <TreeItem key={child.id} node={child} />)}</ul>}</li>;
 }
 export function TreeView({ label, nodes }: { label: string; nodes: TreeNode[] }) { return <ul className="ui-tree" role="tree" aria-label={label}>{nodes.map(node => <TreeItem key={node.id} node={node} />)}</ul>; }
-
-export function LiveRegion({ children }: { children: ReactNode }) { return <div className="sr-only" aria-live="polite">{children}</div>; }

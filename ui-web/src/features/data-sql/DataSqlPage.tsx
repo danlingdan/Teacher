@@ -3,7 +3,7 @@ import Editor, { loader } from "@monaco-editor/react";
 import * as monaco from "monaco-editor/editor/editor.api";
 import EditorWorker from "monaco-editor/editor/editor.worker?worker";
 import "monaco-editor/languages/definitions/sql/register";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Button, Dialog, Feedback, FormField, useToast } from "../../shared/ui";
 import { cancelLocalAppRequest, localAppRequest, localAppRequestWithId } from "../../shared/ipc";
@@ -379,36 +379,7 @@ function SchemaPanel({
                       {sample.error.message}
                     </Feedback>
                   )}
-                  {sample.data &&
-                    (sample.data.columns.length === 0 ? (
-                      <p className="muted">该表没有可展示的数据。</p>
-                    ) : (
-                      <div
-                        className="virtual-table schema-sample-table"
-                        role="region"
-                        aria-label={`${table.name} 样例数据`}
-                        tabIndex={0}
-                      >
-                        <table>
-                          <thead>
-                            <tr>
-                              {sample.data.columns.map((column) => (
-                                <th key={column}>{column}</th>
-                              ))}
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {sample.data.rows.map((row, rowIndex) => (
-                              <tr key={rowIndex}>
-                                {sample.data!.columns.map((column) => (
-                                  <td key={column}>{String(row[column] ?? "NULL")}</td>
-                                ))}
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    ))}
+                  {sample.data && <SchemaSampleGrid table={table.name} data={sample.data} />}
                 </div>
               )}
             </details>
@@ -711,7 +682,7 @@ function SqlWorkbench({
       <SqlResults
         page={page}
         pending={execute.isPending || nextPage.isPending}
-        onPage={(value) => nextPage.mutate(value)}
+        onPage={nextPage.mutate}
       />
       {explainReading.length > 0 && (
         <section className="explain-reading">
@@ -820,7 +791,43 @@ function SqlWorkbench({
   );
 }
 
-function SqlResults({
+/** 只读样例数据网格（前 5 行）；memo 避免页面其他状态变化触发重渲染。 */
+const SchemaSampleGrid = memo(function SchemaSampleGrid({ table, data }: {
+  table: string;
+  data: { columns: string[]; rows: Array<Record<string, unknown>> };
+}) {
+  if (data.columns.length === 0) return <p className="muted">该表没有可展示的数据。</p>;
+  return (
+    <div
+      className="virtual-table schema-sample-table"
+      role="region"
+      aria-label={`${table} 样例数据`}
+      tabIndex={0}
+    >
+      <table>
+        <thead>
+          <tr>
+            {data.columns.map((column) => (
+              <th key={column}>{column}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {data.rows.map((row, rowIndex) => (
+            <tr key={rowIndex}>
+              {data.columns.map((column) => (
+                <td key={column}>{String(row[column] ?? "NULL")}</td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+});
+
+/** memo：page 引用稳定时，编辑器输入等父级状态变化不再触发最多 500 行结果的全量重渲染。 */
+const SqlResults = memo(function SqlResults({
   page,
   pending,
   onPage,
@@ -828,8 +835,7 @@ function SqlResults({
   page?: SqlPage;
   pending: boolean;
   onPage: (page: number) => void;
-}) {
-  const toast = useToast();
+}) {  const toast = useToast();
   const [exporting, setExporting] = useState(false);
   const exportCsv = async () => {
     if (!page) return;
@@ -919,7 +925,7 @@ function SqlResults({
       </footer>
     </section>
   );
-}
+});
 
 function AiAssistant({
   connectionId,

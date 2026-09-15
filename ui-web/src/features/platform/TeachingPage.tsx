@@ -1,9 +1,10 @@
 // Teaching workspace page (v3.4.0 REF-13): extracted from PlatformPages.tsx.
 // Read-only loads use useQuery; all write/action mutations stay mutations.
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { localAppRequest } from "../../shared/ipc";
 import { difficultyLabel, knowledgePointLabel, roleLabel } from "../../shared/labels";
+import { copyToClipboard } from "../../shared/clipboard";
 import type {
   ExerciseDefinition,
   ExerciseImportPreview,
@@ -204,10 +205,7 @@ export function TeachingPage() {
         `${item.passed ? "通过" : "未通过"}\t${item.exerciseId}\t${item.title}\t${item.message}`,
     );
     const report = ["状态\t题目ID\t题目\t说明", ...lines].join("\n");
-    void navigator.clipboard
-      ?.writeText(report)
-      .then(() => toast("success", "体检报告已复制到剪贴板，可粘贴保存"))
-      .catch(() => toast("error", "剪贴板不可用，请手动记录"));
+    copyToClipboard(report, "体检报告已复制到剪贴板，可粘贴保存", "剪贴板不可用，请手动记录", toast);
   };
   const draftExercises = useMutation({
     mutationFn: () =>
@@ -258,6 +256,17 @@ export function TeachingPage() {
   useEffect(() => {
     if (analytics.isError) toast("error", `加载学情分析失败：${analytics.error?.message ?? ""}`);
   }, [analytics.isError, analytics.error, toast]);
+  // 放在提前 return 之前（hooks 规则）；练习列表按查询词过滤的结果按需重算，
+  // 避免无关状态（如分页、弹窗）变化时重复全量过滤。
+  const filteredExercises = useMemo(
+    () =>
+      (query.data?.exercises ?? []).filter((item) =>
+        `${item.title} ${item.knowledgePoint}`
+          .toLowerCase()
+          .includes(exerciseQuery.trim().toLowerCase()),
+      ),
+    [query.data, exerciseQuery],
+  );
   if (query.isPending) return <Loading label="正在读取本地题库与学情" />;
   if (query.isError)
     return (
@@ -267,11 +276,6 @@ export function TeachingPage() {
     );
   const data = query.data;
   const interventionItems = interventions.data?.items ?? [];
-  const filteredExercises = data.exercises.filter((item) =>
-    `${item.title} ${item.knowledgePoint}`
-      .toLowerCase()
-      .includes(exerciseQuery.trim().toLowerCase()),
-  );
   const exercisePageSize = 50;
   const exercisePages = Math.max(1, Math.ceil(filteredExercises.length / exercisePageSize));
   const visibleExercisePage = Math.min(exercisePage, exercisePages - 1);

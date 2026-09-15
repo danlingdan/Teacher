@@ -25,6 +25,8 @@ import java.util.Objects;
 public final class ExerciseTextDraftingServiceImpl implements ExerciseTextDraftingService {
     /** Drafting prompts are long and reasoning models can be slow, so use a dedicated bound. */
     private static final Duration DRAFT_TIMEOUT = Duration.ofMinutes(3);
+    /** Shared mapper for draft-content unwrapping; constructing one per call is expensive. */
+    private static final ObjectMapper JSON = new ObjectMapper();
     private final AiModelProvider aiModelProvider;
     private final AiConfiguration aiConfiguration;
     private final AiModelSelectionService modelSelectionService;
@@ -179,7 +181,7 @@ public final class ExerciseTextDraftingServiceImpl implements ExerciseTextDrafti
 
     private static String unwrapJson(String content) {
         try {
-            JsonNode root = new ObjectMapper().readTree(content);
+            JsonNode root = JSON.readTree(content);
             if (root.isTextual()) {
                 return root.asText();
             }

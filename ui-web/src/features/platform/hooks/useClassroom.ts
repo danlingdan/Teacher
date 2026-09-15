@@ -6,6 +6,7 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tansta
 import { useSearchParams } from "react-router-dom";
 import { localAppRequest } from "../../../shared/ipc";
 import { assignmentStatusLabel } from "../../../shared/labels";
+import { datetimeLocalFromIso } from "../../../shared/datetime";
 import { downloadText } from "../../../shared/download";
 import type {
   CloudAssignment,
@@ -192,7 +193,7 @@ export function useClassroom({
     setEditingAssignment(item);
     setAssignmentTitle(item.title);
     setAssignmentDescription(item.description ?? "");
-    setAssignmentDueAt(toDatetimeLocal(item.dueAt));
+    setAssignmentDueAt(datetimeLocalFromIso(item.dueAt));
   };
   const cancelAssignmentEdit = () => {
     setEditingAssignment(undefined);
@@ -435,13 +436,4 @@ export function useClassroom({
     openMastery,
     openFeedback,
   };
-}
-
-/** ISO 时间 → datetime-local 输入值（本地时区）；空值或无法解析时返回空串。 */
-function toDatetimeLocal(iso?: string) {
-  if (!iso) return "";
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return "";
-  const pad = (value: number) => String(value).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }

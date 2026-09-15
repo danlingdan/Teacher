@@ -5,16 +5,20 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.sqlteacher.application.ai.AiTaskHistoryEntry;
 import com.sqlteacher.application.ai.AiTaskHistoryService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
 
 public final class FileAiTaskHistoryService implements AiTaskHistoryService {
+    private static final Logger log = LoggerFactory.getLogger(FileAiTaskHistoryService.class);
     private static final int MAX_ENTRIES = 100;
     private final Path file;
     private final ObjectMapper mapper = new ObjectMapper().registerModule(new JavaTimeModule());
@@ -57,7 +61,19 @@ public final class FileAiTaskHistoryService implements AiTaskHistoryService {
     private List<AiTaskHistoryEntry> load() {
         if (Files.notExists(file)) return new ArrayList<>();
         try { return new ArrayList<>(mapper.readValue(file.toFile(), new TypeReference<List<AiTaskHistoryEntry>>() {})); }
-        catch (Exception error) { return new ArrayList<>(); }
+        catch (Exception error) {
+            // Quarantine the unreadable file so the next save cannot silently destroy the
+            // history; only the failure class is logged, never file content.
+            log.warn("AI task history file is unreadable ({}); quarantining it before rewriting",
+                error.getClass().getSimpleName());
+            try {
+                Files.move(file, file.resolveSibling(file.getFileName() + ".corrupt"),
+                    StandardCopyOption.REPLACE_EXISTING);
+            } catch (IOException quarantineError) {
+                log.warn("Unable to quarantine the corrupted AI task history file", quarantineError);
+            }
+            return new ArrayList<>();
+        }
     }
 
     private void save() {

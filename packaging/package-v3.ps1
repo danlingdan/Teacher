@@ -133,9 +133,19 @@ try {
     }
     $tauriKnowledgeRoot = Join-Path $projectRoot "ui-web\src-tauri\knowledge"
     New-Item -ItemType Directory -Force -Path $tauriKnowledgeRoot | Out-Null
+    # The bundle version lives in the filename, so Copy-Item -Force never overwrites the
+    # previous run's zip; purge stale staging bundles first or knowledge/**/* ships them all.
+    # The selected zip is skipped so the purge stays safe even if it already lives here.
+    Get-ChildItem -Path (Join-Path $tauriKnowledgeRoot "*") -Include "*.zip", "*.sha256" -File -ErrorAction SilentlyContinue |
+        Where-Object { $_.FullName -ne $bundleZip.FullName } |
+        Remove-Item -Force
     Copy-Item -LiteralPath $bundleZip.FullName -Destination $tauriKnowledgeRoot -Force
     if (-not (Test-Path -LiteralPath (Join-Path $tauriKnowledgeRoot $bundleZip.Name))) {
         throw "Knowledge bundle staging for the Tauri bundle is incomplete: $($bundleZip.Name)"
+    }
+    $stagedZips = Get-ChildItem -Path $tauriKnowledgeRoot -Filter "*.zip" -File
+    if ($stagedZips.Count -ne 1) {
+        throw "Knowledge bundle staging must contain exactly one zip, found: $($stagedZips.Name -join ', ')"
     }
 
     Push-Location (Join-Path $projectRoot "ui-web")

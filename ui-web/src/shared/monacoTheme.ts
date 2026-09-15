@@ -13,7 +13,7 @@ let themeDefined = false;
  * 传入：打包产物中 monaco 模块可能被复制进多个 chunk，模块内自行 import 会拿到
  * 与编辑器不同的实例，导致主题注册无效。
  */
-export function defineSqlTeacherEditorTheme(monaco: MonacoNamespace): void {
+function defineSqlTeacherEditorTheme(monaco: MonacoNamespace): void {
   if (themeDefined) return;
   try {
     // 测试环境的 monaco mock 没有完整 editor 命名空间：跳过注册，主题名回退到内置 vs-dark。

@@ -4,6 +4,7 @@
 import { useEffect, useState } from "react";
 import { localAppRequest } from "../../shared/ipc";
 import { formatInstant } from "../../shared/instant";
+import { copyToClipboard } from "../../shared/clipboard";
 import { Button, Dialog, Feedback, FormField, useToast } from "../../shared/ui";
 
 type ProblemReportReceipt = {
@@ -108,10 +109,7 @@ export function ProblemReportDialog({ open, onClose }: { open: boolean; onClose:
 
   const copyQueryToken = () => {
     if (!receipt) return;
-    void navigator.clipboard
-      ?.writeText(receipt.queryToken)
-      .then(() => toast("success", "查询凭据已复制到剪贴板"))
-      .catch(() => toast("error", "剪贴板不可用，请手动抄录"));
+    copyToClipboard(receipt.queryToken, "查询凭据已复制到剪贴板", "剪贴板不可用，请手动抄录", toast);
   };
 
   return (

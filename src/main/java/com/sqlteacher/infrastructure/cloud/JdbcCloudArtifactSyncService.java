@@ -120,24 +120,27 @@ public final class JdbcCloudArtifactSyncService implements CloudArtifactSyncServ
     }
 
     private int importPage(String owner, List<CloudArtifactSyncItem> items) {
+        if (items.isEmpty()) return 0;
         int imported = 0;
-        for (CloudArtifactSyncItem item : items) {
-            try (Connection connection = connections.open("app"); PreparedStatement statement = connection.prepareStatement("""
-                insert or ignore into cloud_sync_operation(operation_id,owner_id,aggregate_type,aggregate_id,
-                    aggregate_version,payload_sha256,summary_json,status,conflict_code,created_at,updated_at)
-                values(?,?,?,?,?,?,?,'SYNCED','',?,?)
-                """)) {
+        // One connection and prepared statement are reused for the page; rows stay
+        // individually executed so the "insert or ignore" affected-row count is unchanged.
+        try (Connection connection = connections.open("app"); PreparedStatement statement = connection.prepareStatement("""
+            insert or ignore into cloud_sync_operation(operation_id,owner_id,aggregate_type,aggregate_id,
+                aggregate_version,payload_sha256,summary_json,status,conflict_code,created_at,updated_at)
+            values(?,?,?,?,?,?,?,'SYNCED','',?,?)
+            """)) {
+            for (CloudArtifactSyncItem item : items) {
                 statement.setString(1, item.operationId()); statement.setString(2, owner);
                 statement.setString(3, item.aggregateType()); statement.setString(4, item.aggregateId());
                 statement.setLong(5, item.aggregateVersion()); statement.setString(6, item.payloadSha256());
                 statement.setString(7, item.summaryJson()); statement.setString(8, item.occurredAt().toString());
                 statement.setString(9, Instant.now().toString());
                 imported += statement.executeUpdate();
-            } catch (SQLException error) {
-                throw new SqlTeacherException("CLOUD_SYNC_IMPORT_FAILED", "Failed to import sync metadata", error);
             }
+            return imported;
+        } catch (SQLException error) {
+            throw new SqlTeacherException("CLOUD_SYNC_IMPORT_FAILED", "Failed to import sync metadata", error);
         }
-        return imported;
     }
 
     private long cursor(String owner) {

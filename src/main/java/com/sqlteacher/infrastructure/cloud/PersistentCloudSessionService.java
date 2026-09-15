@@ -4,6 +4,8 @@ import com.sqlteacher.application.collaboration.CloudApiRequestException;
 import com.sqlteacher.application.collaboration.CloudAuthenticationService;
 import com.sqlteacher.application.collaboration.CloudAuthApi;
 import com.sqlteacher.application.collaboration.CloudSessionService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -12,6 +14,7 @@ import java.util.Optional;
 
 /** Restores only a valid session and removes expired or explicitly signed-out sessions. */
 public final class PersistentCloudSessionService implements CloudSessionService {
+    private static final Logger log = LoggerFactory.getLogger(PersistentCloudSessionService.class);
     private final CloudSessionStore store;
     private final CloudAuthApi api;
     private final Clock clock;
@@ -51,6 +54,9 @@ public final class PersistentCloudSessionService implements CloudSessionService 
         } catch (RuntimeException error) {
             if (isSessionRejected(error)) {
                 signOut();
+            } else {
+                // Transient failures must not silently drop the session without a trace.
+                log.info("Cloud session refresh failed; keeping the stored session", error);
             }
             return Optional.empty();
         }

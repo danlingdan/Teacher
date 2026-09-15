@@ -23,6 +23,8 @@ import java.util.Map;
  * are content-addressed (a content change requires a new dataset ID).
  */
 final class ExerciseBankWriter {
+    /** Shared mapper for chapter JSON encoding; constructing one per call is expensive. */
+    private static final ObjectMapper JSON = new ObjectMapper();
 
     enum DatasetOutcome {
         INSERTED, IDENTICAL, CONFLICT
@@ -147,7 +149,7 @@ final class ExerciseBankWriter {
             payload.add(item);
         }
         try {
-            return new ObjectMapper().writeValueAsString(payload);
+            return JSON.writeValueAsString(payload);
         } catch (com.fasterxml.jackson.core.JsonProcessingException error) {
             throw new IllegalStateException("Chapter JSON encoding failed", error);
         }

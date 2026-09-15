@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { localAppRequest, localAppRequestWithId, subscribeLocalAppEvents } from "./ipc";
 
 export type UpdateInstallPhase = "idle" | "downloading" | "ready" | "launching";
@@ -19,6 +19,10 @@ export function useUpdateInstaller() {
   const [phase, setPhase] = useState<UpdateInstallPhase>("idle");
   const [fraction, setFraction] = useState(0);
   const [error, setError] = useState("");
+  const stopProgressRef = useRef<(() => void) | undefined>(undefined);
+
+  // 组件卸载（如用户中途关闭弹窗/页面）时退订仍在进行的下载进度监听，避免泄漏。
+  useEffect(() => () => stopProgressRef.current?.(), []);
 
   const download = useCallback(() => {
     const requestId = crypto.randomUUID();
@@ -34,6 +38,7 @@ export function useUpdateInstaller() {
       }
     }).then((stop) => {
       unlisten = stop;
+      stopProgressRef.current = stop;
     });
     void localAppRequestWithId("settings.update.download", {}, requestId)
       .then(() => setPhase("ready"))
@@ -43,7 +48,10 @@ export function useUpdateInstaller() {
       })
       .finally(() => {
         // 事件监听在流结束后保留一拍再退订，避免吞掉最后的进度帧。
-        window.setTimeout(() => unlisten?.(), 500);
+        window.setTimeout(() => {
+          unlisten?.();
+          if (stopProgressRef.current === unlisten) stopProgressRef.current = undefined;
+        }, 500);
       });
   }, []);
 
