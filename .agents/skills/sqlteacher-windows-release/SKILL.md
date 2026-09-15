@@ -14,6 +14,7 @@ When publication is authorized, use the repository's solo workflow on `main`; do
 ## Establish the release baseline
 
 1. Check `git status --short`, current branch, `pom.xml` version, existing tags, latest release notes, and `.github/workflows/release.yml`.
+2. Probe the public `GET /api/v1/app/update-manifest` and record the version it currently serves; this release must supersede it, and a stale value here is a pending incident to close during publish.
 2. Confirm the target version is new and all user-visible changes have release notes under `docs/releases/vX.Y.Z.md`.
 3. Inspect the current packaging script instead of assuming artifact names or gates from an older release.
 
@@ -29,7 +30,7 @@ When publication is authorized, use the repository's solo workflow on `main`; do
 
 ## Publish and verify
 
-When authorized, commit the version and documentation together, push `main`, create and push the matching `vX.Y.Z` tag, then follow the triggered GitHub Actions run. Verify that the workflow tests, packages, signs the stable update manifest, uploads the expected assets, and publishes a non-draft, non-prerelease Release marked latest. Before the release announcement is finished, complete the release write-back checklist (v3.4.0 DOC-8/DOC-9; both historical drift incidents trace to missing this step):
+When authorized, commit the version and documentation together, push `main`, create and push the matching `vX.Y.Z` tag, then follow the triggered GitHub Actions run. Verify that the workflow tests, packages, signs the stable update manifest, uploads the expected assets, and publishes a non-draft, non-prerelease Release marked latest. After the Release is public, deploy the CI-signed `update-manifest.json` from the new Release assets to `/opt/sqlteacher/shared/update-manifest.json` on the ECS host (SFTP to a temp name, verify, then `install -o root -g sqlteacher -m 0640` atomically; keep the previous version as backup). The endpoint reads the file per request, so no restart is required. Verify the public endpoint now decodes to the new version and that installer/portable URLs, sizes, and SHA-256 values match the Release assets. v3.4.3 shipped without this step and no client ever saw the 3.4.3 update; v3.4.4 repeated the near-miss in reverse (knowledge bundle deployed, app manifest stale at 3.4.2). Treat "Release published but update manifest not swapped" as an unfinished release. Before the release announcement is finished, complete the release write-back checklist (v3.4.0 DOC-8/DOC-9; both historical drift incidents trace to missing this step):
 
 - Update the docs baseline set: `docs/README.md` "当前基线", `docs/releases/README.md` header status, the release note's date line (replace any "未发布/本地候选" wording with the actual publish date), and the matching `docs/plans/README.md` status column.
 - Update the GitHub Release page itself: the body must carry the full changelog sourced from `docs/releases/vX.Y.Z.md`, the status line must show the real date (a published page must never say "未发布"), and "Latest" must point at the new version. Fix earlier published pages the same way if they still carry candidate wording.
