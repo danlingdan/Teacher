@@ -1,17 +1,17 @@
 {
   "schemaVersion": 1,
-  "commit": "6498c90b59dbe08018435af5fccc70ece560f3d2",
-  "generatedAtUtc": "2026-09-15T13:38:25.3304630+00:00",
+  "commit": "f2a52ffd172aca2c2510f0bb140b60337625cd5e",
+  "generatedAtUtc": "2026-09-15T17:29:10.6190666+00:00",
   "jdkVersion": "java version \"25.0.3\" 2026-04-21 LTS",
   "nodeVersion": "v26.5.0",
   "maven": {
-    "testsRun": 757,
+    "testsRun": 766,
     "failures": 0,
     "errors": 0,
-    "skipped": 0
+    "skipped": 2
   },
   "npm": {
-    "testsRun": 105,
+    "testsRun": 130,
     "failures": 0
   }
 }
