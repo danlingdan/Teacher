@@ -27,6 +27,15 @@ public interface KnowledgeBundleService {
     Optional<KnowledgeBundleState> findBundleState(String bundleId);
 
     /**
+     * Remove an installed bundle entirely: hard-deletes every article it imported
+     * (child-first, mirroring import-time replacement), its bundle state row, and its
+     * copied asset directory. User-authored documents (bundle_id NULL) are never touched.
+     *
+     * @return the number of articles removed
+     */
+    int removeBundle(String bundleId);
+
+    /**
      * Resolve and read an image asset referenced by an article's markdown.
      *
      * @param articleId    the article whose bundle ownership scopes the lookup

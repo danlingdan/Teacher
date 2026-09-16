@@ -140,6 +140,11 @@ class DefaultKnowledgeBundleUpdateServiceTest {
         }
 
         @Override
+        public int removeBundle(String bundleId) {
+            return 0;
+        }
+
+        @Override
         public List<KnowledgeBundleState> listBundleStates() {
             return state.map(List::of).orElse(List.of());
         }

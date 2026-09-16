@@ -102,9 +102,9 @@ describe("KnowledgePage", () => {
     renderPage();
 
     // v3.4.3 KSR-2：课程树由文章自身的 courseTitle/sectionTitle 归组，overview 根本不含活动。
-    // v3.4.4：课程与章节双层折叠树默认展开（章节级 open），点击文档即打开。
+    // v3.5.3：树默认收起（多库并存的目录很长，默认展开没法找），点击章节逐级展开。
     const summary = await screen.findByText(/进程调度/, { selector: "summary" });
-    expect(summary.closest("details")).toHaveAttribute("open");
+    expect(summary.closest("details")).not.toHaveAttribute("open");
     expect(screen.getByText(/1 篇文档/)).toBeInTheDocument();
     expect(requestMock).toHaveBeenCalledWith("knowledge.overview");
     expect(requestMock).not.toHaveBeenCalledWith("course.workspace");
@@ -265,6 +265,10 @@ describe("KnowledgePage", () => {
           overview({
             hasOfficialBundle: true,
             bundle: { bundleId: "official-db-concepts", version: "1.0.0", source: "BUILTIN", importedAt: "2026-09-15T00:00:00Z" },
+            bundles: [
+              { bundleId: "official-db-concepts", version: "1.0.0", source: "builtin" },
+              { bundleId: "thomas-calculus", version: "1.1.0", source: "builtin" },
+            ],
           }),
         );
       if (method === "session.current") return Promise.resolve({ role: "STUDENT" });
@@ -289,7 +293,11 @@ describe("KnowledgePage", () => {
 
     // v3.4.4：知识库更新入口对全角色开放（学生可自查云端更新或手动导入）。
     fireEvent.click(await screen.findByText(/知识库更新/, { selector: "summary" }));
-    expect(await screen.findByText(/已安装 v1.0.0/)).toBeInTheDocument();
+    expect(await screen.findByText(/已安装 2 个知识库/)).toBeInTheDocument();
+    // 面板逐包列出名称与版本，而不是只显示官方通道的第一个状态。
+    expect((await screen.findAllByText("托马斯微积分")).length).toBeGreaterThan(0);
+    expect(await screen.findByText(/v1.1.0 · 内置/)).toBeInTheDocument();
+    expect((await screen.findAllByText(/数据库系统概念/)).length).toBeGreaterThan(0);
     fireEvent.click(screen.getByRole("button", { name: "检查云端更新" }));
 
     await waitFor(() =>

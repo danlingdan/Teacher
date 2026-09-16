@@ -85,9 +85,12 @@ foreach ($file in $markdownFiles) {
     $docDirectory = $file.DirectoryName
 
     # Rewrite Obsidian image embeds ![[name|alias]] to standard markdown images.
-    $content = [regex]::Replace($content, '!\[\[([^\]\|]+)(?:\|[^\]]*)?\]\]', {
+    # Obsidian 的 |尺寸 后缀（如 ![[img.png|300]]）必须保留：按官方约定写进 alt
+    # （![name|300](src)），渲染端据此控制宽度；此前直接丢弃导致图片全部原尺寸爆版。
+    $content = [regex]::Replace($content, '!\[\[([^\]\|]+)(?:\|([^\]]*))?\]\]', {
         param($match)
         $name = $match.Groups[1].Value.Trim()
+        $suffix = if ($match.Groups.Count -gt 2) { $match.Groups[2].Value.Trim() } else { "" }
         $extension = [System.IO.Path]::GetExtension($name).ToLowerInvariant()
         if ($attachmentExtensions -notcontains $extension) { return $match.Value }
 
@@ -128,7 +131,8 @@ foreach ($file in $markdownFiles) {
 
         $encodedSrc = ((@("attachments") + ($segments | ForEach-Object { Get-EncodedSegment $_ }) +
                 @((Get-EncodedSegment $fileName))) -join '/')
-        return "![$name]($encodedSrc)"
+        $alt = if ($suffix) { "$name|$suffix" } else { $name }
+        return "![$alt]($encodedSrc)"
     })
 
     $docRelative = (@("docs") + ($relativePath -split '/')) -join '/'

@@ -19,6 +19,12 @@ import KnowledgeRenderer from "./KnowledgeRenderer";
 // v3.4.3 KSR-2：知识页三态由 knowledge.overview 驱动，与课程活动完全解耦。
 type KnowledgeLibraryState = "empty" | "indexing" | "ready";
 
+// 官方知识库包的展示名（与发布说明/用户手册的课程名一致）。
+const bundleDisplayNames: Record<string, string> = {
+  "official-db-concepts": "数据库系统概念",
+  "thomas-calculus": "托马斯微积分",
+};
+
 export default function KnowledgePage() {
   const [searchParams] = useSearchParams();
   const client = useQueryClient();
@@ -73,6 +79,7 @@ export default function KnowledgePage() {
   const [knowledgePoints, setKnowledgePoints] = useState("");
   const [updateStatus, setUpdateStatus] = useState<KnowledgeBundleUpdateStatus>();
   const [bundleReport, setBundleReport] = useState<KnowledgeBundleImportReport>();
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string>();
   const article = useQuery({
     queryKey: ["knowledge", "article", selectedId],
     queryFn: () =>
@@ -220,6 +227,18 @@ export default function KnowledgePage() {
     },
     onError: (error: Error) => toast("error", `导入失败：${error.message}`),
   });
+  const removeBundle = useMutation({
+    mutationFn: (bundleId: string) =>
+      localAppRequest<{ bundleId: string; removedArticles: number }>("knowledge.bundle.remove", {
+        bundleId,
+      }),
+    onSuccess: (value) => {
+      setConfirmDeleteId(undefined);
+      refresh();
+      toast("success", `已删除知识库（移除 ${value.removedArticles} 篇文档）`);
+    },
+    onError: (error: Error) => toast("error", `删除失败：${error.message}`),
+  });
   const currentMarkdown = article.data?.markdown;
   // 稳定数组身份：下方三个 useMemo 依赖它，避免每次渲染重建映射。
   const articles = useMemo(() => overview.data?.articles ?? [], [overview.data]);
@@ -247,7 +266,7 @@ export default function KnowledgePage() {
   const articleCount = overview.data?.articleCount ?? 0;
   const libraryState: KnowledgeLibraryState =
     articleCount === 0 ? "empty" : (indexStatus?.pendingJobs ?? 0) > 0 ? "indexing" : "ready";
-  const bundle = overview.data?.bundle ?? null;
+  const bundles = overview.data?.bundles ?? [];
 
   if (overview.isPending)
     return <section className="page-skeleton">正在读取课程与知识索引…</section>;
@@ -406,7 +425,7 @@ export default function KnowledgePage() {
             <div className="course-tree">
               {/* v3.4.4：课程与章节双层折叠的单一导航树，去掉与课程树重复的平铺文档列表。 */}
               {grouped.map((course) => (
-                <details key={course.title} className="course-node" open>
+                <details key={course.title} className="course-node">
                   <summary>
                     {course.title}
                     <small>
@@ -420,7 +439,7 @@ export default function KnowledgePage() {
                     </small>
                   </summary>
                   {course.sections.map((section) => (
-                    <details key={section.title} open>
+                    <details key={section.title}>
                       <summary>
                         {section.title}
                         <small> · {section.articles.length} 篇</small>
@@ -449,10 +468,58 @@ export default function KnowledgePage() {
         <details className="knowledge-bundle-update">
           <summary>
             知识库更新
-            <small>{bundle ? `已安装 v${bundle.version}` : "未安装官方知识库"}</small>
+            <small>
+              {bundles.length > 0 ? `已安装 ${bundles.length} 个知识库` : "未安装官方知识库"}
+            </small>
           </summary>
           <div className="bundle-update-body">
-            <p className="muted">从云端获取官方知识库更新，或手动导入知识库压缩包。</p>
+            {bundles.length > 0 && (
+              <ul className="installed-bundles">
+                {bundles.map((item) => (
+                  <li key={item.bundleId}>
+                    <div className="installed-bundle-info">
+                      <strong>{bundleDisplayNames[item.bundleId] ?? item.bundleId}</strong>
+                      <small>
+                        v{item.version} ·{" "}
+                        {item.source === "builtin"
+                          ? "内置"
+                          : item.source === "cloud"
+                            ? "云端更新"
+                            : "手动导入"}
+                      </small>
+                    </div>
+                    {confirmDeleteId === item.bundleId ? (
+                      <span className="bundle-delete-confirm">
+                        <Button
+                          variant="danger"
+                          disabled={removeBundle.isPending}
+                          busy={removeBundle.isPending}
+                          onClick={() => removeBundle.mutate(item.bundleId)}
+                        >
+                          确认删除
+                        </Button>
+                        <Button
+                          variant="secondary"
+                          onClick={() => setConfirmDeleteId(undefined)}
+                        >
+                          取消
+                        </Button>
+                      </span>
+                    ) : (
+                      <Button
+                        variant="danger"
+                        onClick={() => setConfirmDeleteId(item.bundleId)}
+                      >
+                        删除
+                      </Button>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+            <p className="muted">
+              从云端获取官方知识库更新，或手动导入知识库压缩包；云端通道跟踪数据库系统概念，托马斯微积分更新随安装包分发。
+            </p>
             <div className="button-row">
               <Button
                 variant="secondary"

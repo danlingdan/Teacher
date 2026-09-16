@@ -548,12 +548,46 @@ button {
   margin: 12px 0;
 }
 .callout {
+  /* Obsidian 官方色板（help.obsidian.md → Callouts → Supported types）；
+     未知类型回退 note 蓝，别名已在渲染器归一为标准类型。 */
+  --callout-color: #086ddd;
   margin: 22px 0;
   padding: 16px 18px;
-  border: 1px solid var(--teal-line);
-  border-left: 4px solid var(--teal);
+  border: 1px solid color-mix(in srgb, var(--callout-color) 25%, var(--line-soft));
+  border-left: 4px solid var(--callout-color);
   border-radius: 12px;
-  background: var(--teal-wash);
+  background: color-mix(in srgb, var(--callout-color) 7%, var(--surface));
+}
+.callout-note,
+.callout-info,
+.callout-todo {
+  --callout-color: #086ddd;
+}
+.callout-abstract {
+  --callout-color: #00a8a5;
+}
+.callout-tip {
+  --callout-color: #009685;
+}
+.callout-success {
+  --callout-color: #089449;
+}
+.callout-question {
+  --callout-color: #b8860b;
+}
+.callout-warning {
+  --callout-color: #d97a00;
+}
+.callout-failure,
+.callout-danger,
+.callout-bug {
+  --callout-color: #e93147;
+}
+.callout-example {
+  --callout-color: #6f4bd8;
+}
+.callout-quote {
+  --callout-color: #8a8a8a;
 }
 .callout .callout {
   margin-bottom: 5px;
@@ -561,10 +595,28 @@ button {
 }
 .callout-title {
   margin: 0 0 8px;
-  color: var(--teal-deep);
+  color: var(--callout-color);
 }
 .callout > p:last-child {
   margin-bottom: 0;
+}
+/* 折叠 callout（[!type]+ / [!type]-）：标题即 summary，箭头指示开合。 */
+details.callout > summary.callout-title {
+  cursor: pointer;
+  list-style: none;
+  margin: 0;
+}
+details.callout > summary.callout-title::-webkit-details-marker {
+  display: none;
+}
+details.callout > summary.callout-title::after {
+  content: "▸";
+  float: right;
+  color: var(--muted);
+  transition: transform 120ms ease;
+}
+details.callout[open] > summary.callout-title::after {
+  transform: rotate(90deg);
 }
 .knowledge-embed {
   display: inline-flex;
@@ -773,6 +825,9 @@ button {
   background: transparent;
   text-align: left;
   cursor: pointer;
+  /* 知识点条目是树的叶子层级：显式小号字号，避免继承正文大小显得臃肿。 */
+  font-size: 13px;
+  line-height: 1.5;
 }
 .course-tree li button:not(.ui-button):hover,
 .article-list button:not(.ui-button):hover,
@@ -1903,11 +1958,46 @@ body {
   background: rgba(20, 39, 51, 0.75);
   border-color: var(--line-strong);
 }
-.theme-dark .callout,
 .theme-dark .ai-answer {
   color: var(--text);
   background: #153735;
   border-color: #32766e;
+}
+/* Obsidian 暗色色板：callout 背景由 color-mix 按 --callout-color 自动着色。 */
+.theme-dark .callout {
+  --callout-color: #52a7ef;
+  color: var(--text);
+}
+.theme-dark .callout-note,
+.theme-dark .callout-info,
+.theme-dark .callout-todo {
+  --callout-color: #52a7ef;
+}
+.theme-dark .callout-abstract {
+  --callout-color: #00bfbc;
+}
+.theme-dark .callout-tip {
+  --callout-color: #00d0b1;
+}
+.theme-dark .callout-success {
+  --callout-color: #29d38c;
+}
+.theme-dark .callout-question {
+  --callout-color: #eac45e;
+}
+.theme-dark .callout-warning {
+  --callout-color: #ec7500;
+}
+.theme-dark .callout-failure,
+.theme-dark .callout-danger,
+.theme-dark .callout-bug {
+  --callout-color: #fb464c;
+}
+.theme-dark .callout-example {
+  --callout-color: #a882ff;
+}
+.theme-dark .callout-quote {
+  --callout-color: #b8b8b8;
 }
 .theme-dark .article-list button,
 .theme-dark .selection-panel button,
@@ -3139,16 +3229,6 @@ kbd {
   font-weight: 600;
   margin-top: 4px;
 }
-.recommend-card {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 16px 20px;
-}
-.recommend-card strong {
-  font-size: 15px;
-}
 .wrongbook-card {
   display: flex;
   flex-direction: column;
@@ -3648,11 +3728,19 @@ p.assistant-citation {
 .course-tree .course-node {
   border-top: 1px solid var(--line-soft);
 }
+/* 课程名是一级层级，章节是二级：字号必须随层级递减（用户反馈 2026-09-17）。 */
 .course-tree .course-node > summary {
   padding: 10px 2px;
   color: var(--navy);
-  font-size: 14px;
+  font-size: 16px;
   font-weight: 800;
+  cursor: pointer;
+}
+.course-tree .course-node details > summary {
+  padding: 8px 2px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
   cursor: pointer;
 }
 .course-tree .course-node > summary small {
@@ -3725,6 +3813,44 @@ p.assistant-citation {
 }
 .knowledge-bundle-update .bundle-update-body > p {
   margin: 0;
+  font-size: 11px;
+}
+.installed-bundles {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 6px;
+}
+.installed-bundles li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 10px;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  background: var(--surface);
+}
+.installed-bundles .installed-bundle-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.installed-bundles li strong {
+  font-size: 12px;
+}
+.installed-bundles li small {
+  color: var(--muted);
+  font-size: 10px;
+}
+.installed-bundles .bundle-delete-confirm {
+  display: inline-flex;
+  gap: 6px;
+}
+.installed-bundles .ui-button {
+  padding: 4px 10px;
   font-size: 11px;
 }
 .database-picker {

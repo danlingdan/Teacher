@@ -20,13 +20,13 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/** W2.2/W2.3: deterministic recommendation and the local wrong-answer book. */
+/** W2.3: the local wrong-answer book and catalog status aggregation. */
 class JdbcExerciseCatalogServiceTest {
     @TempDir
     Path tempDir;
 
     @Test
-    void shouldAggregateWrongBookWithScoresAndRecommendNextDeterministically() throws Exception {
+    void shouldAggregateWrongBookWithScoresAndCatalogStatuses() throws Exception {
         SqlTeacherConfiguration configuration = configuration();
         new SqliteAppDatabaseInitializer(configuration).initialize();
         JdbcConnectionFactory connections = new JdbcConnectionFactory(configuration.database());
@@ -69,13 +69,6 @@ class JdbcExerciseCatalogServiceTest {
             .filter(candidate -> candidate.id().equals("query-01")).findFirst().orElseThrow();
         assertEquals(100, passed.bestScore());
         assertTrue(passed.passed());
-
-        // 推荐：query-02 正确率 0% → 低分桶 → 巩固基础文案；同一输入必须同一推荐。
-        var first = catalog.recommendNextExercise().orElseThrow();
-        var second = catalog.recommendNextExercise().orElseThrow();
-        assertEquals(first, second);
-        assertEquals("query-02", first.exerciseId());
-        assertTrue(first.reason().contains("0%") || first.reason().contains("巩固"), first.reason());
     }
 
     @Test

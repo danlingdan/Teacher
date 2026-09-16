@@ -15,7 +15,6 @@ import type {
   ExerciseHint,
   ExerciseSession,
   ExerciseView,
-  RecommendationView,
   ResultComparison,
   SqlPage,
 } from "../../shared/types";
@@ -111,13 +110,6 @@ export function ExerciseFlow() {
     queryFn: () => localAppRequest<{ notice: BankPendingNotice | null }>("practice.bank.notice"),
     staleTime: 60_000,
   });
-  // 确定性推荐下一题（本地作答历史重算，无随机、无 AI）。
-  const recommendation = useQuery({
-    queryKey: ["practice", "recommend"],
-    queryFn: () =>
-      localAppRequest<{ recommendation: RecommendationView | null }>("practice.recommend"),
-    staleTime: 30_000,
-  });
   const [selectedId, setSelectedId] = useState<string | undefined>(
     () => searchParams.get("exercise") ?? undefined,
   );
@@ -139,6 +131,14 @@ export function ExerciseFlow() {
     enabled: Boolean(selectedId),
     staleTime: 30_000,
   });
+  // 目录、推荐、错题本、学习路径都从本地作答历史聚合而来，且带 staleTime；
+  // 开始/运行/提交推进状态后不主动失效，这些查询会一直停留在旧结果，
+  // 出现"做完了目录还显示未做"的假象。
+  const invalidatePracticeHistory = () => {
+    for (const key of ["catalog", "wrongbook", "paths"]) {
+      void client.invalidateQueries({ queryKey: ["practice", key] });
+    }
+  };
   const start = useMutation({
     mutationFn: () =>
       localAppRequest<ExerciseSession>("practice.start", {
@@ -149,6 +149,7 @@ export function ExerciseFlow() {
       setFeedback(undefined);
       // 从通用查询模板起步时按题型替换起始模板；已有草稿不动。
       if (answer === defaultSqlAnswer) setAnswer(answerTemplate(value.exercise.exerciseType));
+      invalidatePracticeHistory();
     },
   });
   // 作答写入按题持久化的草稿；300ms 防抖避免每个按键都同步写 localStorage。
@@ -200,6 +201,7 @@ export function ExerciseFlow() {
       setFeedback(result);
       if (submit && selectedId && result.evaluation?.passed) clearDraft(selectedId);
       if (submit && assignmentContext) deliverAssignment.mutate(result);
+      invalidatePracticeHistory();
     },
   });
   // AI 讲解：按需起草展示文本，只读展示，不写任何学习状态。
@@ -326,7 +328,6 @@ export function ExerciseFlow() {
     setAnswer(loadDraft(exerciseId) ?? defaultSqlAnswer);
   };
   const step = feedback ? 3 : session ? 2 : preview.data ? 1 : 0;
-  const recommendationView = recommendation.data?.recommendation;
   return (
     <div className="flow-layout">
       <ExerciseCatalogPanel
@@ -358,21 +359,6 @@ export function ExerciseFlow() {
           <Feedback tone="info" title={assignmentTitle || "班级任务"}>
             <p>提交将计入班级任务。</p>
           </Feedback>
-        )}
-        {recommendationView && !session && (
-          <section className="content-card recommend-card">
-            <div>
-              <p className="eyebrow">推荐下一题</p>
-              <strong>{recommendationView.title}</strong>
-              <p className="muted">{recommendationView.reason}</p>
-            </div>
-            <Button
-              variant="secondary"
-              onClick={() => handleCatalogSelect(recommendationView.exerciseId)}
-            >
-              去练习
-            </Button>
-          </section>
         )}
         {/* v3.5.0 EPATH-2：学习路径入口；无路径数据时组件自身隐藏，保持现状。 */}
         <LearningPathPanel onSelect={handleCatalogSelect} />

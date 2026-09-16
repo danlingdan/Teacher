@@ -97,55 +97,80 @@ try {
         if ($LASTEXITCODE -ne 0) { throw "Unable to build the official knowledge bundle." }
     }
     $knowledgeSourceRoot = Join-Path $targetRoot "knowledge"
-    $bundleZip = Get-ChildItem -LiteralPath $knowledgeSourceRoot -Filter "*.zip" -File -ErrorAction SilentlyContinue |
-        Sort-Object LastWriteTime -Descending |
-        Select-Object -First 1
-    if (-not $bundleZip) {
-        # v3.4.3: CI has no Obsidian source vault, so fall back to the versioned bundle committed
-        # under packaging/knowledge-bundles (the official distribution artifact). A locally
-        # rebuilt bundle in target\knowledge (or -KnowledgeSourceDirectory) always wins.
-        $committedRoot = Join-Path $projectRoot "packaging\knowledge-bundles"
-        $committedZip = Get-ChildItem -LiteralPath $committedRoot -Filter "*.zip" -File -ErrorAction SilentlyContinue |
-            Sort-Object LastWriteTime -Descending |
-            Select-Object -First 1
-        if ($committedZip) {
-            New-Item -ItemType Directory -Force -Path $knowledgeSourceRoot | Out-Null
-            Copy-Item -LiteralPath $committedZip.FullName -Destination $knowledgeSourceRoot -Force
-            $committedSha = "$($committedZip.FullName).sha256"
-            if (Test-Path -LiteralPath $committedSha) {
-                Copy-Item -LiteralPath $committedSha -Destination $knowledgeSourceRoot -Force
+    $committedRoot = Join-Path $projectRoot "packaging\knowledge-bundles"
+    # The installer may ship several official knowledge bundles (distinct courses, e.g.
+    # 数据库系统概念 + 托马斯微积分). Local rebuilds in target\knowledge win per bundleId;
+    # bundleIds absent locally fall back to the committed versioned bundles. Each selected
+    # zip must carry a .sha256 sidecar and a unique bundleId so the first-launch bootstrap
+    # (which iterates every staged zip) can track upgrades per bundle.
+    $selectedZips = [System.Collections.Generic.List[System.IO.FileInfo]]::new()
+    $seenBundleIds = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+    foreach ($sourceRoot in @($knowledgeSourceRoot, $committedRoot)) {
+        if (-not (Test-Path -LiteralPath $sourceRoot)) { continue }
+            foreach ($zip in Get-ChildItem -LiteralPath $sourceRoot -Filter "*.zip" -File -ErrorAction SilentlyContinue | Sort-Object Name) {
+                if (-not (Test-Path -LiteralPath "$($zip.FullName).sha256")) {
+                    if ($sourceRoot -eq $committedRoot) {
+                        throw "Committed knowledge bundle '$($zip.Name)' is missing its .sha256 sidecar."
+                    }
+                    continue
+                }
+                $archive = [System.IO.Compression.ZipFile]::OpenRead($zip.FullName)
+                try {
+                    $manifestEntry = $archive.Entries | Where-Object { $_.FullName -eq "manifest.json" }
+                    if (-not $manifestEntry) { throw "Knowledge bundle '$($zip.Name)' has no manifest.json." }
+                    $reader = New-Object System.IO.StreamReader($manifestEntry.Open())
+                    try { $manifest = $reader.ReadToEnd() | ConvertFrom-Json } finally { $reader.Dispose() }
+                    $bundleId = [string]$manifest.bundleId
+                    if (-not $bundleId) { throw "Knowledge bundle '$($zip.Name)' has no bundleId in its manifest." }
+                    if (-not $seenBundleIds.Add($bundleId)) {
+                        continue
+                    }
+                } finally {
+                    $archive.Dispose()
+                }
+                $selected = $zip
+                if ($sourceRoot -ne $knowledgeSourceRoot) {
+                    # Stage the committed copy through target\knowledge so both roots agree.
+                    $targetPath = Join-Path $knowledgeSourceRoot $zip.Name
+                    if (-not (Test-Path -LiteralPath $targetPath)) {
+                        New-Item -ItemType Directory -Force -Path $knowledgeSourceRoot | Out-Null
+                        Copy-Item -LiteralPath $zip.FullName -Destination $knowledgeSourceRoot -Force
+                        Copy-Item -LiteralPath "$($zip.FullName).sha256" -Destination $knowledgeSourceRoot -Force
+                    }
+                    $selected = Get-Item -LiteralPath $targetPath
+                }
+                $selectedZips.Add($selected)
             }
-            $bundleZip = Get-ChildItem -LiteralPath $knowledgeSourceRoot -Filter "*.zip" -File |
-                Sort-Object LastWriteTime -Descending |
-                Select-Object -First 1
-        }
     }
-    if (-not $bundleZip) {
+    if ($selectedZips.Count -eq 0) {
         throw "No knowledge bundle zip in target\knowledge or packaging\knowledge-bundles. Run packaging\build-knowledge-bundle.ps1 first; the bundled knowledge base is required for this release."
-    }
-    $bundleChecksumFile = "$($bundleZip.FullName).sha256"
-    if (Test-Path -LiteralPath $bundleChecksumFile) {
-        $expectedHash = (Get-Content -LiteralPath $bundleChecksumFile -Raw).Trim().ToLowerInvariant()
-        $actualHash = (Get-FileHash -LiteralPath $bundleZip.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
-        if ($expectedHash -ne $actualHash) {
-            throw "Knowledge bundle checksum mismatch: $bundleZip does not match its .sha256 sidecar."
-        }
     }
     $tauriKnowledgeRoot = Join-Path $projectRoot "ui-web\src-tauri\knowledge"
     New-Item -ItemType Directory -Force -Path $tauriKnowledgeRoot | Out-Null
-    # The bundle version lives in the filename, so Copy-Item -Force never overwrites the
-    # previous run's zip; purge stale staging bundles first or knowledge/**/* ships them all.
-    # The selected zip is skipped so the purge stays safe even if it already lives here.
+    # Bundle versions live in filenames, so Copy-Item -Force never overwrites a previous
+    # run's zips; purge stale staging files first or knowledge/**/* ships them all.
+    $selectedNames = [System.Collections.Generic.HashSet[string]]::new()
+    foreach ($zip in $selectedZips) {
+        $selectedNames.Add($zip.Name) | Out-Null
+        $expectedHash = (Get-Content -LiteralPath "$($zip.FullName).sha256" -Raw).Trim().ToLowerInvariant()
+        $actualHash = (Get-FileHash -LiteralPath $zip.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+        if ($expectedHash -ne $actualHash) {
+            throw "Knowledge bundle checksum mismatch: $($zip.Name) does not match its .sha256 sidecar."
+        }
+        Copy-Item -LiteralPath $zip.FullName -Destination $tauriKnowledgeRoot -Force
+        Copy-Item -LiteralPath "$($zip.FullName).sha256" -Destination $tauriKnowledgeRoot -Force
+    }
     Get-ChildItem -Path (Join-Path $tauriKnowledgeRoot "*") -Include "*.zip", "*.sha256" -File -ErrorAction SilentlyContinue |
-        Where-Object { $_.FullName -ne $bundleZip.FullName } |
+        Where-Object { -not $selectedNames.Contains($_.Name) } |
         Remove-Item -Force
-    Copy-Item -LiteralPath $bundleZip.FullName -Destination $tauriKnowledgeRoot -Force
-    if (-not (Test-Path -LiteralPath (Join-Path $tauriKnowledgeRoot $bundleZip.Name))) {
-        throw "Knowledge bundle staging for the Tauri bundle is incomplete: $($bundleZip.Name)"
+    foreach ($zip in $selectedZips) {
+        if (-not (Test-Path -LiteralPath (Join-Path $tauriKnowledgeRoot $zip.Name))) {
+            throw "Knowledge bundle staging for the Tauri bundle is incomplete: $($zip.Name)"
+        }
     }
     $stagedZips = Get-ChildItem -Path $tauriKnowledgeRoot -Filter "*.zip" -File
-    if ($stagedZips.Count -ne 1) {
-        throw "Knowledge bundle staging must contain exactly one zip, found: $($stagedZips.Name -join ', ')"
+    if ($stagedZips.Count -ne $selectedZips.Count) {
+        throw "Knowledge bundle staging must contain exactly the selected zips, found: $($stagedZips.Name -join ', ')"
     }
 
     Push-Location (Join-Path $projectRoot "ui-web")
@@ -230,10 +255,13 @@ try {
     Copy-Item -LiteralPath (Join-Path $projectRoot "src\main\resources\legal\THIRD-PARTY-LICENSES.txt") -Destination $legalRoot -Force
     Copy-Item -LiteralPath (Join-Path $projectRoot "src\main\resources\legal\PRIVACY.md") -Destination $legalRoot -Force
 
-    # v3.4.3 PUB-1: the portable package ships the same official knowledge bundle.
+    # v3.4.3 PUB-1: the portable package ships the same official knowledge bundles.
     $portableKnowledgeRoot = Join-Path $portableRoot "knowledge"
     New-Item -ItemType Directory -Force -Path $portableKnowledgeRoot | Out-Null
-    Copy-Item -LiteralPath $bundleZip.FullName -Destination $portableKnowledgeRoot -Force
+    foreach ($zip in $selectedZips) {
+        Copy-Item -LiteralPath $zip.FullName -Destination $portableKnowledgeRoot -Force
+        Copy-Item -LiteralPath "$($zip.FullName).sha256" -Destination $portableKnowledgeRoot -Force
+    }
 
     $generatedJavaSbom = Join-Path $targetRoot "sqlteacher-sbom.json"
     if (-not (Test-Path -LiteralPath $generatedJavaSbom)) {
@@ -255,9 +283,11 @@ try {
     $requiredPortableFiles = @(
         (Join-Path $portableRoot "SQLTeacher.exe"),
         (Join-Path $portableRoot "sidecar\runtime\bin\java.exe"),
-        (Join-Path $portableRoot "sidecar\sidecar.json"),
-        (Join-Path $portableKnowledgeRoot $bundleZip.Name)
+        (Join-Path $portableRoot "sidecar\sidecar.json")
     )
+    foreach ($zip in $selectedZips) {
+        $requiredPortableFiles += (Join-Path $portableKnowledgeRoot $zip.Name)
+    }
     foreach ($file in $requiredPortableFiles) {
         if (-not (Test-Path -LiteralPath $file)) { throw "Portable package is incomplete: $file" }
     }

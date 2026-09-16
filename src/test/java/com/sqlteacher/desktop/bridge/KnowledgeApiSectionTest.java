@@ -219,6 +219,37 @@ class KnowledgeApiSectionTest {
     }
 
     @Test
+    void knowledgeBundleRemoveDeletesArticlesAndReportsCount() throws Exception {
+        List<Object[]> removals = new ArrayList<>();
+        var bundles = fake(KnowledgeBundleService.class, Map.of(
+            "removeBundle", args -> {
+                removals.add(args);
+                return 166;
+            }));
+        try (var host = hostWithBeans(bundles)) {
+            KnowledgeApiSection section = new KnowledgeApiSection(host);
+
+            JsonNode result = section.handle("knowledge.bundle.remove", mapper.createObjectNode()
+                .put("bundleId", "thomas-calculus"), () -> false, ignored -> { });
+
+            assertEquals("thomas-calculus", result.path("bundleId").asText());
+            assertEquals(166, result.path("removedArticles").asInt());
+            assertEquals("thomas-calculus", removals.get(0)[0]);
+        }
+    }
+
+    @Test
+    void knowledgeBundleRemoveRejectsBlankBundleId() {
+        try (var host = hostWithBeans(fake(KnowledgeBundleService.class, Map.of()))) {
+            KnowledgeApiSection section = new KnowledgeApiSection(host);
+
+            assertThrows(IllegalArgumentException.class,
+                () -> section.handle("knowledge.bundle.remove", mapper.createObjectNode()
+                    .put("bundleId", " "), () -> false, ignored -> { }));
+        }
+    }
+
+    @Test
     void knowledgeBundleImportRunsAsManualSource() throws Exception {
         var sessions = new ApiSectionTestSupport.FakeCloudSessions();
         sessions.signIn(session("t-1", "教师账号", UserRole.TEACHER));

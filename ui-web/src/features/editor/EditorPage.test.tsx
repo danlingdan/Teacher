@@ -174,6 +174,8 @@ describe("EditorPage CodeEditor shortcuts", () => {
           text: "参考 SELECT 语句",
           exhausted: true,
         });
+      if (method === "practice.paths") return Promise.resolve({ items: [] });
+      if (method === "practice.wrongbook") return Promise.resolve({ items: [] });
       return Promise.reject(new Error(`Unexpected request: ${method}`));
     });
   });
@@ -204,6 +206,30 @@ describe("EditorPage CodeEditor shortcuts", () => {
         answer: "SELECT name FROM student WHERE id = 1;",
       }),
     );
+  });
+
+  it("refreshes catalog-derived queries after a submit so badges stop lagging", async () => {
+    await openSession();
+    const callsFor = (method: string) =>
+      requestMock.mock.calls.filter(([name]) => name === method).length;
+    const catalogBefore = callsFor("practice.catalog");
+
+    await act(async () => {
+      monacoTest.latest.onChange?.("SELECT name FROM student WHERE id = 1;");
+    });
+    await act(async () => {
+      monacoTest.commands.get(KEY_CTRL_SHIFT_ENTER)?.();
+    });
+    await waitFor(() =>
+      expect(requestMock).toHaveBeenCalledWith("practice.submit", {
+        sessionId: "session-1",
+        answer: "SELECT name FROM student WHERE id = 1;",
+      }),
+    );
+    // 提交成功后目录必须失效重取，否则已通过/未通过徽标停留在旧值。
+    await waitFor(() => {
+      expect(callsFor("practice.catalog")).toBeGreaterThan(catalogBefore);
+    });
   });
 
   it("submits the freshly edited source when a CODE activity runs via Ctrl+Enter", async () => {

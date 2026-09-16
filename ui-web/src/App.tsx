@@ -11,6 +11,7 @@ import {
   useNavigate,
 } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { actionRoute } from "./shared/actionRoute";
 import { healthQuery, homeQuery, sessionQuery, settingsPreferencesQuery } from "./app/queries";
 import { ErrorBoundary } from "./app/ErrorBoundary";
 import { RoleGuard } from "./app/RoleGuard";
@@ -581,15 +582,7 @@ function TodayPage() {
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: homeQuery.queryKey }),
   });
   function continueAction(action: LearningActionSummary) {
-    if (action.type === "REVIEW_KNOWLEDGE" || action.knowledgePoint)
-      navigate(`/knowledge?query=${encodeURIComponent(action.knowledgePoint)}`);
-    else if (action.type === "RETRY_ACTIVITY")
-      navigate(`/practice?activity=${encodeURIComponent(action.exerciseId)}`);
-    else if (action.exerciseId)
-      navigate(`/practice?exercise=${encodeURIComponent(action.exerciseId)}`);
-    else if (action.type === "COMPLETE_ASSIGNMENT" || action.type === "REVIEW_FEEDBACK")
-      navigate("/cloud");
-    else navigate("/practice");
+    navigate(actionRoute(action));
   }
   if (summary.isPending) return <PageSkeleton label="正在读取本地学习摘要" />;
   if (summary.isError)

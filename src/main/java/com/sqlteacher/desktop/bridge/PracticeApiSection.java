@@ -25,7 +25,7 @@ final class PracticeApiSection extends ApiSection {
     public Set<String> supportedMethods() {
         return Set.of(
             "practice.catalog", "practice.preview", "practice.start", "practice.run", "practice.submit",
-            "practice.hint", "practice.reset", "practice.close", "practice.wrongbook", "practice.recommend",
+            "practice.hint", "practice.reset", "practice.close", "practice.wrongbook",
             "practice.paths",
             "practice.bank.check", "practice.bank.update", "practice.bank.channels", "practice.bank.notice"
         );
@@ -44,7 +44,6 @@ final class PracticeApiSection extends ApiSection {
             case "practice.reset" -> practiceReset(params, cancellation);
             case "practice.close" -> practiceClose(params, cancellation);
             case "practice.wrongbook" -> practiceWrongBook(cancellation);
-            case "practice.recommend" -> practiceRecommend(cancellation);
             case "practice.paths" -> practicePaths(cancellation);
             case "practice.bank.check" -> practiceBankCheck(cancellation);
             case "practice.bank.update" -> practiceBankUpdate(cancellation, events);
@@ -127,18 +126,6 @@ final class PracticeApiSection extends ApiSection {
         cancellation.throwIfCancelled();
         var items = context().getBean(ExerciseCatalogService.class).wrongBook();
         return mapper.createObjectNode().set("items", mapper.valueToTree(items));
-    }
-
-    private JsonNode practiceRecommend(CancellationToken cancellation) {
-        cancellation.throwIfCancelled();
-        var recommendation = context().getBean(ExerciseCatalogService.class).recommendNextExercise();
-        ObjectNode node = mapper.createObjectNode();
-        if (recommendation.isPresent()) {
-            node.set("recommendation", mapper.valueToTree(recommendation.get()));
-        } else {
-            node.putNull("recommendation");
-        }
-        return node;
     }
 
     private JsonNode practiceBankCheck(CancellationToken cancellation) {

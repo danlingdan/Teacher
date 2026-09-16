@@ -92,11 +92,18 @@ export interface KnowledgeBundleState {
   archiveSha256?: string | null;
   importedAt: string;
 }
+export interface InstalledKnowledgeBundle {
+  bundleId: string;
+  version: string;
+  source: string;
+}
+
 export interface KnowledgeOverview {
   articleCount: number;
   articles: KnowledgeArticle[];
   hasOfficialBundle: boolean;
   bundle: KnowledgeBundleState | null;
+  bundles: InstalledKnowledgeBundle[];
   index: KnowledgeIndexStatus;
 }
 export interface KnowledgeBundleUpdateStatus {
@@ -295,14 +302,6 @@ export interface WrongBookItem {
   bestScore: number | null;
   lastAttemptAt: string | null;
   lastFeedback: string;
-}
-export interface RecommendationView {
-  exerciseId: string;
-  title: string;
-  knowledgePoint: string;
-  difficulty: string;
-  exerciseType: ExerciseKind;
-  reason: string;
 }
 // v3.5.0 EPATH-1/2：题库分发的章节学习路径（进度由 Java 侧联接当前学习者数据）。
 export interface PathExerciseView {

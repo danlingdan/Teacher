@@ -9,7 +9,6 @@ import com.sqlteacher.application.exercise.ExerciseCatalogService;
 import com.sqlteacher.application.exercise.ExerciseManagementService;
 import com.sqlteacher.application.exercise.ExerciseSummary;
 import com.sqlteacher.application.exercise.ExerciseView;
-import com.sqlteacher.application.exercise.RecommendationView;
 import com.sqlteacher.application.exercise.WrongBookItem;
 import com.sqlteacher.domain.SqlTeacherException;
 import com.sqlteacher.domain.exercise.ExerciseDifficulty;
@@ -20,12 +19,10 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.TreeMap;
 
 public final class JdbcExerciseCatalogService implements ExerciseCatalogService {
     private static final ObjectMapper FEEDBACK_MAPPER = new ObjectMapper();
@@ -215,81 +212,6 @@ public final class JdbcExerciseCatalogService implements ExerciseCatalogService 
         }
     }
 
-    @Override
-    public Optional<RecommendationView> recommendNextExercise() {
-        List<ExerciseCatalogItem> items = listAvailableExercises();
-        List<ExerciseCatalogItem> unpassed = items.stream()
-            .filter(item -> !item.passed())
-            .sorted(Comparator.comparing((ExerciseCatalogItem item) ->
-                    difficultyRank(item.difficulty())).thenComparing(ExerciseCatalogItem::title))
-            .toList();
-        if (unpassed.isEmpty()) {
-            return Optional.empty();
-        }
-
-        // Knowledge-point accuracy from the same local status map the catalog uses.
-        Map<String, List<ExerciseCatalogItem>> byKnowledgePoint = new TreeMap<>();
-        for (ExerciseCatalogItem item : items) {
-            byKnowledgePoint.computeIfAbsent(item.knowledgePoint(), key -> new ArrayList<>()).add(item);
-        }
-        String targetPoint = null;
-        int accuracy = -1;
-        for (Map.Entry<String, List<ExerciseCatalogItem>> entry : byKnowledgePoint.entrySet()) {
-            List<ExerciseCatalogItem> attempted = entry.getValue().stream()
-                .filter(item -> item.attempts() > 0)
-                .toList();
-            if (attempted.isEmpty()) {
-                continue;
-            }
-            long passed = attempted.stream().filter(ExerciseCatalogItem::passed).count();
-            int pointAccuracy = (int) Math.floor(100.0 * passed / attempted.size());
-            if (targetPoint == null || pointAccuracy < accuracy) {
-                targetPoint = entry.getKey();
-                accuracy = pointAccuracy;
-            }
-        }
-
-        if (targetPoint == null) {
-            ExerciseCatalogItem first = unpassed.getFirst();
-            return Optional.of(new RecommendationView(
-                first.id(), first.title(), first.knowledgePoint(), first.difficulty(), first.exerciseType(),
-                "还没有作答记录，建议从「" + first.knowledgePoint() + "」的入门题开始。"
-            ));
-        }
-
-        final String selectedPoint = targetPoint;
-        List<ExerciseCatalogItem> pointUnpassed = unpassed.stream()
-            .filter(item -> item.knowledgePoint().equals(selectedPoint))
-            .toList();
-        if (pointUnpassed.isEmpty()) {
-            pointUnpassed = unpassed;
-        }
-        final String reasonPoint = selectedPoint;
-        final int pointAccuracy = accuracy;
-        int targetRank;
-        String reason;
-        if (accuracy >= 80) {
-            targetRank = difficultyRank(ExerciseDifficulty.ADVANCED);
-            reason = "「" + reasonPoint + "」正确率 " + pointAccuracy + "%，建议挑战更高难度。";
-        } else if (accuracy >= 40) {
-            targetRank = difficultyRank(pointUnpassed.getFirst().difficulty());
-            reason = "「" + reasonPoint + "」正确率 " + pointAccuracy + "%，建议同难度再练一道。";
-        } else {
-            targetRank = difficultyRank(ExerciseDifficulty.BEGINNER);
-            reason = "「" + reasonPoint + "」正确率 " + pointAccuracy + "%，建议先巩固基础题。";
-        }
-        ExerciseCatalogItem best = pointUnpassed.stream()
-            .min(Comparator
-                .comparingInt((ExerciseCatalogItem item) ->
-                    Math.abs(difficultyRank(item.difficulty()) - targetRank))
-                .thenComparingInt(item -> difficultyRank(item.difficulty()))
-                .thenComparing(ExerciseCatalogItem::title))
-            .orElse(pointUnpassed.getFirst());
-        return Optional.of(new RecommendationView(
-            best.id(), best.title(), best.knowledgePoint(), best.difficulty(), best.exerciseType(), reason
-        ));
-    }
-
     private ExerciseCatalogItem toItem(ExerciseSummary summary, OwnerStatus status) {
         return new ExerciseCatalogItem(
             summary.id(), summary.title(), summary.knowledgePoint(), summary.difficulty(),
@@ -365,14 +287,6 @@ public final class JdbcExerciseCatalogService implements ExerciseCatalogService 
         } catch (JsonProcessingException | IllegalArgumentException error) {
             return "";
         }
-    }
-
-    private static int difficultyRank(ExerciseDifficulty difficulty) {
-        return switch (difficulty) {
-            case BEGINNER -> 0;
-            case INTERMEDIATE -> 1;
-            case ADVANCED -> 2;
-        };
     }
 
     private record OwnerStatus(int attempts, boolean passed, String lastAttemptAt, Integer bestScore) {

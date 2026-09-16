@@ -99,6 +99,11 @@ class KnowledgeBundleBootstrapServiceTest {
         }
 
         @Override
+        public int removeBundle(String bundleId) {
+            return 0;
+        }
+
+        @Override
         public List<KnowledgeBundleState> listBundleStates() {
             return existingState.map(List::of).orElse(List.of());
         }

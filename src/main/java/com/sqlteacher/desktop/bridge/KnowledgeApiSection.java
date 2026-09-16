@@ -42,6 +42,7 @@ final class KnowledgeApiSection extends ApiSection {
             "knowledge.article.visibility", "knowledge.article.delete",
             "knowledge.import.preview", "knowledge.import.execute",
             "knowledge.bundle.import", "knowledge.bundle.check", "knowledge.bundle.download",
+            "knowledge.bundle.remove",
             "knowledge.overview"
         );
     }
@@ -63,6 +64,7 @@ final class KnowledgeApiSection extends ApiSection {
             case "knowledge.import.preview" -> knowledgeImportPreview(params, cancellation);
             case "knowledge.import.execute" -> knowledgeImportExecute(params, cancellation, events);
             case "knowledge.bundle.import" -> knowledgeBundleImport(params, cancellation, events);
+            case "knowledge.bundle.remove" -> knowledgeBundleRemove(params, cancellation);
             case "knowledge.bundle.check" -> knowledgeBundleCheck(cancellation);
             case "knowledge.bundle.download" -> knowledgeBundleDownload(cancellation, events);
             case "knowledge.overview" -> knowledgeOverview(cancellation);
@@ -220,6 +222,14 @@ final class KnowledgeApiSection extends ApiSection {
         return mapper.valueToTree(report);
     }
 
+    private JsonNode knowledgeBundleRemove(JsonNode params, CancellationToken cancellation) {
+        cancellation.throwIfCancelled();
+        // 与导入/下载同权：官方知识库内容对所有角色可管理（用户 2026-09-16 确认）。
+        String bundleId = requiredText(params, "bundleId", 128);
+        int removed = context().getBean(KnowledgeBundleService.class).removeBundle(bundleId);
+        return mapper.createObjectNode().put("bundleId", bundleId).put("removedArticles", removed);
+    }
+
     private JsonNode knowledgeBundleCheck(CancellationToken cancellation) {
         cancellation.throwIfCancelled();
         return mapper.valueToTree(context().getBean(KnowledgeBundleUpdateService.class).check());
@@ -246,6 +256,15 @@ final class KnowledgeApiSection extends ApiSection {
         ObjectNode result = mapper.createObjectNode();
         result.put("articleCount", articles.size());
         result.set("articles", mapper.valueToTree(articles));
+        // 多官方包（v3.5.3）：面板列出每个已装包，不再只透出第一个状态。
+        var bundles = mapper.createArrayNode();
+        for (var state : states) {
+            bundles.add(mapper.createObjectNode()
+                .put("bundleId", state.bundleId())
+                .put("version", state.version())
+                .put("source", state.source().wireName()));
+        }
+        result.set("bundles", bundles);
         if (states.isEmpty()) {
             result.put("hasOfficialBundle", false);
             result.putNull("bundle");

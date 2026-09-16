@@ -196,6 +196,43 @@ public final class SqliteKnowledgeBundleService implements KnowledgeBundleServic
     }
 
     @Override
+    public int removeBundle(String bundleId) {
+        if (bundleId == null || bundleId.isBlank()) {
+            throw new IllegalArgumentException("bundleId must not be blank");
+        }
+        List<String[]> doomed;
+        try (Connection connection = connectionFactory.open("app");
+             PreparedStatement statement = connection.prepareStatement(
+                 "select id, document_id from course_knowledge_articles "
+                     + "where bundle_id = ? order by id")) {
+            statement.setString(1, bundleId);
+            try (ResultSet rows = statement.executeQuery()) {
+                doomed = new ArrayList<>();
+                while (rows.next()) {
+                    doomed.add(new String[]{rows.getString(1), rows.getString(2)});
+                }
+            }
+        } catch (SQLException error) {
+            throw new SqlTeacherException("KNOWLEDGE_BUNDLE_READ_FAILED", "读取知识库文章失败", error);
+        }
+        for (String[] article : doomed) {
+            hardDeleteArticle(article[0], article[1]);
+        }
+        try (Connection connection = connectionFactory.open("app");
+             PreparedStatement statement = connection.prepareStatement(
+                 "delete from knowledge_bundle_state where bundle_id = ?")) {
+            statement.setString(1, bundleId);
+            statement.executeUpdate();
+        } catch (SQLException error) {
+            throw new SqlTeacherException("KNOWLEDGE_BUNDLE_STATE_DELETE_FAILED", "知识库状态删除失败", error);
+        }
+        // 拷贝出的图片资产可由包 zip 原样重建，随包一并移除。
+        deleteRecursively(assetRoot.resolve(bundleId));
+        indexService.rebuildPending();
+        return doomed.size();
+    }
+
+    @Override
     public KnowledgeAsset readArticleAsset(String articleId, String relativePath) {
         if (articleId == null || articleId.isBlank() || relativePath == null || relativePath.isBlank()) {
             throw new IllegalArgumentException("articleId and relativePath are required");
