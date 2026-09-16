@@ -33,7 +33,10 @@ public record UpdateManifest(int schemaVersion, String product, String channel, 
             throw new IllegalArgumentException("update URL must use HTTPS");
         }
         String host = value.getHost().toLowerCase(java.util.Locale.ROOT);
-        if (!host.equals("github.com") && !host.equals("api.sqlteacher.tech") && !host.equals("objects.githubusercontent.com")) {
+        // 与下载侧 SecureUpdateService.ALLOWED_HOSTS 保持一致：GitHub Releases
+        // 资产既可能以 github.com 直链出现，也可能落在其两个 CDN 主机上。
+        if (!host.equals("github.com") && !host.equals("api.sqlteacher.tech")
+            && !host.equals("objects.githubusercontent.com") && !host.equals("release-assets.githubusercontent.com")) {
             throw new IllegalArgumentException("update URL host is not allowed");
         }
     }

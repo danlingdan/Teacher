@@ -61,6 +61,39 @@ class SecureUpdateServiceTest {
         assertEquals("/danlingdan/Teacher/releases/download/v1.10.0/SQLTeacher-1.10.0.exe", mirrors.get(0).getPath());
     }
 
+    @Test void followsGitHubReleasesRedirectToItsCurrentAssetCdn() {
+        // GitHub 将 Releases 资产 302 到 release-assets.githubusercontent.com；
+        // 重定向轮的主机校验必须放行，否则官方安装包下载必然失败。
+        SecureUpdateService.requireAllowed(java.net.URI.create(
+            "https://release-assets.githubusercontent.com/github-production-release-asset/1287965038/asset"),
+            SecureUpdateService.ALLOWED_HOSTS);
+        SecureUpdateService.requireAllowed(java.net.URI.create(
+            "https://github.com/danlingdan/Teacher/releases/download/v1.10.0/SQLTeacher-1.10.0.exe"),
+            SecureUpdateService.ALLOWED_HOSTS);
+        assertThrows(IllegalArgumentException.class, () -> SecureUpdateService.requireAllowed(
+            java.net.URI.create("http://release-assets.githubusercontent.com/asset"), SecureUpdateService.ALLOWED_HOSTS));
+        assertThrows(IllegalArgumentException.class, () -> SecureUpdateService.requireAllowed(
+            java.net.URI.create("https://evil.example.com/installer.exe"), SecureUpdateService.ALLOWED_HOSTS));
+    }
+
+    @Test void acceptsManifestUrlsOnGitHubAssetCdnAndRejectsStrangerHosts() throws Exception {
+        var pair = KeyPairGenerator.getInstance("Ed25519").generateKeyPair();
+        Properties keys = new Properties();
+        keys.setProperty("test-key", Base64.getEncoder().encodeToString(pair.getPublic().getEncoded()));
+
+        Map<String, Object> cdn = payloadMap();
+        cdn.put("installerUrl", "https://release-assets.githubusercontent.com/github-production-release-asset/1287965038/SQLTeacher-1.10.0.exe");
+        byte[] cdnPayload = JSON.writeValueAsBytes(cdn);
+        assertEquals("1.10.0", SecureUpdateService.verifyAndParse(
+            envelope("test-key", cdnPayload, sign(pair.getPrivate(), cdnPayload)), keys).version().toString());
+
+        Map<String, Object> stranger = payloadMap();
+        stranger.put("installerUrl", "https://evil.example.com/SQLTeacher-1.10.0.exe");
+        byte[] strangerPayload = JSON.writeValueAsBytes(stranger);
+        assertThrows(IllegalArgumentException.class,
+            () -> SecureUpdateService.verifyAndParse(envelope("test-key", strangerPayload, sign(pair.getPrivate(), strangerPayload)), keys));
+    }
+
     @Test void resumesPartialDownloadsOnlyOn206AndRestartsOtherwise() {
         assertEquals(SecureUpdateService.ResumeMode.APPEND, SecureUpdateService.resumeMode(100, 206));
         assertEquals(SecureUpdateService.ResumeMode.RESTART, SecureUpdateService.resumeMode(100, 200));

@@ -7,6 +7,7 @@ import com.sqlteacher.application.system.GeneralSoftwareService;
 import com.sqlteacher.application.system.GeneralSoftwareSettings;
 import com.sqlteacher.application.system.ResourcePolicy;
 import com.sqlteacher.application.update.*;
+import com.sqlteacher.domain.SqlTeacherException;
 import com.sqlteacher.infrastructure.system.AtomicJsonFile;
 import com.sqlteacher.infrastructure.system.ConfiguredHttpClient;
 import org.slf4j.Logger;
@@ -42,7 +43,11 @@ import java.util.function.DoubleConsumer;
 
 public final class SecureUpdateService implements UpdateService {
     private static final Logger log = LoggerFactory.getLogger(SecureUpdateService.class);
-    private static final Set<String> ALLOWED_HOSTS = Set.of("api.sqlteacher.tech", "github.com", "objects.githubusercontent.com");
+    // GitHub 已将 Releases 资产下载的 302 目标从 objects.githubusercontent.com
+    // 迁移到 release-assets.githubusercontent.com；两个 CDN 主机都必须放行，
+    // 否则重定向轮的 requireAllowed 会拒绝官方安装包地址。
+    static final Set<String> ALLOWED_HOSTS = Set.of("api.sqlteacher.tech", "github.com",
+        "objects.githubusercontent.com", "release-assets.githubusercontent.com");
     private static final List<String> MIRROR_HOSTS = List.of("mirror.sqlteacher.tech", "download.sqlteacher.tech");
     private static final ObjectMapper JSON = new ObjectMapper().findAndRegisterModules();
     private final URI endpoint;
@@ -146,15 +151,18 @@ public final class SecureUpdateService implements UpdateService {
         } catch (ResumeCorruptedException error) {
             deleteQuietly(temporary);
             system.failTask(task, "UPDATE_DOWNLOAD_CORRUPTED", true);
-            throw new IllegalStateException("更新文件未通过完整性校验，请重新下载", error);
+            // 领域异常携带错误码与中文原因：IPC 桥会原样透传给界面，
+            // 而不是被协议层兜底替换成笼统的 "Local application operation failed"。
+            throw new SqlTeacherException("UPDATE_DOWNLOAD_CORRUPTED", "更新文件未通过完整性校验，请重新下载", error);
         } catch (InterruptedException error) {
             // interrupted transfer keeps the partial file so a later attempt can resume
             Thread.currentThread().interrupt(); system.failTask(task, "UPDATE_DOWNLOAD_CANCELLED", true);
-            throw new IllegalStateException("更新下载已取消", error);
+            throw new SqlTeacherException("UPDATE_DOWNLOAD_CANCELLED", "更新下载已取消", error);
         } catch (Exception error) {
             // transport failures keep the partial file for a future resume
             system.failTask(task, "UPDATE_DOWNLOAD_INTERRUPTED", true);
-            throw new IllegalStateException(error.getMessage() == null ? "更新下载失败" : error.getMessage(), error);
+            throw new SqlTeacherException("UPDATE_DOWNLOAD_FAILED",
+                error.getMessage() == null ? "更新下载失败" : error.getMessage(), error);
         }
     }
 
@@ -238,9 +246,9 @@ public final class SecureUpdateService implements UpdateService {
     }
 
     @Override public void launchInstaller(UpdateManifest manifest, Path installer) {
-        if (!ready(manifest, installer)) throw new IllegalStateException("安装器尚未通过完整性校验");
+        if (!ready(manifest, installer)) throw new SqlTeacherException("UPDATE_INSTALL_NOT_READY", "安装器尚未通过完整性校验");
         try { new ProcessBuilder(installer.toAbsolutePath().toString()).directory(installer.getParent().toFile()).start(); }
-        catch (IOException error) { throw new IllegalStateException("无法启动安装器", error); }
+        catch (IOException error) { throw new SqlTeacherException("UPDATE_INSTALL_FAILED", "无法启动安装器", error); }
     }
 
     @Override public void skip(SemanticVersion version) {
@@ -293,6 +301,10 @@ public final class SecureUpdateService implements UpdateService {
         return value;
     }
     private void requireAllowed(URI uri) {
+        requireAllowed(uri, allowedHosts);
+    }
+
+    static void requireAllowed(URI uri, Set<String> allowedHosts) {
         String host = uri.getHost() == null ? "" : uri.getHost().toLowerCase(Locale.ROOT);
         if (!"https".equalsIgnoreCase(uri.getScheme()) || !allowedHosts.contains(host)) {
             throw new IllegalArgumentException("update download host is not allowed");
