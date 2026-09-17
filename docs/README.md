@@ -4,8 +4,8 @@
 
 ## 当前基线
 
-- 当前代码版本：`3.5.3`（最新 tag）
-- 当前公开正式版本：[v3.5.3](releases/v3.5.3.md)（GitHub Release Latest）
+- 当前代码版本：`3.5.4`（最新 tag）
+- 当前公开正式版本：[v3.5.4](releases/v3.5.4.md)（GitHub Release Latest）
 - 上一稳定版本线：[v3.4.4](releases/v3.4.4.md)（体验补齐版本；v3.4.0–v3.4.4 均已公开发布）
 - 当前迭代计划：[v3.5.0 SQL 教学体验提升计划](plans/2026-09-16-v3.5.0-sql-teaching-experience-plan.md)（已发布，见 [v3.5.0 发布说明](releases/v3.5.0.md)；上一轮 [v3.4.4 计划](plans/2026-09-15-v3.4.4-plan.md) 已发布）
 - 最近一轮功能计划：[v3.3 SQL 教学能力全面提升计划](plans/2026-09-10-v3.3-sql-teaching-capability-plan.md)（已交付，v3.3.0–v3.3.4 均已发布）

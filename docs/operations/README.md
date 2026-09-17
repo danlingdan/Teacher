@@ -2,6 +2,7 @@
 
 本目录记录生产环境实际操作和门禁结果。长期部署方法见 [云端服务部署指南](../guide/12-cloud-service-deployment.md)；这里的日期型文件用于追溯当次操作，不应直接当作最新操作手册。
 
+- [v3.5.4 发布与更新清单部署记录](2026-09-18-v3.5.4-release-deployment.md)（GitHub 上传通道故障改本地签名发布；清单原子替换并公网验证 3.5.4）
 - [更新下载中继（/gh/ 反代）部署记录](2026-09-18-update-download-relay.md)（api.sqlteacher.tech 兼任 GitHub Releases 中继，客户端 GitHub 直链失败自动回退；公网全量下载与 SHA-256 验证通过）
 - [v3.5.3 发布与更新清单部署记录](2026-09-17-v3.5.3-release-deployment.md)（双官方知识库包随安装包分发，CI 签名清单原子替换并公网验证）
 - [v3.5.2 发布与更新清单部署记录](2026-09-16-v3.5.2-release-deployment.md)（服务端 jar 无变更，CI 签名清单原子替换并公网验证；存量客户端需手动下载）
