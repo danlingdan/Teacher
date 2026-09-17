@@ -140,6 +140,7 @@ export type LocalAppMethod =
   | "support.report.withdraw"
   | "support.report.export"
   | "settings.update.download"
+  | "settings.update.forceDownload"
   | "settings.update.install"
   | "settings.update.skip"
   | "teaching.bank.rollback"

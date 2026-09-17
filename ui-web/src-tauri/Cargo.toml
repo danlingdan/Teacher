@@ -1,6 +1,6 @@
 [package]
 name = "sqlteacher-desktop"
-version = "3.5.3"
+version = "3.5.4"
 description = "SQLTeacher 3.0 desktop shell"
 authors = ["SQLTeacher Project"]
 edition = "2024"

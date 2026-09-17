@@ -11,6 +11,10 @@ vi.mock("./ipc", () => ({
   localAppRequest: (...args: unknown[]) => requestMock(...args),
   localAppRequestWithId: (...args: unknown[]) => requestWithIdMock(...args),
   subscribeLocalAppEvents: (...args: unknown[]) => subscribeMock(...args),
+  cancelLocalAppRequest: (targetRequestId: string) => {
+    requestMock("system.cancel", { targetRequestId });
+    return Promise.resolve({ cancelled: true });
+  },
 }));
 
 const basePreferences = {
@@ -56,6 +60,7 @@ function mockHappyRequests() {
     if (method === "settings.update.check") return Promise.resolve(updateCheck);
     if (method === "settings.update.install") return Promise.resolve({});
     if (method === "settings.update.skip") return Promise.resolve({});
+    if (method === "system.cancel") return Promise.resolve({ cancelled: true });
     throw new Error(`Unexpected request: ${method}`);
   });
 }
@@ -135,6 +140,35 @@ describe("UpdateDialog", () => {
     // 安装请求成功后应用保持运行：弹窗不关闭，主按钮停留在 launching 忙状态。
     expect(screen.getByRole("button", { name: "立即下载并安装" })).toBeDisabled();
     expect(screen.queryByText("发现新版本 SQLTeacher 3.4.0")).toBeInTheDocument();
+  });
+
+  it("cancels an in-flight download and returns to the idle state", async () => {
+    mockHappyRequests();
+    let rejectDownload: (cause: unknown) => void = () => {};
+    requestWithIdMock.mockImplementation((method: string) => {
+      if (method === "settings.update.download") {
+        return new Promise((_resolve, reject) => {
+          rejectDownload = reject;
+        });
+      }
+      throw new Error(`Unexpected with-id request: ${method}`);
+    });
+    await renderDialog();
+
+    expect(await screen.findByText("发现新版本 SQLTeacher 3.4.0")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "立即下载并安装" }));
+    expect(await screen.findByText(/正在下载更新… 0%/)).toBeInTheDocument();
+
+    const requestId = String(requestWithIdMock.mock.calls[0]?.[2] ?? "");
+    fireEvent.click(screen.getByRole("button", { name: "取消下载" }));
+    await waitFor(() =>
+      expect(requestMock).toHaveBeenCalledWith("system.cancel", { targetRequestId: requestId }),
+    );
+
+    // Java 侧中止后请求以错误收尾：状态机回到 idle，展示原因且可重新发起下载。
+    rejectDownload(new Error("更新下载中断，请检查网络后重试"));
+    expect(await screen.findByText("更新下载中断，请检查网络后重试")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "立即下载并安装" })).toBeEnabled();
   });
 
   it("skips the offered version and closes the dialog", async () => {

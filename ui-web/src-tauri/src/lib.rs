@@ -25,7 +25,7 @@ fn request_timeout(method: &str) -> Duration {
     const MINUTE: u64 = 60;
     match method {
         // Downloads and component installs (bundled JDK) run far beyond any RPC budget.
-        "settings.update.download" | "settings.component.install" => {
+        "settings.update.download" | "settings.update.forceDownload" | "settings.component.install" => {
             Duration::from_secs(30 * MINUTE)
         }
         // Backup/restore, imports, index rebuilds, data resets and sandbox/bank work
@@ -292,6 +292,7 @@ const ALLOWED_METHODS: &[&str] = &[
     "settings.storage",
     "settings.update",
     "settings.update.download",
+    "settings.update.forceDownload",
     "settings.update.install",
     "settings.update.skip",
     "settings.component.install",
@@ -834,5 +835,6 @@ mod tests {
         assert!(request_timeout("knowledge.import.execute") > REQUEST_TIMEOUT);
         assert!(request_timeout("ai.knowledge.ask") > REQUEST_TIMEOUT);
         assert!(request_timeout("settings.update.download") > request_timeout("cloud.sync"));
+        assert!(request_timeout("settings.update.forceDownload") > request_timeout("cloud.sync"));
     }
 }

@@ -40,6 +40,7 @@ import java.util.Properties;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.DoubleConsumer;
+import java.util.function.LongSupplier;
 
 public final class SecureUpdateService implements UpdateService {
     private static final Logger log = LoggerFactory.getLogger(SecureUpdateService.class);
@@ -49,8 +50,13 @@ public final class SecureUpdateService implements UpdateService {
     static final Set<String> ALLOWED_HOSTS = Set.of("api.sqlteacher.tech", "github.com",
         "objects.githubusercontent.com", "release-assets.githubusercontent.com");
     private static final List<String> MIRROR_HOSTS = List.of("mirror.sqlteacher.tech", "download.sqlteacher.tech");
+    /** Path prefix on the cloud host that relays GitHub Releases (see nginx /gh/ + /gh-asset/ on the ECS). */
+    private static final String RELAY_PATH_PREFIX = "/gh";
+    /** A source that delivers no bytes for this long is abandoned so failover moves on (30s). */
+    static final long STALL_TIMEOUT_NANOS = Duration.ofSeconds(30).toNanos();
     private static final ObjectMapper JSON = new ObjectMapper().findAndRegisterModules();
     private final URI endpoint;
+    private final String relayHost;
     private final Path updateDirectory;
     private final Path stateFile;
     private final Path identityFile;
@@ -58,6 +64,7 @@ public final class SecureUpdateService implements UpdateService {
     private final HttpClient client;
     private final Set<String> allowedHosts;
     private final Properties keys = new Properties();
+    private final java.util.concurrent.atomic.AtomicBoolean downloadGate = new java.util.concurrent.atomic.AtomicBoolean();
 
     public SecureUpdateService(URI cloudBaseUri, Path dataDirectory, GeneralSoftwareService system) {
         this(cloudBaseUri, dataDirectory, system, Set.of());
@@ -65,6 +72,7 @@ public final class SecureUpdateService implements UpdateService {
 
     SecureUpdateService(URI cloudBaseUri, Path dataDirectory, GeneralSoftwareService system, Set<String> extraAllowedHosts) {
         endpoint = cloudBaseUri.resolve("/api/v1/app/update-manifest");
+        relayHost = cloudBaseUri.getHost() == null ? "" : cloudBaseUri.getHost().toLowerCase(Locale.ROOT);
         updateDirectory = dataDirectory.toAbsolutePath().normalize().resolve("updates");
         stateFile = dataDirectory.toAbsolutePath().normalize().resolve("support/update-state.json");
         identityFile = dataDirectory.toAbsolutePath().normalize().resolve("support/install-identity.json");
@@ -72,6 +80,8 @@ public final class SecureUpdateService implements UpdateService {
         allowedHosts = new java.util.HashSet<>(ALLOWED_HOSTS);
         allowedHosts.addAll(MIRROR_HOSTS);
         allowedHosts.addAll(extraAllowedHosts);
+        // 云端主机签发更新清单，是受信任的第一方：其下载中继路径（/gh/…）同样放行。
+        if (!relayHost.isEmpty()) allowedHosts.add(relayHost);
         client = ConfiguredHttpClient.create(system, HttpClient.Redirect.NEVER);
         try (InputStream stream = SecureUpdateService.class.getResourceAsStream("/update-public-keys.properties")) {
             if (stream != null) keys.load(stream);
@@ -95,10 +105,7 @@ public final class SecureUpdateService implements UpdateService {
         }
         String task = system.startTask("UPDATE_CHECK", "检查软件更新", false);
         try {
-            HttpRequest request = HttpRequest.newBuilder(endpoint).timeout(Duration.ofSeconds(12)).header("Accept", "application/json").GET().build();
-            HttpResponse<byte[]> response = client.send(request, HttpResponse.BodyHandlers.ofByteArray());
-            if (response.statusCode() != 200 || response.body().length > 128 * 1024) throw new IllegalStateException("更新服务暂时不可用");
-            UpdateManifest manifest = verifyAndParse(response.body(), keys);
+            UpdateManifest manifest = fetchVerifiedManifest();
             if (!channelAllowedForBuild(current.version(), manifest.channel())) {
                 throw new IllegalStateException("更新清单通道与当前安装通道不兼容");
             }
@@ -132,7 +139,31 @@ public final class SecureUpdateService implements UpdateService {
         }
     }
 
+    /** Fetches and signature-verifies the current stable manifest without version or rollout gating; backs force/reinstall downloads. */
+    @Override public UpdateManifest latest() {
+        try {
+            return fetchVerifiedManifest();
+        } catch (InterruptedException error) {
+            Thread.currentThread().interrupt();
+            throw new SqlTeacherException("UPDATE_CHECK_CANCELLED", "更新检查已取消", error);
+        } catch (RuntimeException | IOException error) {
+            throw new SqlTeacherException("UPDATE_CHECK_FAILED", "无法获取官方更新清单，请检查网络后重试", error);
+        }
+    }
+
+    private UpdateManifest fetchVerifiedManifest() throws IOException, InterruptedException {
+        HttpRequest request = HttpRequest.newBuilder(endpoint).timeout(Duration.ofSeconds(12)).header("Accept", "application/json").GET().build();
+        HttpResponse<byte[]> response = client.send(request, HttpResponse.BodyHandlers.ofByteArray());
+        if (response.statusCode() != 200 || response.body().length > 128 * 1024) throw new IllegalStateException("更新服务暂时不可用");
+        return verifyAndParse(response.body(), keys);
+    }
+
     @Override public Path download(UpdateManifest manifest, DoubleConsumer progress) {
+        // 更新包写入固定路径的 .part 文件：并发下载会让两路输出交错写坏同一个文件，
+        // 因此同一进程内只允许一个下载任务（跨进程由桌面单实例约束兜底）。
+        if (!downloadGate.compareAndSet(false, true)) {
+            throw new SqlTeacherException("UPDATE_DOWNLOAD_IN_PROGRESS", "已有下载任务正在进行，请等待其完成后再试");
+        }
         String task = system.startTask("UPDATE_DOWNLOAD", "下载 SQLTeacher " + manifest.version(), true);
         Path temporary = updateDirectory.resolve("SQLTeacher-" + manifest.version() + ".exe.part");
         Path ready = updateDirectory.resolve("SQLTeacher-" + manifest.version() + ".exe");
@@ -161,18 +192,28 @@ public final class SecureUpdateService implements UpdateService {
         } catch (Exception error) {
             // transport failures keep the partial file for a future resume
             system.failTask(task, "UPDATE_DOWNLOAD_INTERRUPTED", true);
-            throw new SqlTeacherException("UPDATE_DOWNLOAD_FAILED",
-                error.getMessage() == null ? "更新下载失败" : error.getMessage(), error);
+            // IOException 的 message 往往只是一条 Windows 路径，直接透传到弹窗毫无可读性；
+            // 换成可操作的原因，原始异常仍留在链路里供日志排查。
+            String reason = error instanceof IOException ? "更新下载中断，请检查网络后重试"
+                : (error.getMessage() == null ? "更新下载失败" : error.getMessage());
+            throw new SqlTeacherException("UPDATE_DOWNLOAD_FAILED", reason, error);
+        } finally {
+            downloadGate.set(false);
         }
     }
 
     private void performDownload(UpdateManifest manifest, Path temporary, String task, DoubleConsumer progress) throws Exception {
+        // 源顺序：GitHub 直链 → 云端中继（防 GitHub 直连被重置的第一方回退，始终可用）
+        // → 镜像站（需在设置中开启；mirror/download.sqlteacher.tech 至今未部署 DNS）。
         List<URI> sources = new ArrayList<>();
         sources.add(manifest.installerUrl());
+        URI relay = relaySource(manifest.installerUrl(), relayHost);
+        if (relay != null) sources.add(relay);
         if (system.settings().updateMirrorsEnabled()) sources.addAll(mirrorSources(manifest.installerUrl()));
         Exception failure = null;
         for (URI source : sources) {
             try {
+                log.info("Downloading update from {}", source.getHost());
                 downloadOnce(source, temporary, manifest.installerSize(), value -> { progress.accept(value); system.updateTask(task, value); });
                 return;
             } catch (Exception error) { failure = error; }
@@ -180,11 +221,28 @@ public final class SecureUpdateService implements UpdateService {
         if (failure != null) throw failure;
     }
 
+    /** Rewrites a GitHub Releases URL onto the cloud host's {@code /gh/} relay path; null when it is not a GitHub URL. */
+    static URI relaySource(URI primary, String relayHost) {
+        if (relayHost == null || relayHost.isEmpty() || !"https".equalsIgnoreCase(primary.getScheme())
+            || !"github.com".equalsIgnoreCase(primary.getHost())) {
+            return null;
+        }
+        try {
+            return new URI("https", null, relayHost, -1,
+                RELAY_PATH_PREFIX + primary.getRawPath(), primary.getRawQuery(), null);
+        } catch (URISyntaxException error) {
+            log.debug("Skipping update relay for {}: {}", primary, error.getMessage());
+            return null;
+        }
+    }
+
     /** Downloads one source, resuming from an existing partial file via HTTP Range when the server supports it. */
     private void downloadOnce(URI uri, Path part, long expectedSize, DoubleConsumer progress) throws Exception {
         long existing = Files.exists(part) ? Files.size(part) : 0;
         if (existing >= expectedSize) { Files.deleteIfExists(part); existing = 0; }
-        HttpRequest.Builder builder = HttpRequest.newBuilder(uri).timeout(Duration.ofMinutes(20));
+        // 头部超时从 20 分钟收紧到 2 分钟：头部迟迟不来的源应在分钟级放弃并切换下一源，
+        // 而不是把整个多源回退窗口耗在黑洞连接上；正文传输由停滞检测与 TCP 层错误兜底。
+        HttpRequest.Builder builder = HttpRequest.newBuilder(uri).timeout(Duration.ofMinutes(2));
         if (existing > 0) builder.header("Range", "bytes=" + existing + "-");
         HttpResponse<InputStream> response = null; URI current = uri;
         for (int redirects = 0; redirects <= 3; redirects++) {
@@ -203,17 +261,36 @@ public final class SecureUpdateService implements UpdateService {
         if (response == null || (response.statusCode() != 200 && response.statusCode() != 206)) throw new IllegalStateException("更新下载失败");
         ResumeMode mode = resumeMode(existing, response.statusCode());
         if (mode == ResumeMode.RESTART) { Files.deleteIfExists(part); existing = 0; }
+        try (InputStream input = response.body()) {
+            pumpToPart(input, part, mode, existing, expectedSize, progress, System::nanoTime);
+        }
+    }
+
+    /**
+     * Streams a response body into the partial download file. WRITE without CREATE refuses
+     * to open a missing file, which made the first-ever download fail with
+     * NoSuchFileException; CREATE is required so a fresh updates directory downloads at all.
+     * The clock is checked per chunk: a source that stops delivering bytes for
+     * {@link #STALL_TIMEOUT_NANOS} is abandoned so failover can move to the next source.
+     */
+    static void pumpToPart(InputStream input, Path part, ResumeMode mode, long existing, long expectedSize,
+                           DoubleConsumer progress, LongSupplier clock) throws Exception {
+        StandardOpenOption[] options = mode == ResumeMode.APPEND
+            ? new StandardOpenOption[]{StandardOpenOption.CREATE, StandardOpenOption.WRITE, StandardOpenOption.APPEND}
+            : new StandardOpenOption[]{StandardOpenOption.CREATE, StandardOpenOption.WRITE, StandardOpenOption.TRUNCATE_EXISTING};
         long total = 0;
-        try (InputStream input = response.body();
-             OutputStream output = Files.newOutputStream(part, mode == ResumeMode.APPEND
-                 ? new StandardOpenOption[]{StandardOpenOption.WRITE, StandardOpenOption.APPEND}
-                 : new StandardOpenOption[]{StandardOpenOption.WRITE, StandardOpenOption.TRUNCATE_EXISTING})) {
+        long lastProgress = clock.getAsLong();
+        try (OutputStream output = Files.newOutputStream(part, options)) {
             byte[] buffer = new byte[64 * 1024]; int read;
             while ((read = input.read(buffer)) >= 0) {
+                if (clock.getAsLong() - lastProgress > STALL_TIMEOUT_NANOS) {
+                    throw new IOException("更新下载停滞，已切换下载源；重试将从断点续传");
+                }
                 if (read == 0) continue;
                 total += read;
                 if (existing + total > expectedSize) throw new ResumeCorruptedException("更新文件超过签名清单大小");
                 output.write(buffer, 0, read);
+                lastProgress = clock.getAsLong();
                 double value = Math.min(1, (existing + total) / (double) expectedSize);
                 progress.accept(value);
             }
@@ -247,7 +324,10 @@ public final class SecureUpdateService implements UpdateService {
 
     @Override public void launchInstaller(UpdateManifest manifest, Path installer) {
         if (!ready(manifest, installer)) throw new SqlTeacherException("UPDATE_INSTALL_NOT_READY", "安装器尚未通过完整性校验");
-        try { new ProcessBuilder(installer.toAbsolutePath().toString()).directory(installer.getParent().toFile()).start(); }
+        // NSIS 安装器要求管理员提权（CreateProcess error=740），而 ProcessBuilder 的
+        // CreateProcess 无法弹出 UAC。经 explorer 壳启动复用系统的 ShellExecute 提权提示；
+        // explorer 立即返回，安装器以独立进程运行。
+        try { new ProcessBuilder("explorer.exe", installer.toAbsolutePath().toString()).start(); }
         catch (IOException error) { throw new SqlTeacherException("UPDATE_INSTALL_FAILED", "无法启动安装器", error); }
     }
 

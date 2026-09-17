@@ -100,6 +100,12 @@ export function UpdateDialog() {
             启动安装程序
           </Button>
         )}
+        {/* v3.5.4：下载可能持续较久，取消中止传输并保留已下载部分供下次续传。 */}
+        {downloading && (
+          <Button variant="secondary" onClick={installer.cancel}>
+            取消下载
+          </Button>
+        )}
         <Button variant="secondary" disabled={busy} onClick={skip}>
           跳过此版本
         </Button>

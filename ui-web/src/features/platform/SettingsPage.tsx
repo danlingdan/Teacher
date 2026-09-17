@@ -1086,6 +1086,8 @@ export function SettingsPage() {
               releaseNotesUrl={updateResult.available.releaseNotesUrl}
             />
           )}
+          {/* v3.5.4：始终可用的重装入口（修复安装/同版本重装/端到端下载验证）。 */}
+          <ReinstallPanel />
           <ul className="plain-list">
             {data.notifications.map((item) => (
               <li key={item.id}>
@@ -1199,6 +1201,53 @@ function UpdateInstallPanel({
           ) : (
             <Button busy={launching} disabled={launching} onClick={installer.launch}>
               启动安装程序
+            </Button>
+          )}
+          {downloading && (
+            <Button variant="secondary" onClick={installer.cancel}>
+              取消下载
+            </Button>
+          )}
+        </div>
+      </Feedback>
+    </section>
+  );
+}
+
+/**
+ * v3.5.4：重装入口——跳过版本门控，直接重新下载最新官方安装包并启动安装。
+ * 给用户"修复/同版本重装"的自助选项，也便于对已发布清单做端到端下载验证。
+ */
+function ReinstallPanel() {
+  const installer = useUpdateInstaller();
+  const downloading = installer.phase === "downloading";
+  const launching = installer.phase === "launching";
+  const ready = installer.phase === "ready";
+  const busy = downloading || launching;
+  return (
+    <section className="update-install-panel">
+      <Feedback tone="info" title="重装官方安装包">
+        <p>
+          不检查版本，直接重新下载最新官方安装包并启动安装；可用于修复安装或同版本重装，
+          安装过程中应用保持运行。
+        </p>
+        {downloading && <p>正在下载安装包… {Math.round(installer.fraction * 100)}%</p>}
+        {installer.error && <p className="muted">{installer.error}</p>}
+        <div className="button-row">
+          {!ready ? (
+            <Button busy={downloading} disabled={busy} onClick={installer.forceDownload}>
+              {downloading
+                ? `下载中 ${Math.round(installer.fraction * 100)}%`
+                : "强制下载安装包"}
+            </Button>
+          ) : (
+            <Button busy={launching} disabled={launching} onClick={installer.launch}>
+              启动安装程序
+            </Button>
+          )}
+          {downloading && (
+            <Button variant="secondary" onClick={installer.cancel}>
+              取消下载
             </Button>
           )}
         </div>

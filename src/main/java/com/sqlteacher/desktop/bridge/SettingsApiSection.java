@@ -43,6 +43,7 @@ final class SettingsApiSection extends ApiSection {
             "settings.backups", "settings.backup.create", "settings.backup.restore", "settings.demo.restore",
             "settings.learning.reset", "settings.cache.clear", "settings.update.check",
             "settings.update.download", "settings.update.install", "settings.update.skip",
+            "settings.update.forceDownload",
             "settings.notifications.read", "settings.help", "settings.bank.update"
         );
     }
@@ -66,6 +67,7 @@ final class SettingsApiSection extends ApiSection {
             case "settings.cache.clear" -> settingsCacheClear(cancellation);
             case "settings.update.check" -> settingsUpdateCheck(cancellation);
             case "settings.update.download" -> settingsUpdateDownload(cancellation, events);
+            case "settings.update.forceDownload" -> settingsUpdateForceDownload(cancellation, events);
             case "settings.update.install" -> settingsUpdateInstall(cancellation);
             case "settings.update.skip" -> settingsUpdateSkip(params, cancellation);
             case "settings.notifications.read" -> settingsNotificationsRead(cancellation);
@@ -238,23 +240,48 @@ final class SettingsApiSection extends ApiSection {
         return mapper.valueToTree(result);
     }
 
-    private JsonNode settingsUpdateDownload(CancellationToken cancellation, Consumer<LocalAppEvent> events) {
+    private JsonNode settingsUpdateDownload(CancellationToken cancellation, Consumer<LocalAppEvent> events) throws Exception {
         cancellation.throwIfCancelled();
         var manifest = lastUpdateCheck == null ? null : lastUpdateCheck.available();
         if (manifest == null) throw new IllegalArgumentException("请先检查更新");
+        return downloadAndStage(manifest, cancellation, events);
+    }
+
+    /**
+     * v3.5.4：强制下载——不做"是否有新版本"的门控，直接取最新签名清单并下载官方安装包。
+     * 用于用户自检自修（同版本重装）与开发期对既有云端清单做端到端下载验证。
+     */
+    private JsonNode settingsUpdateForceDownload(CancellationToken cancellation, Consumer<LocalAppEvent> events) throws Exception {
+        cancellation.throwIfCancelled();
+        var manifest = context().getBean(UpdateService.class).latest();
+        return downloadAndStage(manifest, cancellation, events);
+    }
+
+    /** Shared tail of both download entry points: bounded download with progress events, then staging for install. */
+    private JsonNode downloadAndStage(UpdateManifest manifest, CancellationToken cancellation,
+                                      Consumer<LocalAppEvent> events) throws Exception {
         var service = context().getBean(UpdateService.class);
-        Path installer = service.download(manifest, fraction -> {
-            ObjectNode progress = mapper.createObjectNode();
-            progress.put("phase", "update.download");
-            progress.put("fraction", fraction);
-            events.accept(new LocalAppEvent("progress", progress));
-        });
-        if (!service.ready(manifest, installer)) {
-            throw new SqlTeacherException("UPDATE_DOWNLOAD_FAILED", "下载的安装包未通过校验，请重试。");
+        try {
+            Path installer = service.download(manifest, fraction -> {
+                // 下载过程中的取消检查：每个进度帧都会经过这里，取消请求在下一个 64KB 块前生效，
+                // 部分文件按设计保留，下次下载可断点续传。
+                cancellation.throwIfCancelled();
+                ObjectNode progress = mapper.createObjectNode();
+                progress.put("phase", "update.download");
+                progress.put("fraction", fraction);
+                events.accept(new LocalAppEvent("progress", progress));
+            });
+            if (!service.ready(manifest, installer)) {
+                throw new SqlTeacherException("UPDATE_DOWNLOAD_FAILED", "下载的安装包未通过校验，请重试。");
+            }
+            downloadedInstaller = installer;
+            downloadedManifest = manifest;
+            return mapper.createObjectNode().put("ready", true).put("version", manifest.version().toString());
+        } catch (SqlTeacherException error) {
+            // 基础设施层不感知桥接取消类型：用户主动取消后把包装过的失败还原成标准取消响应。
+            if (cancellation.cancelled()) throw new LocalAppCancelledException();
+            throw error;
         }
-        downloadedInstaller = installer;
-        downloadedManifest = manifest;
-        return mapper.createObjectNode().put("ready", true);
     }
 
     private JsonNode settingsUpdateInstall(CancellationToken cancellation) {
