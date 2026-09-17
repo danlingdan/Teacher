@@ -11,6 +11,8 @@ import type {
   KnowledgeBundleImportReport,
   KnowledgeBundleUpdateStatus,
   KnowledgeOverview,
+  KnowledgeImportOutcome,
+  KnowledgeSearchItem,
   KnowledgeSearchResult,
 } from "../../shared/types";
 import { Button, Feedback, FormField, Stepper, useToast } from "../../shared/ui";
@@ -44,6 +46,8 @@ export default function KnowledgePage() {
         mode: string;
         message: string;
       }>("knowledge.index.status"),
+    // v3.6.0 KBX-1：索引在后台执行，有待处理任务时轮询进度直到清零。
+    refetchInterval: (query) => ((query.state.data?.pendingJobs ?? 0) > 0 ? 3000 : false),
   });
   const [selectedId, setSelectedId] = useState<string | undefined>(
     () =>
@@ -87,16 +91,36 @@ export default function KnowledgePage() {
         articleId: selectedId,
       }),
     enabled: Boolean(selectedId),
+    // v3.6.0 KBF-2：失效文章 ID 重试也不会成功，禁止自动重试造成 404 请求风暴。
+    retry: false,
   });
+  // v3.6.0 KBF-2：知识库更新/重导入会更换文章编号。文章拉取失败说明本地引用已失效，
+  // 立即刷新课程列表自愈（queryFn 内部 invalidate 会被 react-query 吞掉，须在 error 态触发）。
+  useEffect(() => {
+    if (!article.isError) return;
+    void client.invalidateQueries({ queryKey: ["knowledge", "overview"] });
+  }, [article.isError, client]);
+  // v3.6.0 KBX-2：课程/章节过滤（契约早已支持，页面此前恒用全库检索）。
+  const [courseFilter, setCourseFilter] = useState("");
+  const [sectionFilter, setSectionFilter] = useState("");
+  // v3.6.0 KBX-3：分页——首页走 useQuery，后续页「加载更多」追加。
+  const [extraItems, setExtraItems] = useState<KnowledgeSearchItem[]>([]);
   const search = useQuery({
-    queryKey: ["knowledge", "search", query],
+    queryKey: ["knowledge", "search", query, courseFilter, sectionFilter],
     queryFn: () =>
       localAppRequest<KnowledgeSearchResult>("knowledge.search", {
         query,
         limit: 30,
+        offset: 0,
+        ...(courseFilter ? { courseTitle: courseFilter } : {}),
+        ...(sectionFilter ? { sectionTitle: sectionFilter } : {}),
       }),
     enabled: query.trim().length >= 2,
   });
+  useEffect(() => {
+    setExtraItems([]);
+  }, [query, courseFilter, sectionFilter]);
+  const searchItems = search.data ? [...search.data.items, ...extraItems] : [];
   const previewImport = useMutation({
     mutationFn: () =>
       localAppRequest<ImportPreview>("knowledge.import.preview", {
@@ -133,18 +157,35 @@ export default function KnowledgePage() {
       }),
   });
   const rebuild = useMutation({
-    mutationFn: () => localAppRequest("knowledge.index.rebuild"),
-    onSuccess: refresh,
+    mutationFn: () => localAppRequest<{ started: boolean }>("knowledge.index.rebuild"),
+    // v3.6.0 KBX-1：重建改为后台执行（重切全部分块 + 重建索引），完成后经状态轮询反映。
+    onSuccess: () => {
+      refresh();
+      toast("success", "索引重建已在后台启动，可稍后查看进度");
+    },
   });
+  // v3.6.0 KBF-3：导入先做同内容查重——命中既有文章时列出候选，经用户确认后
+  // 以 allowDuplicate=true 重新发起；不做自动合并。
   const importArticle = useMutation({
-    mutationFn: () =>
-      localAppRequest("knowledge.article.import", {
+    mutationFn: (allowDuplicate: boolean) =>
+      localAppRequest<KnowledgeImportOutcome>("knowledge.article.import", {
         path: articlePath,
         courseTitle,
         sectionTitle,
         knowledgePoints: splitPoints(knowledgePoints),
+        allowDuplicate,
       }),
-    onSuccess: refresh,
+    onSuccess: (value) => {
+      if (value?.duplicates?.length) {
+        const names = value.duplicates
+          .map((item) => `《${item.title}》（${item.courseTitle} · ${item.sectionTitle}）`)
+          .join("、");
+        if (!window.confirm(`检测到内容相同的既有文章：${names}。仍要导入为新文章吗？`)) return;
+        importArticle.mutate(true);
+        return;
+      }
+      refresh();
+    },
   });
   const reviseArticle = useMutation({
     mutationFn: () =>
@@ -179,13 +220,28 @@ export default function KnowledgePage() {
     if (context?.courseTitle) params.set("course", context.courseTitle);
     if (context?.sectionTitle) params.set("section", context.sectionTitle);
     if (context?.title) params.set("title", context.title);
+    // v3.6.0 KUI：子窗口尺寸随显示器自适应（逻辑尺寸 = 物理像素 / 缩放比），
+    // 不再用固定 440×720 的小窗。
+    let width = 640;
+    let height = 860;
+    try {
+      const { currentMonitor } = await import("@tauri-apps/api/window");
+      const monitor = await currentMonitor();
+      if (monitor) {
+        const scale = monitor.scaleFactor || 1;
+        width = Math.round(Math.min(860, Math.max(520, (monitor.size.width / scale) * 0.46)));
+        height = Math.round(Math.min(1200, Math.max(680, (monitor.size.height / scale) * 0.88)));
+      }
+    } catch {
+      // 取不到显示器信息时使用上面的默认值。
+    }
     const webview = new WebviewWindow(`assistant-${Date.now().toString(36)}`, {
       url: `/#/assistant-window?${params.toString()}`,
       title: "知识助教",
-      width: 440,
-      height: 720,
-      minWidth: 360,
-      minHeight: 480,
+      width,
+      height,
+      minWidth: 420,
+      minHeight: 560,
       center: true,
     });
     webview.once("tauri://error", () => toast("error", "无法打开知识助教窗口，请重试"));
@@ -261,12 +317,52 @@ export default function KnowledgePage() {
     return () => window.clearInterval(timer);
   }, [emptyPolling, client]);
   const canManage = session.data?.role === "TEACHER" || session.data?.role === "ADMINISTRATOR";
+  // v3.6.0 KUI：单篇导入改为系统文件选择器，路径输入仅作后备。
+  const pickDocument = async () => {
+    const { open } = await import("@tauri-apps/plugin-dialog");
+    const selection = await open({
+      multiple: false,
+      directory: false,
+      title: "选择要导入的文档",
+      filters: [{ name: "课程文档（txt/md/pdf/docx）", extensions: ["txt", "md", "pdf", "docx"] }],
+    });
+    if (typeof selection === "string" && selection.trim()) setArticlePath(selection);
+  };
 
   const indexStatus = overview.data?.index;
   const articleCount = overview.data?.articleCount ?? 0;
   const libraryState: KnowledgeLibraryState =
     articleCount === 0 ? "empty" : (indexStatus?.pendingJobs ?? 0) > 0 ? "indexing" : "ready";
   const bundles = overview.data?.bundles ?? [];
+  // v3.6.0 KBX-2：过滤下拉选项来自当前文章清单。
+  const courseOptions = Array.from(
+    new Set((overview.data?.articles ?? []).map((article) => article.courseTitle)),
+  ).sort();
+  const sectionOptions = Array.from(
+    new Set(
+      (overview.data?.articles ?? [])
+        .filter((article) => !courseFilter || article.courseTitle === courseFilter)
+        .map((article) => article.sectionTitle),
+    ),
+  ).sort();
+  const searchFilters = {
+    ...(courseFilter ? { courseTitle: courseFilter } : {}),
+    ...(sectionFilter ? { sectionTitle: sectionFilter } : {}),
+  };
+  const loadMoreSearch = async () => {
+    if (!search.data) return;
+    try {
+      const next = await localAppRequest<KnowledgeSearchResult>("knowledge.search", {
+        query,
+        limit: 30,
+        offset: search.data.items.length + extraItems.length,
+        ...searchFilters,
+      });
+      setExtraItems((current) => [...current, ...next.items]);
+    } catch {
+      toast("error", "加载更多结果失败");
+    }
+  };
 
   if (overview.isPending)
     return <section className="page-skeleton">正在读取课程与知识索引…</section>;
@@ -350,6 +446,44 @@ export default function KnowledgePage() {
           </div>
         ) : (
           <>
+            <div className="knowledge-filters">
+              <FormField label="筛选课程" hint="检索结果只来自所选范围">
+                {(ids) => (
+                  <select
+                    {...ids}
+                    value={courseFilter}
+                    onChange={(event) => {
+                      setCourseFilter(event.target.value);
+                      setSectionFilter("");
+                    }}
+                  >
+                    <option value="">全部课程</option>
+                    {courseOptions.map((course) => (
+                      <option key={course} value={course}>
+                        {course}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </FormField>
+              <FormField label="筛选章节">
+                {(ids) => (
+                  <select
+                    {...ids}
+                    value={sectionFilter}
+                    disabled={!courseFilter}
+                    onChange={(event) => setSectionFilter(event.target.value)}
+                  >
+                    <option value="">全部章节</option>
+                    {sectionOptions.map((section) => (
+                      <option key={section} value={section}>
+                        {section}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </FormField>
+            </div>
             <FormField label="检索课程知识" hint="输入至少 2 个字符后自动检索">
               {(ids) => (
                 <input
@@ -376,7 +510,7 @@ export default function KnowledgePage() {
                   <Feedback tone="error" title="检索失败">
                     {search.error.message}
                   </Feedback>
-                ) : !search.data || search.data.items.length === 0 ? (
+                ) : !search.data || searchItems.length === 0 ? (
                   <>
                     <p className="muted">没有匹配“{query.trim()}”的内容。</p>
                     <p className="muted">换个关键词试试，或浏览下方课程树。</p>
@@ -384,7 +518,7 @@ export default function KnowledgePage() {
                 ) : (
                   <>
                     <div className="search-results-head">
-                      <span>共 {search.data.items.length} 条结果</span>
+                      <span>共 {searchItems.length} 条结果</span>
                       <button
                         type="button"
                         className="search-clear"
@@ -396,7 +530,7 @@ export default function KnowledgePage() {
                         清除
                       </button>
                     </div>
-                    {search.data.items.map((item) => {
+                    {searchItems.map((item) => {
                       const origin = articleById.get(item.articleId);
                       return (
                         <button
@@ -418,6 +552,16 @@ export default function KnowledgePage() {
                         </button>
                       );
                     })}
+                    {search.data.hasMore && (
+                      <button
+                        type="button"
+                        className="search-clear"
+                        disabled={search.isFetching}
+                        onClick={() => void loadMoreSearch()}
+                      >
+                        加载更多
+                      </button>
+                    )}
                   </>
                 )}
               </div>
@@ -605,6 +749,11 @@ export default function KnowledgePage() {
                 </div>
                 <KnowledgeRenderer markdown={currentMarkdown} articleId={selectedId} />
               </>
+            ) : article.isError ? (
+              <div className="knowledge-empty">
+                <h2>文档暂时无法打开</h2>
+                <p>该文档可能已在知识库更新中更换编号，课程列表已刷新，请重新选择一篇文档。</p>
+              </div>
             ) : (
               <div className="knowledge-empty">
                 <h2>选择一篇知识文档</h2>
@@ -612,6 +761,11 @@ export default function KnowledgePage() {
               </div>
             )}
           </section>
+        )}
+        {selectedId && !article.isError && currentMarkdown && (
+          <button type="button" className="assistant-fab" onClick={() => void openAssistant()}>
+            知识助教
+          </button>
         )}
         {canManage && (
           <details className="teacher-admin">
@@ -704,13 +858,21 @@ export default function KnowledgePage() {
                       : "读取索引"}
                   </span>
                 </div>
-                <FormField label="文档路径" hint="导入新文档或修订当前文档">
+                <FormField label="文档路径" hint="点「选择文件…」选取要导入/修订的文档，也可直接粘贴路径">
                   {(ids) => (
-                    <input
-                      {...ids}
-                      value={articlePath}
-                      onChange={(event) => setArticlePath(event.target.value)}
-                    />
+                    <div className="path-field">
+                      <input
+                        {...ids}
+                        value={articlePath}
+                        onChange={(event) => setArticlePath(event.target.value)}
+                      />
+                      <Button
+                        variant="secondary"
+                        onClick={() => void pickDocument()}
+                      >
+                        选择文件…
+                      </Button>
+                    </div>
                   )}
                 </FormField>
                 <div className="form-grid">
@@ -747,7 +909,7 @@ export default function KnowledgePage() {
                     disabled={
                       !articlePath || !courseTitle || !sectionTitle || importArticle.isPending
                     }
-                    onClick={() => importArticle.mutate()}
+                    onClick={() => importArticle.mutate(false)}
                   >
                     导入单篇
                   </Button>

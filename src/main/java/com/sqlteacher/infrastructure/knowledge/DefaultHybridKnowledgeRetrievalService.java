@@ -33,7 +33,7 @@ public final class DefaultHybridKnowledgeRetrievalService implements HybridKnowl
     public RetrievalResponse retrieve(String query, CourseKnowledgeSearchFilter requestedFilter, int limit) {
         if (query == null || query.isBlank() || limit < 1 || limit > 50) throw new IllegalArgumentException("invalid retrieval request");
         CourseKnowledgeSearchFilter filter = requestedFilter == null ? CourseKnowledgeSearchFilter.published() : requestedFilter;
-        List<KnowledgeSearchResult> keyword = lexical.search(query, filter, Math.min(50, Math.max(limit * 4, limit)));
+        List<KnowledgeSearchResult> keyword = lexical.search(query, filter, Math.min(50, Math.max(limit * 4, limit)), 0);
         Map<String, RankedResult> fused = new LinkedHashMap<>();
         for (int rank = 0; rank < keyword.size(); rank++) add(fused, keyword.get(rank), 1.0 / (RRF_K + rank + 1));
         try {

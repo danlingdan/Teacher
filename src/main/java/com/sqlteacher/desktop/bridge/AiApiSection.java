@@ -60,7 +60,7 @@ final class AiApiSection extends ApiSection {
         cancellation.throwIfCancelled();
         String question = requiredText(params, "question", 2_000);
         var answer = context().getBean(GroundedKnowledgeExplanationService.class)
-            .explain(question, CourseKnowledgeSearchFilter.allLocal());
+            .explain(question, knowledgeAskFilter(params.path("context")));
         cancellation.throwIfCancelled();
         String content = answer.answer();
         for (int offset = 0; offset < content.length(); offset += 240) {
@@ -70,6 +70,30 @@ final class AiApiSection extends ApiSection {
             events.accept(new LocalAppEvent("ai.delta", payload));
         }
         return mapper.valueToTree(answer);
+    }
+
+    /**
+     * v3.6.0 KBF-1: 阅读上下文只经结构化字段进入检索过滤，不再拼接进问题文本（前缀会被
+     * FTS 硬 AND 查询整体吞掉命中）。课程与章节均缺省时保持全库检索语义，旧前端兼容。
+     */
+    private static CourseKnowledgeSearchFilter knowledgeAskFilter(JsonNode context) {
+        if (context == null || !context.isObject()) {
+            return CourseKnowledgeSearchFilter.allLocal();
+        }
+        String courseTitle = optionalContextText(context, "courseTitle");
+        String sectionTitle = optionalContextText(context, "sectionTitle");
+        if (courseTitle.isEmpty() && sectionTitle.isEmpty()) {
+            return CourseKnowledgeSearchFilter.allLocal();
+        }
+        return new CourseKnowledgeSearchFilter(courseTitle, sectionTitle, "", true);
+    }
+
+    private static String optionalContextText(JsonNode context, String field) {
+        String value = context.path(field).asText("").trim();
+        if (value.length() > 240) {
+            throw new IllegalArgumentException(field + " must contain at most 240 characters");
+        }
+        return value;
     }
 
     private JsonNode aiSqlPreview(JsonNode params, CancellationToken cancellation) {

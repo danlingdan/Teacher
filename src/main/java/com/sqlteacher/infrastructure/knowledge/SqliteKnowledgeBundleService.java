@@ -112,7 +112,9 @@ public final class SqliteKnowledgeBundleService implements KnowledgeBundleServic
                         hardDeleteArticle(existing.get().articleId(), existing.get().documentId());
                     }
                     CourseKnowledgeArticle article = courseKnowledgeService.importArticle(
-                        docPath, manifest.title(), document.sectionTitle(), List.of());
+                        // 官方包按 bundleId+docId 自行 upsert（先硬删旧版再导入），
+                        // 不参与单篇导入的交互式同内容查重。
+                        docPath, manifest.title(), document.sectionTitle(), List.of(), true).article();
                     markBundleArticle(article.id(), manifest.bundleId(), document.id());
                     copyAttachments(tempRoot, manifest.bundleId(), document);
                     if (existing.isPresent()) {

@@ -2,7 +2,9 @@ package com.sqlteacher.desktop.bridge;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.sqlteacher.application.knowledge.CourseKnowledgeArticle;
+import com.sqlteacher.application.knowledge.CourseKnowledgeImportResult;
 import com.sqlteacher.application.knowledge.CourseKnowledgeSearchFilter;
 import com.sqlteacher.application.knowledge.CourseKnowledgeService;
 import com.sqlteacher.application.knowledge.KnowledgeAsset;
@@ -14,6 +16,7 @@ import com.sqlteacher.application.knowledge.KnowledgeBundleUpdateService;
 import com.sqlteacher.application.knowledge.KnowledgeIndexService;
 import com.sqlteacher.application.knowledge.KnowledgeReadStateService;
 import com.sqlteacher.application.knowledge.KnowledgeSearchResult;
+import com.sqlteacher.application.knowledge.KnowledgeVectorStore;
 import com.sqlteacher.application.knowledge.KnowledgeVisibility;
 import com.sqlteacher.application.collaboration.UserRole;
 import org.junit.jupiter.api.Test;
@@ -127,20 +130,25 @@ class KnowledgeApiSectionTest {
     }
 
     @Test
-    void knowledgeIndexRebuildReturnsTheReportForTeachers() throws Exception {
+    void knowledgeIndexRebuildRunsInTheBackgroundForTeachers() throws Exception {
+        // v3.6.0 KBX-1/KBQ-1：重建 = 重切全部分块 + 整体重建索引，后台执行、立即返回 started。
         var sessions = new ApiSectionTestSupport.FakeCloudSessions();
         sessions.signIn(session("t-1", "教师账号", UserRole.TEACHER));
-        KnowledgeIndexService index = fake(KnowledgeIndexService.class,
-            Map.of("rebuildAll", args -> new KnowledgeIndexService.IndexReport(5, 1, "重建完成")));
+        List<String> contents = new ArrayList<>();
+        KnowledgeIndexService index = fake(KnowledgeIndexService.class, Map.of(
+            "rebuildContent", args -> {
+                contents.add("run");
+                return new KnowledgeIndexService.IndexReport(5, 1, "已重切 5 篇文章；重建完成");
+            }));
         try (var host = hostWithBeans(sessions, index)) {
             KnowledgeApiSection section = new KnowledgeApiSection(host);
+            section.indexExecutor = Runnable::run;
 
             JsonNode result = section.handle("knowledge.index.rebuild", mapper.createObjectNode(), () -> false, ignored -> { });
 
-            assertEquals(5, result.path("indexedChunks").asInt());
-            assertEquals(1, result.path("failedJobs").asInt());
-            assertEquals("重建完成", result.path("message").asText());
+            assertTrue(result.path("started").asBoolean());
         }
+        assertEquals(List.of("run"), contents);
     }
 
     @Test
@@ -236,6 +244,115 @@ class KnowledgeApiSectionTest {
             assertEquals(166, result.path("removedArticles").asInt());
             assertEquals("thomas-calculus", removals.get(0)[0]);
         }
+    }
+
+    @Test
+    void knowledgeArticleDeleteCleansTheVectorIndexResidue() throws Exception {
+        // v3.6.0 KBF-2：单篇删除走文章聚合删除（修订/分块/索引作业/底层文档与 FTS），
+        // 并同步清理向量索引残留。
+        var sessions = new ApiSectionTestSupport.FakeCloudSessions();
+        sessions.signIn(session("t-1", "教师账号", UserRole.TEACHER));
+        List<String> deletedArticles = new ArrayList<>();
+        var knowledge = fake(CourseKnowledgeService.class, Map.of(
+            "deleteArticle", args -> {
+                deletedArticles.add((String) args[0]);
+                return null;
+            }));
+        List<String> vectorDeletes = new ArrayList<>();
+        var vectors = fake(KnowledgeVectorStore.class, Map.of(
+            "deleteArticle", args -> {
+                vectorDeletes.add((String) args[0]);
+                return null;
+            }));
+        try (var host = hostWithBeans(sessions, knowledge, vectors)) {
+            KnowledgeApiSection section = new KnowledgeApiSection(host);
+
+            JsonNode result = section.handle("knowledge.article.delete", mapper.createObjectNode()
+                .put("articleId", "a-1"), () -> false, ignored -> { });
+
+            assertTrue(result.path("deleted").asBoolean());
+            assertEquals("a-1", result.path("articleId").asText());
+        }
+        assertEquals(List.of("a-1"), deletedArticles);
+        assertEquals(List.of("a-1"), vectorDeletes);
+    }
+
+    @Test
+    void knowledgeArticleDeleteSurvivesVectorCleanupFailure() throws Exception {
+        // 向量清理失败不推翻已完成的删除；残留经「重建索引」收敛，响应保持删除成功语义。
+        var sessions = new ApiSectionTestSupport.FakeCloudSessions();
+        sessions.signIn(session("t-1", "教师账号", UserRole.TEACHER));
+        var knowledge = fake(CourseKnowledgeService.class, Map.of("deleteArticle", args -> null));
+        var vectors = fake(KnowledgeVectorStore.class, Map.of("deleteArticle",
+            args -> { throw new IllegalStateException("lucene unavailable"); }));
+        try (var host = hostWithBeans(sessions, knowledge, vectors)) {
+            KnowledgeApiSection section = new KnowledgeApiSection(host);
+
+            JsonNode result = section.handle("knowledge.article.delete", mapper.createObjectNode()
+                .put("articleId", "a-1"), () -> false, ignored -> { });
+
+            assertTrue(result.path("deleted").asBoolean());
+        }
+    }
+
+    @Test
+    void knowledgeArticleImportReturnsDuplicateCandidatesWithoutIndexing() throws Exception {
+        // v3.6.0 KBF-3：命中同内容既有文章时原样返回候选清单、不导入、不触发重建索引。
+        var sessions = new ApiSectionTestSupport.FakeCloudSessions();
+        sessions.signIn(session("t-1", "教师账号", UserRole.TEACHER));
+        var knowledge = fake(CourseKnowledgeService.class, Map.of(
+            "importArticle", args -> new CourseKnowledgeImportResult(null, List.of(
+                new CourseKnowledgeImportResult.ContentDuplicate("a-9", "索引入门", "数据库课程", "第一章", 1)))));
+        List<String> rebuilds = new ArrayList<>();
+        var index = fake(KnowledgeIndexService.class, Map.of(
+            "rebuildPending", args -> {
+                rebuilds.add("run");
+                return null;
+            }));
+        try (var host = hostWithBeans(sessions, knowledge, index)) {
+            KnowledgeApiSection section = new KnowledgeApiSection(host);
+            section.indexExecutor = Runnable::run;
+
+            ObjectNode duplicateParams = mapper.createObjectNode()
+                .put("path", "C:\\doc.md").put("courseTitle", "数据库课程").put("sectionTitle", "第一章")
+                .put("allowDuplicate", false);
+            duplicateParams.putArray("knowledgePoints");
+            JsonNode result = section.handle("knowledge.article.import", duplicateParams,
+                () -> false, ignored -> { });
+
+            assertTrue(result.path("article").isNull());
+            assertEquals("a-9", result.path("duplicates").get(0).path("articleId").asText());
+            assertEquals("索引入门", result.path("duplicates").get(0).path("title").asText());
+        }
+        assertTrue(rebuilds.isEmpty());
+    }
+
+    @Test
+    void knowledgeArticleImportTriggersIndexRebuildAfterImport() throws Exception {
+        var sessions = new ApiSectionTestSupport.FakeCloudSessions();
+        sessions.signIn(session("t-1", "教师账号", UserRole.TEACHER));
+        var knowledge = fake(CourseKnowledgeService.class, Map.of(
+            "importArticle", args -> CourseKnowledgeImportResult.imported(article("a-1", "d-1"))));
+        List<String> rebuilds = new ArrayList<>();
+        var index = fake(KnowledgeIndexService.class, Map.of(
+            "rebuildPending", args -> {
+                rebuilds.add("run");
+                return null;
+            }));
+        try (var host = hostWithBeans(sessions, knowledge, index)) {
+            KnowledgeApiSection section = new KnowledgeApiSection(host);
+            section.indexExecutor = Runnable::run;
+
+            ObjectNode importParams = mapper.createObjectNode()
+                .put("path", "C:\\doc.md").put("courseTitle", "数据库课程").put("sectionTitle", "第一章");
+            importParams.putArray("knowledgePoints");
+            JsonNode result = section.handle("knowledge.article.import", importParams,
+                () -> false, ignored -> { });
+
+            assertEquals("a-1", result.path("article").path("id").asText());
+            assertTrue(result.path("duplicates").isEmpty());
+        }
+        assertEquals(List.of("run"), rebuilds);
     }
 
     @Test

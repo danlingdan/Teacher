@@ -41,11 +41,12 @@ class DefaultHybridKnowledgeRetrievalServiceTest {
         public void deleteArticle(String id) { } public void clear() { }
     }
     private static final class StubCourseKnowledgeService implements CourseKnowledgeService {
-        public CourseKnowledgeArticle importArticle(java.nio.file.Path p,String c,String s,List<String> k){throw new UnsupportedOperationException();}
+        public com.sqlteacher.application.knowledge.CourseKnowledgeImportResult importArticle(java.nio.file.Path p,String c,String s,List<String> k,boolean a){throw new UnsupportedOperationException();}
         public List<CourseKnowledgeArticle> listArticles(){return List.of(new CourseKnowledgeArticle("a","doc","SQL","查询","SELECT",KnowledgeVisibility.PUBLISHED,1,List.of("SELECT"),"hash", Instant.now()));}
         public CourseKnowledgeDetail getArticle(String id){throw new UnsupportedOperationException();}
         public CourseKnowledgeArticle reviseArticle(String id,java.nio.file.Path p,List<String> k){throw new UnsupportedOperationException();}
         public CourseKnowledgeArticle changeVisibility(String id,KnowledgeVisibility v){throw new UnsupportedOperationException();}
-        public List<KnowledgeSearchResult> search(String q,CourseKnowledgeSearchFilter f,int l){return List.of(new KnowledgeSearchResult("doc","SELECT","local",0,"SELECT reads rows",1));}
+        @Override public void deleteArticle(String id){throw new UnsupportedOperationException();}
+        public List<KnowledgeSearchResult> search(String q,CourseKnowledgeSearchFilter f,int l,int o){return List.of(new KnowledgeSearchResult("doc","SELECT","local",0,"SELECT reads rows",1));}
     }
 }

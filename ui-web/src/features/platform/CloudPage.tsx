@@ -295,29 +295,28 @@ export function CloudPage() {
         <Metric label="待同步" value={data.sync.pending} />
         <Metric label="重试次数" value={data.sync.attempt} />
       </section>
-      <section className="content-card">
-        <div className="section-heading">
-          <div>
-            <h2>可见班级</h2>
+      <details className="content-card">
+        <summary>
+          <strong>可见班级</strong>
+          <span className="policy-chip">{data.classes.length} 个班级</span>
+        </summary>
+        {(data.role === "TEACHER" || data.role === "ADMINISTRATOR") && (
+          <div className="button-row">
+            <input
+              aria-label="新班级名称"
+              value={className}
+              onChange={(event) => setClassName(event.target.value)}
+              placeholder="新班级名称"
+            />
+            <Button
+              busy={createClass.isPending}
+              disabled={!className.trim()}
+              onClick={() => createClass.mutate()}
+            >
+              创建班级
+            </Button>
           </div>
-          {(data.role === "TEACHER" || data.role === "ADMINISTRATOR") && (
-            <div className="button-row">
-              <input
-                aria-label="新班级名称"
-                value={className}
-                onChange={(event) => setClassName(event.target.value)}
-                placeholder="新班级名称"
-              />
-              <Button
-                busy={createClass.isPending}
-                disabled={!className.trim()}
-                onClick={() => createClass.mutate()}
-              >
-                创建班级
-              </Button>
-            </div>
-          )}
-        </div>
+        )}
         {!(data.role === "TEACHER" || data.role === "ADMINISTRATOR") && (
           // v3.4.1 CLS-5：学生凭班级码自助加入，不再只能等教师按邮箱添加。
           <div className="button-row">
@@ -365,7 +364,7 @@ export function CloudPage() {
             ))}
           </ul>
         )}
-      </section>
+      </details>
       {classroomId && (
         <section className="content-card class-assignments">
           <div className="section-heading">
@@ -545,8 +544,9 @@ export function CloudPage() {
                       onChange={(event) => setAssignmentExerciseId(event.target.value)}
                     >
                       <option value="">选择练习</option>
+                      {/* practice.catalog 本就只返回启用题目（且不含 enabled 字段），
+                          此处不得再按 enabled 过滤——过去会把全部条目滤成空下拉。 */}
                       {exercises.data?.items
-                        .filter((item) => item.enabled)
                         .map((item) => (
                           <option key={item.id} value={item.id}>
                             {item.title}
@@ -633,61 +633,67 @@ export function CloudPage() {
             </details>
           )}
           {(data.role === "TEACHER" || data.role === "ADMINISTRATOR") && (
-            <div className="class-analytics-bar">
-              <div className="settings-grid analytics-filters">
-                <FormField label="提交状态">
-                  {(ids) => (
-                    <select
-                      {...ids}
-                      value={analyticsStatus}
-                      onChange={(event) => setAnalyticsStatus(event.target.value)}
-                    >
-                      <option value="">全部</option>
-                      <option value="NOT_SUBMITTED">未提交</option>
-                      <option value="SUBMITTED">已提交</option>
-                      <option value="PASSED">已通过</option>
-                      <option value="FAILED">未通过</option>
-                    </select>
-                  )}
-                </FormField>
-                <FormField label="开始时间">
-                  {(ids) => (
-                    <input
-                      {...ids}
-                      type="datetime-local"
-                      value={analyticsFrom}
-                      onChange={(event) => setAnalyticsFrom(event.target.value)}
-                    />
-                  )}
-                </FormField>
-                <FormField label="结束时间">
-                  {(ids) => (
-                    <input
-                      {...ids}
-                      type="datetime-local"
-                      value={analyticsTo}
-                      onChange={(event) => setAnalyticsTo(event.target.value)}
-                    />
-                  )}
-                </FormField>
+            // v3.6.0 KUI：任务学情筛选默认收起，避免班级任务卡片堆满。
+            <details className="content-card class-analytics-panel">
+              <summary>
+                <strong>任务学情</strong>
+              </summary>
+              <div className="class-analytics-bar">
+                <div className="settings-grid analytics-filters">
+                  <FormField label="提交状态">
+                    {(ids) => (
+                      <select
+                        {...ids}
+                        value={analyticsStatus}
+                        onChange={(event) => setAnalyticsStatus(event.target.value)}
+                      >
+                        <option value="">全部</option>
+                        <option value="NOT_SUBMITTED">未提交</option>
+                        <option value="SUBMITTED">已提交</option>
+                        <option value="PASSED">已通过</option>
+                        <option value="FAILED">未通过</option>
+                      </select>
+                    )}
+                  </FormField>
+                  <FormField label="开始时间">
+                    {(ids) => (
+                      <input
+                        {...ids}
+                        type="datetime-local"
+                        value={analyticsFrom}
+                        onChange={(event) => setAnalyticsFrom(event.target.value)}
+                      />
+                    )}
+                  </FormField>
+                  <FormField label="结束时间">
+                    {(ids) => (
+                      <input
+                        {...ids}
+                        type="datetime-local"
+                        value={analyticsTo}
+                        onChange={(event) => setAnalyticsTo(event.target.value)}
+                      />
+                    )}
+                  </FormField>
+                </div>
+                <div className="button-row">
+                  <Button
+                    variant="secondary"
+                    busy={classAnalytics.isPending}
+                    onClick={() => classAnalytics.mutate()}
+                  >
+                    查看学情
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    busy={exportClassAnalytics.isPending}
+                    onClick={() => exportClassAnalytics.mutate()}
+                  >
+                    导出学情
+                  </Button>
+                </div>
               </div>
-              <div className="button-row">
-                <Button
-                  variant="secondary"
-                  busy={classAnalytics.isPending}
-                  onClick={() => classAnalytics.mutate()}
-                >
-                  查看学情
-                </Button>
-                <Button
-                  variant="secondary"
-                  busy={exportClassAnalytics.isPending}
-                  onClick={() => exportClassAnalytics.mutate()}
-                >
-                  导出学情
-                </Button>
-              </div>
-            </div>
+            </details>
           )}
           <ul className="plain-list">
             {assignmentItems.map((item) => (
@@ -1198,32 +1204,30 @@ export function CloudPage() {
           </section>
         </details>
       )}
-      <section className="content-card">
-        <div className="section-heading">
-          <div>
-            <p className="eyebrow">学习成果</p>
-            <h2>我的作品集</h2>
-          </div>
-          <div className="button-row">
-            <Button
-              variant="secondary"
-              busy={portfolio.isFetching}
-              onClick={() => {
-                setPortfolioOpen(true);
-                void client.invalidateQueries({ queryKey: portfolioKey });
-              }}
-            >
-              刷新作品集
-            </Button>
-            <Button
-              variant="secondary"
-              busy={exportPortfolio.isPending}
-              disabled={portfolioItems.length === 0}
-              onClick={() => exportPortfolio.mutate()}
-            >
-              确认并导出
-            </Button>
-          </div>
+      <details className="content-card">
+        <summary>
+          <strong>我的作品集</strong>
+          <span className="policy-chip">{portfolioItems.length} 条成果</span>
+        </summary>
+        <div className="button-row">
+          <Button
+            variant="secondary"
+            busy={portfolio.isFetching}
+            onClick={() => {
+              setPortfolioOpen(true);
+              void client.invalidateQueries({ queryKey: portfolioKey });
+            }}
+          >
+            刷新作品集
+          </Button>
+          <Button
+            variant="secondary"
+            busy={exportPortfolio.isPending}
+            disabled={portfolioItems.length === 0}
+            onClick={() => exportPortfolio.mutate()}
+          >
+            确认并导出
+          </Button>
         </div>
         {portfolioItems.length === 0 ? (
           <p className="muted">暂无成果记录。</p>
@@ -1239,7 +1243,7 @@ export function CloudPage() {
             ))}
           </ul>
         )}
-      </section>
+      </details>
       <details
         className="content-card account-governance"
         onToggle={(event) => {
@@ -1251,8 +1255,9 @@ export function CloudPage() {
         </summary>
         <section className="account-section">
           <h3>修改密码</h3>
-          <div className="settings-grid">
-            <FormField label="当前密码">
+          {/* v3.6.0 KUI：两个字段纵向等宽排列，修复左右高度/宽度不一致。 */}
+          <div className="password-form">
+            <FormField label="当前密码" hint="输入账号当前使用的密码">
               {(ids) => (
                 <input
                   {...ids}

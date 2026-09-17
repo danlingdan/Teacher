@@ -121,7 +121,7 @@ class SqliteKnowledgeBundleServiceTest {
         Path userDoc = tempDir.resolve("user-note.md");
         Files.writeString(userDoc, "# 用户笔记\n\n我自己的内容。", StandardCharsets.UTF_8);
         CourseKnowledgeArticle userArticle =
-            knowledgeService().importArticle(userDoc, "我的课程", "随手记", List.of());
+            knowledgeService().importArticle(userDoc, "我的课程", "随手记", List.of(), true).article();
 
         Path zip = buildBundle("official-db-concepts", "1.0.0", "数据库系统概念", List.of(
             doc("chap1/intro", "# 引言\n\n官方内容。", "第1部分", List.of())));
@@ -172,7 +172,7 @@ class SqliteKnowledgeBundleServiceTest {
         Path userDoc = tempDir.resolve("user-note.md");
         Files.writeString(userDoc, "# 用户笔记\n\n内容。", StandardCharsets.UTF_8);
         CourseKnowledgeArticle userArticle =
-            knowledgeService().importArticle(userDoc, "我的课程", "随手记", List.of());
+            knowledgeService().importArticle(userDoc, "我的课程", "随手记", List.of(), true).article();
 
         // A user article has no bundle, so asset reads are refused.
         SqlTeacherException notBundled = assertThrows(SqlTeacherException.class,
@@ -273,6 +273,11 @@ class SqliteKnowledgeBundleServiceTest {
 
     private static final class StubIndexService implements KnowledgeIndexService {
         int rebuildPendingCalls = 0;
+
+        @Override
+        public IndexReport rebuildContent() {
+            return rebuildPending();
+        }
 
         @Override
         public IndexReport rebuildPending() {

@@ -110,6 +110,176 @@ describe("KnowledgePage", () => {
     expect(requestMock).not.toHaveBeenCalledWith("course.workspace");
   });
 
+  it("heals stale article references by refreshing the overview and showing guidance", async () => {
+    // v3.6.0 KBF-2：知识库更新会更换文章编号，深链/残留引用失效时刷新列表并给出指引，
+    // 不再对同一个失效 ID 反复重试（过去表现为连续 404）。
+    requestMock.mockImplementation((method: string) => {
+      if (method === "knowledge.overview") return Promise.resolve(overview());
+      if (method === "session.current") return Promise.resolve({ role: "STUDENT" });
+      if (method === "knowledge.index.status") {
+        return Promise.resolve({
+          pendingJobs: 0,
+          indexedChunks: 0,
+          failedChunks: 0,
+          mode: "HYBRID",
+          message: "ready",
+        });
+      }
+      if (method === "knowledge.article") {
+        return Promise.reject(new Error("Course knowledge article not found"));
+      }
+      throw new Error(`Unexpected request: ${method}`);
+    });
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter initialEntries={["/?article=stale-id"]}>
+          <KnowledgePage />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    expect(await screen.findByText("文档暂时无法打开")).toBeInTheDocument();
+    await waitFor(() => {
+      const overviewCalls = requestMock.mock.calls.filter((call) => call[0] === "knowledge.overview");
+      expect(overviewCalls.length).toBeGreaterThanOrEqual(2);
+    });
+    // 失效 ID 不触发自动重试：article 请求只发生一次。
+    expect(requestMock.mock.calls.filter((call) => call[0] === "knowledge.article")).toHaveLength(1);
+  });
+
+  it("asks for consent and re-imports with allowDuplicate when content matches an existing article", async () => {
+    // v3.6.0 KBF-3：同内容导入先列出既有文章并请用户确认；确认后以 allowDuplicate=true 重新发起。
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    let importCalls = 0;
+    requestMock.mockImplementation((method: string) => {
+      if (method === "knowledge.overview") return Promise.resolve(overview());
+      if (method === "session.current") return Promise.resolve({ role: "TEACHER" });
+      if (method === "knowledge.index.status") {
+        return Promise.resolve({ pendingJobs: 0, indexedChunks: 0, failedChunks: 0, mode: "HYBRID", message: "ready" });
+      }
+      if (method === "knowledge.article.import") {
+        importCalls += 1;
+        return importCalls === 1
+          ? Promise.resolve({
+              article: null,
+              duplicates: [
+                { articleId: "a-9", title: "索引原理", courseTitle: "SQL 基础", sectionTitle: "索引", revision: 1 },
+              ],
+            })
+          : Promise.resolve({ article: { id: "a-2" }, duplicates: [] });
+      }
+      throw new Error(`Unexpected request: ${method}`);
+    });
+    renderPage();
+
+    fireEvent.change(await screen.findByLabelText("文档路径"), { target: { value: "C:\\doc.md" } });
+    fireEvent.change(screen.getByLabelText("课程标题"), { target: { value: "测试课程" } });
+    fireEvent.change(screen.getByLabelText("章节标题"), { target: { value: "测试章节" } });
+    fireEvent.click(screen.getByRole("button", { name: "导入单篇" }));
+
+    await waitFor(() => {
+      const imports = requestMock.mock.calls.filter((call) => call[0] === "knowledge.article.import");
+      expect(imports).toHaveLength(2);
+      expect(imports[0]?.[1]?.allowDuplicate).toBe(false);
+      expect(imports[1]?.[1]?.allowDuplicate).toBe(true);
+    });
+    expect(confirmSpy).toHaveBeenCalledTimes(1);
+    expect(String(confirmSpy.mock.calls[0]?.[0])).toContain("索引原理");
+  });
+
+  it("does not import again when the user declines the duplicate consent", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(false);
+    requestMock.mockImplementation((method: string) => {
+      if (method === "knowledge.overview") return Promise.resolve(overview());
+      if (method === "session.current") return Promise.resolve({ role: "TEACHER" });
+      if (method === "knowledge.index.status") {
+        return Promise.resolve({ pendingJobs: 0, indexedChunks: 0, failedChunks: 0, mode: "HYBRID", message: "ready" });
+      }
+      if (method === "knowledge.article.import") {
+        return Promise.resolve({
+          article: null,
+          duplicates: [
+            { articleId: "a-9", title: "索引原理", courseTitle: "SQL 基础", sectionTitle: "索引", revision: 1 },
+          ],
+        });
+      }
+      throw new Error(`Unexpected request: ${method}`);
+    });
+    renderPage();
+
+    fireEvent.change(await screen.findByLabelText("文档路径"), { target: { value: "C:\\doc.md" } });
+    fireEvent.change(screen.getByLabelText("课程标题"), { target: { value: "测试课程" } });
+    fireEvent.change(screen.getByLabelText("章节标题"), { target: { value: "测试章节" } });
+    fireEvent.click(screen.getByRole("button", { name: "导入单篇" }));
+
+    await waitFor(() => {
+      expect(requestMock).toHaveBeenCalledWith("knowledge.article.import", expect.objectContaining({ allowDuplicate: false }));
+    });
+    expect(requestMock.mock.calls.filter((call) => call[0] === "knowledge.article.import")).toHaveLength(1);
+  });
+
+  it("passes search filters down and loads more pages with an offset", async () => {
+    // v3.6.0 KBX-2/3：课程/章节过滤进入检索参数；「加载更多」以 offset 取下一页并追加。
+    let searchCalls = 0;
+    requestMock.mockImplementation((method: string) => {
+      if (method === "knowledge.overview") return Promise.resolve(overview());
+      if (method === "session.current") return Promise.resolve({ role: "STUDENT" });
+      if (method === "knowledge.index.status") {
+        return Promise.resolve({ pendingJobs: 0, indexedChunks: 0, failedChunks: 0, mode: "HYBRID", message: "ready" });
+      }
+      if (method === "knowledge.search") {
+        searchCalls += 1;
+        return searchCalls === 1
+          ? Promise.resolve({
+              items: [
+                {
+                  articleId: "article-1",
+                  documentId: "doc-1",
+                  title: "调度算法概述",
+                  sourceName: "os.md",
+                  chunkIndex: 0,
+                  snippet: "第一批结果",
+                  relevance: 0.9,
+                },
+              ],
+              hasMore: true,
+            })
+          : Promise.resolve({
+              items: [
+                {
+                  articleId: "article-1",
+                  documentId: "doc-1",
+                  title: "调度算法概述",
+                  sourceName: "os.md",
+                  chunkIndex: 1,
+                  snippet: "第二批结果",
+                  relevance: 0.8,
+                },
+              ],
+              hasMore: false,
+            });
+      }
+      throw new Error(`Unexpected request: ${method}`);
+    });
+    renderPage();
+
+    await screen.findByText(/1 篇文档/);
+    fireEvent.change(screen.getByLabelText("筛选课程"), { target: { value: "操作系统" } });
+    fireEvent.change(screen.getByLabelText(/检索课程知识/), { target: { value: "调度" } });
+
+    expect(await screen.findByText("第一批结果")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "加载更多" }));
+
+    expect(await screen.findByText("第二批结果")).toBeInTheDocument();
+    expect(screen.getByText("第一批结果")).toBeInTheDocument();
+    const searchRequests = requestMock.mock.calls.filter((call) => call[0] === "knowledge.search");
+    expect(searchRequests).toHaveLength(2);
+    expect(searchRequests[1]?.[1]).toEqual(
+      expect.objectContaining({ offset: 1, courseTitle: "操作系统" }),
+    );
+  });
+
   it("opens a section document directly from the course tree and shows the reading header", async () => {
     renderPage();
 
@@ -206,9 +376,10 @@ describe("KnowledgePage", () => {
     );
 
     // v3.4.4：阅读区内不再嵌入助教表单；「知识助教」按钮拉起独立子窗口并携带上下文。
-    const button = await screen.findByRole("button", { name: "知识助教" });
+    // v3.6.0 KUI：顶栏与浮动入口各有一个，点击任一即可。
+    const buttons = await screen.findAllByRole("button", { name: "知识助教" });
     expect(screen.queryByLabelText(/针对课程资料提问/)).not.toBeInTheDocument();
-    fireEvent.click(button);
+    fireEvent.click(buttons[0]!);
 
     await waitFor(() => expect(webviewWindowMock).toHaveBeenCalledTimes(1));
     const [label, options] = webviewWindowMock.mock.calls[0] as [string, { url: string }];

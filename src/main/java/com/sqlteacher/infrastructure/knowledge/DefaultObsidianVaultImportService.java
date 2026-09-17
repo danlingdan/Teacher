@@ -87,7 +87,9 @@ public final class DefaultObsidianVaultImportService implements ObsidianVaultImp
                     knowledge.reviseArticle(file.existingArticleId(), file.path(), List.of());
                     revised++;
                 } else {
-                    knowledge.importArticle(file.path(), pending.mapping().courseTitle(), file.sectionTitle(), List.of());
+                    // Obsidian 库Vault 批量导入保持既有语义（逐文件弹窗确认不可行）；
+                    // 批量场景的同内容跳过策略另行处理。
+                    knowledge.importArticle(file.path(), pending.mapping().courseTitle(), file.sectionTitle(), List.of(), true);
                     imported++;
                 }
             } catch (RuntimeException error) {

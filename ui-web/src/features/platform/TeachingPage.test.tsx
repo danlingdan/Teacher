@@ -52,13 +52,13 @@ describe("TeachingPage", () => {
     );
 
     expect(await screen.findByText("进度题目 1")).toBeInTheDocument();
-    expect(screen.getByText("第 1 / 3 页")).toBeInTheDocument();
-    expect(screen.queryByText("进度题目 60")).not.toBeInTheDocument();
+    expect(screen.getByText("第 1 / 8 页")).toBeInTheDocument();
+    expect(screen.queryByText("进度题目 16")).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "下一页" }));
-    expect(await screen.findByText("进度题目 60")).toBeInTheDocument();
+    expect(await screen.findByText("进度题目 16")).toBeInTheDocument();
     expect(screen.queryByText("进度题目 1")).not.toBeInTheDocument();
-    expect(screen.getByText("第 2 / 3 页")).toBeInTheDocument();
+    expect(screen.getByText("第 2 / 8 页")).toBeInTheDocument();
   });
 
   it("parses a preview before confirming text import", async () => {

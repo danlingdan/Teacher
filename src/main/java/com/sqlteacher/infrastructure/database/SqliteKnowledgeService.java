@@ -6,6 +6,7 @@ import com.sqlteacher.application.knowledge.KnowledgeDocument;
 import com.sqlteacher.application.knowledge.KnowledgeDocumentService;
 import com.sqlteacher.application.knowledge.CourseKnowledgeArticle;
 import com.sqlteacher.application.knowledge.CourseKnowledgeDetail;
+import com.sqlteacher.application.knowledge.CourseKnowledgeImportResult;
 import com.sqlteacher.application.knowledge.CourseKnowledgeRevision;
 import com.sqlteacher.application.knowledge.CourseKnowledgeSearchFilter;
 import com.sqlteacher.application.knowledge.CourseKnowledgeService;
@@ -37,17 +38,17 @@ import java.util.HexFormat;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
-import java.util.function.Function;
 import java.util.stream.Collectors;
 
 public final class SqliteKnowledgeService implements KnowledgeDocumentService, KnowledgeSearchService, CourseKnowledgeService {
     static final long MAX_DOCUMENT_BYTES = 20 * 1024 * 1024;
     static final int MAX_CHUNK_CHARACTERS = 800;
+    /** v3.6.0 KBQ-1: 分块算法版本号——算法或参数变化时提升，存量库启动后自动重切。 */
+    public static final String CHUNKER_VERSION = "structure-aware-v1";
     private static final Set<String> ALLOWED_EXTENSIONS = Set.of("txt", "md", "markdown", "pdf", "docx");
 
     private final JdbcConnectionFactory connectionFactory;
@@ -204,17 +205,25 @@ public final class SqliteKnowledgeService implements KnowledgeDocumentService, K
     }
 
     @Override
-    public CourseKnowledgeArticle importArticle(
+    public CourseKnowledgeImportResult importArticle(
         Path path,
         String requestedCourseTitle,
         String requestedSectionTitle,
-        List<String> requestedKnowledgePoints
+        List<String> requestedKnowledgePoints,
+        boolean allowDuplicate
     ) {
         String courseTitle = requireText(requestedCourseTitle, "courseTitle");
         String sectionTitle = requireText(requestedSectionTitle, "sectionTitle");
         List<String> knowledgePoints = normalizeKnowledgePoints(requestedKnowledgePoints);
+        String content = readContent(validatePath(path));
+        if (!allowDuplicate) {
+            // v3.6.0 KBF-3：跨来源同内容导入过去会静默并存，先查重并把决定权交给用户。
+            List<CourseKnowledgeImportResult.ContentDuplicate> duplicates = findContentDuplicates(content);
+            if (!duplicates.isEmpty()) {
+                return new CourseKnowledgeImportResult(null, duplicates);
+            }
+        }
         KnowledgeDocument document = importDocument(path);
-        String content = readContent(path);
         String articleId = UUID.randomUUID().toString();
         String revisionId = UUID.randomUUID().toString();
         String contentHash = sha256(content.getBytes(StandardCharsets.UTF_8));
@@ -245,7 +254,46 @@ public final class SqliteKnowledgeService implements KnowledgeDocumentService, K
             }
             throw new SqlTeacherException("COURSE_KNOWLEDGE_IMPORT_FAILED", "Failed to import course knowledge", error);
         }
-        return getArticle(articleId).article();
+        return CourseKnowledgeImportResult.imported(getArticle(articleId).article());
+    }
+
+    /**
+     * v3.6.0 KBF-3: 在现存文章的当前修订中按归一化内容哈希查重（BOM/CRLF/连续空行收敛后
+     * 比较，同一内容经不同来源导入也能命中）。扫描量为全部当前修订，仅在导入时执行。
+     */
+    private List<CourseKnowledgeImportResult.ContentDuplicate> findContentDuplicates(String content) {
+        String hash = sha256(normalizeForDuplicateCheck(content).getBytes(StandardCharsets.UTF_8));
+        String sql = """
+            select a.id, a.course_title, a.section_title, a.current_revision, r.title, r.content
+            from course_knowledge_articles a
+            join course_knowledge_revisions r
+              on r.article_id = a.id and r.revision = a.current_revision
+            """;
+        List<CourseKnowledgeImportResult.ContentDuplicate> matches = new ArrayList<>();
+        try (Connection connection = connectionFactory.open("app");
+             PreparedStatement statement = connection.prepareStatement(sql);
+             ResultSet rows = statement.executeQuery()) {
+            while (rows.next()) {
+                String candidate = sha256(normalizeForDuplicateCheck(rows.getString("content"))
+                    .getBytes(StandardCharsets.UTF_8));
+                if (candidate.equals(hash)) {
+                    matches.add(new CourseKnowledgeImportResult.ContentDuplicate(
+                        rows.getString("id"), rows.getString("title"),
+                        rows.getString("course_title"), rows.getString("section_title"),
+                        rows.getInt("current_revision")));
+                }
+            }
+            return List.copyOf(matches);
+        } catch (SQLException error) {
+            throw new SqlTeacherException("COURSE_KNOWLEDGE_IMPORT_FAILED", "Failed to check duplicate content", error);
+        }
+    }
+
+    static String normalizeForDuplicateCheck(String content) {
+        return content.replace("\uFEFF", "")
+            .replace("\r\n", "\n").replace('\r', '\n')
+            .trim()
+            .replaceAll("\\n{3,}", "\n\n");
     }
 
     @Override
@@ -398,58 +446,232 @@ public final class SqliteKnowledgeService implements KnowledgeDocumentService, K
     }
 
     @Override
+    public void deleteArticle(String requestedArticleId) {
+        String articleId = requireText(requestedArticleId, "articleId");
+        String documentId;
+        try (Connection connection = connectionFactory.open("app");
+             PreparedStatement statement = connection.prepareStatement(
+                 "select document_id from course_knowledge_articles where id = ?")) {
+            statement.setString(1, articleId);
+            try (ResultSet rows = statement.executeQuery()) {
+                if (!rows.next()) {
+                    throw new SqlTeacherException("COURSE_KNOWLEDGE_NOT_FOUND", "Course knowledge article not found");
+                }
+                documentId = rows.getString("document_id");
+            }
+        } catch (SQLException error) {
+            throw new SqlTeacherException("COURSE_KNOWLEDGE_DELETE_FAILED", "Failed to delete course knowledge", error);
+        }
+        try (Connection connection = connectionFactory.open("app")) {
+            connection.setAutoCommit(false);
+            try {
+                // 应用库连接外键是关闭的（与官方包 hardDeleteArticle 同一前提），按子表在先显式删除，
+                // 不得依赖 on delete cascade。knowledge_chunks 删除会触发 FTS after-delete 触发器；
+                // 底层文档行可能已被旧版删除路径先行清掉，缺失时按 0 行处理。
+                deleteByColumn(connection, "delete from knowledge_chunks_v2 where article_id = ?", articleId);
+                deleteByColumn(connection, "delete from knowledge_index_jobs where article_id = ?", articleId);
+                deleteByColumn(connection, "delete from knowledge_read_state where article_id = ?", articleId);
+                deleteByColumn(connection, "delete from course_knowledge_point_links where revision_id in "
+                    + "(select id from course_knowledge_revisions where article_id = ?)", articleId);
+                deleteByColumn(connection, "delete from course_knowledge_revisions where article_id = ?", articleId);
+                deleteByColumn(connection, "delete from course_knowledge_articles where id = ?", articleId);
+                deleteByColumn(connection, "delete from knowledge_chunks where document_id = ?", documentId);
+                deleteByColumn(connection, "delete from knowledge_documents where id = ?", documentId);
+                connection.commit();
+            } catch (SQLException | RuntimeException error) {
+                connection.rollback();
+                throw error;
+            }
+        } catch (SQLException error) {
+            throw new SqlTeacherException("COURSE_KNOWLEDGE_DELETE_FAILED", "Failed to delete course knowledge", error);
+        }
+    }
+
+    private static void deleteByColumn(Connection connection, String sql, String parameter) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, parameter);
+            statement.executeUpdate();
+        }
+    }
+
+    /**
+     * v3.6.0 KBQ-1: 用当前分块算法重切全部文章的当前修订（FTS 与混合分块表同步重写、
+     * 索引作业重置为待处理）。启动时的分块版本升级与「重建检索索引」共用此路径；
+     * 无可检索内容的文章跳过，不阻塞整体升级。
+     */
+    public int rechunkAllArticles() {
+        record ArticleContent(String articleId, String documentId, String revisionId, String content) {}
+        String sql = """
+            select a.id, a.document_id, r.id revision_id, r.content
+            from course_knowledge_articles a
+            join course_knowledge_revisions r
+              on r.article_id = a.id and r.revision = a.current_revision
+            """;
+        List<ArticleContent> articles = new ArrayList<>();
+        try (Connection connection = connectionFactory.open("app");
+             PreparedStatement statement = connection.prepareStatement(sql);
+             ResultSet rows = statement.executeQuery()) {
+            while (rows.next()) {
+                articles.add(new ArticleContent(rows.getString("id"), rows.getString("document_id"),
+                    rows.getString("revision_id"), rows.getString("content")));
+            }
+        } catch (SQLException error) {
+            throw new SqlTeacherException("COURSE_KNOWLEDGE_RECHUNK_FAILED",
+                "Failed to read articles for re-chunking", error);
+        }
+        int processed = 0;
+        for (ArticleContent article : articles) {
+            List<String> chunks;
+            try {
+                chunks = chunk(article.content());
+            } catch (IllegalArgumentException skipped) {
+                continue;
+            }
+            String headings = String.join("\n", headingPath(article.content()));
+            try (Connection connection = connectionFactory.open("app")) {
+                connection.setAutoCommit(false);
+                try {
+                    deleteByColumn(connection, "delete from knowledge_chunks where document_id = ?", article.documentId());
+                    deleteByColumn(connection, "delete from knowledge_chunks_v2 where article_id = ?", article.articleId());
+                    try (PreparedStatement resetJobs = connection.prepareStatement(
+                        "update knowledge_index_jobs set status = 'PENDING', error_message = null, updated_at = ? where article_id = ?")) {
+                        resetJobs.setString(1, Instant.now().toString());
+                        resetJobs.setString(2, article.articleId());
+                        resetJobs.executeUpdate();
+                    }
+                    insertChunks(connection, article.documentId(), chunks);
+                    insertHybridChunks(connection, article.documentId(), article.articleId(),
+                        article.revisionId(), chunks, headings);
+                    connection.commit();
+                    processed++;
+                } catch (SQLException | RuntimeException error) {
+                    connection.rollback();
+                    throw error;
+                }
+            } catch (SQLException error) {
+                throw new SqlTeacherException("COURSE_KNOWLEDGE_RECHUNK_FAILED",
+                    "Failed to re-chunk article " + article.articleId(), error);
+            }
+        }
+        return processed;
+    }
+
+    @Override
     public List<KnowledgeSearchResult> search(
         String requestedQuery,
         CourseKnowledgeSearchFilter requestedFilter,
-        int limit
+        int limit,
+        int offset
     ) {
         CourseKnowledgeSearchFilter filter = requestedFilter == null
             ? CourseKnowledgeSearchFilter.allLocal() : requestedFilter;
-        if (limit < 1 || limit > 50) {
-            throw new IllegalArgumentException("Knowledge search limit must be between 1 and 50");
+        if (limit < 1 || limit > 100) {
+            throw new IllegalArgumentException("Knowledge search limit must be between 1 and 100");
         }
-        Map<String, CourseKnowledgeArticle> byDocument = listArticles().stream()
-            .collect(Collectors.toMap(CourseKnowledgeArticle::documentId, Function.identity()));
-        return search(requestedQuery, 50).stream()
-            .filter(result -> Optional.ofNullable(byDocument.get(result.documentId()))
-                .filter(article -> matches(article, filter)).isPresent())
-            .limit(limit)
-            .toList();
+        if (offset < 0) {
+            throw new IllegalArgumentException("Knowledge search offset must not be negative");
+        }
+        String andQuery = toFtsQuery(requestedQuery);
+        // v3.6.0 KBQ-3：owner/visibility/课程/章节/知识点过滤全部下推到 SQL（过去先取
+        // 50 条再内存过滤，窄过滤会欠召回）；AND 无命中时放宽为 OR + bm25 排序兜底
+        // （unicode61 无中文分词，硬 AND 对多词中文查询过脆）。安全过滤始终留在 SQL 层。
+        List<KnowledgeSearchResult> results = filteredFtsSearch(andQuery, filter, limit, offset);
+        if (results.isEmpty() && andQuery.contains(" AND ")) {
+            results = filteredFtsSearch(toFtsQuery(requestedQuery, " OR "), filter, limit, offset);
+        }
+        List<KnowledgeSearchResult> snapshot = List.copyOf(results);
+        eventService.recordKnowledgeSearch(requestedQuery.trim().length(), snapshot.size());
+        return snapshot;
     }
 
-    private static boolean matches(CourseKnowledgeArticle article, CourseKnowledgeSearchFilter filter) {
-        if (!filter.includePrivate() && article.visibility() != KnowledgeVisibility.PUBLISHED) {
-            return false;
+    private List<KnowledgeSearchResult> filteredFtsSearch(
+        String ftsQuery,
+        CourseKnowledgeSearchFilter filter,
+        int limit,
+        int offset
+    ) {
+        StringBuilder sql = new StringBuilder("""
+            select d.id, d.title, d.source_name, c.chunk_index,
+                snippet(knowledge_chunks_fts, 0, '【', '】', '…', 24) as matched_snippet,
+                bm25(knowledge_chunks_fts) as score
+            from knowledge_chunks_fts
+            join knowledge_chunks c on c.rowid = knowledge_chunks_fts.rowid
+            join knowledge_documents d on d.id = c.document_id
+            join course_knowledge_articles a on a.document_id = d.id
+            where knowledge_chunks_fts match ?
+            """);
+        List<Object> parameters = new ArrayList<>();
+        parameters.add(ftsQuery);
+        if (filter.includePrivate()) {
+            sql.append(" and (a.owner_id = ? or a.visibility = 'PUBLISHED')");
+            parameters.add(currentOwnerId());
+        } else {
+            sql.append(" and a.visibility = 'PUBLISHED'");
         }
-        if (!filter.courseTitle().isBlank() && !article.courseTitle().equalsIgnoreCase(filter.courseTitle())) {
-            return false;
+        if (!filter.courseTitle().isBlank()) {
+            sql.append(" and lower(a.course_title) = lower(?)");
+            parameters.add(filter.courseTitle());
         }
-        if (!filter.sectionTitle().isBlank() && !article.sectionTitle().equalsIgnoreCase(filter.sectionTitle())) {
-            return false;
+        if (!filter.sectionTitle().isBlank()) {
+            sql.append(" and lower(a.section_title) = lower(?)");
+            parameters.add(filter.sectionTitle());
         }
-        return filter.knowledgePoint().isBlank() || article.knowledgePoints().stream()
-            .anyMatch(point -> point.equalsIgnoreCase(filter.knowledgePoint()));
+        if (!filter.knowledgePoint().isBlank()) {
+            sql.append("""
+                and exists (select 1 from course_knowledge_point_links l
+                    join course_knowledge_revisions cr on cr.id = l.revision_id
+                    where cr.article_id = a.id and cr.revision = a.current_revision
+                      and lower(l.knowledge_point) = lower(?))
+                """);
+            parameters.add(filter.knowledgePoint());
+        }
+        sql.append(" order by score, d.title, c.chunk_index limit ? offset ?");
+        parameters.add(limit);
+        parameters.add(offset);
+        try (Connection connection = connectionFactory.open("app");
+             PreparedStatement statement = connection.prepareStatement(sql.toString())) {
+            for (int index = 0; index < parameters.size(); index++) {
+                statement.setObject(index + 1, parameters.get(index));
+            }
+            List<KnowledgeSearchResult> results = new ArrayList<>();
+            try (ResultSet rows = statement.executeQuery()) {
+                while (rows.next()) {
+                    results.add(new KnowledgeSearchResult(
+                        rows.getString("id"), rows.getString("title"), rows.getString("source_name"),
+                        rows.getInt("chunk_index"), rows.getString("matched_snippet"),
+                        Math.max(0, -rows.getDouble("score"))
+                    ));
+                }
+            }
+            return results;
+        } catch (SQLException error) {
+            throw new SqlTeacherException("KNOWLEDGE_SEARCH_FAILED", "Failed to search local knowledge", error);
+        }
     }
 
+    /**
+     * v3.6.0 KBQ-1: 结构感知分块——标题处开新块（分块边界对齐章节），围栏代码块与表格
+     * 不从中间截断，超长块按行边界二次切分。分块算法变化时必须同步提升 {@link #CHUNKER_VERSION}
+     * 触发存量库自动重切。
+     */
     static List<String> chunk(String content) {
         String normalized = content.replace("\r\n", "\n").replace('\r', '\n').trim();
         List<String> chunks = new ArrayList<>();
         StringBuilder current = new StringBuilder();
-        for (String paragraph : normalized.split("\\n\\s*\\n")) {
-            String clean = paragraph.replaceAll("[\\t ]+", " ").replaceAll("\\n+", "\n").trim();
-            if (clean.isBlank()) {
-                continue;
+        for (String block : structuralBlocks(normalized)) {
+            if (isHeadingBlock(block) && current.length() > 0) {
+                chunks.add(current.toString());
+                current.setLength(0);
             }
-            for (int offset = 0; offset < clean.length(); offset += MAX_CHUNK_CHARACTERS) {
-                String part = clean.substring(offset, Math.min(clean.length(), offset + MAX_CHUNK_CHARACTERS));
-                if (current.length() > 0 && current.length() + 2 + part.length() > MAX_CHUNK_CHARACTERS) {
+            for (String piece : splitOversize(block)) {
+                if (current.length() > 0 && current.length() + 2 + piece.length() > MAX_CHUNK_CHARACTERS) {
                     chunks.add(current.toString());
                     current.setLength(0);
                 }
                 if (current.length() > 0) {
                     current.append("\n\n");
                 }
-                current.append(part);
+                current.append(piece);
             }
         }
         if (current.length() > 0) {
@@ -459,6 +681,105 @@ public final class SqliteKnowledgeService implements KnowledgeDocumentService, K
             throw new IllegalArgumentException("Knowledge document has no searchable content");
         }
         return List.copyOf(chunks);
+    }
+
+    /** 按结构把正文拆为最小块：标题行、围栏代码块、表格行组、空行分隔的段落。 */
+    private static List<String> structuralBlocks(String normalized) {
+        List<String> blocks = new ArrayList<>();
+        List<String> paragraph = new ArrayList<>();
+        List<String> table = new ArrayList<>();
+        List<String> code = new ArrayList<>();
+        boolean inCode = false;
+        for (String line : normalized.split("\n", -1)) {
+            String trimmed = line.replaceAll("[\t ]+", " ").trim();
+            if (trimmed.startsWith("```")) {
+                if (inCode) {
+                    code.add(line);
+                    blocks.add(String.join("\n", code));
+                    code.clear();
+                    inCode = false;
+                } else {
+                    flushText(paragraph, blocks);
+                    flushText(table, blocks);
+                    code.add(line);
+                    inCode = true;
+                }
+                continue;
+            }
+            if (inCode) {
+                code.add(line);
+                continue;
+            }
+            if (trimmed.startsWith("|")) {
+                flushText(paragraph, blocks);
+                table.add(trimmed);
+                continue;
+            }
+            if (!table.isEmpty()) {
+                flushText(table, blocks);
+            }
+            if (trimmed.isBlank()) {
+                flushText(paragraph, blocks);
+                continue;
+            }
+            if (isHeadingBlock(trimmed)) {
+                flushText(paragraph, blocks);
+                blocks.add(trimmed);
+                continue;
+            }
+            paragraph.add(trimmed);
+        }
+        flushText(paragraph, blocks);
+        flushText(table, blocks);
+        if (!code.isEmpty()) {
+            // 未闭合的围栏按普通内容处理，避免整块丢失。
+            blocks.add(String.join("\n", code));
+        }
+        return blocks;
+    }
+
+    private static void flushText(List<String> lines, List<String> blocks) {
+        if (!lines.isEmpty()) {
+            blocks.add(String.join("\n", lines));
+            lines.clear();
+        }
+    }
+
+    private static boolean isHeadingBlock(String block) {
+        return block.startsWith("#") && block.matches("#{1,6} .*");
+    }
+
+    /** 超过单块上限的块按行边界二次切分；单行超限时按字符硬切，行完整性优先。 */
+    private static List<String> splitOversize(String block) {
+        if (block.length() <= MAX_CHUNK_CHARACTERS) {
+            return List.of(block);
+        }
+        List<String> pieces = new ArrayList<>();
+        StringBuilder piece = new StringBuilder();
+        for (String line : block.split("\n", -1)) {
+            if (line.length() > MAX_CHUNK_CHARACTERS) {
+                if (piece.length() > 0) {
+                    pieces.add(piece.toString());
+                    piece.setLength(0);
+                }
+                for (int offset = 0; offset < line.length(); offset += MAX_CHUNK_CHARACTERS) {
+                    pieces.add(line.substring(offset, Math.min(line.length(), offset + MAX_CHUNK_CHARACTERS)));
+                }
+                continue;
+            }
+            if (piece.length() > 0 && piece.length() + 1 + line.length() > MAX_CHUNK_CHARACTERS) {
+                pieces.add(piece.toString());
+                piece.setLength(0);
+            }
+            if (piece.length() > 0) {
+                piece.append('\n');
+            }
+            piece.append(line);
+        }
+        if (piece.length() > 0) {
+            pieces.add(piece.toString());
+        }
+        return List.copyOf(pieces);
     }
 
     private static Path validatePath(Path requestedPath) {
@@ -805,6 +1126,10 @@ public final class SqliteKnowledgeService implements KnowledgeDocumentService, K
     }
 
     private static String toFtsQuery(String query) {
+        return toFtsQuery(query, " AND ");
+    }
+
+    private static String toFtsQuery(String query, String operator) {
         String[] tokens = query.trim().split("\\s+");
         List<String> phrases = new ArrayList<>();
         for (String token : tokens) {
@@ -816,7 +1141,7 @@ public final class SqliteKnowledgeService implements KnowledgeDocumentService, K
         if (phrases.isEmpty()) {
             throw new IllegalArgumentException("query must contain searchable text");
         }
-        return String.join(" AND ", phrases);
+        return String.join(operator, phrases);
     }
 
     private static String sha256(byte[] content) {

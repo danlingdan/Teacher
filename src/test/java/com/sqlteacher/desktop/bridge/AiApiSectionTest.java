@@ -100,6 +100,34 @@ class AiApiSectionTest {
     }
 
     @Test
+    void aiKnowledgeAskMapsStructuredContextIntoTheSearchFilter() throws Exception {
+        List<Object[]> asks = new ArrayList<>();
+        GroundedKnowledgeExplanationService explanation = fake(GroundedKnowledgeExplanationService.class, Map.of(
+            "explain", args -> {
+                asks.add(args);
+                return new GroundedKnowledgeAnswer(false, "片段", "test-model", List.of(), "");
+            }));
+        try (var host = hostWithBeans(explanation)) {
+            AiApiSection section = new AiApiSection(host);
+
+            // v3.6.0 KBF-1：阅读上下文经结构化字段映射为课程/章节过滤（保持私有可见语义）。
+            section.handle("ai.knowledge.ask", mapper.createObjectNode()
+                .put("question", "什么是周转时间")
+                .set("context", mapper.createObjectNode()
+                    .put("courseTitle", "操作系统")
+                    .put("sectionTitle", "进程调度")), () -> false, ignored -> { });
+
+            // 空上下文与缺省字段保持全库检索语义（旧前端兼容）。
+            ObjectNode emptyContextParams = mapper.createObjectNode().put("question", "什么是周转时间");
+            emptyContextParams.putObject("context");
+            section.handle("ai.knowledge.ask", emptyContextParams, () -> false, ignored -> { });
+
+            assertEquals(new CourseKnowledgeSearchFilter("操作系统", "进程调度", "", true), asks.get(0)[1]);
+            assertEquals(CourseKnowledgeSearchFilter.allLocal(), asks.get(1)[1]);
+        }
+    }
+
+    @Test
     void aiSqlPreviewRejectsMissingConnections() {
         ConnectionManagementService connections = fake(ConnectionManagementService.class,
             Map.of("findProfile", args -> Optional.empty()));

@@ -20,6 +20,7 @@ import com.sqlteacher.infrastructure.knowledge.DefaultHybridKnowledgeRetrievalSe
 import com.sqlteacher.infrastructure.knowledge.DefaultKnowledgeBundleUpdateService;
 import com.sqlteacher.infrastructure.knowledge.JdkSafeWebContentFetcher;
 import com.sqlteacher.infrastructure.knowledge.KnowledgeBundleBootstrapService;
+import com.sqlteacher.infrastructure.knowledge.KnowledgeChunkUpgradeService;
 import com.sqlteacher.infrastructure.knowledge.LuceneKnowledgeVectorStore;
 import com.sqlteacher.infrastructure.knowledge.OllamaEmbeddingProvider;
 import com.sqlteacher.infrastructure.knowledge.SqliteKnowledgeBundleService;
@@ -56,8 +57,9 @@ public class DatabaseKnowledgeServiceConfig {
 
     @Bean
     public KnowledgeIndexService knowledgeIndexService(JdbcConnectionFactory connectionFactory,
-            EmbeddingProvider embeddingProvider, KnowledgeVectorStore vectorStore) {
-        return new SqliteKnowledgeIndexService(connectionFactory, embeddingProvider, vectorStore);
+            EmbeddingProvider embeddingProvider, KnowledgeVectorStore vectorStore,
+            SqliteKnowledgeService knowledgeService) {
+        return new SqliteKnowledgeIndexService(connectionFactory, embeddingProvider, vectorStore, knowledgeService);
     }
 
     @Bean
@@ -95,6 +97,18 @@ public class DatabaseKnowledgeServiceConfig {
     public KnowledgeBundleBootstrapService knowledgeBundleBootstrapService(KnowledgeBundleService bundleService) {
         KnowledgeBundleBootstrapService service =
             new KnowledgeBundleBootstrapService(bundleService, resolveBuiltinBundleDirectory());
+        service.start();
+        return service;
+    }
+
+    /**
+     * v3.6.0 KBQ-1: re-chunk stored articles in the background when the chunker version changes,
+     * keeping keyword retrieval quality in sync with the evolving structure-aware chunker.
+     */
+    @Bean(destroyMethod = "close")
+    public KnowledgeChunkUpgradeService knowledgeChunkUpgradeService(SqliteKnowledgeService knowledgeService,
+            JdbcConnectionFactory connectionFactory) {
+        KnowledgeChunkUpgradeService service = new KnowledgeChunkUpgradeService(knowledgeService, connectionFactory);
         service.start();
         return service;
     }

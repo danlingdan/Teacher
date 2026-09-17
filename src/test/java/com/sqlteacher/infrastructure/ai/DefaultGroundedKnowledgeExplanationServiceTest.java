@@ -6,6 +6,7 @@ import com.sqlteacher.application.ai.AiTaskResult;
 import com.sqlteacher.application.ai.AiTaskService;
 import com.sqlteacher.application.knowledge.CourseKnowledgeArticle;
 import com.sqlteacher.application.knowledge.CourseKnowledgeDetail;
+import com.sqlteacher.application.knowledge.CourseKnowledgeImportResult;
 import com.sqlteacher.application.knowledge.CourseKnowledgeSearchFilter;
 import com.sqlteacher.application.knowledge.CourseKnowledgeService;
 import com.sqlteacher.application.knowledge.KnowledgeSearchResult;
@@ -58,12 +59,13 @@ class DefaultGroundedKnowledgeExplanationServiceTest {
     }
 
     private static final class StubKnowledgeService implements CourseKnowledgeService {
-        @Override public CourseKnowledgeArticle importArticle(Path path, String courseTitle, String sectionTitle, List<String> knowledgePoints) { throw new UnsupportedOperationException(); }
+        @Override public CourseKnowledgeImportResult importArticle(Path path, String courseTitle, String sectionTitle, List<String> knowledgePoints, boolean allowDuplicate) { throw new UnsupportedOperationException(); }
         @Override public List<CourseKnowledgeArticle> listArticles() { return List.of(ARTICLE); }
         @Override public CourseKnowledgeDetail getArticle(String articleId) { throw new UnsupportedOperationException(); }
         @Override public CourseKnowledgeArticle reviseArticle(String articleId, Path path, List<String> knowledgePoints) { throw new UnsupportedOperationException(); }
         @Override public CourseKnowledgeArticle changeVisibility(String articleId, KnowledgeVisibility visibility) { throw new UnsupportedOperationException(); }
-        @Override public List<KnowledgeSearchResult> search(String query, CourseKnowledgeSearchFilter filter, int limit) {
+        @Override public void deleteArticle(String articleId) { throw new UnsupportedOperationException(); }
+        @Override public List<KnowledgeSearchResult> search(String query, CourseKnowledgeSearchFilter filter, int limit, int offset) {
             return List.of(new KnowledgeSearchResult("document-1", "分组过滤", "having.md", 0,
                 "HAVING 用于过滤分组后的结果。", 1.0));
         }

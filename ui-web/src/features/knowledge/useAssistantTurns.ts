@@ -13,11 +13,17 @@ export type AssistantTurn = {
   error?: string;
 };
 
+/** v3.6.0 KBF-1：阅读上下文走结构化字段进检索过滤，不再拼接问题文本前缀。 */
+export type AssistantContext = {
+  courseTitle?: string;
+  sectionTitle?: string;
+};
+
 /**
  * 知识助教的提问-回答状态机：主窗口与独立子窗口共用。
- * `groundPrefix` 是可选的文档上下文前缀（拼在问题文本前，由 Java 端消费）。
+ * `context` 是可选的文档上下文（结构化传给 Java 端做检索过滤，问题文本保持纯净）。
  */
-export function useAssistantTurns(groundPrefix: string) {
+export function useAssistantTurns(context: AssistantContext) {
   const [turns, setTurns] = useState<AssistantTurn[]>([]);
   const askPending = turns.some((turn) => turn.pending);
 
@@ -25,13 +31,18 @@ export function useAssistantTurns(groundPrefix: string) {
     (text: string): boolean => {
       const trimmed = text.trim();
       if (trimmed.length < 2 || askPending) return false;
-      const groundedQuestion = groundPrefix ? `${groundPrefix}\n${trimmed}` : trimmed;
       const turnId = crypto.randomUUID();
       const requestId = crypto.randomUUID();
       setTurns((value) => [...value, { id: turnId, question: trimmed, requestId, pending: true }]);
       localAppRequestWithId<AiKnowledgeAnswer>(
         "ai.knowledge.ask",
-        { question: groundedQuestion },
+        {
+          question: trimmed,
+          context: {
+            courseTitle: context.courseTitle ?? "",
+            sectionTitle: context.sectionTitle ?? "",
+          },
+        },
         requestId,
       )
         .then((answer) =>
@@ -50,7 +61,7 @@ export function useAssistantTurns(groundPrefix: string) {
         );
       return true;
     },
-    [askPending, groundPrefix],
+    [askPending, context.courseTitle, context.sectionTitle],
   );
 
   const cancelTurn = useCallback((turn: AssistantTurn) => {

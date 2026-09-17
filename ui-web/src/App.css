@@ -3595,22 +3595,27 @@ kbd {
 }
 
 /* ---- v3.4.4 KUI：阅读双栏、助教会话、检索强化、教师管理收拢 ---- */
-/* v3.4.4：知识助教独立子窗口。 */
+/* v3.6.0 KUI：助教子窗口防横向溢出——长标题/引用/URL 均可断行。 */
 .assistant-window-page {
   height: 100vh;
   padding: 16px;
   display: grid;
   grid-template-rows: minmax(0, 1fr);
   background: var(--surface-2);
+  overflow-x: hidden;
 }
 .assistant-window-page .knowledge-assistant {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
 }
 .assistant-context-line {
   margin: 0;
   font-size: 12px;
+  overflow-wrap: anywhere;
 }
 .assistant-turns {
   flex: 0 1 auto;
@@ -3878,4 +3883,50 @@ p.assistant-citation {
 }
 .ai-provider-row .button-row {
   justify-content: flex-start;
+}
+
+/* ---- v3.6.0 KUI：知识页检索过滤器、导入路径选择、助教浮动入口 ---- */
+.knowledge-filters {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.knowledge-filters select {
+  width: 100%;
+}
+.path-field {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+.path-field input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.path-field .button-row,
+.path-field button {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+.assistant-fab {
+  position: fixed;
+  right: 32px;
+  bottom: 32px;
+  z-index: 60;
+  padding: 12px 20px;
+  border-radius: 999px;
+  border: 1px solid var(--accent, #2aa198);
+  background: var(--accent, #2aa198);
+  color: #08131a;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+}
+.assistant-fab:hover {
+  filter: brightness(1.08);
+}
+.password-form {
+  display: grid;
+  gap: 10px;
+  max-width: 460px;
 }

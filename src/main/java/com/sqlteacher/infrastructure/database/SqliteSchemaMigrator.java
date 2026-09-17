@@ -1279,6 +1279,19 @@ final class SqliteSchemaMigrator {
                     )
                     """
             )
+        ),
+        new Migration(
+            26,
+            "Track knowledge chunker version for v3.6.0 structure-aware re-chunking",
+            List.of(
+                """
+                    create table knowledge_index_meta (
+                        key text primary key,
+                        value text not null,
+                        updated_at text not null default current_timestamp
+                    )
+                    """
+            )
         )
     );
 

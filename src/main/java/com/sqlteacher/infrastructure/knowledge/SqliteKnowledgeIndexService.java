@@ -7,6 +7,7 @@ import com.sqlteacher.application.knowledge.KnowledgeVectorStore;
 import com.sqlteacher.application.knowledge.KnowledgeVisibility;
 import com.sqlteacher.domain.SqlTeacherException;
 import com.sqlteacher.infrastructure.database.JdbcConnectionFactory;
+import com.sqlteacher.infrastructure.database.SqliteKnowledgeService;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -21,15 +22,18 @@ public final class SqliteKnowledgeIndexService implements KnowledgeIndexService 
     private final JdbcConnectionFactory connectionFactory;
     private final EmbeddingProvider embeddingProvider;
     private final KnowledgeVectorStore vectorStore;
+    private final SqliteKnowledgeService knowledgeService;
 
     public SqliteKnowledgeIndexService(
         JdbcConnectionFactory connectionFactory,
         EmbeddingProvider embeddingProvider,
-        KnowledgeVectorStore vectorStore
+        KnowledgeVectorStore vectorStore,
+        SqliteKnowledgeService knowledgeService
     ) {
         this.connectionFactory = connectionFactory;
         this.embeddingProvider = embeddingProvider;
         this.vectorStore = vectorStore;
+        this.knowledgeService = knowledgeService;
     }
 
     @Override
@@ -80,6 +84,15 @@ public final class SqliteKnowledgeIndexService implements KnowledgeIndexService 
             throw failure("KNOWLEDGE_INDEX_RESET_FAILED", "Failed to reset knowledge index", error);
         }
         return rebuildPending();
+    }
+
+    @Override
+    public synchronized IndexReport rebuildContent() {
+        // v3.6.0 KBQ-1：先用当前分块算法重切全部文章（FTS/混合分块同步重写），再整体重建。
+        int rechunked = knowledgeService.rechunkAllArticles();
+        IndexReport report = rebuildAll();
+        return new IndexReport(report.indexedChunks(), report.failedJobs(),
+            "已重切 " + rechunked + " 篇文章；" + report.message());
     }
 
     @Override

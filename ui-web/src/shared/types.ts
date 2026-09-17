@@ -187,6 +187,18 @@ export interface KnowledgeArticleDetail {
   trustedHtml: false;
   externalResourcesAllowed: false;
 }
+// v3.6.0 KBF-3：单篇导入结果——命中同内容既有文章时 article 为空并携带候选清单，
+// 由用户确认后以 allowDuplicate=true 重新发起。
+export interface KnowledgeImportOutcome {
+  article?: KnowledgeArticle | null;
+  duplicates?: Array<{
+    articleId: string;
+    title: string;
+    courseTitle: string;
+    sectionTitle: string;
+    revision: number;
+  }>;
+}
 export interface KnowledgeSearchItem {
   articleId: string;
   documentId: string;
@@ -198,6 +210,8 @@ export interface KnowledgeSearchItem {
 }
 export interface KnowledgeSearchResult {
   items: KnowledgeSearchItem[];
+  /** v3.6.0 KBX-3：结果数达到 limit 时为 true，可带 offset 继续取下一页。 */
+  hasMore?: boolean;
 }
 export interface ImportPreviewItem {
   relativePath: string;

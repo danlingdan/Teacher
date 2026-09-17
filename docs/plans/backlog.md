@@ -30,5 +30,6 @@
 | surefire 按类并行（TST-8 第二项） | v3.4.0 | 与 SQLite 临时目录 / WSL runner 测试存在资源竞争风险，暂不启用。 |
 | Monaco 体积优化（register-\*.js 2.66MB） | v3.4.0 | 收益/风险比一般，挂起。 |
 | `FileAiTaskHistoryService` 整表重写 | v3.4.0 | 性能项；若历史任务量级可感知再立项。 |
+| 本地嵌入链路打通 + 嵌入模型一致性校验（v3.6.0 KBQ-2，含受控 overlap 分块） | v3.6.0 | 用户确认本机 Ollama 未安装向量模型，语义检索暂无运行对象；安装向量模型（如 embeddinggemma）后从本条启动，届时一并启用分块 overlap。 |
 
 返回 [迭代计划索引](README.md) · [文档中心](../README.md)。

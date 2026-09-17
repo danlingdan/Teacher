@@ -55,7 +55,7 @@ describe("AssistantWindow", () => {
     expect(screen.getByText(/将结合正在阅读的资料：调度算法概述/)).toBeInTheDocument();
   });
 
-  it("grounds each question with the context prefix and keeps the conversation", async () => {
+  it("sends the reading context as structured fields and keeps the conversation", async () => {
     renderWindow();
 
     const input = screen.getByLabelText(/针对课程资料提问/);
@@ -71,12 +71,14 @@ describe("AssistantWindow", () => {
     expect(await screen.findByText("第二个问题")).toBeInTheDocument();
     expect(screen.getByText("第一个问题")).toBeInTheDocument();
 
-    // 两次提问都带上了当前文档上下文前缀（Java 端检索优先命中该资料）。
+    // v3.6.0 KBF-1：问题文本保持纯净，阅读上下文经结构化字段随请求传递（Java 端做检索过滤）。
     await waitFor(() => {
       const asks = requestMock.mock.calls.filter((call) => call[0] === "ai.knowledge.ask");
       expect(asks).toHaveLength(2);
-      expect(String(asks[0]?.[1]?.question)).toContain("（课程：操作系统 / 章节：进程调度 / 资料标题：调度算法概述）\n第一个问题");
-      expect(String(asks[1]?.[1]?.question)).toContain("第二个问题");
+      expect(asks[0]?.[1]?.question).toBe("第一个问题");
+      expect(asks[0]?.[1]?.context).toEqual({ courseTitle: "操作系统", sectionTitle: "进程调度" });
+      expect(asks[1]?.[1]?.question).toBe("第二个问题");
+      expect(asks[1]?.[1]?.context).toEqual({ courseTitle: "操作系统", sectionTitle: "进程调度" });
     });
     // 引用在子窗口中为可追溯文本（原文跳转在主窗口完成）；两轮各有一条相同引用。
     const citation = screen.getAllByText(/调度算法概述 第 2 版/)[0];

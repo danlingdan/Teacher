@@ -42,7 +42,7 @@ public final class DefaultGroundedKnowledgeExplanationService implements Grounde
         AiContextPolicy contextPolicy
     ) {
         this(knowledgeService, (query, filter, limit) -> new HybridKnowledgeRetrievalService.RetrievalResponse(
-            knowledgeService.search(query, filter, limit), "FTS5", false, ""), aiTaskService, contextPolicy);
+            knowledgeService.search(query, filter, limit, 0), "FTS5", false, ""), aiTaskService, contextPolicy);
     }
 
     public DefaultGroundedKnowledgeExplanationService(

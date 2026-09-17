@@ -276,14 +276,14 @@ export function TeachingPage() {
     );
   const data = query.data;
   const interventionItems = interventions.data?.items ?? [];
-  const exercisePageSize = 50;
+  const exercisePageSize = 15;
   const exercisePages = Math.max(1, Math.ceil(filteredExercises.length / exercisePageSize));
   const visibleExercisePage = Math.min(exercisePage, exercisePages - 1);
   const visibleExercises = filteredExercises.slice(
     visibleExercisePage * exercisePageSize,
     (visibleExercisePage + 1) * exercisePageSize,
   );
-  const progressPageSize = 50;
+  const progressPageSize = 15;
   const progressPages = Math.max(1, Math.ceil(data.progressItems.length / progressPageSize));
   const visibleProgressPage = Math.min(progressPage, progressPages - 1);
   const visibleProgressItems = data.progressItems.slice(
@@ -308,14 +308,13 @@ export function TeachingPage() {
       <p className="muted">
         以下统计与学情均为本机作答记录（学生练习发生在各自的电脑上）；班级维度的提交与学情请前往「班级与云端」。
       </p>
-      <section className="content-card teaching-bank">
-        <div className="section-heading">
-          <div>
-            <p className="eyebrow">题库管理</p>
-            <h2>本地题库</h2>
-          </div>
-          <span className="policy-chip">{data.canPublish ? "可发布" : "只读"}</span>
-        </div>
+      <details className="content-card teaching-bank">
+        <summary>
+          <strong>题库管理</strong>
+          <span className="policy-chip">
+            {data.exercises.length} 道题 · {data.canPublish ? "可发布" : "只读"}
+          </span>
+        </summary>
         <div className="bank-toolbar">
           <input
             aria-label="搜索题库"
@@ -393,7 +392,7 @@ export function TeachingPage() {
             </Button>
           </div>
         )}
-      </section>
+      </details>
       <details
         ref={editorRef}
         className="content-card teaching-editor"
@@ -678,16 +677,15 @@ export function TeachingPage() {
           </Button>
         </div>
       </details>
-      <section className="content-card">
-        <div className="section-heading">
-          <div>
-            <p className="eyebrow">学习分析</p>
-            <h2>学习进度</h2>
-          </div>
-        </div>
-        {data.progressItems.length === 0 ? (
-          <p className="muted">尚无练习记录。</p>
-        ) : (
+      {/* v3.6.0 KUI 方案A：学习进度与完整学情分析合并为「本机作答记录」——
+          仅含本机试做/练习记录，班级学情在「班级与云端」；无记录时整卡不渲染。 */}
+      {data.progressItems.length > 0 && (
+        <details className="content-card">
+          <summary>
+            <strong>本机作答记录</strong>
+            <span className="policy-chip">{data.progressItems.length} 条记录</span>
+          </summary>
+          <p className="muted">仅本机试做/练习记录；班级学情请前往「班级与云端」。</p>
           <DataTable
             caption="练习学情"
             rows={visibleProgressItems}
@@ -706,63 +704,62 @@ export function TeachingPage() {
               },
             ]}
           />
-        )}
-        {data.progressItems.length > progressPageSize && (
-          <div className="compact-pager" aria-label="学习进度分页">
-            <Button
-              variant="secondary"
-              disabled={visibleProgressPage === 0}
-              onClick={() => setProgressPage(visibleProgressPage - 1)}
-            >
-              上一页
-            </Button>
-            <span>
-              第 {visibleProgressPage + 1} / {progressPages} 页
-            </span>
-            <Button
-              variant="secondary"
-              disabled={visibleProgressPage + 1 >= progressPages}
-              onClick={() => setProgressPage(visibleProgressPage + 1)}
-            >
-              下一页
-            </Button>
-          </div>
-        )}
-      </section>
-      <details
-        className="content-card"
-        onToggle={(event) => {
-          if (event.currentTarget.open) {
-            setAnalyticsOpen(true);
-            void client.invalidateQueries({ queryKey: analyticsKey });
-          }
-        }}
-      >
-        <summary>
-          <strong>完整学情分析</strong>
-        </summary>
-        {analytics.isPending ? (
-          <p className="muted">正在生成本地学情分析…</p>
-        ) : analytics.data ? (
-          <>
-            <p>生成时间：{formatAccountDate(analytics.data.generatedAt)}</p>
-            <div className="metric-row">
-              {Object.entries(analytics.data.overview).map(([key, value]) => (
-                <Metric key={key} label={analyticsMetricLabel(key)} value={value} />
-              ))}
+          {data.progressItems.length > progressPageSize && (
+            <div className="compact-pager" aria-label="学习进度分页">
+              <Button
+                variant="secondary"
+                disabled={visibleProgressPage === 0}
+                onClick={() => setProgressPage(visibleProgressPage - 1)}
+              >
+                上一页
+              </Button>
+              <span>
+                第 {visibleProgressPage + 1} / {progressPages} 页
+              </span>
+              <Button
+                variant="secondary"
+                disabled={visibleProgressPage + 1 >= progressPages}
+                onClick={() => setProgressPage(visibleProgressPage + 1)}
+              >
+                下一页
+              </Button>
             </div>
-            <p>
-              题目统计 {analytics.data.exercises.length} 项，知识点统计{" "}
-              {analytics.data.knowledgePoints.length} 项，常见错误{" "}
-              {analytics.data.commonErrors.length} 项。
-            </p>
-          </>
-        ) : (
-          <p className="muted">
-            暂无学情数据：此处统计的是本机作答记录，学生完成练习后即可看到分析。
-          </p>
-        )}
-      </details>
+          )}
+          <details
+            onToggle={(event) => {
+              if (event.currentTarget.open) {
+                setAnalyticsOpen(true);
+                void client.invalidateQueries({ queryKey: analyticsKey });
+              }
+            }}
+          >
+            <summary>
+              <strong>完整学情分析</strong>
+            </summary>
+            {analytics.isPending ? (
+              <p className="muted">正在生成本地学情分析…</p>
+            ) : analytics.data ? (
+              <>
+                <p>生成时间：{formatAccountDate(analytics.data.generatedAt)}</p>
+                <div className="metric-row">
+                  {Object.entries(analytics.data.overview).map(([key, value]) => (
+                    <Metric key={key} label={analyticsMetricLabel(key)} value={value} />
+                  ))}
+                </div>
+                <p>
+                  题目统计 {analytics.data.exercises.length} 项，知识点统计{" "}
+                  {analytics.data.knowledgePoints.length} 项，常见错误{" "}
+                  {analytics.data.commonErrors.length} 项。
+                </p>
+              </>
+            ) : (
+              <p className="muted">
+                暂无学情数据：此处统计的是本机作答记录，学生完成练习后即可看到分析。
+              </p>
+            )}
+          </details>
+        </details>
+      )}
       <details
         className="content-card"
         onToggle={(event) => {

@@ -6,6 +6,7 @@ import { useAppearanceEffects } from "../../shared/useAppearanceEffects";
 
 // v3.4.4：知识助教独立子窗口。经主窗口「知识助教」按钮以 WebviewWindow 打开，
 // 路由 /#/assistant-window?course=…&section=…&title=… 携带当前文档上下文；
+// v3.6.0 KBF-1：上下文以结构化字段随提问传给 Java 端做检索过滤（不再拼进问题文本），
 // 每轮提问仍是独立的单轮检索问答，引用在此窗口内为纯文本（原文跳转在主窗口完成）。
 export default function AssistantWindow() {
   const [searchParams] = useSearchParams();
@@ -14,11 +15,10 @@ export default function AssistantWindow() {
   const section = searchParams.get("section") ?? "";
   const title = searchParams.get("title") ?? "";
   const hasContext = Boolean(course || section || title);
-  const groundPrefix = hasContext
-    ? `（课程：${course} / 章节：${section} / 资料标题：${title}）`
-    : "";
-  const { turns, askPending, submitQuestion, cancelTurn, clearTurns } =
-    useAssistantTurns(groundPrefix);
+  const { turns, askPending, submitQuestion, cancelTurn, clearTurns } = useAssistantTurns({
+    courseTitle: course,
+    sectionTitle: section,
+  });
   const [question, setQuestion] = useState("");
 
   const submit = () => {
