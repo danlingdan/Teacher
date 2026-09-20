@@ -11,6 +11,7 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -104,6 +105,105 @@ class CloudServerHardeningIntegrationTest {
         assertEquals("RATE_LIMITED", JSON.readTree(fourth.body()).get("code").asText());
     }
 
+    /** v3.8.0 ACC-S2：注册（未验证邮箱）→ 请求重置 → 邮件验证码 → 完成重置 → 新密码可登录的完整闭环。 */
+    @Test void passwordResetCodeFlowCompletesEndToEnd() throws Exception {
+        start();
+        register("code-reset@example.com", "Reset User");
+        assertEquals(200, resetRequest("code-reset@example.com").statusCode());
+        String code = newestCodeFromOutbox();
+        HttpResponse<String> reset = post("auth/reset-password", null,
+            JSON.writeValueAsString(Map.of("email", "code-reset@example.com", "code", code, "newPassword", "another-pass-123")), null);
+        assertEquals(200, reset.statusCode());
+        assertEquals(200, login("code-reset@example.com", "another-pass-123").statusCode());
+        assertEquals(401, login("code-reset@example.com", PASSWORD).statusCode());
+    }
+
+    /** v3.8.0 ACC-S2：错误验证码与不存在的账号必须返回完全相同的错误体（防枚举）。 */
+    @Test void resetCodeFailuresStayUniform() throws Exception {
+        start();
+        register("uniform@example.com", "Uniform User");
+        assertEquals(200, resetRequest("uniform@example.com").statusCode());
+        String code = newestCodeFromOutbox();
+        String wrongCode = (code.charAt(0) == '9' ? '0' : (char) (code.charAt(0) + 1)) + code.substring(1);
+        HttpResponse<String> wrongCodeReset = post("auth/reset-password", null,
+            JSON.writeValueAsString(Map.of("email", "uniform@example.com", "code", wrongCode, "newPassword", "another-pass-123")), null);
+        HttpResponse<String> unknownEmailReset = post("auth/reset-password", null,
+            JSON.writeValueAsString(Map.of("email", "nobody@example.com", "code", "123456", "newPassword", "another-pass-123")), null);
+        assertEquals(400, wrongCodeReset.statusCode());
+        assertEquals(400, unknownEmailReset.statusCode());
+        assertEquals(JSON.readTree(wrongCodeReset.body()).toString(), JSON.readTree(unknownEmailReset.body()).toString(),
+            "wrong-code and unknown-account failures must be indistinguishable");
+    }
+
+    /**
+     * v3.8.0 ACC-S4（决策点 1 方案 B）：管理员签发一次性教师升级码 → 学生兑换 → 教师端点立即
+     * 可用的全链路；兑换后重放同码必须失败。
+     */
+    @Test void teacherRoleCodeRedemptionUnlocksTeacherEndpoints() throws Exception {
+        start();
+        String adminToken = accessToken(register("code-admin@example.com", "Code Admin"));
+        try (var connection = java.sql.DriverManager.getConnection("jdbc:sqlite:" + directory.resolve("cloud.db").toAbsolutePath());
+             var promote = connection.prepareStatement(
+                 "insert or ignore into user_roles(user_id,role) select id,'ADMIN' from users where email='code-admin@example.com'")) {
+            assertEquals(1, promote.executeUpdate());
+        }
+        HttpResponse<String> minted = post("admin/role-codes", adminToken,
+            JSON.writeValueAsString(Map.of("ttlDays", "30")), null);
+        assertEquals(201, minted.statusCode());
+        String code = JSON.readTree(minted.body()).get("code").asText();
+        assertEquals(8, code.length());
+
+        String studentToken = accessToken(register("code-student@example.com", "Code Student"));
+        HttpResponse<String> before = post("classes", studentToken, JSON.writeValueAsString(Map.of("name", "提前建班")), null);
+        assertTrue(before.statusCode() >= 400, "students must not create classes before redemption");
+
+        HttpResponse<String> redeem = post("account/role-codes/redeem", studentToken,
+            JSON.writeValueAsString(Map.of("code", code.toLowerCase())), null);
+        assertEquals(200, redeem.statusCode());
+        HttpResponse<String> created = post("classes", studentToken, JSON.writeValueAsString(Map.of("name", "兑换后的班级")), null);
+        assertEquals(201, created.statusCode(), "the redeemed teacher role must take effect immediately");
+
+        HttpResponse<String> replay = post("account/role-codes/redeem", studentToken,
+            JSON.writeValueAsString(Map.of("code", code)), null);
+        assertEquals(400, replay.statusCode());
+
+        HttpResponse<String> denied = post("admin/role-codes", studentToken,
+            JSON.writeValueAsString(Map.of()), null);
+        assertEquals(403, denied.statusCode(), "redemption must not grant administrative rights");
+    }
+
+    /** v3.8.0 ACC-S3：登录携带的 deviceLabel 经服务端净化后进入会话表；缺省回落"桌面设备"。 */
+    @Test void deviceLabelIsSanitizedAndListedWithSessions() throws Exception {
+        start();
+        register("label-user@example.com", "Label User");
+        HttpResponse<String> labeled = post("auth/login", null, JSON.writeValueAsString(Map.of(
+            "email", "label-user@example.com", "password", PASSWORD, "deviceLabel", "机房A-05 workstation")), null);
+        assertEquals(200, labeled.statusCode());
+        String token = JSON.readTree(labeled.body()).get("accessToken").asText();
+        HttpResponse<String> sessions = get("sessions", token);
+        String body = sessions.body();
+        assertTrue(body.contains("机房A-05 workstation"), "the sanitized label must appear in the session list: " + body);
+
+        // 控制字符被剥离;未上报 label 的会话回落"桌面设备"。
+        HttpResponse<String> control = post("auth/login", null, JSON.writeValueAsString(Map.of(
+            "email", "label-user@example.com", "password", PASSWORD, "deviceLabel", "badlabel")), null);
+        assertEquals(200, control.statusCode());
+        HttpResponse<String> both = get("sessions", JSON.readTree(control.body()).get("accessToken").asText());
+        String bothBody = both.body();
+        assertFalse(bothBody.contains(""), "control characters must be stripped");
+        assertTrue(bothBody.contains("badlabel"), "the cleaned label must persist");
+        assertTrue(bothBody.contains("桌面设备"), "the default label must backfill missing reports");
+    }
+
+    private HttpResponse<String> get(String path, String token) throws Exception {
+        HttpRequest.Builder request = HttpRequest.newBuilder(
+                URI.create("http://127.0.0.1:" + server.port() + "/api/v1/" + path))
+            .header("Authorization", "Bearer " + token)
+            .GET();
+        return HttpClient.newBuilder().version(HttpClient.Version.HTTP_1_1).build()
+            .send(request.build(), HttpResponse.BodyHandlers.ofString());
+    }
+
     @Test void syncEventBodiesAboveOneMiBAreRejectedWith413() throws Exception {
         start();
         String token = accessToken(register("sync-limit@example.com", "Sync User"));
@@ -170,6 +270,17 @@ class CloudServerHardeningIntegrationTest {
 
     private HttpResponse<String> resetRequest(String email) throws Exception {
         return post("auth/request-password-reset", null, JSON.writeValueAsString(Map.of("email", email)), null);
+    }
+
+    private String newestCodeFromOutbox() throws Exception {
+        try (var entries = Files.list(directory.resolve("mails"))) {
+            var newest = entries.filter(p -> p.toString().endsWith(".mail"))
+                .max(java.util.Comparator.comparingLong(p -> p.toFile().lastModified()))
+                .orElseThrow(() -> new AssertionError("no mail written to the outbox"));
+            var matcher = java.util.regex.Pattern.compile("\\b(\\d{6})\\b").matcher(Files.readString(newest));
+            assertTrue(matcher.find(), "mail must contain a 6-digit code");
+            return matcher.group(1);
+        }
     }
 
     private Map<String, Object> reportBody(String idempotencyKey, String installId) {

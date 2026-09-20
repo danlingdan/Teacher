@@ -135,17 +135,17 @@ public final class HttpCloudApiClient implements CloudCapabilityApi, CloudAuthAp
 
     @Override
     public CloudAuthenticationService.Session login(String email, char[] password) {
-        return authenticate("auth/login", Map.of("email", email, "password", new String(password)));
+        return authenticate("auth/login", withDeviceLabel(Map.of("email", email, "password", new String(password))));
     }
 
     @Override
     public CloudAuthenticationService.Session register(String email, String displayName, char[] password) {
-        return authenticate("auth/register", Map.of("email", email, "displayName", displayName, "password", new String(password)));
+        return authenticate("auth/register", withDeviceLabel(Map.of("email", email, "displayName", displayName, "password", new String(password))));
     }
 
     @Override
     public CloudAuthenticationService.Session refresh(String refreshToken) {
-        return authenticate("auth/refresh", Map.of("refreshToken", refreshToken));
+        return authenticate("auth/refresh", withDeviceLabel(Map.of("refreshToken", refreshToken)));
     }
 
     @Override public void logout(String accessToken){send("auth/logout","POST",Map.of(),accessToken);}
@@ -162,6 +162,27 @@ public final class HttpCloudApiClient implements CloudCapabilityApi, CloudAuthAp
     @Override public void resetPassword(String token, char[] newPassword) {
         try { send("auth/reset-password", "POST", Map.of("token", token, "newPassword", new String(newPassword)), null); }
         finally { java.util.Arrays.fill(newPassword, '\0'); }
+    }
+
+    @Override public void resetPassword(String email, String code, char[] newPassword) {
+        try { send("auth/reset-password", "POST", Map.of("email", email, "code", code, "newPassword", new String(newPassword)), null); }
+        finally { java.util.Arrays.fill(newPassword, '\0'); }
+    }
+
+    @Override public void requestEmailBinding(String accessToken, String email) {
+        send("account/bind-email", "POST", Map.of("email", email), accessToken);
+    }
+
+    @Override public void confirmEmailBinding(String accessToken, String code) {
+        send("account/verify-email", "POST", Map.of("code", code), accessToken);
+    }
+
+    @Override public void updateProfile(String accessToken, String displayName) {
+        send("account/profile", "PATCH", Map.of("displayName", displayName), accessToken);
+    }
+
+    @Override public void redeemRoleCode(String accessToken, String code) {
+        send("account/role-codes/redeem", "POST", Map.of("code", code), accessToken);
     }
 
     @Override public java.util.List<ActiveSession> listSessions(String accessToken) {
@@ -765,6 +786,30 @@ public final class HttpCloudApiClient implements CloudCapabilityApi, CloudAuthAp
     private CloudAuthenticationService.Session authenticate(String path, Map<String, String> payload) {
         SessionDto result = request(path, "POST", payload, null, SessionDto.class);
         return result.toDomain();
+    }
+
+    /**
+     * v3.8.0 ACC-S3：登录/注册/刷新携带本机设备名，服务端净化后作为会话的 device_label
+     * （多设备会话管理可读）。派生失败时省略字段，服务端回落"桌面设备"。
+     */
+    private static final String DEVICE_LABEL = resolveDeviceLabel();
+
+    private static String resolveDeviceLabel() {
+        try {
+            String host = java.net.InetAddress.getLocalHost().getHostName();
+            String cleaned = host == null ? "" : host.replaceAll("[\\p{Cntrl}]", "").strip();
+            if (cleaned.isEmpty()) return null;
+            return cleaned.length() > 64 ? cleaned.substring(0, 64) : cleaned;
+        } catch (RuntimeException | java.net.UnknownHostException error) {
+            return null;
+        }
+    }
+
+    private static Map<String, String> withDeviceLabel(Map<String, String> payload) {
+        if (DEVICE_LABEL == null) return payload;
+        Map<String, String> extended = new LinkedHashMap<>(payload);
+        extended.put("deviceLabel", DEVICE_LABEL);
+        return extended;
     }
 
     private <T> T request(String path, String method, Object payload, String token, Class<T> type) {

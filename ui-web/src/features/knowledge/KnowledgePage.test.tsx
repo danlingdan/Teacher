@@ -150,7 +150,7 @@ describe("KnowledgePage", () => {
 
   it("asks for consent and re-imports with allowDuplicate when content matches an existing article", async () => {
     // v3.6.0 KBF-3：同内容导入先列出既有文章并请用户确认；确认后以 allowDuplicate=true 重新发起。
-    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    // v3.8.0 UIX-2：确认交互改为应用内 ConfirmDialog（原 window.confirm 桩移除）。
     let importCalls = 0;
     requestMock.mockImplementation((method: string) => {
       if (method === "knowledge.overview") return Promise.resolve(overview());
@@ -180,16 +180,21 @@ describe("KnowledgePage", () => {
 
     await waitFor(() => {
       const imports = requestMock.mock.calls.filter((call) => call[0] === "knowledge.article.import");
-      expect(imports).toHaveLength(2);
+      expect(imports).toHaveLength(1);
       expect(imports[0]?.[1]?.allowDuplicate).toBe(false);
-      expect(imports[1]?.[1]?.allowDuplicate).toBe(true);
     });
-    expect(confirmSpy).toHaveBeenCalledTimes(1);
-    expect(String(confirmSpy.mock.calls[0]?.[0])).toContain("索引原理");
+    // 对话框列出既有文章，点「仍要导入」后才发起第二次导入。
+    expect(await screen.findByRole("dialog", { name: "检测到重复内容" })).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "检测到重复内容" }).textContent).toContain("索引原理");
+    fireEvent.click(screen.getByRole("button", { name: "仍要导入" }));
+    await waitFor(() => {
+      const imports = requestMock.mock.calls.filter((call) => call[0] === "knowledge.article.import");
+      expect(imports).toHaveLength(2);
+    });
   });
 
   it("does not import again when the user declines the duplicate consent", async () => {
-    vi.spyOn(window, "confirm").mockReturnValue(false);
+    // v3.8.0 UIX-2：点对话框「取消」后保持单次导入。
     requestMock.mockImplementation((method: string) => {
       if (method === "knowledge.overview") return Promise.resolve(overview());
       if (method === "session.current") return Promise.resolve({ role: "TEACHER" });
@@ -215,6 +220,10 @@ describe("KnowledgePage", () => {
 
     await waitFor(() => {
       expect(requestMock).toHaveBeenCalledWith("knowledge.article.import", expect.objectContaining({ allowDuplicate: false }));
+    });
+    fireEvent.click(await screen.findByRole("button", { name: "取消" }));
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog", { name: "检测到重复内容" })).not.toBeInTheDocument();
     });
     expect(requestMock.mock.calls.filter((call) => call[0] === "knowledge.article.import")).toHaveLength(1);
   });

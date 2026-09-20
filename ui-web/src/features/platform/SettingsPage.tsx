@@ -2,6 +2,7 @@
 // Preferences come from the shared settingsPreferencesQuery options
 // (src/app/queries.ts); read-only maintenance loads use useQuery.
 import { useEffect, useState } from "react";
+import { Cloud, Copyright, Download, Sparkles, Terminal } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { localAppRequest } from "../../shared/ipc";
 import { formatInstant } from "../../shared/instant";
@@ -15,7 +16,7 @@ import type {
   SettingsStorage,
   UpdateCheck,
 } from "../../shared/types";
-import { Button, Dialog, Feedback, FormField, useToast } from "../../shared/ui";
+import { Button, ConfirmDialog, Dialog, Feedback, FormField, useToast } from "../../shared/ui";
 import { Loading, Toggle } from "./shared";
 import { ProblemReportDialog, ReportStatusDialog } from "./ProblemReportDialogs";
 import { formatManifestVersion, useUpdateInstaller } from "../../shared/useUpdateInstaller";
@@ -61,7 +62,7 @@ function CloudSyncSettings() {
   return (
     <details className="content-card settings-panel">
       <summary>
-        <span className="settings-symbol">☁</span>
+        <span className="settings-symbol"><Cloud size={18} strokeWidth={1.75} /></span>
         <span>
           <strong>云端同步</strong>
           <small>学习记录上传与自动同步开关</small>
@@ -159,7 +160,7 @@ function BankUpdateSettings({
   return (
     <details className="content-card settings-panel">
       <summary>
-        <span className="settings-symbol">⇩</span>
+        <span className="settings-symbol"><Download size={18} strokeWidth={1.75} /></span>
         <span>
           <strong>题库更新</strong>
           <small>订阅频道与定时检查</small>
@@ -346,6 +347,8 @@ function AiModelSettings() {
   });
   const refresh = () => void client.invalidateQueries({ queryKey: ["ai", "providers"] });
   const [editing, setEditing] = useState<AiProviderDraft>();
+  // v3.8.0 UIX-2：删除 AI 供应商的应用内确认状态（原 window.confirm）。
+  const [pendingRemove, setPendingRemove] = useState<{ id: string; displayName: string } | null>(null);
   const test = useMutation({
     mutationFn: (draft: AiProviderDraft) =>
       localAppRequest<{ success: boolean; message: string; models: string[] }>(
@@ -405,7 +408,7 @@ function AiModelSettings() {
   return (
     <details className="content-card settings-panel">
       <summary>
-        <span className="settings-symbol">✦</span>
+        <span className="settings-symbol"><Sparkles size={18} strokeWidth={1.75} /></span>
         <span>
           <strong>AI 模型</strong>
           <small>{active ? `网络 AI · ${active.displayName}` : "本地 Ollama"}</small>
@@ -452,14 +455,7 @@ function AiModelSettings() {
                   >
                     编辑
                   </Button>
-                  <Button
-                    variant="danger"
-                    onClick={() => {
-                      if (window.confirm(`删除“${item.displayName}”？其加密密钥会一并清除。`)) {
-                        remove.mutate(item.id);
-                      }
-                    }}
-                  >
+                  <Button variant="danger" onClick={() => setPendingRemove({ id: item.id, displayName: item.displayName })}>
                     删除
                   </Button>
                 </div>
@@ -540,6 +536,19 @@ function AiModelSettings() {
           </>
         )}
       </Dialog>
+      {/* v3.8.0 UIX-2：删除 AI 供应商确认（原 window.confirm）。 */}
+      <ConfirmDialog
+        open={pendingRemove !== null}
+        title="删除 AI 供应商"
+        danger
+        message={`删除“${pendingRemove?.displayName ?? ""}”？其加密密钥会一并清除。`}
+        confirmLabel="删除"
+        onConfirm={() => {
+          if (pendingRemove) remove.mutate(pendingRemove.id);
+          setPendingRemove(null);
+        }}
+        onClose={() => setPendingRemove(null)}
+      />
     </details>
   );
 }
@@ -555,7 +564,7 @@ function AboutPanel({ onCheckUpdate, checkingUpdate, onOpenReport }: { onCheckUp
   return (
     <details className="content-card settings-panel">
       <summary>
-        <span className="settings-symbol">©</span>
+        <span className="settings-symbol"><Copyright size={18} strokeWidth={1.75} /></span>
         <span>
           <strong>关于</strong>
           <small>版本、制作团队与法律信息</small>
@@ -944,7 +953,7 @@ export function SettingsPage() {
       <BankUpdateSettings preferences={query.data?.bank} role={query.data?.role} />
       <details className="content-card settings-panel">
         <summary>
-          <span className="settings-symbol">⌘</span>
+          <span className="settings-symbol"><Terminal size={18} strokeWidth={1.75} /></span>
           <span>
             <strong>本机环境与组件</strong>
             <small>默认不检测，需要时手动运行</small>

@@ -6,7 +6,7 @@
 
     <groupId>org.hjh.JavaWork</groupId>
     <artifactId>Teacher</artifactId>
-    <version>3.7.0</version>
+    <version>3.8.0</version>
     <name>SQLTeacher</name>
 
     <properties>
@@ -30,6 +30,7 @@
         <lucene.version>10.4.0</lucene.version>
         <jsoup.version>1.22.2</jsoup.version>
         <pdfbox.version>3.0.7</pdfbox.version>
+        <angus-mail.version>2.0.5</angus-mail.version>
     </properties>
 
     <dependencies>
@@ -134,6 +135,13 @@
             <groupId>org.apache.pdfbox</groupId>
             <artifactId>pdfbox</artifactId>
             <version>${pdfbox.version}</version>
+        </dependency>
+        <!-- v3.8.0 ACC-S1：云端邮件通道（SMTP）。Eclipse Angus Mail 是 jakarta.mail 参考实现，
+             自研 SMTP 客户端在 TLS/AUTH/MIME 细节上的风险显著更高；未配置 SMTP 时服务器仍走文件 outbox。 -->
+        <dependency>
+            <groupId>org.eclipse.angus</groupId>
+            <artifactId>angus-mail</artifactId>
+            <version>${angus-mail.version}</version>
         </dependency>
         <dependency>
             <groupId>org.junit.jupiter</groupId>

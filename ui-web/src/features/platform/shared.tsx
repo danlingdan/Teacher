@@ -32,14 +32,8 @@ export function Metric({ label, value }: { label: string; value: string | number
     </article>
   );
 }
-export function Loading({ label }: { label: string }) {
-  return (
-    <section className="page-skeleton" aria-live="polite">
-      <span className="spinner" />
-      {label}
-    </section>
-  );
-}
+// v3.8.0 UIX-4：Loading 统一收口到 shared/ui,这里保留导出兼容既有页面导入。
+export { Loading } from "../../shared/ui";
 export function formatAccountDate(value: string) {
   return formatInstant(value);
 }

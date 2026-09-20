@@ -103,6 +103,10 @@ final class CloudAuthenticationStore extends CloudStoreBase implements CloudAuth
     }
 
     SessionData registerData(String email, String displayName, char[] password) {
+        return registerData(email, displayName, password, null);
+    }
+
+    SessionData registerData(String email, String displayName, char[] password, String deviceLabel) {
         String normalizedEmail = validateEmail(email);
         if (displayName == null || displayName.isBlank() || displayName.length() > 80) throw new IllegalArgumentException("displayName must be 1 to 80 characters");
         validatePassword(password);
@@ -127,7 +131,7 @@ final class CloudAuthenticationStore extends CloudStoreBase implements CloudAuth
             if (error.getMessage().contains("UNIQUE")) throw new SecurityException("duplicate account");
             throw database(error);
         }
-        return issue(user(id));
+        return issue(user(id), normalizeDeviceLabel(deviceLabel));
     }
 
     void ensureBootstrapAdmin(String email, char[] password) {
@@ -156,6 +160,10 @@ final class CloudAuthenticationStore extends CloudStoreBase implements CloudAuth
     }
 
     SessionData loginData(String email, char[] password) {
+        return loginData(email, password, null);
+    }
+
+    SessionData loginData(String email, char[] password, String deviceLabel) {
         String normalizedEmail = validateEmail(email);
         validateLoginPassword(password);
         String userId;
@@ -182,10 +190,14 @@ final class CloudAuthenticationStore extends CloudStoreBase implements CloudAuth
                 audit(connection, userId, "AUTH_LOGIN", "USER", userId, "SUCCESS", "CREDENTIAL_VERIFIED");
             }
         } catch (SQLException error) { throw database(error); }
-        return issue(user(userId));
+        return issue(user(userId), normalizeDeviceLabel(deviceLabel));
     }
 
     SessionData refreshData(String refreshToken) {
+        return refreshData(refreshToken, null);
+    }
+
+    SessionData refreshData(String refreshToken, String deviceLabel) {
         if (refreshToken == null || refreshToken.isBlank()) throw new IllegalArgumentException("refreshToken must not be blank");
         try (Connection connection = open();
              PreparedStatement token = connection.prepareStatement(
@@ -204,7 +216,7 @@ final class CloudAuthenticationStore extends CloudStoreBase implements CloudAuth
                 revoke.setBytes(2, tokenHash(refreshToken));
                 if (revoke.executeUpdate() != 1) throw new SecurityException("refresh token already used");
             }
-            SessionData session = issue(connection, user(userId));
+            SessionData session = issue(connection, user(userId), normalizeDeviceLabel(deviceLabel));
             connection.commit();
             return session;
         } catch (SQLException error) { throw database(error); }
@@ -232,14 +244,18 @@ final class CloudAuthenticationStore extends CloudStoreBase implements CloudAuth
     }
 
     private SessionData issue(AuthenticatedUser user) {
+        return issue(user, null);
+    }
+
+    private SessionData issue(AuthenticatedUser user, String deviceLabel) {
         try (Connection c = open()) {
-            return issue(c, user);
+            return issue(c, user, deviceLabel);
         } catch (SQLException e) {
             throw database(e);
         }
     }
 
-    private SessionData issue(Connection c, AuthenticatedUser user) throws SQLException {
+    private SessionData issue(Connection c, AuthenticatedUser user, String deviceLabel) throws SQLException {
         String token = Hashes.randomToken();
         String refresh = Hashes.randomToken();
         Instant now = Instant.now();
@@ -253,7 +269,8 @@ final class CloudAuthenticationStore extends CloudStoreBase implements CloudAuth
             access.setString(2, user.id());
             access.setString(3, expiry.toString());
             access.setString(4, now.toString());
-            access.setString(5, "桌面设备");
+            // v3.8.0 ACC-S3：客户端上报的设备名（服务端净化，缺省回落"桌面设备"）。
+            access.setString(5, normalizeDeviceLabel(deviceLabel));
             access.setString(6, now.toString());
             access.executeUpdate();
             refreshStatement.setBytes(1, tokenHash(refresh));
@@ -263,6 +280,14 @@ final class CloudAuthenticationStore extends CloudStoreBase implements CloudAuth
             refreshStatement.executeUpdate();
         }
         return new SessionData(token, expiry, user, refresh);
+    }
+
+    /** v3.8.0 ACC-S3: strips control characters, caps the length and falls back to the legacy label. */
+    private static String normalizeDeviceLabel(String raw) {
+        if (raw == null) return "桌面设备";
+        String cleaned = raw.replaceAll("[\\p{Cntrl}]", "").strip();
+        if (cleaned.isEmpty()) return "桌面设备";
+        return cleaned.length() > 64 ? cleaned.substring(0, 64) : cleaned;
     }
 
     private AuthenticatedUser user(String id) {

@@ -288,6 +288,18 @@ final class CloudSchemaMigrator {
         )),
         new CloudMigration(10, "v3.7.0 submission payload for teacher review", List.of(
             CloudSchemaStep.addColumnIfMissing("assignment_submissions", "submission_payload_json text")
+        )),
+        // v3.8.0 ACC-S4（决策点 1 方案 B）：一次性教师升级码。明文码只在签发响应出现一次，
+        // 库中仅存 SHA-256 哈希；used_by 不设外键，避免未来账号清理路径被码表反向锁死。
+        new CloudMigration(11, "v3.8.0 one-time teacher role grant codes", List.of(
+            CloudSchemaStep.sql("create table if not exists role_grant_codes("
+                + "code_hash blob primary key,"
+                + "role text not null check(role in ('TEACHER')),"
+                + "created_by text not null references users(id),"
+                + "created_at text not null,expires_at text not null,"
+                + "used_by text,used_at text,revoked_at text)"),
+            CloudSchemaStep.sql("create index if not exists idx_role_grant_codes_state "
+                + "on role_grant_codes(revoked_at,used_at)")
         ))
     ));
 

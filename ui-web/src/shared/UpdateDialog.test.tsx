@@ -126,8 +126,8 @@ describe("UpdateDialog", () => {
       handler(progressEvent(requestId, 0.42));
     });
     expect(await screen.findByText(/正在下载更新… 42%/)).toBeInTheDocument();
-    // busy 状态下 Button 显示“处理中…”，进度体现在正文文案中。
-    expect(screen.getByRole("button", { name: "处理中…" })).toBeDisabled();
+    // v3.8.0 UIX-4：busy 保留按钮原文案(内联 spinner),进度直接体现在按钮文案上。
+    expect(screen.getByRole("button", { name: "下载中 42%" })).toBeDisabled();
     expect(
       screen.queryByRole("button", { name: "启动安装程序" }),
     ).not.toBeInTheDocument();

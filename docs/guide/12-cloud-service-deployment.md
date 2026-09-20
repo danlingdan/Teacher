@@ -42,6 +42,43 @@ SQLTEACHER_KNOWLEDGE_BUNDLE_FILE=/opt/sqlteacher/shared/official-db-concepts-1.0
 
 首次启动时，服务将创建或提升此邮箱对应的管理员账号。完成首次管理员登录后，应删除 `SQLTEACHER_CLOUD_BOOTSTRAP_ADMIN_PASSWORD` 并重启服务，避免该引导凭据持续存在。
 
+### 邮件通道（v3.8.0 ACC-S1，密码找回与邮箱验证依赖）
+
+密码重置与邮箱绑定验证码经邮件发送。配置以下环境变量后走真实 SMTP；**未配置 `SQLTEACHER_CLOUD_SMTP_HOST` 时邮件写入 `<data>/mails` 文件 outbox（行为与旧版一致），公网用户将收不到邮件，密码找回不可用**，因此生产环境必须配置：
+
+```ini
+SQLTEACHER_CLOUD_SMTP_HOST=smtp.your-provider.example
+SQLTEACHER_CLOUD_SMTP_PORT=587
+SQLTEACHER_CLOUD_SMTP_USERNAME=noreply@your-domain.example
+SQLTEACHER_CLOUD_SMTP_PASSWORD=<SMTP 凭据>
+SQLTEACHER_CLOUD_SMTP_FROM=noreply@your-domain.example
+# 默认启用 STARTTLS；仅内网明文中继才显式设为 false
+# SQLTEACHER_CLOUD_SMTP_STARTTLS=true
+```
+
+行为约定：SMTP 未配置或缺少发件地址时自动降级文件 outbox 并记录告警日志；发送失败不改变接口的防枚举语义（请求恒返回统一响应），仅在服务端日志记录失败类别与收件人域（不含本地部分与凭据）。验证码为 6 位数字、重置码 15 分钟/验证码 30 分钟内有效，找回密码不再要求邮箱已验证，也**不再产生指向服务器的重置链接页面**。
+
+### 教师升级码签发（v3.8.0 ACC-S4，决策点 1 方案 B）
+
+教师角色除"已有教师建班时附带授予"外，新增管理员签发的**一次性升级码**通道：码为 8 位大写字符（去除 0/O/1/I），库中仅存 SHA-256 哈希，明文只在签发响应出现一次，默认 30 天有效（`ttlDays` 可调 1–365），可撤销；签发、撤销与兑换全部写 `admin_audit`，兑换接口限流 5 次/账号/时，任何失败统一返回同一种错误且不消耗码。教师拿到码后在「班级与云端 → 账号安全与数据治理 → 教师身份」输入兑换，会话立即获得教师角色。
+
+管理操作经 SSH 在服务器本机用 curl 完成（端口仅监听回环，不要通过 Nginx 暴露 `/api/v1/admin`）：
+
+```bash
+# 1. 管理员登录获取 accessToken
+curl -s http://127.0.0.1:18080/api/v1/auth/login -H 'Content-Type: application/json' \
+  -d '{"email":"admin@your-school.example","password":"..."}' | jq -r .accessToken
+
+# 2. 签发升级码（响应中的 code 只出现这一次，直接交给教师）
+curl -s http://127.0.0.1:18080/api/v1/admin/role-codes -H "Authorization: Bearer $TOKEN" \
+  -H 'Content-Type: application/json' -d '{"ttlDays":30}'
+
+# 3. 查看签发记录（只有码哈希与使用状态）
+curl -s http://127.0.0.1:18080/api/v1/admin/role-codes -H "Authorization: Bearer $TOKEN"
+# 4. 撤销未使用的码（路径参数为列表中的 codeHash）
+curl -s -X POST http://127.0.0.1:18080/api/v1/admin/role-codes/<codeHash>/revoke -H "Authorization: Bearer $TOKEN"
+```
+
 ## 应用与 systemd
 
 将构建产物部署到 `/opt/sqlteacher/releases/<version>/app/`，其中包含应用 JAR 和 `lib/` 依赖目录；将 `packaging/cloud/run-cloud.sh` 放入对应版本的 `bin/`。

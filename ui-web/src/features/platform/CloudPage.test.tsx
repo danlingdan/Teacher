@@ -421,7 +421,7 @@ describe("CloudPage", () => {
         return Promise.resolve({ joinCode: "CD345678" });
       return Promise.reject(new Error(`Unexpected request: ${method}`));
     });
-    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    // v3.8.0 UIX-2：确认交互改为应用内 ConfirmDialog（原 window.confirm 桩移除）。
     renderCloudPage();
 
     // v3.4.1 CLS-4：教师在成员名单里可见班级码。
@@ -429,6 +429,7 @@ describe("CloudPage", () => {
     expect(await screen.findByText("班级码：AB234567")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "重置班级码" }));
+    fireEvent.click(await screen.findByRole("button", { name: "重置" }));
 
     await waitFor(() =>
       expect(requestMock).toHaveBeenCalledWith("cloud.class.join-code.rotate", {
@@ -437,7 +438,6 @@ describe("CloudPage", () => {
     );
     expect(await screen.findByText("班级码：CD345678")).toBeInTheDocument();
     expect(await screen.findByText(/班级码已重置/)).toBeInTheDocument();
-    expect(confirmSpy).toHaveBeenCalled();
   });
 
   it("lets students join a class by code and shows the joined class", async () => {
@@ -567,6 +567,8 @@ describe("CloudPage", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: "批阅反馈" }));
     fireEvent.click(await screen.findByRole("button", { name: "AI 起草" }));
+    // v3.8.0 UIX-2：已有评语时先经应用内确认，点「覆盖并起草」后才发起起草。
+    fireEvent.click(await screen.findByRole("button", { name: "覆盖并起草" }));
 
     expect(await screen.findByText(/AI 起草失败，可直接手写评语/)).toBeInTheDocument();
     expect(screen.getByLabelText("反馈内容")).toHaveValue("手写评语");

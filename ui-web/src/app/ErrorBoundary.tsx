@@ -19,14 +19,10 @@ export class ErrorBoundary extends Component<Props, State> {
   render() {
     if (!this.state.error) return this.props.children;
     return (
-      <section
-        className="content-card"
-        role="alert"
-        style={{ padding: "48px 40px", display: "grid", gap: 12, justifyItems: "start" }}
-      >
+      <section className="content-card error-boundary" role="alert">
         <p className="eyebrow">意外错误</p>
         <h2>页面渲染出现问题</h2>
-        <p style={{ color: "var(--muted)" }}>
+        <p className="error-boundary-hint">
           {this.state.error.message || "未知错误"}。本地学习数据不受影响，可以重试或返回今天页。
         </p>
         <div className="button-row">

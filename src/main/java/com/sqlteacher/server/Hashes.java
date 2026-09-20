@@ -47,6 +47,27 @@ final class Hashes {
         return Base64.getUrlEncoder().withoutPadding().encodeToString(randomBytes(TOKEN_BYTES));
     }
 
+    /** Uniformly random zero-padded decimal code of the requested length (mailed verification codes). */
+    static String randomNumericCode(int digits) {
+        if (digits < 1 || digits > 9) throw new IllegalArgumentException("digits must be 1 to 9");
+        StringBuilder code = new StringBuilder(digits);
+        for (int index = 0; index < digits; index++) code.append(RANDOM.nextInt(10));
+        return code.toString();
+    }
+
+    /** Unambiguous uppercase alphabet (no 0/O/1/I) for shareable one-time codes. */
+    private static final String CODE_ALPHABET = "23456789ABCDEFGHJKMNPQRSTUVWXYZ";
+
+    /** Uniformly random code from the unambiguous uppercase alphabet (one-time role grant codes). */
+    static String randomCode(int length) {
+        if (length < 1 || length > 64) throw new IllegalArgumentException("length must be 1 to 64");
+        StringBuilder code = new StringBuilder(length);
+        for (int index = 0; index < length; index++) {
+            code.append(CODE_ALPHABET.charAt(RANDOM.nextInt(CODE_ALPHABET.length())));
+        }
+        return code.toString();
+    }
+
     static byte[] randomBytes(int count) {
         byte[] value = new byte[count];
         RANDOM.nextBytes(value);

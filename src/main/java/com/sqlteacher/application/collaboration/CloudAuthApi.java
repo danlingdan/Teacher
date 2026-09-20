@@ -27,4 +27,9 @@ public interface CloudAuthApi {
     default void resetPassword(String token, char[] newPassword) {
         throw new UnsupportedOperationException("Password reset is unavailable");
     }
+
+    /** v3.8.0 ACC-S2: resets the password with the 6-digit code mailed to the account; revokes all sessions. */
+    default void resetPassword(String email, String code, char[] newPassword) {
+        throw new UnsupportedOperationException("Password reset is unavailable");
+    }
 }

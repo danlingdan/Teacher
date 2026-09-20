@@ -22,7 +22,9 @@ final class AccountApiSection extends ApiSection {
     public Set<String> supportedMethods() {
         return Set.of(
             "account.login", "account.register", "account.logout",
-            "account.password.change", "account.password.reset.request",
+            "account.password.change", "account.password.reset.request", "account.password.reset",
+            "account.email.bind", "account.email.verify", "account.profile.update",
+            "account.role.redeem",
             "account.sessions", "account.session.revoke",
             "account.export.request", "account.export.get",
             "account.deletion.request", "account.deletion.cancel", "account.deletion.status"
@@ -38,6 +40,11 @@ final class AccountApiSection extends ApiSection {
             case "account.logout" -> accountLogout(cancellation);
             case "account.password.change" -> accountPasswordChange(params, cancellation);
             case "account.password.reset.request" -> accountPasswordResetRequest(params, cancellation);
+            case "account.password.reset" -> accountPasswordReset(params, cancellation);
+            case "account.email.bind" -> accountEmailBind(params, cancellation);
+            case "account.email.verify" -> accountEmailVerify(params, cancellation);
+            case "account.profile.update" -> accountProfileUpdate(params, cancellation);
+            case "account.role.redeem" -> accountRoleRedeem(params, cancellation);
             case "account.sessions" -> accountSessions(cancellation);
             case "account.session.revoke" -> accountSessionRevoke(params, cancellation);
             case "account.export.request" -> accountExportRequest(cancellation);
@@ -117,6 +124,62 @@ final class AccountApiSection extends ApiSection {
         cancellation.throwIfCancelled();
         context().getBean(CloudAuthApi.class).requestPasswordReset(requiredText(params, "email", 320));
         return mapper.createObjectNode().put("accepted", true);
+    }
+
+    /** v3.8.0 ACC-S2: completes the reset with the 6-digit code from the mail; revokes all sessions. */
+    private JsonNode accountPasswordReset(JsonNode params, CancellationToken cancellation) {
+        cancellation.throwIfCancelled();
+        char[] newPassword = requiredRawText(params, "newPassword", 1_024).toCharArray();
+        try {
+            context().getBean(CloudAuthApi.class).resetPassword(requiredText(params, "email", 320),
+                requiredText(params, "code", 64), newPassword);
+            return mapper.createObjectNode().put("reset", true);
+        } finally {
+            Arrays.fill(newPassword, '\0');
+        }
+    }
+
+    /** v3.8.0 ACC-S2: mails a verification code to the address being bound (bind or re-bind). */
+    private JsonNode accountEmailBind(JsonNode params, CancellationToken cancellation) {
+        cancellation.throwIfCancelled();
+        var session = requireCloudSession();
+        context().getBean(CloudAccountApi.class).requestEmailBinding(session.accessToken(),
+            requiredText(params, "email", 320));
+        return mapper.createObjectNode().put("sent", true);
+    }
+
+    /** v3.8.0 ACC-S2: confirms the mailed code; the pending address becomes the verified account email. */
+    private JsonNode accountEmailVerify(JsonNode params, CancellationToken cancellation) {
+        cancellation.throwIfCancelled();
+        var session = requireCloudSession();
+        context().getBean(CloudAccountApi.class).confirmEmailBinding(session.accessToken(),
+            requiredText(params, "code", 64));
+        return currentSession();
+    }
+
+    /** v3.8.0 ACC-S3: display-name change; the session is re-issued so the local identity stays fresh. */
+    private JsonNode accountProfileUpdate(JsonNode params, CancellationToken cancellation) {
+        cancellation.throwIfCancelled();
+        var session = requireCloudSession();
+        context().getBean(CloudAccountApi.class).updateProfile(session.accessToken(),
+            requiredText(params, "displayName", 160));
+        var refreshed = context().getBean(CloudAuthApi.class).refresh(session.refreshToken());
+        context().getBean(CloudSessionService.class).signIn(refreshed);
+        return currentSession();
+    }
+
+    /**
+     * v3.8.0 ACC-S4 (decision point 1, plan B): redeems a one-time teacher upgrade code; the
+     * session is re-issued so the granted role takes effect immediately without re-login.
+     */
+    private JsonNode accountRoleRedeem(JsonNode params, CancellationToken cancellation) {
+        cancellation.throwIfCancelled();
+        var session = requireCloudSession();
+        context().getBean(CloudAccountApi.class).redeemRoleCode(session.accessToken(),
+            requiredText(params, "code", 64));
+        var refreshed = context().getBean(CloudAuthApi.class).refresh(session.refreshToken());
+        context().getBean(CloudSessionService.class).signIn(refreshed);
+        return currentSession();
     }
 
     private JsonNode accountSessions(CancellationToken cancellation) {

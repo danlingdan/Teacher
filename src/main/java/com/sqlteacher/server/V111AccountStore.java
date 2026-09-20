@@ -17,7 +17,6 @@ import java.util.HexFormat;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Objects;
 import java.util.UUID;
 
 /**
@@ -26,27 +25,36 @@ import java.util.UUID;
  *
  * <p>Password hashing mirrors {@code CloudStore} (PBKDF2-HMAC-SHA256, 310k
  * iterations) and token hashes are SHA-256 so no plaintext token is ever stored.</p>
+ *
+ * <p>v3.8.0 ACC-S2: reset and email-verification credentials are 6-digit mailed
+ * codes hashed with the same SHA-256 column (15-minute reset window). Codes are
+ * bound to the account at query level, burned after {@value #RESET_MAX_ATTEMPTS}
+ * failed confirmations, and every mailed-code failure mode collapses into one
+ * uniform message so responses never reveal whether an account exists.</p>
  */
 final class V111AccountStore {
     private static final com.fasterxml.jackson.databind.ObjectMapper JSON = CloudJsonStoreSupport.mapper();
     private static final int SALT_BYTES = 16;
-    private static final int RESET_TOKEN_MINUTES = 30;
+    private static final int CODE_DIGITS = 6;
+    private static final int RESET_CODE_MINUTES = 15;
+    private static final int VERIFICATION_CODE_MINUTES = 30;
     private static final int RESET_MAX_ATTEMPTS = 5;
     private static final int DELETE_CANCEL_DAYS = 7;
     private static final int VERIFICATION_MAILS_PER_ACCOUNT_PER_HOUR = 3;
     private static final int VERIFICATION_MAILS_PER_EMAIL_PER_DAY = 1;
     private static final Duration VERIFICATION_ACCOUNT_WINDOW = Duration.ofHours(1);
     private static final Duration VERIFICATION_EMAIL_WINDOW = Duration.ofDays(1);
+    // Single uniform failure message for the code path: unknown email, wrong code,
+    // expired code, reused code and exhausted attempts are indistinguishable.
+    private static final String RESET_CODE_INVALID = "reset code is invalid or has expired";
+    private static final String VERIFICATION_CODE_INVALID = "verification code is invalid or has expired";
     private final String url;
     private final MailSender mail;
-    private final String publicBaseUrl;
     private final AuthRateLimiter verificationMailLimiter = new AuthRateLimiter();
 
-    V111AccountStore(java.nio.file.Path database, MailSender mail, String publicBaseUrl) throws SQLException {
+    V111AccountStore(java.nio.file.Path database, MailSender mail) throws SQLException {
         url = "jdbc:sqlite:" + database.toAbsolutePath().normalize();
         this.mail = mail;
-        this.publicBaseUrl = Objects.requireNonNullElse(
-            publicBaseUrl, "https://api.sqlteacher.tech");
         // v3.4.0 REF-5: schema evolution is owned by the shared versioned migrator.
         CloudSchemaMigrator.migrate(database.toAbsolutePath().normalize());
     }
@@ -96,37 +104,39 @@ final class V111AccountStore {
         verificationMailLimiter.recordEvent(accountKey, VERIFICATION_ACCOUNT_WINDOW);
         verificationMailLimiter.checkQuota(emailKey, VERIFICATION_MAILS_PER_EMAIL_PER_DAY);
         verificationMailLimiter.recordEvent(emailKey, VERIFICATION_EMAIL_WINDOW);
-        String token = Hashes.randomToken(); Instant now = Instant.now();
+        String code = Hashes.randomNumericCode(CODE_DIGITS);
+        Instant now = Instant.now();
         try (Connection connection = open(); PreparedStatement statement = connection.prepareStatement(
             "insert into email_verifications(id,user_id,email,token_hash,created_at,expires_at,used_at) values(?,?,?,?,?,?,null)")) {
             statement.setString(1, UUID.randomUUID().toString()); statement.setString(2, userId);
-            statement.setString(3, email); statement.setBytes(4, tokenHash(token));
-            statement.setString(5, now.toString()); statement.setString(6, now.plus(30, ChronoUnit.MINUTES).toString());
+            statement.setString(3, email); statement.setBytes(4, tokenHash(code));
+            statement.setString(5, now.toString());
+            statement.setString(6, now.plus(VERIFICATION_CODE_MINUTES, ChronoUnit.MINUTES).toString());
             statement.executeUpdate();
         } catch (SQLException error) { throw database(error); }
-        mail.send(email, "SQLTeacher 邮箱验证", "验证链接（30 分钟内有效，仅限一次）：\n" + publicBaseUrl + "/verify-email?token=" + token);
+        mail.send(email, "SQLTeacher 邮箱验证",
+            "您的邮箱验证码：" + code + "\n\n验证码 " + VERIFICATION_CODE_MINUTES + " 分钟内有效，仅限一次。如非本人操作，请忽略本邮件。");
     }
 
-    void confirmEmailVerification(String token) {
-        if (token == null || token.isBlank()) throw new IllegalArgumentException("verification token is invalid");
+    void confirmEmailVerification(String userId, String code) {
+        if (userId == null || userId.isBlank() || code == null || code.isBlank()) {
+            throw new IllegalArgumentException("verification code is invalid");
+        }
         try (Connection connection = open()) {
             connection.setAutoCommit(false);
             try {
                 String verificationId;
-                String userId;
                 String email;
                 try (PreparedStatement statement = connection.prepareStatement(
-                    "select id,user_id,email,expires_at,used_at from email_verifications where token_hash=?")) {
-                    statement.setBytes(1, tokenHash(token));
+                    "select id,email from email_verifications where token_hash=? and user_id=? and used_at is null and expires_at>? "
+                        + "order by created_at desc")) {
+                    statement.setBytes(1, tokenHash(code.strip()));
+                    statement.setString(2, userId);
+                    statement.setString(3, Instant.now().toString());
                     try (ResultSet row = statement.executeQuery()) {
-                        if (!row.next()) throw new IllegalArgumentException("verification token is invalid");
+                        if (!row.next()) throw new IllegalArgumentException(VERIFICATION_CODE_INVALID);
                         verificationId = row.getString("id");
-                        userId = row.getString("user_id");
                         email = row.getString("email");
-                        if (row.getString("used_at") != null
-                            || Instant.parse(row.getString("expires_at")).isBefore(Instant.now())) {
-                            throw new IllegalArgumentException("verification token has expired or already been used");
-                        }
                     }
                 }
                 // Atomic consume: only the first concurrent confirmation wins the conditional update.
@@ -137,7 +147,7 @@ final class V111AccountStore {
                     consume.setString(2, verificationId);
                     consumed = consume.executeUpdate();
                 }
-                if (consumed != 1) throw new IllegalArgumentException("verification token has expired or already been used");
+                if (consumed != 1) throw new IllegalArgumentException(VERIFICATION_CODE_INVALID);
                 try (PreparedStatement user = connection.prepareStatement(
                     "update users set email=?, email_verified=1 where id=?")) {
                     user.setString(1, email); user.setString(2, userId); user.executeUpdate();
@@ -145,6 +155,11 @@ final class V111AccountStore {
                 connection.commit();
             } catch (SQLException | RuntimeException error) {
                 connection.rollback();
+                if (error instanceof SQLException sqlError && String.valueOf(sqlError.getMessage()).contains("UNIQUE")) {
+                    // Binding an address owned by another account must fail with a clear,
+                    // non-database message and leave the current binding untouched.
+                    throw new IllegalArgumentException("email is already registered");
+                }
                 throw error;
             }
         } catch (SQLException error) { throw database(error); }
@@ -154,40 +169,71 @@ final class V111AccountStore {
 
     void requestPasswordReset(String email) {
         String normalized = email == null ? "" : email.strip().toLowerCase(Locale.ROOT);
-        String userId = null;
-        try (Connection connection = open(); PreparedStatement statement = connection.prepareStatement(
-            "select id,email_verified from users where email=?")) {
-            statement.setString(1, normalized);
-            try (ResultSet row = statement.executeQuery()) {
-                if (row.next() && row.getInt("email_verified") == 1) userId = row.getString("id");
+        String userId = findUserId(normalized);
+        if (userId == null) return; // uniform response; no account enumeration
+        // v3.8.0 ACC-S2: an existing account receives a code regardless of email_verified —
+        // receiving the code at the mailbox is itself the ownership proof, and gating on
+        // verification used to leave unverified accounts permanently unable to self-recover.
+        String code = Hashes.randomNumericCode(CODE_DIGITS);
+        Instant now = Instant.now();
+        try (Connection connection = open()) {
+            connection.setAutoCommit(false);
+            try {
+                try (PreparedStatement invalidate = connection.prepareStatement(
+                    "update reset_tokens set used_at=? where user_id=? and used_at is null")) {
+                    invalidate.setString(1, now.toString()); invalidate.setString(2, userId);
+                    invalidate.executeUpdate();
+                }
+                try (PreparedStatement statement = connection.prepareStatement(
+                    "insert into reset_tokens(id,user_id,token_hash,created_at,expires_at,used_at,attempts) values(?,?,?,?,?,null,0)")) {
+                    statement.setString(1, UUID.randomUUID().toString()); statement.setString(2, userId);
+                    statement.setBytes(3, tokenHash(code)); statement.setString(4, now.toString());
+                    statement.setString(5, now.plus(RESET_CODE_MINUTES, ChronoUnit.MINUTES).toString());
+                    statement.executeUpdate();
+                }
+                connection.commit();
+            } catch (SQLException | RuntimeException error) {
+                connection.rollback();
+                throw error;
             }
         } catch (SQLException error) { throw database(error); }
-        if (userId == null) return; // uniform response; no account enumeration
-        String token = Hashes.randomToken(); Instant now = Instant.now();
-        try (Connection connection = open(); PreparedStatement statement = connection.prepareStatement(
-            "insert into reset_tokens(id,user_id,token_hash,created_at,expires_at,used_at,attempts) values(?,?,?,?,?,null,0)")) {
-            statement.setString(1, UUID.randomUUID().toString()); statement.setString(2, userId);
-            statement.setBytes(3, tokenHash(token)); statement.setString(4, now.toString());
-            statement.setString(5, now.plus(RESET_TOKEN_MINUTES, ChronoUnit.MINUTES).toString()); statement.executeUpdate();
-        } catch (SQLException error) { throw database(error); }
-        mail.send(normalized, "SQLTeacher 密码重置", "重置链接（30 分钟内有效，仅限一次）：\n" + publicBaseUrl + "/reset-password?token=" + token);
+        mail.send(normalized, "SQLTeacher 密码重置",
+            "您的密码重置验证码：" + code + "\n\n验证码 " + RESET_CODE_MINUTES
+                + " 分钟内有效，仅限一次。如非本人操作，请忽略本邮件。");
     }
 
+    /** Legacy token-based reset kept additively for already-shipped request bodies; prefer the code path. */
     void resetPassword(String token, char[] newPassword) {
         if (token == null || token.isBlank()) throw new IllegalArgumentException("reset token is invalid");
-        byte[] hash = tokenHash(token);
+        consumeResetToken(tokenHash(token), newPassword, null);
+    }
+
+    void resetPassword(String email, String code, char[] newPassword) {
+        if (code == null || code.isBlank()) throw new IllegalArgumentException(RESET_CODE_INVALID);
+        String userId = findUserId(email == null ? "" : email.strip().toLowerCase(Locale.ROOT));
+        if (userId == null) throw new IllegalArgumentException(RESET_CODE_INVALID);
+        consumeResetToken(tokenHash(code.strip()), newPassword, userId);
+    }
+
+    private void consumeResetToken(byte[] hash, char[] newPassword, String requireUserId) {
+        boolean codePath = requireUserId != null;
+        String invalidMessage = codePath ? RESET_CODE_INVALID : "reset token is invalid";
+        String expiredMessage = codePath ? RESET_CODE_INVALID : "reset token has expired or already been used";
         try (Connection connection = open()) {
             connection.setAutoCommit(false);
             String userId;
             try (PreparedStatement statement = connection.prepareStatement(
-                "select id,user_id,expires_at,used_at,attempts from reset_tokens where token_hash=?")) {
+                codePath
+                    ? "select id,user_id,expires_at,used_at,attempts from reset_tokens where token_hash=? and user_id=?"
+                    : "select id,user_id,expires_at,used_at,attempts from reset_tokens where token_hash=?")) {
                 statement.setBytes(1, hash);
+                if (codePath) statement.setString(2, requireUserId);
                 try (ResultSet row = statement.executeQuery()) {
-                    if (!row.next()) throw new IllegalArgumentException("reset token is invalid");
+                    if (!row.next()) throw new IllegalArgumentException(invalidMessage);
                     String used = row.getString("used_at");
                     if (used != null || Instant.parse(row.getString("expires_at")).isBefore(Instant.now())
                         || row.getInt("attempts") >= RESET_MAX_ATTEMPTS) {
-                        throw new IllegalArgumentException("reset token has expired or already been used");
+                        throw new IllegalArgumentException(expiredMessage);
                     }
                     userId = row.getString("user_id");
                 }
@@ -207,11 +253,12 @@ final class V111AccountStore {
                 try (PreparedStatement markUsed = connection.prepareStatement("update reset_tokens set used_at=? where token_hash=?")) {
                     markUsed.setString(1, now); markUsed.setBytes(2, hash); markUsed.executeUpdate();
                 }
+                audit(connection, userId, "AUTH_PASSWORD_RESET", "USER", userId, "SUCCESS", "MAILED_CODE");
                 connection.commit();
             } catch (RuntimeException failure) {
-                // The token matched but the attempt failed (for example an invalid new password):
+                // The credential matched but the attempt failed (for example an invalid new password):
                 // roll back and burn one of the RESET_MAX_ATTEMPTS so repeated failed attempts
-                // against a live token invalidate it.
+                // against a live credential invalidate it.
                 try {
                     connection.rollback();
                     try (PreparedStatement bump = connection.prepareStatement(
@@ -227,6 +274,22 @@ final class V111AccountStore {
             }
         } catch (SQLException error) { throw database(error); }
         finally { java.util.Arrays.fill(newPassword, '\0'); }
+    }
+
+    // ---- profile ----
+
+    /** v3.8.0 ACC-S3: self-service display-name change (email and password have their own flows). */
+    void updateProfile(String userId, String displayName) {
+        if (userId == null || userId.isBlank()) throw new IllegalArgumentException("account does not exist");
+        if (displayName == null || displayName.isBlank() || displayName.strip().length() > 80) {
+            throw new IllegalArgumentException("displayName must be 1 to 80 characters");
+        }
+        try (Connection connection = open(); PreparedStatement statement = connection.prepareStatement(
+            "update users set display_name=? where id=?")) {
+            statement.setString(1, displayName.strip()); statement.setString(2, userId);
+            if (statement.executeUpdate() != 1) throw new IllegalArgumentException("account does not exist");
+            audit(connection, userId, "AUTH_PROFILE_UPDATED", "USER", userId, "SUCCESS", "SELF_SERVICE");
+        } catch (SQLException error) { throw database(error); }
     }
 
     // ---- account export / deletion ----
@@ -331,6 +394,34 @@ final class V111AccountStore {
             statement.execute("pragma foreign_keys=on"); statement.execute("pragma busy_timeout=5000");
         }
         return connection;
+    }
+    private String findUserId(String normalizedEmail) {
+        try (Connection connection = open(); PreparedStatement statement = connection.prepareStatement(
+            "select id from users where email=?")) {
+            statement.setString(1, normalizedEmail);
+            try (ResultSet row = statement.executeQuery()) {
+                return row.next() ? row.getString(1) : null;
+            }
+        } catch (SQLException error) { throw database(error); }
+    }
+
+    /** Mirrors {@code CloudStoreBase.audit} so account lifecycle events land in the same audit trail. */
+    private void audit(Connection connection, String actorUserId, String action, String targetType,
+                       String targetId, String result, String reasonCode) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement(
+            "insert into admin_audit(id,actor_user_id,action,target_type,target_id,result,reason_code,"
+                + "correlation_id,created_at) values(?,?,?,?,?,?,?,?,?)")) {
+            statement.setString(1, UUID.randomUUID().toString());
+            statement.setString(2, actorUserId);
+            statement.setString(3, action);
+            statement.setString(4, targetType);
+            statement.setString(5, targetId);
+            statement.setString(6, result);
+            statement.setString(7, reasonCode);
+            statement.setString(8, UUID.randomUUID().toString());
+            statement.setString(9, Instant.now().toString());
+            statement.executeUpdate();
+        }
     }
     private byte[] tokenHash(String token) { return Hashes.sha256Bytes(token); }
     private static byte[] hexBytes(String hex) {

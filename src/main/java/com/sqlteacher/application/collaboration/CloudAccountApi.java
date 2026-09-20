@@ -33,4 +33,24 @@ public interface CloudAccountApi {
     default AccountTaskState getAccountDeletionStatus(String accessToken) {
         throw new UnsupportedOperationException("Account deletion is unavailable");
     }
+
+    /** v3.8.0 ACC-S2: mails a 6-digit code to the given address to bind (or re-bind) it to the account. */
+    default void requestEmailBinding(String accessToken, String email) {
+        throw new UnsupportedOperationException("Email binding is unavailable");
+    }
+
+    /** v3.8.0 ACC-S2: confirms a mailed code, binding the pending address and marking it verified. */
+    default void confirmEmailBinding(String accessToken, String code) {
+        throw new UnsupportedOperationException("Email binding is unavailable");
+    }
+
+    /** v3.8.0 ACC-S3: updates the signed-in account's display name. */
+    default void updateProfile(String accessToken, String displayName) {
+        throw new UnsupportedOperationException("Profile updates are unavailable");
+    }
+
+    /** v3.8.0 ACC-S4 (plan B): redeems a one-time teacher upgrade code for the signed-in account. */
+    default void redeemRoleCode(String accessToken, String code) {
+        throw new UnsupportedOperationException("Role code redemption is unavailable");
+    }
 }

@@ -78,7 +78,7 @@ class CloudSchemaMigratorTest {
         assertEquals(schemaObjects(golden), schemaObjects(interrupted),
             "resuming an interrupted legacy provisioning must converge to the same schema");
         assertEquals(tableColumns(golden), tableColumns(interrupted));
-        assertEquals(Set.of(1, 2, 3, 4, 5, 6, 7, 8, 9, 10), appliedVersions(interrupted));
+        assertEquals(Set.of(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11), appliedVersions(interrupted));
     }
 
     @Test
@@ -120,25 +120,45 @@ class CloudSchemaMigratorTest {
     }
 
     /**
-     * The documented migration schema deltas: the v3.4.1 classroom join-code unique index
-     * and the v3.7.0 assignment submission payload column.
+     * The documented migration schema deltas: the v3.4.1 classroom join-code unique index,
+     * the v3.7.0 assignment submission payload column, and the v3.8.0 role_grant_codes table
+     * (ACC-S4) with its state index and the auto-index created by its blob primary key.
      * sqlite_master 存储的是 SQLite 规范化后的 DDL 文本（大写关键字、丢弃 if not exists）。
      */
     private static final String JOIN_CODE_INDEX_OBJECT =
         "index|idx_classrooms_join_code|classrooms|CREATE UNIQUE INDEX idx_classrooms_join_code "
             + "on classrooms(join_code)";
+    private static final String ROLE_GRANT_TABLE_OBJECT =
+        "table|role_grant_codes|role_grant_codes|CREATE TABLE role_grant_codes(code_hash blob primary key,"
+            + "role text not null check(role in ('TEACHER')),created_by text not null references users(id),"
+            + "created_at text not null,expires_at text not null,used_by text,used_at text,revoked_at text)";
+    private static final String ROLE_GRANT_INDEX_OBJECT =
+        "index|idx_role_grant_codes_state|role_grant_codes|CREATE INDEX idx_role_grant_codes_state "
+            + "on role_grant_codes(revoked_at,used_at)";
+    private static final String ROLE_GRANT_AUTOINDEX_OBJECT =
+        "index|sqlite_autoindex_role_grant_codes_1|role_grant_codes|null";
     private static final String JOIN_CODE_COLUMN = "classrooms|join_code|TEXT|0|null|0";
     private static final String SUBMISSION_PAYLOAD_COLUMN =
         "assignment_submissions|submission_payload_json|TEXT|0|null|0";
+    /** Migration 11 新表 role_grant_codes 的全部列（ACC-S4）。 */
+    private static final Set<String> ROLE_GRANT_COLUMNS = Set.of(
+        "role_grant_codes|code_hash|BLOB|0|null|1",
+        "role_grant_codes|role|TEXT|1|null|0",
+        "role_grant_codes|created_by|TEXT|1|null|0",
+        "role_grant_codes|created_at|TEXT|1|null|0",
+        "role_grant_codes|expires_at|TEXT|1|null|0",
+        "role_grant_codes|used_by|TEXT|0|null|0",
+        "role_grant_codes|used_at|TEXT|0|null|0",
+        "role_grant_codes|revoked_at|TEXT|0|null|0");
     /** sqlite_master 中 classrooms 建表 DDL 行的定位前缀。 */
     private static final String CLASSROOMS_TABLE_MARKER = "|classrooms|classrooms|CREATE TABLE classrooms(";
     private static final String ASSIGNMENTS_TABLE_MARKER =
         "|assignment_submissions|assignment_submissions|CREATE TABLE assignment_submissions(";
 
     /**
-     * 已记录的迁移增量仅为：Migration 9（班级码唯一索引、classrooms 增列）与 v3.7.0
-     * Migration 10（assignment_submissions 增列），以及 SQLite 对这两张表建表 DDL 的
-     * ALTER 规范化重写。其余对象必须一致。
+     * 已记录的迁移增量仅为：Migration 9（班级码唯一索引、classrooms 增列）、v3.7.0
+     * Migration 10（assignment_submissions 增列）与 v3.8.0 Migration 11（role_grant_codes
+     * 表及其索引），以及 SQLite 对这两张表建表 DDL 的 ALTER 规范化重写。其余对象必须一致。
      */
     private static void assertDocumentedMigrationDelta(List<String> before, List<String> after) {
         List<String> beforeRest = withoutRewrittenTableDdl(before);
@@ -147,9 +167,12 @@ class CloudSchemaMigratorTest {
             .filter(object -> !afterRest.contains(object)).toList();
         assertTrue(missing.isEmpty(),
             "migration must not alter legacy schema objects; missing after migration: " + missing);
-        assertEquals(List.of(JOIN_CODE_INDEX_OBJECT),
-            afterRest.stream().filter(object -> !beforeRest.contains(object)).toList(),
-            "the only documented new schema object after migration is the join-code index");
+        // sqlite_master 的行序取决于对象创建顺序，断言比较集合而非顺序。
+        List<String> expectedNewObjects = List.of(JOIN_CODE_INDEX_OBJECT, ROLE_GRANT_TABLE_OBJECT,
+            ROLE_GRANT_INDEX_OBJECT, ROLE_GRANT_AUTOINDEX_OBJECT);
+        assertEquals(expectedNewObjects.stream().sorted().toList(),
+            afterRest.stream().filter(object -> !beforeRest.contains(object)).sorted().toList(),
+            "only the documented migration deltas may introduce new schema objects");
 
         String afterClassrooms = after.stream()
             .filter(object -> object.contains(CLASSROOMS_TABLE_MARKER)).findFirst().orElseThrow();
@@ -184,10 +207,12 @@ class CloudSchemaMigratorTest {
                 .filter(column -> !currentColumns.contains(column)).toList();
             assertTrue(missing.isEmpty(),
                 "migration must not alter legacy table columns; missing in current: " + missing);
-            assertEquals(Set.of(JOIN_CODE_COLUMN, SUBMISSION_PAYLOAD_COLUMN),
+            var expectedColumns = new java.util.HashSet<>(Set.of(JOIN_CODE_COLUMN, SUBMISSION_PAYLOAD_COLUMN));
+            expectedColumns.addAll(ROLE_GRANT_COLUMNS);
+            assertEquals(expectedColumns,
             Set.copyOf(currentColumns.stream().filter(column -> !legacyColumns.contains(column)).toList()),
-                "the only documented column deltas are classrooms.join_code and "
-                    + "assignment_submissions.submission_payload_json");
+                "the only documented column deltas are classrooms.join_code, "
+                    + "assignment_submissions.submission_payload_json and the role_grant_codes table");
         } catch (Exception error) {
             throw new IllegalStateException(error);
         }
@@ -201,7 +226,7 @@ class CloudSchemaMigratorTest {
         new V14CloudStore(database);
         new V19CloudStore(database);
         new V110SupportStore(database);
-        new V111AccountStore(database, new FileMailSender(Path.of(System.getProperty("java.io.tmpdir"))), null);
+        new V111AccountStore(database, new FileMailSender(Path.of(System.getProperty("java.io.tmpdir"))));
         new V31ExerciseBankStore(database);
     }
 

@@ -33,6 +33,7 @@ final class CloudApiSection extends ApiSection {
     public Set<String> supportedMethods() {
         return Set.of(
             "cloud.workspace", "cloud.sync", "cloud.sync.preferences", "cloud.sync.preferences.update",
+            "cloud.guest.records", "cloud.guest.merge",
             "cloud.class.create", "cloud.class.member.add",
             "cloud.class.roster", "cloud.class.join", "cloud.class.join-code", "cloud.class.join-code.rotate",
             "cloud.assignments", "cloud.assignment.create", "cloud.assignment.update",
@@ -54,6 +55,8 @@ final class CloudApiSection extends ApiSection {
                            Consumer<LocalAppEvent> events) throws Exception {
         return switch (method) {
             case "cloud.workspace" -> cloudWorkspace(params, cancellation);
+            case "cloud.guest.records" -> guestRecords(cancellation);
+            case "cloud.guest.merge" -> guestMerge(cancellation);
             case "cloud.sync" -> cloudSync(cancellation, events);
             case "cloud.sync.preferences" -> cloudSyncPreferencesGet(params, cancellation);
             case "cloud.sync.preferences.update" -> cloudSyncPreferencesUpdate(params, cancellation);
@@ -95,6 +98,28 @@ final class CloudApiSection extends ApiSection {
             case "cloud.course.package.import" -> cloudCoursePackageImport(params, cancellation);
             default -> throw new IllegalStateException("Method whitelist and dispatcher are inconsistent");
         };
+    }
+
+    /** v3.8.0 ACC-D4：本机未登录期间产生、仍归属 guest 的记录数。 */
+    private JsonNode guestRecords(CancellationToken cancellation) throws Exception {
+        cancellation.throwIfCancelled();
+        var counts = context().getBean(com.sqlteacher.application.event.LocalRecordOwnershipService.class)
+            .countGuestRecords();
+        return mapper.createObjectNode()
+            .put("learningEvents", counts.learningEvents())
+            .put("sqlHistory", counts.sqlHistory())
+            .put("total", counts.total());
+    }
+
+    /** v3.8.0 ACC-D4：guest 记录一次性并入当前账号（未登录时拒绝）。 */
+    private JsonNode guestMerge(CancellationToken cancellation) throws Exception {
+        cancellation.throwIfCancelled();
+        if (currentAccessProfile().isGuest()) {
+            throw new SecurityException("login is required to adopt local records");
+        }
+        long merged = context().getBean(com.sqlteacher.application.event.LocalRecordOwnershipService.class)
+            .mergeGuestRecordsIntoCurrentUser();
+        return mapper.createObjectNode().put("merged", merged);
     }
 
     private JsonNode cloudWorkspace(JsonNode params, CancellationToken cancellation) {

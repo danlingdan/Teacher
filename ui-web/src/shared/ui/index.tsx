@@ -3,7 +3,8 @@ import { createContext, useCallback, useContext, useEffect, useId, useRef, useSt
 import "./ui.css";
 
 export function Button({ variant = "primary", busy = false, children, disabled, ...props }: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: "primary" | "secondary" | "danger"; busy?: boolean }) {
-  return <button className={`ui-button ${variant}`} disabled={disabled || busy} aria-busy={busy} {...props}>{busy ? "处理中…" : children}</button>;
+  // v3.8.0 UIX-4：busy 保留原文案（宽度不跳动）+ 内联 spinner，替代整体替换为“处理中…”。
+  return <button className={`ui-button ${variant}`} disabled={disabled || busy} aria-busy={busy} {...props}>{busy && <span className="ui-button-spinner" aria-hidden="true" />}{children}</button>;
 }
 
 export type ToastTone = "success" | "error";
@@ -52,8 +53,14 @@ export function Feedback({ tone = "info", title, children }: { tone?: "info" | "
   return <section className={`ui-feedback ${tone}`} role={tone === "error" ? "alert" : "status"}><strong>{title}</strong>{children && <div>{children}</div>}</section>;
 }
 
-export function EmptyState({ title, children, action }: { title: string; children?: ReactNode; action?: ReactNode }) {
-  return <section className="ui-empty"><h2>{title}</h2>{children && <div>{children}</div>}{action}</section>;
+export function EmptyState({ title, children, action, compact = false }: { title: string; children?: ReactNode; action?: ReactNode; compact?: boolean }) {
+  // v3.8.0 UIX-4：compact 变体用于通知浮层等窄空间，避免 230px 最小高度。
+  return <section className={compact ? "ui-empty ui-empty-compact" : "ui-empty"}><h2>{title}</h2>{children && <div>{children}</div>}{action}</section>;
+}
+
+/** 统一的加载占位（v3.8.0 UIX-4：合并 App.tsx PageSkeleton 与 platform/shared 两套重复实现）。 */
+export function Loading({ label }: { label: string }) {
+  return <section className="page-skeleton" aria-live="polite"><span className="spinner" />{label}</section>;
 }
 
 // v3.5.0 反馈：wide 变体给图表类内容（如外键关系图）更宽的画布。
@@ -69,6 +76,28 @@ export function Dialog({ open, title, onClose, children, wide = false }: { open:
   }, [open, onClose]);
   if (!open) return null;
   return <div className="ui-dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><section className={wide ? "ui-dialog ui-dialog-wide" : "ui-dialog"} role="dialog" aria-modal="true" aria-labelledby={titleId}><header><h2 id={titleId}>{title}</h2><button ref={closeRef} aria-label="关闭对话框" onClick={onClose}>×</button></header>{children}</section></div>;
+}
+
+// v3.8.0 UIX-2：危险/重要操作的统一确认对话框，替代原生 window.confirm——视觉与文案与应用一致，
+// danger 时确认按钮用红色 danger 变体，message 里回显操作对象名。
+export function ConfirmDialog({ open, title, message, confirmLabel = "确认", cancelLabel = "取消", danger = false, pending = false, onConfirm, onClose }: {
+  open: boolean;
+  title: string;
+  message: ReactNode;
+  confirmLabel?: string;
+  cancelLabel?: string;
+  danger?: boolean;
+  pending?: boolean;
+  onConfirm: () => void;
+  onClose: () => void;
+}) {
+  return <Dialog open={open} title={title} onClose={onClose}>
+    <div className="ui-confirm">{message}</div>
+    <div className="button-row">
+      <Button variant={danger ? "danger" : "primary"} busy={pending} onClick={onConfirm}>{confirmLabel}</Button>
+      <Button variant="secondary" onClick={onClose}>{cancelLabel}</Button>
+    </div>
+  </Dialog>;
 }
 
 export function DataTable<T>({ caption, rows, columns, rowKey }: { caption: string; rows: T[]; columns: Array<{ key: string; title: string; render: (row: T) => ReactNode }>; rowKey?: (row: T) => string }) {

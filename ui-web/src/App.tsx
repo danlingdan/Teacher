@@ -1,4 +1,5 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { Bell, BookOpen, Braces, Cloud, Database, GraduationCap, Home, Settings as SettingsIcon, type LucideIcon } from "lucide-react";
 import { UpdateDialog } from "./shared/UpdateDialog";
 import { useAppVersion } from "./shared/appVersion";
 import {
@@ -15,7 +16,7 @@ import { actionRoute } from "./shared/actionRoute";
 import { healthQuery, homeQuery, sessionQuery, settingsPreferencesQuery } from "./app/queries";
 import { ErrorBoundary } from "./app/ErrorBoundary";
 import { RoleGuard } from "./app/RoleGuard";
-import { Button, EmptyState, Feedback } from "./shared/ui";
+import { Button, EmptyState, Feedback, Loading } from "./shared/ui";
 import { measure } from "./shared/telemetry";
 import { localAppRequest } from "./shared/ipc";
 import { formatInstant } from "./shared/instant";
@@ -55,23 +56,23 @@ type NavigationItem = {
   to: string;
   label: string;
   detail: string;
-  icon: string;
+  icon: LucideIcon;
   roles?: string[];
 };
 const navigation: NavigationItem[] = [
-  { to: "/today", label: "今天", detail: "学习概览", icon: "⌂" },
-  { to: "/knowledge", label: "课程与知识", detail: "阅读与检索", icon: "◇" },
-  { to: "/practice", label: "练习与实验", detail: "编码与活动", icon: "⌘" },
-  { to: "/data", label: "数据与 SQL", detail: "连接与查询", icon: "▦" },
+  { to: "/today", label: "今天", detail: "学习概览", icon: Home },
+  { to: "/knowledge", label: "课程与知识", detail: "阅读与检索", icon: BookOpen },
+  { to: "/practice", label: "练习与实验", detail: "编码与活动", icon: Braces },
+  { to: "/data", label: "数据与 SQL", detail: "连接与查询", icon: Database },
   {
     to: "/teaching",
     label: "教学空间",
     detail: "题库与学情",
-    icon: "◎",
+    icon: GraduationCap,
     roles: ["TEACHER", "ADMINISTRATOR"],
   },
-  { to: "/cloud", label: "班级与云端", detail: "账号与同步", icon: "☁" },
-  { to: "/settings", label: "设置", detail: "偏好与维护", icon: "⚙" },
+  { to: "/cloud", label: "班级与云端", detail: "账号与同步", icon: Cloud },
+  { to: "/settings", label: "设置", detail: "偏好与维护", icon: SettingsIcon },
 ];
 
 export default function App() {
@@ -83,7 +84,7 @@ export default function App() {
         <Route
           path="login"
           element={
-            <Suspense fallback={<PageSkeleton label="正在加载账号页面" />}>
+            <Suspense fallback={<Loading label="正在加载账号页面" />}>
               <AuthPage />
             </Suspense>
           }
@@ -307,9 +308,7 @@ function Shell() {
               to={item.to}
               className={({ isActive }) => (isActive ? "nav-item active" : "nav-item")}
             >
-              <span className="nav-icon" aria-hidden="true">
-                {item.icon}
-              </span>
+              <span className="nav-icon" aria-hidden="true"><item.icon size={18} strokeWidth={1.75} /></span>
               <span className="nav-copy">
                 <strong>{item.label}</strong>
                 <small>{item.detail}</small>
@@ -367,7 +366,7 @@ function Shell() {
                   if (next && session.data?.authenticated) refreshCloudNotifications.mutate();
                 }}
               >
-                <span aria-hidden="true">●</span>
+                <span aria-hidden="true"><Bell size={16} strokeWidth={1.75} /></span>
                 <span>通知</span>
                 {unreadCount > 0 && <b>{unreadCount > 99 ? "99+" : unreadCount}</b>}
               </button>
@@ -395,7 +394,7 @@ function Shell() {
                     )}
                   </header>
                   {notifications.length === 0 ? (
-                    <p className="muted">暂无通知</p>
+                    <EmptyState compact title="暂无通知" />
                   ) : (
                     <ul>
                       {notifications.slice(0, 8).map((item) => (
@@ -442,7 +441,7 @@ function Shell() {
           </div>
         </header>
         <div className="workspace-content">
-          <Suspense fallback={<PageSkeleton label="正在按需加载页面" />}>
+          <Suspense fallback={<Loading label="正在按需加载页面" />}>
             <Outlet />
           </Suspense>
         </div>
@@ -584,7 +583,7 @@ function TodayPage() {
   function continueAction(action: LearningActionSummary) {
     navigate(actionRoute(action));
   }
-  if (summary.isPending) return <PageSkeleton label="正在读取本地学习摘要" />;
+  if (summary.isPending) return <Loading label="正在读取本地学习摘要" />;
   if (summary.isError)
     return (
       <Feedback tone="error" title="无法读取学习摘要">
@@ -638,12 +637,10 @@ function TodayPage() {
           </span>
         </div>
         {data.actions.length === 0 ? (
-          <div>
-            <p className="muted">暂无待办动作。可以先去「练习与实验」练一题，或完成一道推荐题。</p>
-            <div className="button-row">
-              <Button onClick={() => navigate("/practice")}>去练习一题</Button>
-            </div>
-          </div>
+          <EmptyState title="暂无待办动作">
+            <p>可以先去「练习与实验」练一题，或完成一道推荐题。</p>
+            <Button onClick={() => navigate("/practice")}>去练习一题</Button>
+          </EmptyState>
         ) : (
           <ol>
             {data.actions.map((action) => (
@@ -689,13 +686,5 @@ function Metric({
       <span>{label}</span>
       <strong>{value}</strong>
     </article>
-  );
-}
-function PageSkeleton({ label }: { label: string }) {
-  return (
-    <section className="page-skeleton" aria-live="polite">
-      <span className="spinner" />
-      {label}
-    </section>
   );
 }

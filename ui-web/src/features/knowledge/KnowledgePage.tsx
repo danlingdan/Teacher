@@ -15,7 +15,7 @@ import type {
   KnowledgeSearchItem,
   KnowledgeSearchResult,
 } from "../../shared/types";
-import { Button, Feedback, FormField, Stepper, useToast } from "../../shared/ui";
+import { Button, ConfirmDialog, Feedback, FormField, Stepper, useToast } from "../../shared/ui";
 import KnowledgeRenderer from "./KnowledgeRenderer";
 
 // v3.4.3 KSR-2：知识页三态由 knowledge.overview 驱动，与课程活动完全解耦。
@@ -166,6 +166,9 @@ export default function KnowledgePage() {
   });
   // v3.6.0 KBF-3：导入先做同内容查重——命中既有文章时列出候选，经用户确认后
   // 以 allowDuplicate=true 重新发起；不做自动合并。
+  // v3.8.0 UIX-2：重复导入与删除文档的应用内确认状态。
+  const [duplicateNames, setDuplicateNames] = useState("");
+  const [confirmRemove, setConfirmRemove] = useState(false);
   const importArticle = useMutation({
     mutationFn: (allowDuplicate: boolean) =>
       localAppRequest<KnowledgeImportOutcome>("knowledge.article.import", {
@@ -177,11 +180,12 @@ export default function KnowledgePage() {
       }),
     onSuccess: (value) => {
       if (value?.duplicates?.length) {
-        const names = value.duplicates
-          .map((item) => `《${item.title}》（${item.courseTitle} · ${item.sectionTitle}）`)
-          .join("、");
-        if (!window.confirm(`检测到内容相同的既有文章：${names}。仍要导入为新文章吗？`)) return;
-        importArticle.mutate(true);
+        // v3.8.0 UIX-2：重复导入确认改用应用内对话框（原 window.confirm）。
+        setDuplicateNames(
+          value.duplicates
+            .map((item) => `《${item.title}》（${item.courseTitle} · ${item.sectionTitle}）`)
+            .join("、"),
+        );
         return;
       }
       refresh();
@@ -939,12 +943,7 @@ export default function KnowledgePage() {
                     <Button variant="secondary" onClick={() => visibility.mutate("INACTIVE")}>
                       停用
                     </Button>
-                    <Button
-                      variant="danger"
-                      onClick={() => {
-                        if (window.confirm("确定删除当前知识文档及其索引吗？")) remove.mutate();
-                      }}
-                    >
+                    <Button variant="danger" onClick={() => setConfirmRemove(true)}>
                       删除
                     </Button>
                   </div>
@@ -971,6 +970,31 @@ export default function KnowledgePage() {
           </details>
         )}
       </main>
+      {/* v3.8.0 UIX-2：重复导入确认（原 window.confirm）。 */}
+      <ConfirmDialog
+        open={duplicateNames !== ""}
+        title="检测到重复内容"
+        message={`检测到内容相同的既有文章：${duplicateNames}。仍要导入为新文章吗？`}
+        confirmLabel="仍要导入"
+        onConfirm={() => {
+          setDuplicateNames("");
+          importArticle.mutate(true);
+        }}
+        onClose={() => setDuplicateNames("")}
+      />
+      {/* v3.8.0 UIX-2：删除文档确认（原 window.confirm）。 */}
+      <ConfirmDialog
+        open={confirmRemove}
+        title="删除知识文档"
+        danger
+        message="确定删除当前知识文档及其索引吗？此操作不可撤销。"
+        confirmLabel="删除"
+        onConfirm={() => {
+          setConfirmRemove(false);
+          remove.mutate();
+        }}
+        onClose={() => setConfirmRemove(false)}
+      />
     </div>
   );
 }

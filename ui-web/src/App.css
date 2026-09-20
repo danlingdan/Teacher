@@ -52,6 +52,13 @@
   --danger-line-soft: #ecd6d1;
   --shadow:
     0 1px 2px rgba(16, 24, 40, 0.04), 0 10px 28px rgba(16, 24, 40, 0.055);
+/* v3.8.0 UIX-4：路由级错误兜底卡(原内联样式归位)。 */
+.error-boundary { padding: 48px 40px; display: grid; gap: 12px; justify-items: start; }
+.error-boundary-hint { color: var(--muted); }
+
+  /* v3.8.0 UIX-1：圆角与间距刻度(取自现状值;存量规则的逐处归位在视觉走查轮进行)。 */
+  --radius-sm: 9px; --radius-md: 10px; --radius-lg: 11px; --radius-xl: 16px;
+  --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px; --space-5: 20px; --space-6: 24px; --space-8: 32px;
 }
 
 * {
@@ -94,7 +101,7 @@ button {
   display: grid;
   place-items: center;
   border-radius: 12px;
-  background: linear-gradient(135deg, #31c8b4, #f2b451);
+  background: linear-gradient(135deg, #31c8b4, var(--amber-bright));
   color: #102b42;
   font-weight: 900;
   letter-spacing: -1px;
@@ -177,7 +184,7 @@ button {
 .nav-item.active {
   color: #fff;
   background: rgba(255, 255, 255, 0.13);
-  box-shadow: inset 3px 0 #39c9b6;
+  box-shadow: inset 3px 0 var(--teal-bright);
 }
 .nav-item span,
 .nav-item small {

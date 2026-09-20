@@ -111,6 +111,13 @@ public class DatabaseServiceConfig {
     }
 
     @Bean
+    public com.sqlteacher.application.event.LocalRecordOwnershipService localRecordOwnershipService(
+            JdbcConnectionFactory connectionFactory,
+            com.sqlteacher.application.event.LearningEventOwnerProvider ownerProvider) {
+        return new JdbcLocalRecordOwnershipService(connectionFactory, ownerProvider);
+    }
+
+    @Bean
     public DataMaintenanceService dataMaintenanceService(JdbcConnectionFactory connectionFactory) {
         return new JdbcDataMaintenanceService(connectionFactory);
     }

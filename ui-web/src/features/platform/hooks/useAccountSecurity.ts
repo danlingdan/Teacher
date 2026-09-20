@@ -1,12 +1,14 @@
 // 账号安全与数据治理域 hook（v3.4.0 REF-13）：从 CloudPage.tsx 原样搬移，
 // 覆盖登录会话、修改密码、数据导出与账号删除；不改任何用户可见行为。
+// v3.8.0 ACC-D2/D3：新增显示名修改与邮箱绑定/验证（找回密码的前置）。
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { localAppRequest } from "../../../shared/ipc";
 import { downloadJson } from "../../../shared/download";
-import type { ActiveSession } from "../../../shared/types";
+import { sessionQuery } from "../../../app/queries";
+import type { ActiveSession, SessionResult } from "../../../shared/types";
 import { useToast } from "../../../shared/ui";
-import { sessionsKey } from "./cloudShared";
+import { cloudKey, sessionsKey } from "./cloudShared";
 
 export function useAccountSecurity() {
   const client = useQueryClient();
@@ -16,6 +18,13 @@ export function useAccountSecurity() {
   const [accountMessage, setAccountMessage] = useState("");
   const [exportTaskId, setExportTaskId] = useState("");
   const [accountOpen, setAccountOpen] = useState(false);
+  // v3.8.0 ACC-D2/D3：显示名修改与邮箱绑定/验证的本地输入状态。
+  const [profileName, setProfileName] = useState("");
+  const [bindEmail, setBindEmail] = useState("");
+  const [emailCode, setEmailCode] = useState("");
+  const [emailCodeSent, setEmailCodeSent] = useState(false);
+  // v3.8.0 ACC-S4/D3：一次性教师升级码兑换（决策点 1 方案 B）。
+  const [roleCode, setRoleCode] = useState("");
   const sessions = useQuery({
     queryKey: sessionsKey,
     queryFn: () => localAppRequest<{ items: ActiveSession[] }>("account.sessions"),
@@ -85,6 +94,54 @@ export function useAccountSecurity() {
     setAccountOpen(true);
     void client.invalidateQueries({ queryKey: sessionsKey });
   };
+  // v3.8.0 ACC-D3：显示名保存成功后，桥会重签会话并返回最新身份，本地缓存直接替换。
+  const updateProfile = useMutation({
+    mutationFn: () =>
+      localAppRequest<SessionResult>("account.profile.update", { displayName: profileName.trim() }),
+    onSuccess: (value) => {
+      setProfileName("");
+      setAccountMessage("显示名称已更新。");
+      toast("success", "显示名称已更新");
+      client.setQueryData(sessionQuery.queryKey, value);
+      void client.invalidateQueries({ queryKey: cloudKey });
+    },
+    onError: (error: Error) => setAccountMessage(`显示名称修改失败：${error.message}`),
+  });
+  // v3.8.0 ACC-D2：向新邮箱发送 6 位验证码（绑定或换绑），再输码完成验证。
+  const sendEmailCode = useMutation({
+    mutationFn: () => localAppRequest("account.email.bind", { email: bindEmail.trim() }),
+    onSuccess: () => {
+      setEmailCodeSent(true);
+      setAccountMessage(`验证码已发送至 ${bindEmail.trim()}，30 分钟内有效。`);
+      toast("success", "验证码已发送");
+    },
+    onError: (error: Error) => toast("error", `发送验证码失败：${error.message}`),
+  });
+  const verifyEmail = useMutation({
+    mutationFn: () => localAppRequest<SessionResult>("account.email.verify", { code: emailCode.trim() }),
+    onSuccess: () => {
+      setEmailCode("");
+      setBindEmail("");
+      setEmailCodeSent(false);
+      setAccountMessage("邮箱已验证。之后可通过该邮箱自助找回密码。");
+      toast("success", "邮箱已验证");
+      void client.invalidateQueries({ queryKey: sessionQuery.queryKey });
+      void client.invalidateQueries({ queryKey: cloudKey });
+    },
+    onError: (error: Error) => toast("error", `邮箱验证失败：${error.message}`),
+  });
+  // 兑换成功后桥会重签会话，返回值已带 TEACHER 角色，本地缓存直接替换即可即时生效。
+  const redeemRole = useMutation({
+    mutationFn: () => localAppRequest<SessionResult>("account.role.redeem", { code: roleCode.trim().toUpperCase() }),
+    onSuccess: (value) => {
+      setRoleCode("");
+      setAccountMessage("兑换成功，教师功能已解锁。");
+      toast("success", "教师身份已激活");
+      client.setQueryData(sessionQuery.queryKey, value);
+      void client.invalidateQueries({ queryKey: cloudKey });
+    },
+    onError: (error: Error) => toast("error", `兑换失败：${error.message}`),
+  });
   return {
     currentPassword,
     setCurrentPassword,
@@ -101,5 +158,19 @@ export function useAccountSecurity() {
     requestDeletion,
     cancelDeletion,
     deletionStatus,
+    profileName,
+    setProfileName,
+    updateProfile,
+    bindEmail,
+    setBindEmail,
+    emailCode,
+    setEmailCode,
+    emailCodeSent,
+    setEmailCodeSent,
+    sendEmailCode,
+    verifyEmail,
+    roleCode,
+    setRoleCode,
+    redeemRole,
   };
 }

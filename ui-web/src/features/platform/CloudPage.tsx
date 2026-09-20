@@ -20,13 +20,13 @@ import type {
   PortfolioEntry,
   SubmissionFeedback,
 } from "../../shared/types";
-import { Button, Dialog, Feedback, FormField, useToast } from "../../shared/ui";
-import { Loading, Metric, analyticsMetricLabel, formatAccountDate } from "./shared";
+import { Button, ConfirmDialog, Dialog, Feedback, FormField, useToast } from "../../shared/ui";
+import { Loading, Metric, analyticsMetricLabel } from "./shared";
 import { cloudKey, portfolioKey } from "./hooks/cloudShared";
 import { useClassroom } from "./hooks/useClassroom";
 import { useCourseAuthoring } from "./hooks/useCourseAuthoring";
-import { useAccountSecurity } from "./hooks/useAccountSecurity";
 import { ClassLearningOverviewCard, StudentLearningPanel } from "./StudentLearningPanel";
+import { AccountCenterPanel } from "./AccountCenterPanel";
 
 export function CloudPage() {
   const client = useQueryClient();
@@ -38,6 +38,9 @@ export function CloudPage() {
     displayName: string;
     email: string;
   }>();
+  // v3.8.0 UIX-2：重置班级码与 AI 起草覆盖评语的应用内确认状态（原 window.confirm）。
+  const [confirmRotate, setConfirmRotate] = useState(false);
+  const [overwriteTarget, setOverwriteTarget] = useState<SubmissionFeedback | null>(null);
   const query = useQuery({
     queryKey: cloudKey,
     queryFn: () => localAppRequest<CloudWorkspace>("cloud.workspace"),
@@ -75,6 +78,23 @@ export function CloudPage() {
       toast("success", "同步偏好已保存");
     },
     onError: (error: Error) => toast("error", `同步偏好保存失败：${error.message}`),
+  });
+  // v3.8.0 ACC-D4：本机未登录期间产生的 guest 记录,一次性并入当前账号后才会参与云端同步。
+  const guestRecords = useQuery({
+    queryKey: ["cloud", "guestRecords"],
+    queryFn: () =>
+      localAppRequest<{ learningEvents: number; sqlHistory: number; total: number }>(
+        "cloud.guest.records",
+      ),
+  });
+  const mergeGuestRecords = useMutation({
+    mutationFn: () => localAppRequest<{ merged: number }>("cloud.guest.merge"),
+    onSuccess: (value) => {
+      void client.invalidateQueries({ queryKey: ["cloud", "guestRecords"] });
+      void client.invalidateQueries({ queryKey: cloudKey });
+      toast("success", `已把 ${value.merged} 条本机记录并入当前账号`);
+    },
+    onError: (error: Error) => toast("error", `并入失败：${error.message}`),
   });
   const logout = useMutation({
     mutationFn: () => localAppRequest("account.logout"),
@@ -199,23 +219,6 @@ export function CloudPage() {
     assignmentDescription,
     assignmentDueAt,
   });
-  const {
-    currentPassword,
-    setCurrentPassword,
-    newPassword,
-    setNewPassword,
-    accountMessage,
-    exportTaskId,
-    sessions,
-    openAccount,
-    revokeSession,
-    changePassword,
-    requestExport,
-    getExport,
-    requestDeletion,
-    cancelDeletion,
-    deletionStatus,
-  } = useAccountSecurity();
   const [portfolioOpen, setPortfolioOpen] = useState(false);
   // v3.4.2 LEG-12：作业卡片点「编辑」时自动展开任务表单。
   const [assignmentFormOpen, setAssignmentFormOpen] = useState(false);
@@ -280,7 +283,6 @@ export function CloudPage() {
   const courseItems = courses.data?.items ?? [];
   const courseContentData = courseContent.data;
   const courseCached = Boolean(courseContentData?.cached);
-  const sessionItems = sessions.data?.items ?? [];
   const selectedClassName = data.classes.find((item) => item.id === classroomId)?.name;
   return (
     <div className="platform-workspace page-grid">
@@ -342,7 +344,22 @@ export function CloudPage() {
             }
           />
           登录期间自动同步学习记录（约每 5 分钟）
-        </label>
+        </label>        {guestRecords.data && guestRecords.data.total > 0 && (
+          <div className="guest-adopt">
+            <p className="muted">
+              本机还有 {guestRecords.data.total} 条未登录期间产生的记录（学习事件{" "}
+              {guestRecords.data.learningEvents} 条、SQL 历史 {guestRecords.data.sqlHistory}{" "}
+              条）。并入当前账号后才会参与云端同步；不入库也完全不影响本地使用。
+            </p>
+            <Button
+              variant="secondary"
+              busy={mergeGuestRecords.isPending}
+              onClick={() => mergeGuestRecords.mutate()}
+            >
+              并入我的账号
+            </Button>
+          </div>
+        )}
         <p className="muted">
           学习记录仅你所在班级的教师可见，教师每次查看明细都会记入云端审计；关闭上传不影响本地练习与作业离线队列。
         </p>
@@ -456,15 +473,7 @@ export function CloudPage() {
                   <Button
                     variant="secondary"
                     busy={rotateJoinCode.isPending}
-                    onClick={() => {
-                      if (
-                        window.confirm(
-                          "重置后旧班级码立即失效，已用它加入的成员不受影响。确定重置？",
-                        )
-                      ) {
-                        rotateJoinCode.mutate();
-                      }
-                    }}
+                    onClick={() => setConfirmRotate(true)}
                   >
                     重置班级码
                   </Button>
@@ -955,12 +964,9 @@ export function CloudPage() {
                               draftFeedback.variables?.submissionId === item.submissionId
                             }
                             onClick={() => {
-                              if (
-                                item.comment &&
-                                !window.confirm("AI 起草会覆盖当前评语，确定继续？")
-                              )
-                                return;
-                              draftFeedback.mutate(item);
+                              // v3.8.0 UIX-2：已有评语时先经应用内确认（原 window.confirm）。
+                              if (item.comment) setOverwriteTarget(item);
+                              else draftFeedback.mutate(item);
                             }}
                           >
                             AI 起草
@@ -1321,121 +1327,34 @@ export function CloudPage() {
           </ul>
         )}
       </details>
-      <details
-        className="content-card account-governance"
-        onToggle={(event) => {
-          if (event.currentTarget.open) openAccount();
+      {/* v3.8.0 ACC-D3：账号中心（显示名/邮箱验证/教师升级/改密/会话/导出删除）拆分为独立面板。 */}
+      <AccountCenterPanel />
+      {/* v3.8.0 UIX-2：重置班级码确认（原 window.confirm）。 */}
+      <ConfirmDialog
+        open={confirmRotate}
+        title="重置班级码"
+        message="重置后旧班级码立即失效，已用它加入的成员不受影响。确定重置？"
+        confirmLabel="重置"
+        onConfirm={() => {
+          setConfirmRotate(false);
+          rotateJoinCode.mutate();
         }}
-      >
-        <summary>
-          <strong>账号安全与数据治理</strong>
-        </summary>
-        <section className="account-section">
-          <h3>修改密码</h3>
-          {/* v3.6.0 KUI：两个字段纵向等宽排列，修复左右高度/宽度不一致。 */}
-          <div className="password-form">
-            <FormField label="当前密码" hint="输入账号当前使用的密码">
-              {(ids) => (
-                <input
-                  {...ids}
-                  type="password"
-                  autoComplete="current-password"
-                  value={currentPassword}
-                  onChange={(event) => setCurrentPassword(event.target.value)}
-                />
-              )}
-            </FormField>
-            <FormField label="新密码" hint="12-128 个字符">
-              {(ids) => (
-                <input
-                  {...ids}
-                  type="password"
-                  autoComplete="new-password"
-                  value={newPassword}
-                  onChange={(event) => setNewPassword(event.target.value)}
-                />
-              )}
-            </FormField>
-          </div>
-          <div className="button-row">
-            <Button
-              disabled={!currentPassword || newPassword.length < 12}
-              busy={changePassword.isPending}
-              onClick={() => changePassword.mutate()}
-            >
-              修改密码
-            </Button>
-          </div>
-        </section>
-        <section className="account-section">
-          <h3>登录会话</h3>
-          {sessions.isPending && <p className="muted">正在读取会话…</p>}
-          <ul className="plain-list">
-            {sessionItems.map((item) => (
-              <li key={item.id}>
-                <strong>{item.current ? "当前会话" : item.userAgent || "其他会话"}</strong>
-                <span>{formatAccountDate(item.lastSeenAt)}</span>
-                {!item.current && (
-                  <Button variant="secondary" onClick={() => revokeSession.mutate(item.id)}>
-                    撤销
-                  </Button>
-                )}
-              </li>
-            ))}
-          </ul>
-          {!sessions.isPending && sessionItems.length === 0 && (
-            <p className="muted">没有可显示的其他会话。</p>
-          )}
-        </section>
-        <section className="account-section danger-zone">
-          <h3>数据导出与账号删除</h3>
-          <p className="muted">导出不会修改账号；删除申请进入可撤销期，请谨慎操作。</p>
-          <div className="button-row">
-            <Button
-              variant="secondary"
-              busy={requestExport.isPending}
-              onClick={() => requestExport.mutate()}
-            >
-              申请导出我的数据
-            </Button>
-            {exportTaskId && (
-              <Button
-                variant="secondary"
-                busy={getExport.isPending}
-                onClick={() => getExport.mutate()}
-              >
-                获取导出结果
-              </Button>
-            )}
-            <Button
-              variant="danger"
-              busy={requestDeletion.isPending}
-              onClick={() => requestDeletion.mutate()}
-            >
-              申请删除账号
-            </Button>
-            <Button
-              variant="secondary"
-              busy={deletionStatus.isPending}
-              onClick={() => deletionStatus.mutate()}
-            >
-              查询删除状态
-            </Button>
-            <Button
-              variant="secondary"
-              busy={cancelDeletion.isPending}
-              onClick={() => cancelDeletion.mutate()}
-            >
-              取消账号删除
-            </Button>
-          </div>
-        </section>
-        {accountMessage && (
-          <Feedback tone="info" title="账号状态">
-            {accountMessage}
-          </Feedback>
-        )}
-      </details>
+        onClose={() => setConfirmRotate(false)}
+      />
+      {/* v3.8.0 UIX-2：AI 起草覆盖评语确认（原 window.confirm）。 */}
+      <ConfirmDialog
+        open={overwriteTarget !== null}
+        title="覆盖当前评语"
+        danger
+        message="AI 起草会覆盖当前评语，确定继续？"
+        confirmLabel="覆盖并起草"
+        onConfirm={() => {
+          const target = overwriteTarget;
+          setOverwriteTarget(null);
+          if (target) draftFeedback.mutate(target);
+        }}
+        onClose={() => setOverwriteTarget(null)}
+      />
     </div>
   );
 }

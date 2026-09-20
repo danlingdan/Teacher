@@ -29,7 +29,9 @@ import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Base64;
+import java.util.HexFormat;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -145,6 +147,139 @@ final class CloudAdministrationStore extends CloudStoreBase {
             audit(connection, actor.id(), "ADMIN_SESSION_REVOKE_ALL", "USER", userId, "SUCCESS", reason);
             connection.commit();
         } catch (SQLException error) { throw database(error); }
+    }
+
+    // ---- v3.8.0 ACC-S4 one-time teacher role grant codes (decision point 1: plan B) ----
+
+    private static final int ROLE_CODE_LENGTH = 8;
+    private static final String ROLE_CODE_INVALID = "role code is invalid or has expired";
+
+    /**
+     * Mints a one-time teacher upgrade code. The plaintext appears exactly once, in this return
+     * value; the database keeps only its SHA-256 hash. Issuance, list and revoke are admin-only
+     * and audited; redemption (see {@link #redeemRoleCode}) is a self-service account operation.
+     */
+    TeacherRoleCodeIssued issueTeacherRoleCode(AuthenticatedUser actor, int ttlDays) {
+        requireAdmin(actor);
+        if (ttlDays < 1 || ttlDays > 365) throw new IllegalArgumentException("ttlDays must be 1 to 365");
+        String code = Hashes.randomCode(ROLE_CODE_LENGTH);
+        byte[] hash = tokenHash(code);
+        String hashHex = HexFormat.of().formatHex(hash);
+        Instant now = Instant.now();
+        Instant expiresAt = now.plus(ttlDays, ChronoUnit.DAYS);
+        try (Connection connection = open(); PreparedStatement statement = connection.prepareStatement(
+            "insert into role_grant_codes(code_hash,role,created_by,created_at,expires_at) values(?,?,?,?,?)")) {
+            statement.setBytes(1, hash);
+            statement.setString(2, "TEACHER");
+            statement.setString(3, actor.id());
+            statement.setString(4, now.toString());
+            statement.setString(5, expiresAt.toString());
+            statement.executeUpdate();
+            audit(connection, actor.id(), "ADMIN_ROLE_CODE_ISSUE", "ROLE_GRANT_CODE", hashHex, "SUCCESS", "TEACHER");
+        } catch (SQLException error) { throw database(error); }
+        return new TeacherRoleCodeIssued(code, hashHex, "TEACHER", expiresAt);
+    }
+
+    List<TeacherRoleCodeView> listTeacherRoleCodes(AuthenticatedUser actor) {
+        requireAdmin(actor);
+        try (Connection connection = open(); PreparedStatement statement = connection.prepareStatement(
+            "select code_hash,role,created_at,expires_at,used_by,used_at,revoked_at from role_grant_codes "
+                + "order by created_at desc")) {
+            List<TeacherRoleCodeView> codes = new ArrayList<>();
+            try (ResultSet rows = statement.executeQuery()) {
+                while (rows.next()) {
+                    codes.add(new TeacherRoleCodeView(
+                        HexFormat.of().formatHex(rows.getBytes("code_hash")),
+                        rows.getString("role"),
+                        Instant.parse(rows.getString("created_at")),
+                        Instant.parse(rows.getString("expires_at")),
+                        rows.getString("used_by"),
+                        rows.getString("used_at") == null ? null : Instant.parse(rows.getString("used_at")),
+                        rows.getString("revoked_at") == null ? null : Instant.parse(rows.getString("revoked_at"))));
+                }
+            }
+            return List.copyOf(codes);
+        } catch (SQLException error) { throw database(error); }
+    }
+
+    void revokeTeacherRoleCode(AuthenticatedUser actor, String codeHashHex) {
+        requireAdmin(actor);
+        byte[] hash = hexCodeHash(codeHashHex);
+        try (Connection connection = open()) {
+            connection.setAutoCommit(false);
+            try {
+                try (PreparedStatement statement = connection.prepareStatement(
+                    "update role_grant_codes set revoked_at=? where code_hash=? and revoked_at is null and used_at is null")) {
+                    statement.setString(1, Instant.now().toString());
+                    statement.setBytes(2, hash);
+                    if (statement.executeUpdate() != 1) {
+                        throw new IllegalArgumentException("role code does not exist or can no longer be revoked");
+                    }
+                }
+                audit(connection, actor.id(), "ADMIN_ROLE_CODE_REVOKE", "ROLE_GRANT_CODE",
+                    HexFormat.of().formatHex(hash), "SUCCESS", "ADMIN_REQUEST");
+                connection.commit();
+            } catch (SQLException | RuntimeException error) {
+                connection.rollback();
+                throw error;
+            }
+        } catch (SQLException error) { throw database(error); }
+    }
+
+    /**
+     * Redeems a one-time teacher upgrade code for the signed-in account. Every failure mode
+     * (unknown, wrong, expired, used, revoked) collapses into one uniform message; a failed
+     * redemption never consumes the code or changes roles.
+     */
+    void redeemRoleCode(AuthenticatedUser actor, String code) {
+        if (actor.hasRole(UserRole.TEACHER)) {
+            throw new IllegalArgumentException("account already has the teacher role");
+        }
+        String normalized = code == null ? "" : code.strip().toUpperCase(Locale.ROOT);
+        if (normalized.length() != ROLE_CODE_LENGTH) throw new IllegalArgumentException(ROLE_CODE_INVALID);
+        byte[] hash = tokenHash(normalized);
+        try (Connection connection = open()) {
+            connection.setAutoCommit(false);
+            try {
+                try (PreparedStatement find = connection.prepareStatement(
+                    "select expires_at,used_at,revoked_at from role_grant_codes where code_hash=?")) {
+                    find.setBytes(1, hash);
+                    try (ResultSet row = find.executeQuery()) {
+                        if (!row.next()) throw new IllegalArgumentException(ROLE_CODE_INVALID);
+                        if (row.getString("used_at") != null || row.getString("revoked_at") != null
+                            || Instant.parse(row.getString("expires_at")).isBefore(Instant.now())) {
+                            throw new IllegalArgumentException(ROLE_CODE_INVALID);
+                        }
+                    }
+                }
+                try (PreparedStatement consume = connection.prepareStatement(
+                    "update role_grant_codes set used_by=?,used_at=? where code_hash=? and used_at is null and revoked_at is null")) {
+                    consume.setString(1, actor.id());
+                    consume.setString(2, Instant.now().toString());
+                    consume.setBytes(3, hash);
+                    if (consume.executeUpdate() != 1) throw new IllegalArgumentException(ROLE_CODE_INVALID);
+                }
+                try (PreparedStatement role = connection.prepareStatement(
+                    "insert or ignore into user_roles(user_id,role) values(?, 'TEACHER')")) {
+                    role.setString(1, actor.id());
+                    role.executeUpdate();
+                }
+                audit(connection, actor.id(), "AUTH_ROLE_CODE_REDEEM", "ROLE_GRANT_CODE",
+                    HexFormat.of().formatHex(hash), "SUCCESS", "TEACHER");
+                connection.commit();
+            } catch (SQLException | RuntimeException error) {
+                connection.rollback();
+                throw error;
+            }
+        } catch (SQLException error) { throw database(error); }
+    }
+
+    private static byte[] hexCodeHash(String hex) {
+        try {
+            return HexFormat.of().parseHex(hex == null ? "" : hex.strip());
+        } catch (IllegalArgumentException error) {
+            throw new IllegalArgumentException("role code hash is invalid");
+        }
     }
 
     AdminAuditPage adminAudit(AuthenticatedUser actor, String action, Instant from, Instant to,

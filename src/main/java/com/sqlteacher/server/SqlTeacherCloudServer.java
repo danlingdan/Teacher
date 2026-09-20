@@ -115,10 +115,10 @@ public final class SqlTeacherCloudServer {
         this.v14Store = new V14CloudStore(databasePath);
         this.v19Store = new V19CloudStore(databasePath);
         this.v110SupportStore = new V110SupportStore(databasePath);
-        // 公开 base URL 可注入：测试/演练环境配置 SQLTEACHER_PUBLIC_BASE_URL 后，
-        // 验证/重置邮件不再指向生产域名（v3.4.0 REF-6）。
-        this.v111AccountStore = new V111AccountStore(databasePath, new FileMailSender(mailDirectory),
-            System.getenv("SQLTEACHER_PUBLIC_BASE_URL"));
+        // v3.8.0 ACC-S1：配置 SQLTEACHER_CLOUD_SMTP_* 环境变量后走真实 SMTP 通道；
+        // 未配置时保持文件 outbox 行为不变（本地与测试环境零依赖）。
+        this.v111AccountStore = new V111AccountStore(databasePath,
+            SmtpMailSender.fromEnvironment(new FileMailSender(mailDirectory)));
         this.v31BankStore = new V31ExerciseBankStore(databasePath);
         this.knowledgeIndex = CloudKnowledgeIndexService.fromEnvironment(v14Store);
         String bootstrapEmail = System.getenv("SQLTEACHER_CLOUD_BOOTSTRAP_ADMIN_EMAIL");
@@ -235,7 +235,8 @@ public final class SqlTeacherCloudServer {
             String clientKey = clientPrincipal(exchange);
             enforceQuota("register:email:" + emailKey, REGISTER_MAX_PER_EMAIL_PER_HOUR, ONE_HOUR);
             enforceQuota("register:ip:" + clientKey, REGISTER_MAX_PER_IP_PER_HOUR, ONE_HOUR);
-            SessionData session = authStore.registerData(body.get("email"), body.get("displayName"), password(body));
+            SessionData session = authStore.registerData(body.get("email"), body.get("displayName"),
+                password(body), body.get("deviceLabel"));
             respond(exchange, 201, sessionResponse(session));
         } catch (AuthRateLimiter.RateLimitedException error) { respondRateLimited(exchange, error); }
         catch (IllegalArgumentException error) { respond(exchange, 400, errorResponse("INVALID_REQUEST", error.getMessage())); }
@@ -257,7 +258,7 @@ public final class SqlTeacherCloudServer {
             Map<String, String> body = request(exchange);
             failureKey = "login:" + normalizedEmailKey(body.get("email"));
             authRateLimiter.checkLocked(failureKey);
-            SessionData session = authStore.loginData(body.get("email"), password(body));
+            SessionData session = authStore.loginData(body.get("email"), password(body), body.get("deviceLabel"));
             authRateLimiter.clearFailures(failureKey);
             respond(exchange, 200, sessionResponse(session));
         } catch (AuthRateLimiter.RateLimitedException error) { respondRateLimited(exchange, error); }
@@ -294,7 +295,7 @@ public final class SqlTeacherCloudServer {
         try {
             Map<String, String> body = request(exchange);
             authRateLimiter.checkLocked(failureKey);
-            SessionData session = authStore.refreshData(body.get("refreshToken"));
+            SessionData session = authStore.refreshData(body.get("refreshToken"), body.get("deviceLabel"));
             authRateLimiter.clearFailures(failureKey);
             respond(exchange, 200, sessionResponse(session));
         } catch (AuthRateLimiter.RateLimitedException error) { respondRateLimited(exchange, error); }
@@ -336,7 +337,12 @@ public final class SqlTeacherCloudServer {
         }
         try {
             Map<String, String> body = request(exchange);
-            v111AccountStore.resetPassword(body.get("token"), password(body, "newPassword"));
+            // v3.8.0 ACC-S2：6 位验证码路径为主；既有 token 入参 additive 保留。
+            if (body.get("code") != null && !body.get("code").isBlank()) {
+                v111AccountStore.resetPassword(body.get("email"), body.get("code"), password(body, "newPassword"));
+            } else {
+                v111AccountStore.resetPassword(body.get("token"), password(body, "newPassword"));
+            }
             respond(exchange, 200, Map.of("status", "ok"));
         } catch (IllegalArgumentException error) { respond(exchange, 400, errorResponse("INVALID_REQUEST", error.getMessage())); }
         catch (RuntimeException error) {
@@ -403,7 +409,23 @@ public final class SqlTeacherCloudServer {
             }
             if ("/api/v1/account/verify-email".equals(path) && "POST".equals(method)) {
                 Map<String, String> body = request(exchange);
-                v111AccountStore.confirmEmailVerification(body.get("token"));
+                // v3.8.0 ACC-S2：验证码化确认（6 位码），码在请求时按账号签发并哈希存储。
+                v111AccountStore.confirmEmailVerification(actor.id(), body.get("code"));
+                respond(exchange, 200, Map.of("status", "ok"));
+                return;
+            }
+            // v3.8.0 ACC-S3：自助修改显示名（邮箱走 bind-email 换绑流，密码走 change-password）。
+            if ("/api/v1/account/profile".equals(path) && ("PATCH".equals(method) || "POST".equals(method))) {
+                Map<String, String> body = request(exchange);
+                v111AccountStore.updateProfile(actor.id(), body.get("displayName"));
+                respond(exchange, 200, Map.of("status", "ok"));
+                return;
+            }
+            // v3.8.0 ACC-S4（决策点 1 方案 B）：教师升级码兑换（登录态自助，限流 5 次/账号/时）。
+            if ("/api/v1/account/role-codes/redeem".equals(path) && "POST".equals(method)) {
+                Map<String, String> body = request(exchange);
+                enforceQuota("role-redeem:" + actor.id(), 5, Duration.ofHours(1));
+                adminStore.redeemRoleCode(actor, body.get("code"));
                 respond(exchange, 200, Map.of("status", "ok"));
                 return;
             }
@@ -974,6 +996,30 @@ public final class SqlTeacherCloudServer {
                     respond(exchange, 200, Map.of("status", "ok"));
                     return;
                 }
+            }
+            // v3.8.0 ACC-S4（决策点 1 方案 B）：教师升级码签发/列表/撤销，仅管理员，全部落审计。
+            if (segments.length == 5 && "role-codes".equals(segments[4])
+                && "POST".equals(exchange.getRequestMethod())) {
+                Map<String, String> body = request(exchange);
+                int ttlDays;
+                try {
+                    ttlDays = Integer.parseInt(body.getOrDefault("ttlDays", "30"));
+                } catch (NumberFormatException badTtl) {
+                    throw new IllegalArgumentException("ttlDays must be a number");
+                }
+                respond(exchange, 201, adminStore.issueTeacherRoleCode(actor, ttlDays));
+                return;
+            }
+            if (segments.length == 5 && "role-codes".equals(segments[4])
+                && "GET".equals(exchange.getRequestMethod())) {
+                respond(exchange, 200, Map.of("items", adminStore.listTeacherRoleCodes(actor)));
+                return;
+            }
+            if (segments.length == 7 && "role-codes".equals(segments[4]) && "revoke".equals(segments[6])
+                && "POST".equals(exchange.getRequestMethod())) {
+                adminStore.revokeTeacherRoleCode(actor, segments[5]);
+                respond(exchange, 200, Map.of("status", "ok"));
+                return;
             }
             if (segments.length == 5 && "audit".equals(segments[4])
                 && "GET".equals(exchange.getRequestMethod())) {
