@@ -4,13 +4,13 @@
 
 ## 当前基线
 
-- 当前代码版本：`3.6.0`（最新 tag）
-- 当前公开正式版本：[v3.6.0](releases/v3.6.0.md)（GitHub Release Latest）
+- 当前代码版本：`3.7.0`（最新 tag）
+- 当前公开正式版本：[v3.7.0](releases/v3.7.0.md)（GitHub Release Latest）
 - 上一稳定版本线：[v3.4.4](releases/v3.4.4.md)（体验补齐版本；v3.4.0–v3.4.4 均已公开发布）
-- 当前迭代计划：[v3.7.0 教师端学情反馈计划](plans/2026-09-20-v3.7.0-teaching-feedback-plan.md)（实施中，全部批次已完成；上一轮 [v3.6.0 计划](plans/2026-09-18-v3.6.0-knowledge-quality-plan.md) 已发布，见 [v3.6.0 发布说明](releases/v3.6.0.md)）
+- 当前迭代计划：[v3.7.0 教师端学情反馈计划](plans/2026-09-20-v3.7.0-teaching-feedback-plan.md)（已发布，见 [v3.7.0 发布说明](releases/v3.7.0.md)；上一轮 [v3.6.0 计划](plans/2026-09-18-v3.6.0-knowledge-quality-plan.md) 已发布）
 - 最近一轮功能计划：[v3.3 SQL 教学能力全面提升计划](plans/2026-09-10-v3.3-sql-teaching-capability-plan.md)（已交付，v3.3.0–v3.3.4 均已发布）
 - 当前实施记录：[v3.0 正式版与无控制台启动](history/stages/stage27/2026-08-12-v3-ga-no-console-release-candidate.md)（v3.1 起实施要点内嵌于各发布说明与运维记录）
-- 当前生产部署记录：[v3.5.1 发布与更新清单部署记录](operations/2026-09-16-v3.5.1-release-deployment.md)（v3.5.1 无云端 API 变更；CI 签名更新清单已部署并经公网验证）
+- 当前生产部署记录：[v3.7.0 发布与更新清单部署记录](operations/2026-09-20-v3.7.0-release-deployment.md)（CI 全流程发布；CI 签名更新清单已部署并经公网验证）
 
 > “当前”以 `pom.xml`、Git 标签和实际代码为准。计划文档记录制定时的基线，不应被当作实时状态页。
 
