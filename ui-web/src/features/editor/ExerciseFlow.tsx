@@ -181,6 +181,9 @@ export function ExerciseFlow() {
         passed: Boolean(result.evaluation?.passed),
         errorCode: result.evaluation?.errorCode ?? "",
         completedAt: result.occurredAt,
+        // v3.7.0 TFB-S3：随提交上送作答 SQL 与得分，教师端任务学情可见。
+        sqlText: answer,
+        score: result.evaluation?.score ?? "",
       }),
     onSuccess: setDelivery,
   });

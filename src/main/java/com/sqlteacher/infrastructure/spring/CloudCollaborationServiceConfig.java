@@ -13,9 +13,11 @@ import com.sqlteacher.application.event.LearningEventQueryService;
 import com.sqlteacher.application.event.LearningEventRecorder;
 import com.sqlteacher.application.knowledge.KnowledgeBundleCatalog;
 import com.sqlteacher.infrastructure.cloud.DefaultCloudLearningSyncService;
+import com.sqlteacher.infrastructure.cloud.FileCloudSyncPreferences;
 import com.sqlteacher.infrastructure.cloud.HttpCloudApiClient;
 import com.sqlteacher.infrastructure.cloud.HttpKnowledgeBundleCatalog;
 import com.sqlteacher.infrastructure.cloud.JdbcCloudArtifactSyncService;
+import com.sqlteacher.infrastructure.cloud.LearningAutoSyncService;
 import com.sqlteacher.infrastructure.cloud.PersistentCloudSessionService;
 import com.sqlteacher.infrastructure.cloud.WindowsDpapiCloudSessionStore;
 import com.sqlteacher.infrastructure.database.ExerciseBankSyncService;
@@ -67,7 +69,22 @@ public class CloudCollaborationServiceConfig {
     public CloudLearningSyncService cloudLearningSyncService(CloudSyncApi api, CloudSessionService sessions,
             LearningEventQueryService query, LearningEventRecorder recorder, SqlTeacherConfiguration configuration) {
         return new DefaultCloudLearningSyncService(api, sessions, query, recorder,
-            configuration.dataDirectory().resolve("cloud-state"));
+            cloudSyncPreferences(configuration), configuration.dataDirectory().resolve("cloud-state"));
+    }
+
+    @Bean
+    public com.sqlteacher.application.collaboration.CloudSyncPreferences cloudSyncPreferences(
+            SqlTeacherConfiguration configuration) {
+        return new FileCloudSyncPreferences(configuration.dataDirectory().resolve("cloud-state"));
+    }
+
+    /** v3.7.0 TFB-C2：默认开启的学习记录自动同步（用户可在班级与云端页关闭）。 */
+    @Bean(destroyMethod = "close")
+    public LearningAutoSyncService learningAutoSyncService(CloudLearningSyncService syncService,
+            CloudSessionService sessions, com.sqlteacher.application.collaboration.CloudSyncPreferences preferences) {
+        LearningAutoSyncService service = new LearningAutoSyncService(syncService, sessions, preferences);
+        service.start();
+        return service;
     }
 
     @Bean

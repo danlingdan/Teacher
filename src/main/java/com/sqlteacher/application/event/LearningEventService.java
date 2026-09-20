@@ -18,6 +18,23 @@ public interface LearningEventService {
         String errorCode
     );
 
+    /**
+     * v3.7.0 TFB-D2: richer execution evidence (truncated SQL text, dialect, and a SQL hash for
+     * correlating AI drafts with executions). Legacy callers keep the lean signature above.
+     */
+    default void recordSqlExecution(
+        String connectionId,
+        boolean successful,
+        String statementType,
+        Duration duration,
+        int resultCount,
+        String errorCode,
+        String sqlText,
+        String dialect
+    ) {
+        recordSqlExecution(connectionId, successful, statementType, duration, resultCount, errorCode);
+    }
+
     void recordSqlRiskBlocked(
         String connectionId,
         String statementType,
@@ -33,6 +50,18 @@ public interface LearningEventService {
         String errorCode
     );
 
+    /** v3.7.0 TFB-D2: AI drafts carry truncated SQL text plus a hash for execution correlation. */
+    default void recordAiGeneration(
+        String connectionId,
+        boolean successful,
+        String model,
+        String promptVersion,
+        String errorCode,
+        String generatedSql
+    ) {
+        recordAiGeneration(connectionId, successful, model, promptVersion, errorCode);
+    }
+
     default void recordExerciseAttempt(
         String exerciseId,
         String status,
@@ -40,6 +69,19 @@ public interface LearningEventService {
         Duration duration,
         String errorCode
     ) {
+    }
+
+    /** v3.7.0 TFB-D2: submissions carry the score and truncated SQL the student submitted. */
+    default void recordExerciseAttempt(
+        String exerciseId,
+        String status,
+        boolean successful,
+        Duration duration,
+        String errorCode,
+        Integer score,
+        String sqlText
+    ) {
+        recordExerciseAttempt(exerciseId, status, successful, duration, errorCode);
     }
 
     default void recordActivityEvaluation(
@@ -70,5 +112,28 @@ public interface LearningEventService {
     }
 
     default void recordKnowledgeSearch(int queryLength, int resultCount) {
+    }
+
+    /** v3.7.0 TFB-D2: carries a short search preview; the full query never uploads. */
+    default void recordKnowledgeSearch(int queryLength, int resultCount, String queryPreview) {
+        recordKnowledgeSearch(queryLength, resultCount);
+    }
+
+    /** v3.7.0 TFB-D3: mastery snapshot changed materially for one knowledge point. */
+    default void recordMasteryChanged(
+        String knowledgePoint, String level, int masteryPercent, int attempts, int passes, int failures
+    ) {
+    }
+
+    /** v3.7.0 TFB-D3: ~30 minutes of app-open learning time (no input monitoring). */
+    default void recordDailyActive(int activeMinutes) {
+    }
+
+    /** v3.7.0 TFB-D3: reading progress crossed a threshold for one article revision. */
+    default void recordKnowledgeArticleRead(String articleId, int revision, int progressPercent) {
+    }
+
+    /** v3.7.0 TFB-D3: assistant question metadata plus a truncated question preview. */
+    default void recordAssistantAsked(String question, int resultCount, String resultCode) {
     }
 }

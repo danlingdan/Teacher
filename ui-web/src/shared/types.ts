@@ -638,6 +638,9 @@ export interface CloudWorkspace {
     createdAt: string;
     members: Array<{ userId: string; role: string }>;
   }>;
+  /** v3.7.0 TFB-C1/C2：同步偏好（暂停上传 / 自动同步开关，默认开）。 */
+  syncPaused?: boolean;
+  autoSyncEnabled?: boolean;
 }
 /** Teacher-facing roster entry with contact details (cloud.class.roster). */
 export interface CloudClassRosterMember {
@@ -645,6 +648,34 @@ export interface CloudClassRosterMember {
   email: string;
   displayName: string;
   role: string;
+}
+
+/** v3.7.0 TFB-S2：班级学情总览（cloud.class.analytics.overview）。 */
+export interface CloudLearningOverview {
+  summary: {
+    classroomId: string;
+    studentCount: number;
+    activeStudentCount: number;
+    syncedEvents: number;
+    successfulEvents: number;
+    generatedAt: string;
+  };
+  activeStudents7d: number;
+  eventsByType: Record<string, number>;
+  trend: Array<{ date: string; activeStudents: number; events: number }>;
+}
+
+/** v3.7.0 TFB-S1：教师读到的学生学习事件明细（cloud.class.events）。 */
+export interface CloudEventEntry {
+  eventId: string;
+  eventType: string;
+  occurredAt: string;
+  successful: boolean;
+  attributes: Record<string, string>;
+}
+export interface CloudEventPage {
+  entries: CloudEventEntry[];
+  nextCursor?: number | null;
 }
 export interface CloudAssignment {
   id: string;

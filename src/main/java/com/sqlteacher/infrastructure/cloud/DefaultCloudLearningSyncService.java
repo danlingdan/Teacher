@@ -7,13 +7,16 @@ import com.sqlteacher.application.collaboration.CloudApiRequestException;
 import com.sqlteacher.application.collaboration.CloudLearningSyncService;
 import com.sqlteacher.application.collaboration.CloudSessionService;
 import com.sqlteacher.application.collaboration.CloudSyncItem;
+import com.sqlteacher.application.collaboration.CloudSyncPreferences;
 import com.sqlteacher.application.event.LearningEvent;
 import com.sqlteacher.application.event.LearningEventOwnerProvider;
 import com.sqlteacher.application.event.LearningEventQueryService;
 import com.sqlteacher.application.event.LearningEventRecorder;
+import com.sqlteacher.application.event.LearningEventUploadPolicy;
 import com.sqlteacher.application.event.LearningEventType;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -32,26 +35,47 @@ public final class DefaultCloudLearningSyncService implements CloudLearningSyncS
     private static final String CLOUD_ID = "_cloud_event_id";
     private static final int MAX_ATTEMPTS = 3;
     private static final Duration[] RETRY_DELAYS = {Duration.ofMillis(250), Duration.ofSeconds(1)};
+    /** Stays under the cloud's 16 KiB per-item limit so transport framing never tips it over. */
+    private static final int SAFE_PAYLOAD_BYTES = 15_360;
 
     private final CloudSyncApi api;
     private final CloudSessionService sessions;
     private final LearningEventQueryService query;
     private final LearningEventRecorder recorder;
+    private final CloudSyncPreferences preferences;
     private final Path stateDirectory;
     private final ObjectMapper json = new ObjectMapper().findAndRegisterModules();
     private volatile SyncStatus currentStatus = SyncStatus.idle();
 
     public DefaultCloudLearningSyncService(CloudSyncApi api, CloudSessionService sessions,
             LearningEventQueryService query, LearningEventRecorder recorder, Path stateDirectory) {
+        this(api, sessions, query, recorder,
+            new CloudSyncPreferences() {
+                @Override public boolean uploadPaused() { return false; }
+                @Override public void uploadPaused(boolean paused) { }
+                @Override public boolean autoSyncEnabled() { return false; }
+                @Override public void autoSyncEnabled(boolean enabled) { }
+            },
+            stateDirectory);
+    }
+
+    public DefaultCloudLearningSyncService(CloudSyncApi api, CloudSessionService sessions,
+            LearningEventQueryService query, LearningEventRecorder recorder,
+            CloudSyncPreferences preferences, Path stateDirectory) {
         this.api = Objects.requireNonNull(api);
         this.sessions = Objects.requireNonNull(sessions);
         this.query = Objects.requireNonNull(query);
         this.recorder = Objects.requireNonNull(recorder);
+        this.preferences = Objects.requireNonNull(preferences);
         this.stateDirectory = Objects.requireNonNull(stateDirectory);
     }
 
     @Override
     public synchronized SyncResult synchronize() {
+        if (preferences.uploadPaused()) {
+            // TFB-C1：用户暂停后任何触发路径都不上传，本地记录与作业离线队列不受影响。
+            throw new IllegalStateException("学习记录同步已暂停，可在「班级与云端」页恢复");
+        }
         var session = sessions.refresh().or(() -> sessions.current())
             .orElseThrow(() -> new IllegalStateException("请先登录云端账号"));
         String userId = session.user().id();
@@ -130,11 +154,7 @@ public final class DefaultCloudLearningSyncService implements CloudLearningSyncS
             if (event.attributes().containsKey(CLOUD_ID)) continue;
             if (!userId.equals(event.attributes().get(LearningEventOwnerProvider.OWNER_ATTRIBUTE))) continue;
             try {
-                String payload = json.writeValueAsString(Map.of(
-                    "connectionId", event.connectionId(),
-                    "successful", event.successful(),
-                    "attributes", event.attributes()
-                ));
+                String payload = pendingPayload(event);
                 pending.add(new CloudSyncItem(deviceId + ":" + event.id(), event.type().name(), payload,
                     event.occurredAt(), 0));
                 maxEventId = Math.max(maxEventId, event.id());
@@ -143,6 +163,29 @@ public final class DefaultCloudLearningSyncService implements CloudLearningSyncS
             }
         }
         return new PendingBatch(List.copyOf(pending), maxEventId);
+    }
+
+    /**
+     * TFB-D1: uploads pass the attribute allowlist so local bookkeeping keys never leave the
+     * device. If long text evidence still pushes a payload near the cloud per-item limit, the
+     * event is downgraded to metadata rather than dropped.
+     */
+    private String pendingPayload(LearningEventQueryService.QueriedLearningEvent event) throws IOException {
+        String payload = payloadWith(event,
+            LearningEventUploadPolicy.uploadAttributes(event.type(), event.attributes()));
+        if (payload.getBytes(StandardCharsets.UTF_8).length <= SAFE_PAYLOAD_BYTES) return payload;
+        return payloadWith(event,
+            LearningEventUploadPolicy.uploadAttributesWithoutLongText(event.type(), event.attributes()));
+    }
+
+    private String payloadWith(
+        LearningEventQueryService.QueriedLearningEvent event, Map<String, String> attributes
+    ) throws IOException {
+        return json.writeValueAsString(Map.of(
+            "connectionId", event.connectionId(),
+            "successful", event.successful(),
+            "attributes", attributes
+        ));
     }
 
     private record PendingBatch(List<CloudSyncItem> items, long maxEventId) { }

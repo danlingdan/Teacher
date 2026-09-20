@@ -98,6 +98,25 @@ public interface CloudClassroomApi {
 
     String exportClassLearningCsv(String accessToken, String classroomId);
 
+    /**
+     * v3.7.0 TFB-S2: class learning overview (summary + 7-day actives + event type
+     * distribution + 14-day trend). Servers without the capability throw; callers fall back
+     * to {@link #getClassLearningSummary}.
+     */
+    default ClassLearningOverview getClassLearningOverview(String accessToken, String classroomId) {
+        throw new UnsupportedOperationException("Class learning overview is unavailable");
+    }
+
+    /**
+     * v3.7.0 TFB-S1: one page of a classroom student's learning events for the teacher.
+     * Servers without the capability throw; callers must degrade honestly.
+     */
+    default ClassroomEventPage getClassroomEvents(String accessToken, String classroomId, String studentUserId,
+                                                  String eventType, Instant from, Instant to, Long cursor,
+                                                  int limit) {
+        throw new UnsupportedOperationException("Classroom event details are unavailable");
+    }
+
     default SubmissionFeedback saveSubmissionFeedback(String accessToken, String classroomId, String assignmentId,
                                                        String submissionId, FeedbackStatus status, String comment,
                                                        List<String> knowledgePointIds, long expectedVersion,

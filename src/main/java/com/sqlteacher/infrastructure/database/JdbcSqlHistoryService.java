@@ -2,6 +2,7 @@ package com.sqlteacher.infrastructure.database;
 
 import com.sqlteacher.application.execution.SqlHistoryEntry;
 import com.sqlteacher.application.execution.SqlHistoryService;
+import com.sqlteacher.application.event.LearningEventOwnerProvider;
 import com.sqlteacher.domain.SqlTeacherException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -19,9 +20,11 @@ public final class JdbcSqlHistoryService implements SqlHistoryService {
     private static final Logger log = LoggerFactory.getLogger(JdbcSqlHistoryService.class);
 
     private final JdbcConnectionFactory connectionFactory;
+    private final LearningEventOwnerProvider ownerProvider;
 
-    public JdbcSqlHistoryService(JdbcConnectionFactory connectionFactory) {
+    public JdbcSqlHistoryService(JdbcConnectionFactory connectionFactory, LearningEventOwnerProvider ownerProvider) {
         this.connectionFactory = Objects.requireNonNull(connectionFactory);
+        this.ownerProvider = Objects.requireNonNull(ownerProvider);
     }
 
     @Override
@@ -30,8 +33,8 @@ public final class JdbcSqlHistoryService implements SqlHistoryService {
         try (Connection connection = connectionFactory.open("app")) {
             connection.setAutoCommit(false);
             try (PreparedStatement statement = connection.prepareStatement("""
-                insert into sql_history(connection_id, sql_text, successful, row_count, duration_millis, created_at)
-                values (?, ?, ?, ?, ?, ?)
+                insert into sql_history(connection_id, sql_text, successful, row_count, duration_millis, created_at, owner_id)
+                values (?, ?, ?, ?, ?, ?, ?)
                 """)) {
                 statement.setString(1, entry.connectionId());
                 statement.setString(2, entry.sqlText());
@@ -40,6 +43,8 @@ public final class JdbcSqlHistoryService implements SqlHistoryService {
                 statement.setLong(5, Math.max(0, entry.durationMillis()));
                 // created_at 是 text 列：统一存 ISO-8601，避免 Timestamp 往返解析失败。
                 statement.setString(6, entry.createdAt().toString());
+                // v3.7.0 TFB-D4：历史按学习账号隔离；迁移出的 NULL 旧行保持全员可见。
+                statement.setString(7, ownerProvider.currentOwnerId());
                 statement.executeUpdate();
             }
             trimOldEntries(connection);
@@ -69,10 +74,12 @@ public final class JdbcSqlHistoryService implements SqlHistoryService {
                         h.sql_text, h.successful, h.row_count, h.duration_millis, h.created_at
                  from sql_history h
                  left join connection_profiles p on p.id = h.connection_id
+                 where h.owner_id = ? or h.owner_id is null
                  order by h.created_at desc, h.id desc
                  limit ?
                  """)) {
-            statement.setInt(1, boundedLimit);
+            statement.setString(1, ownerProvider.currentOwnerId());
+            statement.setInt(2, boundedLimit);
             try (ResultSet resultSet = statement.executeQuery()) {
                 List<SqlHistoryEntry> entries = new ArrayList<>();
                 while (resultSet.next()) {

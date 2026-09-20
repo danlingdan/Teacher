@@ -1,6 +1,8 @@
 package com.sqlteacher.server;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.sqlteacher.application.collaboration.AssignmentAnalyticsFilter;
 import com.sqlteacher.application.collaboration.AssignmentAnalyticsReport;
 import com.sqlteacher.application.collaboration.AssignmentAnalyticsRow;
@@ -14,11 +16,16 @@ import com.sqlteacher.application.collaboration.AssignmentSubmissionStatus;
 import com.sqlteacher.application.collaboration.AssignmentVersionConflictException;
 import com.sqlteacher.application.collaboration.AuthenticatedUser;
 import com.sqlteacher.application.collaboration.ClassAssignment;
+import com.sqlteacher.application.collaboration.ClassLearningOverview;
 import com.sqlteacher.application.collaboration.ClassLearningSummary;
 import com.sqlteacher.application.collaboration.ClassroomService;
 import com.sqlteacher.application.collaboration.CloudSyncItem;
+import com.sqlteacher.application.collaboration.ClassroomEventPage;
+import com.sqlteacher.application.collaboration.ClassroomEventPage.ClassroomEventEntry;
 import com.sqlteacher.application.collaboration.SubmissionOperationConflictException;
 import com.sqlteacher.application.collaboration.UserRole;
+import com.sqlteacher.application.event.LearningEventUploadPolicy;
+import com.sqlteacher.application.event.LearningEventType;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -33,6 +40,7 @@ import java.sql.SQLException;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -58,6 +66,8 @@ final class CloudClassroomStore extends CloudStoreBase implements ClassroomServi
     private static final String SUBMISSION_COLUMNS = "id,operation_id,classroom_id,assignment_id,user_id,"
         + "attempt_number,status,result_hash,error_code,client_completed_at,submitted_at";
     private static final int MAX_SYNC_ITEM_PAYLOAD_BYTES = 16_384;
+    /** v3.7.0 TFB-S4: per-user soft cap on stored learning events; uploads beyond it are refused. */
+    static final int MAX_SYNC_EVENTS_PER_USER = 100_000;
     /** 班级码字符集：去除 0/O/1/I/L 等易混字符，便于课堂口头/板书传递（v3.4.1 CLS-1）。 */
     private static final String JOIN_CODE_ALPHABET = "23456789ABCDEFGHJKMNPQRSTUVWXYZ";
     private static final int JOIN_CODE_LENGTH = 8;
@@ -248,6 +258,10 @@ final class CloudClassroomStore extends CloudStoreBase implements ClassroomServi
 
     int upload(AuthenticatedUser actor, List<CloudSyncItem> items) {
         if (items.size() > 500) throw new IllegalArgumentException("A sync batch may contain at most 500 items");
+        if (storedSyncEventCount(actor.id()) + items.size() > MAX_SYNC_EVENTS_PER_USER) {
+            throw new IllegalArgumentException(
+                "SYNC_EVENT_CAPACITY_EXCEEDED: per-user learning event storage limit reached");
+        }
         for (int index = 0; index < items.size(); index++) {
             String payload = items.get(index).payloadJson();
             int size = payload == null ? 0 : payload.getBytes(StandardCharsets.UTF_8).length;
@@ -264,7 +278,7 @@ final class CloudClassroomStore extends CloudStoreBase implements ClassroomServi
                 statement.setString(1, actor.id());
                 statement.setString(2, item.id());
                 statement.setString(3, item.type());
-                statement.setString(4, item.payloadJson());
+                statement.setString(4, sanitizeSyncPayload(item.type(), item.payloadJson()));
                 statement.setString(5, item.occurredAt().toString());
                 statement.addBatch();
             }
@@ -272,6 +286,38 @@ final class CloudClassroomStore extends CloudStoreBase implements ClassroomServi
             connection.commit();
             return items.size();
         } catch (SQLException error) { throw database(error); }
+    }
+
+    private int storedSyncEventCount(String userId) {
+        try (Connection connection = open(); PreparedStatement statement = connection.prepareStatement(
+            "select count(*) from sync_events where user_id=?")) {
+            statement.setString(1, userId);
+            try (ResultSet rows = statement.executeQuery()) { return rows.getInt(1); }
+        } catch (SQLException error) { throw database(error); }
+    }
+
+    /**
+     * TFB-D1 defense in depth: stored payloads keep only the upload allowlist attributes for
+     * known event types. Unparseable payloads are stored unchanged (the class summary already
+     * counts them), and unknown event types keep their non-bookkeeping attributes so a newer
+     * client can still sync to an older server without losing evidence.
+     */
+    private String sanitizeSyncPayload(String eventType, String payload) {
+        if (payload == null || payload.isBlank()) return payload;
+        try {
+            if (!(JSON.readTree(payload) instanceof ObjectNode root)) return payload;
+            if (!root.has("attributes") || !root.get("attributes").isObject()) return payload;
+            Map<String, String> attributes = new LinkedHashMap<>();
+            for (Iterator<Map.Entry<String, JsonNode>> fields = root.get("attributes").fields(); fields.hasNext(); ) {
+                Map.Entry<String, JsonNode> field = fields.next();
+                attributes.put(field.getKey(), field.getValue().asText());
+            }
+            ObjectNode sanitized = root.putObject("attributes");
+            LearningEventUploadPolicy.uploadAttributes(eventType, attributes).forEach(sanitized::put);
+            return JSON.writeValueAsString(root);
+        } catch (IOException error) {
+            return payload;
+        }
     }
 
     List<CloudSyncItem> download(AuthenticatedUser actor, long afterVersion) {
@@ -496,9 +542,10 @@ final class CloudClassroomStore extends CloudStoreBase implements ClassroomServi
             Instant submittedAt = clock.instant();
             try (PreparedStatement statement = connection.prepareStatement(
                 "insert into assignment_submissions(id,operation_id,classroom_id,assignment_id,user_id,"
-                    + "attempt_number,status,result_hash,error_code,client_completed_at,submitted_at) "
+                    + "attempt_number,status,result_hash,error_code,client_completed_at,submitted_at,"
+                    + "submission_payload_json) "
                     + "values(?,?,?,?,?,(select coalesce(max(attempt_number),0)+1 from assignment_submissions "
-                    + "where assignment_id=? and user_id=?),?,?,?,?,?) "
+                    + "where assignment_id=? and user_id=?),?,?,?,?,?,?) "
                     + "on conflict(user_id,operation_id) do nothing")) {
                 statement.setString(1, id);
                 statement.setString(2, request.operationId());
@@ -514,6 +561,7 @@ final class CloudClassroomStore extends CloudStoreBase implements ClassroomServi
                 statement.setString(11, request.clientCompletedAt() == null
                     ? null : request.clientCompletedAt().toString());
                 statement.setString(12, submittedAt.toString());
+                statement.setString(13, request.submissionPayload());
                 if (statement.executeUpdate() == 0) {
                     AssignmentSubmission concurrent = submissionByOperation(
                         connection, actor.id(), request.operationId());
@@ -684,7 +732,10 @@ final class CloudClassroomStore extends CloudStoreBase implements ClassroomServi
         StringBuilder sql = new StringBuilder(
             "select u.id,u.email,u.display_name,count(s.id) attempt_count,"
                 + "coalesce(sum(case when s.status='PASSED' then 1 else 0 end),0) passed_attempts,"
-                + "max(s.submitted_at) last_submitted_at from classroom_members m "
+                + "max(s.submitted_at) last_submitted_at,"
+                + "(select s2.submission_payload_json from assignment_submissions s2 "
+                + "where s2.assignment_id=? and s2.user_id=u.id order by s2.submitted_at desc limit 1) last_payload "
+                + "from classroom_members m "
                 + "join users u on u.id=m.user_id left join assignment_submissions s "
                 + "on s.assignment_id=? and s.user_id=m.user_id");
         if (filter.from() != null) sql.append(" and s.submitted_at>=?");
@@ -694,6 +745,8 @@ final class CloudClassroomStore extends CloudStoreBase implements ClassroomServi
         List<AssignmentAnalyticsRow> rows = new ArrayList<>();
         try (PreparedStatement statement = connection.prepareStatement(sql.toString())) {
             int parameter = 1;
+            // 参数顺序与 SQL 中 ? 出现顺序一致：子查询的 assignment_id、join 的 assignment_id、from、to、classroom_id。
+            statement.setString(parameter++, assignmentId);
             statement.setString(parameter++, assignmentId);
             if (filter.from() != null) statement.setString(parameter++, filter.from().toString());
             if (filter.to() != null) statement.setString(parameter++, filter.to().toString());
@@ -708,7 +761,8 @@ final class CloudClassroomStore extends CloudStoreBase implements ClassroomServi
                     rows.add(new AssignmentAnalyticsRow(
                         result.getString("id"), result.getString("email"), result.getString("display_name"),
                         status, attempts, passedAttempts,
-                        lastSubmittedAt == null ? null : Instant.parse(lastSubmittedAt)
+                        lastSubmittedAt == null ? null : Instant.parse(lastSubmittedAt),
+                        result.getString("last_payload")
                     ));
                 }
             }
@@ -793,6 +847,177 @@ final class CloudClassroomStore extends CloudStoreBase implements ClassroomServi
         }
         return new ClassLearningSummary(
             classroomId, seenStudents.size(), activeStudents.size(), events, success, clock.instant());
+    }
+
+    /**
+     * v3.7.0 TFB-S2: one-pass overview for the teacher — the classic summary numbers plus a
+     * 7-day active-student count, a per-type event distribution, and a 14-day UTC daily trend.
+     */
+    ClassLearningOverview classLearningOverview(AuthenticatedUser actor, String classroomId) {
+        requireTeacher(actor, classroomId);
+        java.util.Set<String> seenStudents = new java.util.HashSet<>();
+        java.util.Set<String> activeStudents = new java.util.HashSet<>();
+        java.util.Set<String> activeStudents7d = new java.util.HashSet<>();
+        Map<String, Long> eventsByType = new java.util.TreeMap<>();
+        Map<String, java.util.Set<String>> activeByDay = new java.util.TreeMap<>();
+        Map<String, Long> eventsByDay = new java.util.TreeMap<>();
+        int events = 0;
+        int success = 0;
+        int unreadablePayloads = 0;
+        Instant now = clock.instant();
+        Instant weekAgo = now.minus(java.time.Duration.ofDays(7));
+        Instant windowStart = java.time.LocalDate.ofInstant(now, java.time.ZoneOffset.UTC)
+            .minusDays(13).atStartOfDay(java.time.ZoneOffset.UTC).toInstant();
+        try (Connection c = open(); PreparedStatement s = c.prepareStatement(
+            "select m.user_id,e.event_type,e.occurred_at,e.payload_json from classroom_members m "
+            + "join sync_events e on e.user_id=m.user_id "
+            + "where m.classroom_id=? and m.role='STUDENT'")) {
+            s.setString(1, classroomId);
+            try (ResultSet r = s.executeQuery()) {
+                while (r.next()) {
+                    String userId = r.getString(1);
+                    seenStudents.add(userId);
+                    events++;
+                    activeStudents.add(userId);
+                    eventsByType.merge(r.getString(2), 1L, Long::sum);
+                    try {
+                        Instant occurred = Instant.parse(r.getString(3));
+                        if (!occurred.isBefore(weekAgo)) activeStudents7d.add(userId);
+                        if (!occurred.isBefore(windowStart)) {
+                            String day = occurred.toString().substring(0, 10);
+                            eventsByDay.merge(day, 1L, Long::sum);
+                            activeByDay.computeIfAbsent(day, ignored -> new java.util.HashSet<>()).add(userId);
+                        }
+                    } catch (RuntimeException unparsableTimestamp) {
+                        unreadablePayloads++;
+                        continue;
+                    }
+                    try {
+                        if (JSON.readTree(r.getString(4)).path("successful").asBoolean(false)) success++;
+                    } catch (IOException error) {
+                        unreadablePayloads++;
+                    }
+                }
+            }
+        } catch (SQLException e) {
+            throw database(e);
+        }
+        if (unreadablePayloads > 0) {
+            log.warn("class learning overview for {}: skipped {} sync events with unreadable payloads", classroomId, unreadablePayloads);
+        }
+        java.time.LocalDate today = java.time.LocalDate.ofInstant(now, java.time.ZoneOffset.UTC);
+        List<ClassLearningOverview.DailyActivity> trend = new ArrayList<>();
+        for (int offset = 13; offset >= 0; offset--) {
+            String day = today.minusDays(offset).toString();
+            trend.add(new ClassLearningOverview.DailyActivity(day,
+                activeByDay.getOrDefault(day, java.util.Set.of()).size(),
+                eventsByDay.getOrDefault(day, 0L)));
+        }
+        return new ClassLearningOverview(
+            new ClassLearningSummary(classroomId, seenStudents.size(), activeStudents.size(), events, success, now),
+            activeStudents7d.size(), eventsByType, trend);
+    }
+
+    /**
+     * v3.7.0 TFB-S1: one page of a classroom student's synced learning events for the teacher.
+     * Reads are limited to student members of the given classroom and every page read is
+     * written to the export audit trail.
+     */
+    ClassroomEventPage classroomEvents(AuthenticatedUser actor, String classroomId, String studentUserId,
+                                       String eventType, Instant from, Instant to, Long cursor, int limit) {
+        requireTeacher(actor, classroomId);
+        if (studentUserId == null || studentUserId.isBlank()) {
+            throw new IllegalArgumentException("studentUserId is required");
+        }
+        if (limit < 1 || limit > 200) {
+            throw new IllegalArgumentException("limit must be between 1 and 200");
+        }
+        requireStudentMember(classroomId, studentUserId);
+        LearningEventType filterType = parseEventType(eventType);
+        StringBuilder sql = new StringBuilder(
+            "select event_id,event_type,payload_json,occurred_at,version from sync_events where user_id=?");
+        if (filterType != null) sql.append(" and event_type=?");
+        if (from != null) sql.append(" and occurred_at>=?");
+        if (to != null) sql.append(" and occurred_at<=?");
+        if (cursor != null) sql.append(" and version>?");
+        sql.append(" order by version limit ?");
+        List<ClassroomEventEntry> entries = new ArrayList<>();
+        Long nextCursor = null;
+        try (Connection c = open(); PreparedStatement s = c.prepareStatement(sql.toString())) {
+            int index = 1;
+            s.setString(index++, studentUserId);
+            if (filterType != null) s.setString(index++, filterType.name());
+            if (from != null) s.setString(index++, from.toString());
+            if (to != null) s.setString(index++, to.toString());
+            if (cursor != null) s.setLong(index++, cursor);
+            // 请求页大小 + 1：多取一行只为判断是否还有下一页，游标取本页最后一行的 version，
+            // 下一页从它的后继开始，不跳过、不重复任何事件。
+            s.setInt(index, limit + 1);
+            Long lastIncludedVersion = null;
+            boolean hasMore = false;
+            try (ResultSet r = s.executeQuery()) {
+                while (r.next()) {
+                    if (entries.size() < limit) {
+                        entries.add(entry(r.getString(1), r.getString(2), r.getString(3), r.getString(4)));
+                        lastIncludedVersion = r.getLong(5);
+                    } else {
+                        hasMore = true;
+                    }
+                }
+            }
+            nextCursor = hasMore && lastIncludedVersion != null ? lastIncludedVersion : null;
+            try (PreparedStatement audit = c.prepareStatement(
+                "insert into export_audit(id,user_id,classroom_id,row_count,created_at) values(?,?,?,?,?)")) {
+                audit.setString(1, UUID.randomUUID().toString());
+                audit.setString(2, actor.id());
+                audit.setString(3, classroomId);
+                audit.setInt(4, entries.size());
+                audit.setString(5, clock.instant().toString());
+                audit.executeUpdate();
+            }
+        } catch (SQLException e) {
+            throw database(e);
+        }
+        return new ClassroomEventPage(List.copyOf(entries), nextCursor);
+    }
+
+    private ClassroomEventEntry entry(String eventId, String eventType, String payload, String occurredAt) {
+        Map<String, String> attributes = new LinkedHashMap<>();
+        boolean successful = false;
+        try {
+            JsonNode root = JSON.readTree(payload);
+            successful = root.path("successful").asBoolean(false);
+            JsonNode payloadAttributes = root.get("attributes");
+            if (payloadAttributes != null && payloadAttributes.isObject()) {
+                payloadAttributes.fields().forEachRemaining(field ->
+                    attributes.put(field.getKey(), field.getValue().asText()));
+            }
+        } catch (IOException unreadable) {
+            log.warn("classroom event {}: payload unreadable, returning metadata only", eventId);
+        }
+        return new ClassroomEventEntry(eventId, eventType, Instant.parse(occurredAt), successful, attributes);
+    }
+
+    private LearningEventType parseEventType(String eventType) {
+        if (eventType == null || eventType.isBlank()) return null;
+        try {
+            return LearningEventType.valueOf(eventType);
+        } catch (IllegalArgumentException unknownType) {
+            throw new IllegalArgumentException("Unknown event type: " + eventType);
+        }
+    }
+
+    private void requireStudentMember(String classroomId, String studentUserId) {
+        try (Connection c = open(); PreparedStatement s = c.prepareStatement(
+            "select 1 from classroom_members where classroom_id=? and user_id=? and role='STUDENT'")) {
+            s.setString(1, classroomId);
+            s.setString(2, studentUserId);
+            try (ResultSet r = s.executeQuery()) {
+                if (!r.next()) throw new IllegalArgumentException("student is not a member of this classroom");
+            }
+        } catch (SQLException e) {
+            throw database(e);
+        }
     }
 
     String exportClassLearningCsv(AuthenticatedUser actor, String classroomId) {

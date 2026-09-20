@@ -1,5 +1,6 @@
 package com.sqlteacher.infrastructure.database;
 
+import com.sqlteacher.application.connection.DatabaseDialect;
 import com.sqlteacher.application.execution.SqlExecutionRequest;
 import com.sqlteacher.application.execution.SqlExecutionResult;
 import com.sqlteacher.application.execution.SqlExecutionService;
@@ -61,9 +62,10 @@ public final class JdbcSqlExecutionService implements SqlExecutionService {
                 request.sql().length()
         );
 
+        DatabaseDialect dialect = connectionProvider.dialect(request.connectionId());
         SqlRiskAnalysis risk = DeveloperSqlExecutionPolicy.apply(riskAnalysisService.analyze(
             request.sql(),
-            connectionProvider.dialect(request.connectionId())
+            dialect
         ), safetyModeService.isDeveloperModeEnabled());
 
         log.debug("Risk analysis result: level={}, executable={}, confirmationRequired={}, type={}",
@@ -159,7 +161,9 @@ public final class JdbcSqlExecutionService implements SqlExecutionService {
                             risk.statementType(),
                             duration,
                             result.rows().size(),
-                            null
+                            null,
+                            request.sql(),
+                            dialect.name()
                     );
                     
                     return result;
@@ -181,7 +185,9 @@ public final class JdbcSqlExecutionService implements SqlExecutionService {
                     risk.statementType(),
                     duration,
                     result.affectedRows(),
-                    null
+                    null,
+                    request.sql(),
+                    dialect.name()
             );
             
             return result;
@@ -203,7 +209,9 @@ public final class JdbcSqlExecutionService implements SqlExecutionService {
                     risk.statementType(),
                     duration,
                     0,
-                    failure.errorCode()
+                    failure.errorCode(),
+                    request.sql(),
+                    dialect.name()
             );
 
             // v3.5.0 SFE-2：SQL 类失败追加教学解读；其余分类（连接/权限等）不掺教学文案。
@@ -227,7 +235,9 @@ public final class JdbcSqlExecutionService implements SqlExecutionService {
                     risk.statementType(),
                     duration,
                     0,
-                    failure.errorCode()
+                    failure.errorCode(),
+                    request.sql(),
+                    dialect.name()
             );
             log.warn("SQL execution failed unexpectedly, connectionId={}, failureType={}, exceptionType={}",
                     request.connectionId(),

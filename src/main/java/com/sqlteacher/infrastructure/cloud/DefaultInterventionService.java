@@ -77,6 +77,8 @@ public final class DefaultInterventionService implements InterventionService {
             boolean teacher = classroom.members().stream().anyMatch(member ->
                 member.userId().equals(session.user().id()) && member.role() == UserRole.TEACHER);
             if (!teacher && !session.user().hasRole(UserRole.ADMIN)) continue;
+            // v3.7.0 TFB-T5：班级近 7 日活跃事实作为候选证据补充；旧云端不支持时静默省略。
+            String activityEvidence = classActivityEvidence(token, classroom.id());
             for (ClassAssignment assignment : api.listAssignments(token, classroom.id())) {
                 if (assignment.status() != AssignmentStatus.PUBLISHED) continue;
                 var report = api.getAssignmentAnalytics(token, classroom.id(), assignment.id(),
@@ -87,7 +89,8 @@ public final class DefaultInterventionService implements InterventionService {
                     String id = stableId(classroom.id(), assignment.id(), row.userId(), rule.reason());
                     result.add(new InterventionCandidate(id, classroom.id(), classroom.name(), assignment.id(),
                         assignment.title(), row.userId(), displayName(row), rule.reason(),
-                        evidenceSummary(rule, row), rule.priority(), InterventionStatus.OPEN, now));
+                        evidenceSummary(rule, row) + activityEvidence, rule.priority(),
+                        InterventionStatus.OPEN, now));
                 }
             }
         }
@@ -202,6 +205,16 @@ public final class DefaultInterventionService implements InterventionService {
     }
 
     /** Attempt count and last submission time are evidence text; they no longer feed the stable id. */
+    private String classActivityEvidence(String token, String classroomId) {
+        try {
+            var overview = api.getClassLearningOverview(token, classroomId);
+            return "；班级近7日活跃 " + overview.activeStudents7d() + "/"
+                + overview.summary().studentCount() + " 人";
+        } catch (RuntimeException unavailable) {
+            return "";
+        }
+    }
+
     private static String evidenceSummary(CandidateRule rule, AssignmentAnalyticsRow row) {
         List<String> facts = new ArrayList<>();
         if (row.attemptCount() > 0) facts.add("已尝试 " + row.attemptCount() + " 次");

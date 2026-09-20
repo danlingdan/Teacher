@@ -285,6 +285,9 @@ final class CloudSchemaMigrator {
             // 唯一索引允许多个 NULL：存量班级先加列，由 CloudClassroomStore 构造时回填短码。
             CloudSchemaStep.sql("create unique index if not exists idx_classrooms_join_code "
                 + "on classrooms(join_code)")
+        )),
+        new CloudMigration(10, "v3.7.0 submission payload for teacher review", List.of(
+            CloudSchemaStep.addColumnIfMissing("assignment_submissions", "submission_payload_json text")
         ))
     ));
 

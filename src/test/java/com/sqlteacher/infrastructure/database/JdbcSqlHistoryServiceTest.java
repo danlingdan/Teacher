@@ -10,6 +10,7 @@ import java.time.Instant;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class JdbcSqlHistoryServiceTest {
@@ -17,7 +18,11 @@ class JdbcSqlHistoryServiceTest {
     Path tempDir;
 
     private JdbcSqlHistoryService service() throws Exception {
-        return new JdbcSqlHistoryService(TestDatabases.migratedFactory(tempDir));
+        return serviceAs("");
+    }
+
+    private JdbcSqlHistoryService serviceAs(String owner) throws Exception {
+        return new JdbcSqlHistoryService(TestDatabases.migratedFactory(tempDir), () -> owner);
     }
 
     private SqlHistoryEntry entry(String connectionId, String sql, boolean successful) {
@@ -61,5 +66,25 @@ class JdbcSqlHistoryServiceTest {
         service.clear();
 
         assertTrue(service.list(10).isEmpty());
+    }
+
+    @Test
+    void shouldIsolateHistoryByOwnerWhileKeepingLegacyRowsVisible() throws Exception {
+        JdbcSqlHistoryService legacy = serviceAs(null);
+        legacy.record(entry("demo", "legacy select", true));
+        JdbcSqlHistoryService alice = serviceAs("alice");
+        alice.record(entry("demo", "alice select", true));
+        JdbcSqlHistoryService bob = serviceAs("bob");
+        bob.record(entry("demo", "bob select", true));
+
+        List<SqlHistoryEntry> aliceView = alice.list(10);
+        List<SqlHistoryEntry> bobView = bob.list(10);
+
+        // v3.7.0 TFB-D4：新记录按 owner 隔离；迁移出的 NULL 旧行对所有人可见。
+        assertEquals(2, aliceView.size());
+        assertTrue(aliceView.stream().anyMatch(item -> item.sqlText().equals("alice select")));
+        assertTrue(aliceView.stream().anyMatch(item -> item.sqlText().equals("legacy select")));
+        assertFalse(aliceView.stream().anyMatch(item -> item.sqlText().equals("bob select")));
+        assertEquals(2, bobView.size());
     }
 }

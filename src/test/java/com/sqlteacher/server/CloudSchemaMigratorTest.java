@@ -52,10 +52,11 @@ class CloudSchemaMigratorTest {
 
         currentStoreInitialization(database);
 
-        // 迁移不得改动任何既有对象；唯一的允许增量是 v3.4.1 Migration 9（班级码唯一索引，
-        // 以及 SQLite 对 classrooms 建表 DDL 的 ALTER 重写，见 assertMigration9Delta）。
+        // 迁移不得改动任何既有对象；允许增量仅限已记录的 Migration 9（班级码唯一索引）与
+        // v3.7.0 Migration 10（提交载荷列），以及 SQLite 对建表 DDL 的 ALTER 重写
+        // （见 assertDocumentedMigrationDelta）。
         List<String> after = schemaObjects(database);
-        assertMigration9Delta(before, after);
+        assertDocumentedMigrationDelta(before, after);
         assertEquals(userVersion(database), 2);
         assertVersionRows(database, CloudSchemaMigrator.latestVersion());
     }
@@ -77,7 +78,7 @@ class CloudSchemaMigratorTest {
         assertEquals(schemaObjects(golden), schemaObjects(interrupted),
             "resuming an interrupted legacy provisioning must converge to the same schema");
         assertEquals(tableColumns(golden), tableColumns(interrupted));
-        assertEquals(Set.of(1, 2, 3, 4, 5, 6, 7, 8, 9), appliedVersions(interrupted));
+        assertEquals(Set.of(1, 2, 3, 4, 5, 6, 7, 8, 9, 10), appliedVersions(interrupted));
     }
 
     @Test
@@ -119,44 +120,57 @@ class CloudSchemaMigratorTest {
     }
 
     /**
-     * The documented v3.4.1 migration-9 schema delta: the classroom join-code unique index.
+     * The documented migration schema deltas: the v3.4.1 classroom join-code unique index
+     * and the v3.7.0 assignment submission payload column.
      * sqlite_master 存储的是 SQLite 规范化后的 DDL 文本（大写关键字、丢弃 if not exists）。
      */
     private static final String JOIN_CODE_INDEX_OBJECT =
         "index|idx_classrooms_join_code|classrooms|CREATE UNIQUE INDEX idx_classrooms_join_code "
             + "on classrooms(join_code)";
     private static final String JOIN_CODE_COLUMN = "classrooms|join_code|TEXT|0|null|0";
+    private static final String SUBMISSION_PAYLOAD_COLUMN =
+        "assignment_submissions|submission_payload_json|TEXT|0|null|0";
     /** sqlite_master 中 classrooms 建表 DDL 行的定位前缀。 */
     private static final String CLASSROOMS_TABLE_MARKER = "|classrooms|classrooms|CREATE TABLE classrooms(";
+    private static final String ASSIGNMENTS_TABLE_MARKER =
+        "|assignment_submissions|assignment_submissions|CREATE TABLE assignment_submissions(";
 
     /**
-     * v3.4.1 起允许的迁移增量仅为 Migration 9：班级码唯一索引、classrooms 新增 join_code 列，
-     * 以及 SQLite 对 classrooms 建表 DDL 的 ALTER 规范化重写（追加 join_code）。其余对象必须一致。
+     * 已记录的迁移增量仅为：Migration 9（班级码唯一索引、classrooms 增列）与 v3.7.0
+     * Migration 10（assignment_submissions 增列），以及 SQLite 对这两张表建表 DDL 的
+     * ALTER 规范化重写。其余对象必须一致。
      */
-    private static void assertMigration9Delta(List<String> before, List<String> after) throws Exception {
-        List<String> beforeRest = withoutClassroomsTableDdl(before);
-        List<String> afterRest = withoutClassroomsTableDdl(after);
+    private static void assertDocumentedMigrationDelta(List<String> before, List<String> after) {
+        List<String> beforeRest = withoutRewrittenTableDdl(before);
+        List<String> afterRest = withoutRewrittenTableDdl(after);
         List<String> missing = beforeRest.stream()
             .filter(object -> !afterRest.contains(object)).toList();
         assertTrue(missing.isEmpty(),
             "migration must not alter legacy schema objects; missing after migration: " + missing);
         assertEquals(List.of(JOIN_CODE_INDEX_OBJECT),
             afterRest.stream().filter(object -> !beforeRest.contains(object)).toList(),
-            "the only documented schema-object delta after migration 9 is the join-code index");
+            "the only documented new schema object after migration is the join-code index");
 
-        String beforeClassrooms = before.stream()
-            .filter(object -> object.contains(CLASSROOMS_TABLE_MARKER)).findFirst().orElseThrow();
         String afterClassrooms = after.stream()
             .filter(object -> object.contains(CLASSROOMS_TABLE_MARKER)).findFirst().orElseThrow();
         assertTrue(afterClassrooms.contains("join_code"),
             "ALTER must append join_code to the classrooms DDL: " + afterClassrooms);
-        assertTrue(afterClassrooms.length() > beforeClassrooms.length(),
-            "the rewritten classrooms DDL must be the original plus join_code");
+        String afterAssignments = after.stream()
+            .filter(object -> object.contains(ASSIGNMENTS_TABLE_MARKER)).findFirst().orElseThrow();
+        assertTrue(afterAssignments.contains("submission_payload_json"),
+            "ALTER must append submission_payload_json to the assignment_submissions DDL: " + afterAssignments);
+    }
+
+    private static List<String> withoutRewrittenTableDdl(List<String> objects) {
+        return objects.stream()
+            .filter(object -> !object.contains(CLASSROOMS_TABLE_MARKER)
+                && !object.contains(ASSIGNMENTS_TABLE_MARKER))
+            .toList();
     }
 
     private static void assertSchemaObjectsMatchLegacyWithDocumentedDelta(Path legacy, Path current) {
         try {
-            assertMigration9Delta(schemaObjects(legacy), schemaObjects(current));
+            assertDocumentedMigrationDelta(schemaObjects(legacy), schemaObjects(current));
         } catch (Exception error) {
             throw new IllegalStateException(error);
         }
@@ -170,16 +184,13 @@ class CloudSchemaMigratorTest {
                 .filter(column -> !currentColumns.contains(column)).toList();
             assertTrue(missing.isEmpty(),
                 "migration must not alter legacy table columns; missing in current: " + missing);
-            assertEquals(List.of(JOIN_CODE_COLUMN),
-                currentColumns.stream().filter(column -> !legacyColumns.contains(column)).toList(),
-                "the only documented column delta after migration 9 is classrooms.join_code");
+            assertEquals(Set.of(JOIN_CODE_COLUMN, SUBMISSION_PAYLOAD_COLUMN),
+            Set.copyOf(currentColumns.stream().filter(column -> !legacyColumns.contains(column)).toList()),
+                "the only documented column deltas are classrooms.join_code and "
+                    + "assignment_submissions.submission_payload_json");
         } catch (Exception error) {
             throw new IllegalStateException(error);
         }
-    }
-
-    private static List<String> withoutClassroomsTableDdl(List<String> objects) {
-        return objects.stream().filter(object -> !object.contains(CLASSROOMS_TABLE_MARKER)).toList();
     }
 
     /** The exact startup order of SqlTeacherCloudServer with the current stores. */

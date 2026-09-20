@@ -208,7 +208,7 @@ public final class Nl2SqlServiceImpl implements Nl2SqlService {
                 );
             }
 
-            recordAiGeneration(request.connectionId(), true, aiResult.model(), null);
+            recordAiGeneration(request.connectionId(), true, aiResult.model(), null, response.sqlDraft());
             return new Nl2SqlPlan(
                 response.sqlDraft(),
                 response.intent(),
@@ -236,8 +236,14 @@ public final class Nl2SqlServiceImpl implements Nl2SqlService {
     }
 
     private void recordAiGeneration(String connectionId, boolean successful, String model, String errorCode) {
+        recordAiGeneration(connectionId, successful, model, errorCode, null);
+    }
+
+    /** v3.7.0 TFB-D2: successful drafts also carry the generated SQL for teacher evidence. */
+    private void recordAiGeneration(String connectionId, boolean successful, String model,
+                                    String errorCode, String generatedSql) {
         try {
-            learningEventService.recordAiGeneration(connectionId, successful, model, PROMPT_VERSION, errorCode);
+            learningEventService.recordAiGeneration(connectionId, successful, model, PROMPT_VERSION, errorCode, generatedSql);
         } catch (Exception ex) {
             log.warn("Failed to record AI generation event", ex);
         }
@@ -367,7 +373,7 @@ public final class Nl2SqlServiceImpl implements Nl2SqlService {
                 return SqlErrorExplanation.failure(validationError, aiResult.model());
             }
 
-            recordAiGeneration(connectionId, true, aiResult.model(), null);
+            recordAiGeneration(connectionId, true, aiResult.model(), null, response.correctedSql());
             return SqlErrorExplanation.success(
                 response.errorCause(),
                 response.correctionSuggestion(),

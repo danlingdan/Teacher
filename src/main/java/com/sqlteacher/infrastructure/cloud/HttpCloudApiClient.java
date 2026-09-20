@@ -32,7 +32,9 @@ import com.sqlteacher.application.collaboration.CloudSyncApi;
 import com.sqlteacher.application.collaboration.CloudAuthenticationService;
 import com.sqlteacher.application.collaboration.CloudSyncItem;
 import com.sqlteacher.application.collaboration.ClassAssignment;
+import com.sqlteacher.application.collaboration.ClassLearningOverview;
 import com.sqlteacher.application.collaboration.ClassLearningSummary;
+import com.sqlteacher.application.collaboration.ClassroomEventPage;
 import com.sqlteacher.application.collaboration.UserRole;
 import com.sqlteacher.application.collaboration.AssignmentContentSnapshot;
 import com.sqlteacher.application.collaboration.CloudNotification;
@@ -303,6 +305,23 @@ public final class HttpCloudApiClient implements CloudCapabilityApi, CloudAuthAp
     }
     @Override public ClassLearningSummary getClassLearningSummary(String token,String classroomId){return request("classes/"+classroomId+"/analytics","GET",null,token,ClassLearningSummary.class);}
     @Override public String exportClassLearningCsv(String token,String classroomId){return send("classes/"+classroomId+"/analytics/export","GET",null,token);}
+    @Override public ClassLearningOverview getClassLearningOverview(String token,String classroomId){return request("classes/"+classroomId+"/analytics/overview","GET",null,token,ClassLearningOverview.class);}
+    @Override public ClassroomEventPage getClassroomEvents(String token,String classroomId,String studentUserId,String eventType,Instant from,Instant to,Long cursor,int limit){return request("classes/"+classroomId+"/events"+classroomEventsQuery(studentUserId,eventType,from,to,cursor,limit),"GET",null,token,ClassroomEventPage.class);}
+
+    private static String classroomEventsQuery(String studentUserId, String eventType, Instant from, Instant to,
+                                               Long cursor, int limit) {
+        Map<String, String> parameters = new java.util.LinkedHashMap<>();
+        parameters.put("studentUserId", studentUserId);
+        if (eventType != null && !eventType.isBlank()) parameters.put("eventType", eventType);
+        if (from != null) parameters.put("from", from.toString());
+        if (to != null) parameters.put("to", to.toString());
+        if (cursor != null) parameters.put("cursor", Long.toString(cursor));
+        parameters.put("limit", Integer.toString(limit));
+        return "?" + parameters.entrySet().stream()
+            .map(entry -> URLEncoder.encode(entry.getKey(), StandardCharsets.UTF_8) + "="
+                + URLEncoder.encode(entry.getValue(), StandardCharsets.UTF_8))
+            .collect(java.util.stream.Collectors.joining("&"));
+    }
 
     private static Map<String, String> assignmentBody(String exerciseId, String title, String description,
                                                       Instant dueAt) {

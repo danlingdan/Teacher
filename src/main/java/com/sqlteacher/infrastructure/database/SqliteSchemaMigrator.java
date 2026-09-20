@@ -1292,6 +1292,20 @@ final class SqliteSchemaMigrator {
                     )
                     """
             )
+        ),
+        new Migration(
+            27,
+            "Tag SQL execution history with the learning owner for v3.7.0 per-account isolation",
+            List.of(
+                "alter table sql_history add column owner_id text"
+            )
+        ),
+        new Migration(
+            28,
+            "Carry the assignment submission payload through the offline retry queue (v3.7.0)",
+            List.of(
+                "alter table assignment_submission_queue add column payload_json text"
+            )
         )
     );
 

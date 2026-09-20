@@ -90,6 +90,7 @@ public final class SqlTeacherCloudServer {
     private final V111AccountStore v111AccountStore;
     private final V31ExerciseBankStore v31BankStore;
     private final CloudKnowledgeIndexService knowledgeIndex;
+    private java.util.concurrent.ScheduledExecutorService retentionPurgeExecutor;
     private final AuthRateLimiter authRateLimiter = new AuthRateLimiter();
     private final HttpServer server;
 
@@ -161,11 +162,52 @@ public final class SqlTeacherCloudServer {
     void start() {
         server.start();
         knowledgeIndex.start();
+        startSyncRetentionPurge();
     }
 
     void stop() {
         knowledgeIndex.close();
+        if (retentionPurgeExecutor != null) {
+            retentionPurgeExecutor.shutdownNow();
+        }
         server.stop(0);
+    }
+
+    /**
+     * v3.7.0 TFB-S4: daily automatic retention for synced learning events, defaulting to a
+     * 180-day window (decision point 2, 2026-09-20). Override with
+     * SQLTEACHER_CLOUD_SYNC_RETENTION_DAYS; 0 disables the purge entirely.
+     */
+    private synchronized void startSyncRetentionPurge() {
+        if (retentionPurgeExecutor != null) return;
+        int days;
+        try {
+            days = Integer.parseInt(System.getenv().getOrDefault("SQLTEACHER_CLOUD_SYNC_RETENTION_DAYS", "180"));
+        } catch (NumberFormatException badConfiguration) {
+            days = 180;
+        }
+        if (days <= 0) {
+            log.info("Automatic sync retention disabled by configuration");
+            return;
+        }
+        final int retentionDays = days;
+        retentionPurgeExecutor = Executors.newSingleThreadScheduledExecutor(runnable -> {
+            Thread thread = new Thread(runnable, "sync-retention-purge");
+            thread.setDaemon(true);
+            return thread;
+        });
+        retentionPurgeExecutor.scheduleWithFixedDelay(() -> {
+            try {
+                int removed = adminStore.autoPurgeSyncEvents(
+                    java.time.Instant.now().minus(java.time.Duration.ofDays(retentionDays)));
+                if (removed > 0) {
+                    log.info("Automatic sync retention removed {} learning events older than {} days",
+                        removed, retentionDays);
+                }
+            } catch (RuntimeException error) {
+                log.info("Automatic sync retention skipped: {}", error.getClass().getSimpleName());
+            }
+        }, 10, 24 * 60L * 60L, java.util.concurrent.TimeUnit.SECONDS);
     }
     int port() {
         return server.getAddress().getPort();
@@ -446,6 +488,25 @@ public final class SqlTeacherCloudServer {
                 respondCsv(exchange, classroomStore.exportClassLearningCsv(actor, segments[4]));
                 return;
             }
+            // v3.7.0 TFB-S2：班级学情总览（汇总 + 7 日活跃 + 类型分布 + 14 日趋势）。
+            // 独立端点而非扩展 /analytics 响应，保证旧桌面客户端解析不受新增字段影响。
+            if (segments.length == 7 && "analytics".equals(segments[5]) && "overview".equals(segments[6])
+                && "GET".equals(exchange.getRequestMethod())) {
+                respond(exchange, 200, classroomStore.classLearningOverview(actor, segments[4]));
+                return;
+            }
+            // v3.7.0 TFB-S1：教师分页读取本班学生的学习事件明细（含审计）。
+            if (segments.length == 6 && "events".equals(segments[5]) && "GET".equals(exchange.getRequestMethod())) {
+                String rawQuery = exchange.getRequestURI().getRawQuery();
+                long cursorValue = queryLong(rawQuery, "cursor", -1);
+                long limitValue = queryLong(rawQuery, "limit", 50);
+                respond(exchange, 200, classroomStore.classroomEvents(actor, segments[4],
+                    queryValue(rawQuery, "studentUserId"),
+                    queryValue(rawQuery, "eventType"),
+                    instantOrNull(queryValue(rawQuery, "from")), instantOrNull(queryValue(rawQuery, "to")),
+                    cursorValue < 0 ? null : cursorValue, (int) Math.min(limitValue, Integer.MAX_VALUE)));
+                return;
+            }
             if (segments.length == 8 && "assignments".equals(segments[5]) && "copy".equals(segments[7])
                 && "POST".equals(exchange.getRequestMethod())) {
                 Map<String, String> body = request(exchange);
@@ -461,9 +522,13 @@ public final class SqlTeacherCloudServer {
             if (segments.length == 8 && "assignments".equals(segments[5]) && "submissions".equals(segments[7])) {
                 if ("POST".equals(exchange.getRequestMethod())) {
                     Map<String, String> body = request(exchange);
+                    String payload = body.get("submissionPayload");
+                    if (payload != null && payload.getBytes(StandardCharsets.UTF_8).length > 16_384) {
+                        throw new IllegalArgumentException("submissionPayload must be at most 16384 bytes");
+                    }
                     AssignmentSubmissionRequest submission = new AssignmentSubmissionRequest(
                         body.get("operationId"), requiredBoolean(body, "passed"), body.get("resultHash"),
-                        body.get("errorCode"), instantOrNull(body.get("clientCompletedAt"))
+                        body.get("errorCode"), instantOrNull(body.get("clientCompletedAt")), payload
                     );
                     AssignmentSubmission created = classroomStore.submitAssignment(actor, segments[4], segments[6], submission);
                     v14Store.recordSubmissionNotification(actor, segments[4], created);
@@ -529,6 +594,8 @@ public final class SqlTeacherCloudServer {
         try {
             AuthenticatedUser actor = authStore.authenticate(token(exchange));
             if ("POST".equals(exchange.getRequestMethod())) {
+                // v3.7.0 TFB-S4：上传限流（每账号每分钟 1 次），配合客户端 5 分钟自动同步节流。
+                enforceQuota("sync-upload:" + actor.id(), 1, Duration.ofMinutes(1));
                 SyncUpload upload = JSON.readValue(requestBytes(exchange, SYNC_UPLOAD_MAX_BYTES), SyncUpload.class);
                 respond(exchange, 200, Map.of("accepted", classroomStore.upload(actor, upload.items())));
                 return;
@@ -543,6 +610,8 @@ public final class SqlTeacherCloudServer {
             respond(exchange, 413, errorResponse("REQUEST_TOO_LARGE", "Request body is too large."));
         } catch (CloudClassroomStore.SyncItemPayloadTooLargeException error) {
             respond(exchange, 400, errorResponse("PAYLOAD_TOO_LARGE", error.getMessage()));
+        } catch (AuthRateLimiter.RateLimitedException error) {
+            respondRateLimited(exchange, error);
         } catch (SecurityException error) {
             respond(exchange, 401, errorResponse("UNAUTHORIZED", "Login is required."));
         } catch (IllegalArgumentException error) {

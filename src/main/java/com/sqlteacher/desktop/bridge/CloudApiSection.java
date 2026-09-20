@@ -9,6 +9,7 @@ import com.sqlteacher.application.collaboration.CloudClassroomApi;
 import com.sqlteacher.application.collaboration.CloudPlanningApi;
 import com.sqlteacher.application.collaboration.CloudLearningSyncService;
 import com.sqlteacher.application.collaboration.CloudSessionService;
+import com.sqlteacher.application.collaboration.CloudSyncPreferences;
 import com.sqlteacher.application.collaboration.DesktopAccessProfile;
 import com.sqlteacher.application.collaboration.UserRole;
 
@@ -31,11 +32,13 @@ final class CloudApiSection extends ApiSection {
     @Override
     public Set<String> supportedMethods() {
         return Set.of(
-            "cloud.workspace", "cloud.sync", "cloud.class.create", "cloud.class.member.add",
+            "cloud.workspace", "cloud.sync", "cloud.sync.preferences", "cloud.sync.preferences.update",
+            "cloud.class.create", "cloud.class.member.add",
             "cloud.class.roster", "cloud.class.join", "cloud.class.join-code", "cloud.class.join-code.rotate",
             "cloud.assignments", "cloud.assignment.create", "cloud.assignment.update",
             "cloud.assignment.copy", "cloud.assignment.status", "cloud.class.analytics",
-            "cloud.class.analytics.export", "cloud.assignment.analytics", "cloud.assignment.analytics.export",
+            "cloud.class.analytics.export", "cloud.class.analytics.overview", "cloud.class.events",
+            "cloud.assignment.analytics", "cloud.assignment.analytics.export",
             "cloud.assignment.snapshot", "cloud.assignment.submit", "cloud.feedback.list",
             "cloud.feedback.save", "cloud.feedback.draft", "cloud.mastery",
             "cloud.notifications", "cloud.notification.read",
@@ -52,6 +55,8 @@ final class CloudApiSection extends ApiSection {
         return switch (method) {
             case "cloud.workspace" -> cloudWorkspace(params, cancellation);
             case "cloud.sync" -> cloudSync(cancellation, events);
+            case "cloud.sync.preferences" -> cloudSyncPreferencesGet(params, cancellation);
+            case "cloud.sync.preferences.update" -> cloudSyncPreferencesUpdate(params, cancellation);
             case "cloud.class.create" -> cloudClassCreate(params, cancellation);
             case "cloud.class.member.add" -> cloudClassMemberAdd(params, cancellation);
             case "cloud.class.roster" -> cloudClassRoster(params, cancellation);
@@ -65,6 +70,8 @@ final class CloudApiSection extends ApiSection {
             case "cloud.assignment.status" -> cloudAssignmentStatus(params, cancellation);
             case "cloud.class.analytics" -> cloudClassAnalytics(params, cancellation);
             case "cloud.class.analytics.export" -> cloudClassAnalyticsExport(params, cancellation);
+            case "cloud.class.analytics.overview" -> cloudClassAnalyticsOverview(params, cancellation);
+            case "cloud.class.events" -> cloudClassEvents(params, cancellation);
             case "cloud.assignment.analytics" -> cloudAssignmentAnalytics(params, cancellation);
             case "cloud.assignment.analytics.export" -> cloudAssignmentAnalyticsExport(params, cancellation);
             case "cloud.assignment.snapshot" -> cloudAssignmentSnapshot(params, cancellation);
@@ -98,6 +105,10 @@ final class CloudApiSection extends ApiSection {
         ObjectNode result = mapper.createObjectNode();
         var sync = core.getBean(CloudLearningSyncService.class).status();
         result.set("sync", mapper.valueToTree(sync));
+        // v3.7.0 TFB-C1/C2：同步偏好随 workspace 下发，供同步卡渲染开关。
+        var preferences = core.getBean(CloudSyncPreferences.class);
+        result.put("syncPaused", preferences.uploadPaused());
+        result.put("autoSyncEnabled", preferences.autoSyncEnabled());
         result.put("signedIn", current.isPresent());
         result.put("recoverable", true);
         ArrayNode classes = result.putArray("classes");
@@ -137,6 +148,29 @@ final class CloudApiSection extends ApiSection {
         cancellation.throwIfCancelled();
         emit(events, "progress", "phase", "cloud-sync-completed");
         return mapper.valueToTree(result);
+    }
+
+    /** v3.7.0 TFB-C1：读取同步偏好（暂停上传 / 自动同步开关）。 */
+    private JsonNode cloudSyncPreferencesGet(JsonNode params, CancellationToken cancellation) {
+        cancellation.throwIfCancelled();
+        var preferences = context().getBean(CloudSyncPreferences.class);
+        ObjectNode result = mapper.createObjectNode();
+        result.put("uploadPaused", preferences.uploadPaused());
+        result.put("autoSyncEnabled", preferences.autoSyncEnabled());
+        return result;
+    }
+
+    /** v3.7.0 TFB-C1/C2：更新同步偏好；字段缺省表示不改动。 */
+    private JsonNode cloudSyncPreferencesUpdate(JsonNode params, CancellationToken cancellation) {
+        cancellation.throwIfCancelled();
+        var preferences = context().getBean(CloudSyncPreferences.class);
+        if (params.has("uploadPaused")) {
+            preferences.uploadPaused(params.path("uploadPaused").asBoolean(false));
+        }
+        if (params.has("autoSyncEnabled")) {
+            preferences.autoSyncEnabled(params.path("autoSyncEnabled").asBoolean(true));
+        }
+        return cloudSyncPreferencesGet(params, cancellation);
     }
 
     private JsonNode cloudClassCreate(JsonNode params, CancellationToken cancellation) {
@@ -257,6 +291,31 @@ final class CloudApiSection extends ApiSection {
             session.accessToken(), requiredText(params, "classroomId", 128)));
     }
 
+    /** v3.7.0 TFB-S2: 班级学情总览（汇总 + 7 日活跃 + 类型分布 + 14 日趋势），仅教师。 */
+    private JsonNode cloudClassAnalyticsOverview(JsonNode params, CancellationToken cancellation) {
+        requireTeacher();
+        cancellation.throwIfCancelled();
+        var session = requireCloudSession();
+        return mapper.valueToTree(context().getBean(CloudClassroomApi.class).getClassLearningOverview(
+            session.accessToken(), requiredText(params, "classroomId", 128)));
+    }
+
+    /** v3.7.0 TFB-S1: 教师分页读取本班指定学生的学习事件明细。 */
+    private JsonNode cloudClassEvents(JsonNode params, CancellationToken cancellation) {
+        requireTeacher();
+        cancellation.throwIfCancelled();
+        var session = requireCloudSession();
+        long cursor = params.path("cursor").asLong(-1);
+        int limit = Math.max(1, Math.min(200, params.path("limit").asInt(50)));
+        String eventType = params.path("eventType").asText("").trim();
+        return mapper.valueToTree(context().getBean(CloudClassroomApi.class).getClassroomEvents(
+            session.accessToken(), requiredText(params, "classroomId", 128),
+            requiredText(params, "studentUserId", 128),
+            eventType.isEmpty() ? null : eventType,
+            optionalInstant(params, "from"), optionalInstant(params, "to"),
+            cursor < 0 ? null : cursor, limit));
+    }
+
     private JsonNode cloudAssignmentAnalytics(JsonNode params, CancellationToken cancellation) {
         requireTeacher();
         cancellation.throwIfCancelled();
@@ -297,9 +356,14 @@ final class CloudApiSection extends ApiSection {
         requireCloudSession();
         var service = context().getBean(com.sqlteacher.application.collaboration.AssignmentDeliveryService.class);
         Instant completedAt = optionalInstant(params, "completedAt");
+        // v3.7.0 TFB-S3：随提交上送截断 SQL 与得分（可选，客户端已白名单化）。
+        String sqlText = params.path("sqlText").asText("").trim();
+        Integer score = params.hasNonNull("score") && params.path("score").isInt()
+            ? Math.max(0, Math.min(100, params.path("score").asInt())) : null;
         var result = service.deliver(requiredText(params, "classroomId", 128),
             requiredText(params, "assignmentId", 128), params.path("passed").asBoolean(false),
-            optionalErrorCode(params), completedAt == null ? Instant.now() : completedAt);
+            optionalErrorCode(params), completedAt == null ? Instant.now() : completedAt,
+            sqlText.isEmpty() ? null : sqlText, score);
         cancellation.throwIfCancelled();
         ObjectNode response = mapper.valueToTree(result);
         response.put("pending", service.pendingCount());

@@ -46,13 +46,20 @@ public final class JdbcAssignmentDeliveryService implements AssignmentDeliverySe
     @Override
     public AssignmentDeliveryResult deliver(String classroomId, String assignmentId, boolean passed,
                                              String errorCode, Instant completedAt) {
+        return deliver(classroomId, assignmentId, passed, errorCode, completedAt, null, null);
+    }
+
+    @Override
+    public AssignmentDeliveryResult deliver(String classroomId, String assignmentId, boolean passed,
+                                             String errorCode, Instant completedAt, String sqlText, Integer score) {
         CloudAuthenticationService.Session session = currentSession();
         String operationId = UUID.randomUUID().toString();
         Instant completed = Objects.requireNonNull(completedAt, "completedAt must not be null");
         String normalizedError = normalizeErrorCode(errorCode);
         String resultHash = resultHash(classroomId, assignmentId, passed, normalizedError);
+        String payload = submissionPayload(sqlText, score);
         PendingSubmission pending = new PendingSubmission(operationId, session.user().id(), classroomId,
-            assignmentId, passed, resultHash, normalizedError, completed, 0);
+            assignmentId, passed, resultHash, normalizedError, completed, 0, payload);
         try {
             var delivered = api.submitAssignment(session.accessToken(), classroomId, assignmentId,
                 request(pending));
@@ -108,13 +115,14 @@ public final class JdbcAssignmentDeliveryService implements AssignmentDeliverySe
         Instant now = Instant.now();
         try (Connection connection = open(); PreparedStatement statement = connection.prepareStatement(
             "insert into assignment_submission_queue(operation_id,account_id,classroom_id,assignment_id,passed,"
-                + "result_hash,error_code,client_completed_at,status,retry_count,next_retry_at,last_error_type,"
-                + "created_at,updated_at) values(?,?,?,?,?,?,?,?,'QUEUED',0,?,?,?,?)")) {
+                + "result_hash,error_code,client_completed_at,payload_json,status,retry_count,next_retry_at,"
+                + "last_error_type,created_at,updated_at) values(?,?,?,?,?,?,?,?,?,'QUEUED',0,?,?,?,?)")) {
             bindPending(statement, item);
-            statement.setString(9, now.toString());
-            statement.setString(10, error.getClass().getSimpleName());
-            statement.setString(11, now.toString());
+            statement.setString(9, item.payloadJson());
+            statement.setString(10, now.toString());
+            statement.setString(11, error.getClass().getSimpleName());
             statement.setString(12, now.toString());
+            statement.setString(13, now.toString());
             statement.executeUpdate();
         } catch (SQLException sqlError) {
             throw database(sqlError);
@@ -125,7 +133,7 @@ public final class JdbcAssignmentDeliveryService implements AssignmentDeliverySe
         List<PendingSubmission> result = new ArrayList<>();
         try (Connection connection = open(); PreparedStatement statement = connection.prepareStatement(
             "select operation_id,account_id,classroom_id,assignment_id,passed,result_hash,error_code,"
-                + "client_completed_at,retry_count from assignment_submission_queue "
+                + "client_completed_at,retry_count,payload_json from assignment_submission_queue "
                 + "where account_id=? and status='QUEUED' and next_retry_at<=? order by created_at limit 50")) {
             statement.setString(1, accountId);
             statement.setString(2, now.toString());
@@ -134,7 +142,7 @@ public final class JdbcAssignmentDeliveryService implements AssignmentDeliverySe
                     rows.getString("operation_id"), rows.getString("account_id"), rows.getString("classroom_id"),
                     rows.getString("assignment_id"), rows.getInt("passed") != 0, rows.getString("result_hash"),
                     rows.getString("error_code"), Instant.parse(rows.getString("client_completed_at")),
-                    rows.getInt("retry_count")));
+                    rows.getInt("retry_count"), rows.getString("payload_json")));
             }
             return List.copyOf(result);
         } catch (SQLException error) {
@@ -200,7 +208,22 @@ public final class JdbcAssignmentDeliveryService implements AssignmentDeliverySe
 
     private AssignmentSubmissionRequest request(PendingSubmission item) {
         return new AssignmentSubmissionRequest(item.operationId(), item.passed(), item.resultHash(),
-            item.errorCode(), item.completedAt());
+            item.errorCode(), item.completedAt(), item.payloadJson());
+    }
+
+    /** v3.7.0 TFB-S3：截断 SQL 与得分打包为载荷 JSON；空白输入不产生载荷。 */
+    private String submissionPayload(String sqlText, Integer score) {
+        if (sqlText == null || sqlText.isBlank()) return null;
+        try {
+            String truncated = sqlText.length() > 4_000 ? sqlText.substring(0, 4_000) : sqlText;
+            java.util.Map<String, Object> payload = new java.util.LinkedHashMap<>();
+            payload.put("sqlText", truncated);
+            payload.put("sqlTruncated", sqlText.length() > 4_000);
+            if (score != null) payload.put("score", score);
+            return new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(payload);
+        } catch (com.fasterxml.jackson.core.JsonProcessingException error) {
+            return null;
+        }
     }
 
     private CloudAuthenticationService.Session currentSession() {
@@ -240,5 +263,5 @@ public final class JdbcAssignmentDeliveryService implements AssignmentDeliverySe
 
     private record PendingSubmission(String operationId, String accountId, String classroomId,
                                      String assignmentId, boolean passed, String resultHash, String errorCode,
-                                     Instant completedAt, int retryCount) { }
+                                     Instant completedAt, int retryCount, String payloadJson) { }
 }

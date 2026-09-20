@@ -35,6 +35,79 @@ type BankChannelInfo = {
   updatedAt: string;
 };
 
+/** v3.7.0 TFB-C1/C2：云端同步偏好——学习记录自动同步（默认开）与上传暂停；与「班级与云端」页同一份配置。 */
+function CloudSyncSettings() {
+  const client = useQueryClient();
+  const toast = useToast();
+  const preferences = useQuery({
+    queryKey: ["cloud", "sync-preferences"],
+    queryFn: () =>
+      localAppRequest<{ uploadPaused: boolean; autoSyncEnabled: boolean }>(
+        "cloud.sync.preferences",
+        {},
+      ),
+    retry: false,
+    staleTime: 30_000,
+  });
+  const update = useMutation({
+    mutationFn: (patch: { uploadPaused?: boolean; autoSyncEnabled?: boolean }) =>
+      localAppRequest<{ uploadPaused: boolean; autoSyncEnabled: boolean }>(
+        "cloud.sync.preferences.update",
+        patch,
+      ),
+    onSuccess: (value) => client.setQueryData(["cloud", "sync-preferences"], value),
+    onError: (error: Error) => toast("error", `同步偏好保存失败：${error.message}`),
+  });
+  return (
+    <details className="content-card settings-panel">
+      <summary>
+        <span className="settings-symbol">☁</span>
+        <span>
+          <strong>云端同步</strong>
+          <small>学习记录上传与自动同步开关</small>
+        </span>
+        <span className="settings-chevron">›</span>
+      </summary>
+      <div className="settings-panel-body">
+        {preferences.isError ? (
+          <p className="muted">同步偏好暂不可用（Java 桌面服务版本较旧）。</p>
+        ) : (
+          <>
+            <label className="setting-toggle">
+              <input
+                type="checkbox"
+                checked={!preferences.data?.uploadPaused}
+                onChange={(event) =>
+                  update.mutate({ uploadPaused: !event.target.checked })
+                }
+              />
+              <span>
+                <strong>上传学习记录到云端</strong>
+                <small>
+                  关闭后手动、登录与自动同步都不再上传；本地记录与作业离线队列不受影响。
+                </small>
+              </span>
+            </label>
+            <label className="setting-toggle">
+              <input
+                type="checkbox"
+                checked={preferences.data?.autoSyncEnabled}
+                onChange={(event) =>
+                  update.mutate({ autoSyncEnabled: event.target.checked })
+                }
+              />
+              <span>
+                <strong>登录期间自动同步学习记录</strong>
+                <small>约每 5 分钟一次；仅班级教师可见，教师查看明细会记入审计。</small>
+              </span>
+            </label>
+          </>
+        )}
+      </div>
+    </details>
+  );
+}
+
 /** 题库更新设置（W4.2/W4.3）：订阅频道 + 定时检查 opt-in（默认关闭）；v3.4.1 起为可折叠面板，默认收起。 */
 function BankUpdateSettings({
   preferences,
@@ -867,6 +940,7 @@ export function SettingsPage() {
           </div>
         </div>
       </details>
+      <CloudSyncSettings />
       <BankUpdateSettings preferences={query.data?.bank} role={query.data?.role} />
       <details className="content-card settings-panel">
         <summary>

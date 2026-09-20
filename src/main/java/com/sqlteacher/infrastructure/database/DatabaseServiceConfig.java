@@ -105,8 +105,9 @@ public class DatabaseServiceConfig {
     }
 
     @Bean
-    public SqlHistoryService sqlHistoryService(JdbcConnectionFactory connectionFactory) {
-        return new JdbcSqlHistoryService(connectionFactory);
+    public SqlHistoryService sqlHistoryService(JdbcConnectionFactory connectionFactory,
+            com.sqlteacher.application.event.LearningEventOwnerProvider ownerProvider) {
+        return new JdbcSqlHistoryService(connectionFactory, ownerProvider);
     }
 
     @Bean

@@ -14,6 +14,8 @@ import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 @Tag("integration")
 class DefaultCloudLearningSyncServiceTest {
@@ -65,6 +67,67 @@ class DefaultCloudLearningSyncServiceTest {
         assertEquals(CloudLearningSyncService.SyncStatus.State.SUCCEEDED, service.status().state());
         assertEquals(3, service.status().attempt());
         assertEquals(0, service.status().pending());
+    }
+
+    @Test
+    void shouldUploadSanitizedAttributesWithoutLocalBookkeeping() throws Exception {
+        Instant now = Instant.parse("2026-07-22T00:00:00Z");
+        var uploaded = new LearningEventQueryService.QueriedLearningEvent(
+            7, LearningEventType.SQL_EXECUTION, now, "demo", true,
+            Map.of(
+                LearningEventOwnerProvider.OWNER_ATTRIBUTE, "user-1",
+                "statementType", "SELECT",
+                "rogueLocalKey", "internal",
+                "sqlText", "SELECT " + "x".repeat(20_000)
+            ),
+            now
+        );
+        var api = new RecordingCloudSyncApi();
+        var sessions = new InMemoryCloudSessionService();
+        sessions.signIn(new CloudAuthenticationService.Session(
+            "token", Instant.now().plusSeconds(3_600),
+            new AuthenticatedUser("user-1", "user@example.com", "User", Set.of(UserRole.STUDENT))
+        ));
+        var service = new DefaultCloudLearningSyncService(
+            api, sessions, new StubQuery(List.of(uploaded)), ignored -> { }, stateDirectory);
+
+        service.synchronize();
+
+        Map<String, Object> payload = new com.fasterxml.jackson.databind.ObjectMapper().readValue(
+            api.uploaded.getFirst().payloadJson(),
+            new com.fasterxml.jackson.core.type.TypeReference<Map<String, Object>>() { });
+        @SuppressWarnings("unchecked")
+        Map<String, Object> attributes = (Map<String, Object>) payload.get("attributes");
+        assertEquals("SELECT", attributes.get("statementType"));
+        assertFalse(attributes.containsKey(LearningEventOwnerProvider.OWNER_ATTRIBUTE));
+        assertFalse(attributes.containsKey("rogueLocalKey"));
+        // 超长文本被截断，事件本体不丢。
+        assertEquals(LearningEventUploadPolicy.SQL_TEXT_LIMIT,
+            ((String) attributes.get("sqlText")).length());
+    }
+
+    @Test
+    void shouldNotUploadAnythingWhileUserPausesSync() {
+        Instant now = Instant.parse("2026-07-22T00:00:00Z");
+        var api = new RecordingCloudSyncApi();
+        var sessions = new InMemoryCloudSessionService();
+        sessions.signIn(new CloudAuthenticationService.Session(
+            "token", Instant.now().plusSeconds(3_600),
+            new AuthenticatedUser("user-1", "user@example.com", "User", Set.of(UserRole.STUDENT))
+        ));
+        var paused = new CloudSyncPreferences() {
+            @Override public boolean uploadPaused() { return true; }
+            @Override public void uploadPaused(boolean value) { }
+            @Override public boolean autoSyncEnabled() { return false; }
+            @Override public void autoSyncEnabled(boolean value) { }
+        };
+        var service = new DefaultCloudLearningSyncService(
+            api, sessions, new StubQuery(List.of(event(1, now, "user-1"))), ignored -> { }, paused,
+            stateDirectory);
+
+        assertThrows(IllegalStateException.class, service::synchronize);
+
+        assertEquals(0, api.uploadAttempts);
     }
 
     private static LearningEventQueryService.QueriedLearningEvent event(long id, Instant occurredAt, String owner) {

@@ -35,6 +35,7 @@ public final class DefaultGroundedKnowledgeExplanationService implements Grounde
     private final AiTaskService aiTaskService;
     private final AiContextPolicy contextPolicy;
     private final ObjectMapper mapper;
+    private final com.sqlteacher.application.event.LearningEventService eventService;
 
     public DefaultGroundedKnowledgeExplanationService(
         CourseKnowledgeService knowledgeService,
@@ -51,10 +52,22 @@ public final class DefaultGroundedKnowledgeExplanationService implements Grounde
         AiTaskService aiTaskService,
         AiContextPolicy contextPolicy
     ) {
+        this(knowledgeService, retrievalService, aiTaskService, contextPolicy,
+            new com.sqlteacher.application.event.DefaultLearningEventService(ignored -> { }));
+    }
+
+    public DefaultGroundedKnowledgeExplanationService(
+        CourseKnowledgeService knowledgeService,
+        HybridKnowledgeRetrievalService retrievalService,
+        AiTaskService aiTaskService,
+        AiContextPolicy contextPolicy,
+        com.sqlteacher.application.event.LearningEventService eventService
+    ) {
         this.knowledgeService = Objects.requireNonNull(knowledgeService);
         this.retrievalService = Objects.requireNonNull(retrievalService);
         this.aiTaskService = Objects.requireNonNull(aiTaskService);
         this.contextPolicy = Objects.requireNonNull(contextPolicy);
+        this.eventService = Objects.requireNonNull(eventService);
         this.mapper = new ObjectMapper();
     }
 
@@ -66,6 +79,18 @@ public final class DefaultGroundedKnowledgeExplanationService implements Grounde
 
     @Override
     public GroundedKnowledgeAnswer explain(String question, CourseKnowledgeSearchFilter filter) {
+        GroundedKnowledgeAnswer answer = explainInternal(question, filter);
+        // v3.7.0 TFB-D3：提问元数据 + 截断问题预览（决策点 1，白名单上限 500 字符），不落回答全文。
+        try {
+            eventService.recordAssistantAsked(question, answer.citations().size(),
+                answer.aiGenerated() ? "ANSWERED" : "FELLBACK");
+        } catch (RuntimeException ignored) {
+            // 事件记录失败不阻断问答主流程。
+        }
+        return answer;
+    }
+
+    private GroundedKnowledgeAnswer explainInternal(String question, CourseKnowledgeSearchFilter filter) {
         PreparedKnowledge prepared = prepare(question, filter);
         if (prepared.citations().isEmpty()) {
             return new GroundedKnowledgeAnswer(false, "未检索到可以支撑回答的课程知识。", "", List.of(),

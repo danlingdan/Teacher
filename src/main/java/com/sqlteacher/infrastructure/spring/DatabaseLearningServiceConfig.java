@@ -50,8 +50,19 @@ public class DatabaseLearningServiceConfig {
 
     @Bean
     public LearningDiagnosisService learningDiagnosisService(JdbcConnectionFactory connectionFactory,
-                                                              LearningEventOwnerProvider ownerProvider) {
-        return new JdbcLearningDiagnosisService(connectionFactory, ownerProvider);
+                                                              LearningEventOwnerProvider ownerProvider,
+                                                              LearningEventService eventService) {
+        return new JdbcLearningDiagnosisService(connectionFactory, ownerProvider, eventService);
+    }
+
+    /** v3.7.0 TFB-D3：应用开启时长的粗粒度活跃心跳（无键鼠/屏幕监控）。 */
+    @Bean(destroyMethod = "close")
+    public com.sqlteacher.infrastructure.system.LearningActivityTracker learningActivityTracker(
+            LearningEventService eventService) {
+        com.sqlteacher.infrastructure.system.LearningActivityTracker tracker =
+            new com.sqlteacher.infrastructure.system.LearningActivityTracker(eventService);
+        tracker.start();
+        return tracker;
     }
 
     @Bean

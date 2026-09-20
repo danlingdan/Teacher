@@ -241,9 +241,24 @@ final class V111AccountStore {
                     "status", row.getString("status"), "summary", row.getString("summary"), "submittedAt", row.getString("created_at")));
             }
         } catch (SQLException error) { throw database(error); }
+        // v3.7.0 TFB-C3：数据主体可取回本人已同步的学习记录（与教师明细同源，仅限本人）。
+        List<Object> learningEvents = new ArrayList<>();
+        try (Connection connection = open(); PreparedStatement statement = connection.prepareStatement(
+            "select event_id,event_type,payload_json,occurred_at from sync_events where user_id=? order by occurred_at")) {
+            statement.setString(1, userId);
+            try (ResultSet row = statement.executeQuery()) {
+                while (row.next()) learningEvents.add(Map.of("eventId", row.getString("event_id"),
+                    "eventType", row.getString("event_type"), "payload", row.getString("payload_json"),
+                    "occurredAt", row.getString("occurred_at")));
+            }
+        } catch (SQLException error) { throw database(error); }
         String payload;
         try {
-            payload = JSON.writeValueAsString(Map.of("exportedAt", Instant.now().toString(), "problemReports", reportRows));
+            java.util.Map<String, Object> export = new java.util.LinkedHashMap<>();
+            export.put("exportedAt", Instant.now().toString());
+            export.put("problemReports", reportRows);
+            export.put("learningEvents", learningEvents);
+            payload = JSON.writeValueAsString(export);
         } catch (java.io.IOException error) {
             throw new IllegalStateException("Unable to build account export", error);
         }

@@ -70,8 +70,8 @@ public class DatabaseKnowledgeServiceConfig {
 
     @Bean
     public KnowledgeReadStateService knowledgeReadStateService(JdbcConnectionFactory connectionFactory,
-            LearningEventOwnerProvider ownerProvider) {
-        return new SqliteKnowledgeReadStateService(connectionFactory, ownerProvider);
+            LearningEventOwnerProvider ownerProvider, com.sqlteacher.application.event.LearningEventService eventService) {
+        return new SqliteKnowledgeReadStateService(connectionFactory, ownerProvider, eventService);
     }
 
     @Bean

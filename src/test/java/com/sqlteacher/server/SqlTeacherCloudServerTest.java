@@ -497,6 +497,79 @@ class SqlTeacherCloudServerTest {
     }
 
     @Test
+    void shouldStoreSubmissionPayloadAndExposeItToTeacherAnalytics() throws Exception {
+        Path database = start();
+        JsonNode teacher = register("tfb-payload-teacher@example.edu", "TFB Payload Teacher");
+        JsonNode student = register("tfb-payload-student@example.edu", "TFB Payload Student");
+        promoteTeacher(database, teacher.at("/user/id").asText());
+        String teacherToken = teacher.get("accessToken").asText();
+        String studentToken = student.get("accessToken").asText();
+
+        String classroomId = post("classes", teacherToken, "{\"name\":\"TFB payload class\"}").get("id").asText();
+        post("classes/" + classroomId + "/members", teacherToken,
+            "{\"email\":\"tfb-payload-student@example.edu\",\"role\":\"STUDENT\"}");
+        String assignmentId = post("classes/" + classroomId + "/assignments", teacherToken,
+            "{\"exerciseId\":\"select-1\",\"title\":\"载荷任务\"}").get("id").asText();
+
+        post("classes/" + classroomId + "/assignments/" + assignmentId + "/submissions", studentToken,
+            JSON.writeValueAsString(java.util.Map.of(
+                "operationId", "op-payload-0001",
+                "passed", true,
+                "resultHash", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "clientCompletedAt", "2026-09-20T03:00:00Z",
+                "submissionPayload", "{\"sqlText\":\"SELECT * FROM students WHERE score > 80\",\"score\":88}")));
+
+        JsonNode analytics = sendJson("GET", "classes/" + classroomId + "/assignments/" + assignmentId
+            + "/analytics", teacherToken);
+        String payload = analytics.get("rows").get(0).get("lastSubmissionPayload").asText();
+        assertEquals("SELECT * FROM students WHERE score > 80", JSON.readTree(payload).path("sqlText").asText());
+        assertEquals(88, JSON.readTree(payload).path("score").asInt());
+    }
+
+    @Test
+    void shouldServeTeacherLearningOverviewAndStudentEventDetails() throws Exception {
+        Path database = start();
+        JsonNode teacher = register("tfb-teacher@example.edu", "TFB Teacher");
+        JsonNode student = register("tfb-student@example.edu", "TFB Student");
+        promoteTeacher(database, teacher.at("/user/id").asText());
+        String teacherToken = teacher.get("accessToken").asText();
+        String studentToken = student.get("accessToken").asText();
+
+        String classroomId = post("classes", teacherToken, "{\"name\":\"TFB class\"}").get("id").asText();
+        post("classes/" + classroomId + "/members", teacherToken,
+            "{\"email\":\"tfb-student@example.edu\",\"role\":\"STUDENT\"}");
+
+        String payload = "{\"connectionId\":\"demo\",\"successful\":true,"
+            + "\"attributes\":{\"statementType\":\"SELECT\",\"sqlText\":\"SELECT 1\"}}";
+        post("sync/events", studentToken, JSON.writeValueAsString(java.util.Map.of("items", java.util.List.of(
+            java.util.Map.of("id", "dev:e1", "type", "SQL_EXECUTION", "payloadJson", payload,
+                "occurredAt", "2026-09-20T01:00:00Z"),
+            java.util.Map.of("id", "dev:e2", "type", "EXERCISE_FAILED", "payloadJson",
+                "{\"connectionId\":\"demo\",\"successful\":false,\"attributes\":{\"errorCode\":\"RESULT_MISMATCH\"}}",
+                "occurredAt", "2026-09-20T02:00:00Z")))));
+
+        JsonNode overview = sendJson("GET", "classes/" + classroomId + "/analytics/overview", teacherToken);
+        assertEquals(2, overview.at("/summary/syncedEvents").asInt());
+        assertEquals(1, overview.get("activeStudents7d").asInt());
+        assertEquals(1, overview.at("/eventsByType/SQL_EXECUTION").asInt());
+        assertEquals(14, overview.get("trend").size());
+
+        JsonNode page = sendJson("GET", "classes/" + classroomId + "/events?studentUserId="
+            + student.at("/user/id").asText() + "&limit=10", teacherToken);
+        assertEquals(2, page.get("entries").size());
+        assertEquals("SQL_EXECUTION", page.at("/entries/0/eventType").asText());
+        assertEquals("SELECT 1", page.at("/entries/0/attributes/sqlText").asText());
+
+        JsonNode filtered = sendJson("GET", "classes/" + classroomId + "/events?studentUserId="
+            + student.at("/user/id").asText() + "&eventType=EXERCISE_FAILED", teacherToken);
+        assertEquals(1, filtered.get("entries").size());
+
+        assertEquals(403, send("GET", "classes/" + classroomId + "/events?studentUserId="
+            + student.at("/user/id").asText(), studentToken, null).statusCode());
+        assertEquals(403, send("GET", "classes/" + classroomId + "/analytics/overview", studentToken, null).statusCode());
+    }
+
+    @Test
     void shouldPreviewArchiveRestoreAndBlockChangedRetentionScope() throws Exception {
         Path database = start();
         JsonNode admin = register("retention-admin@example.edu", "Retention Admin");
@@ -749,6 +822,12 @@ class SqlTeacherCloudServerTest {
         HttpResponse<String> response = send("GET", path, token, null);
         assertEquals(200, response.statusCode(), response.body());
         return response.body();
+    }
+
+    private JsonNode sendJson(String method, String path, String token) throws Exception {
+        HttpResponse<String> response = send(method, path, token, null);
+        assertEquals(200, response.statusCode(), response.body());
+        return JSON.readTree(response.body());
     }
 
     private HttpResponse<String> send(String method, String path, String token, String body) throws Exception {

@@ -196,7 +196,7 @@ public final class SqliteKnowledgeService implements KnowledgeDocumentService, K
                     ));
                 }
                 List<KnowledgeSearchResult> snapshot = List.copyOf(results);
-                eventService.recordKnowledgeSearch(query.length(), snapshot.size());
+                eventService.recordKnowledgeSearch(query.length(), snapshot.size(), query);
                 return snapshot;
             }
         } catch (SQLException error) {
@@ -580,7 +580,7 @@ public final class SqliteKnowledgeService implements KnowledgeDocumentService, K
             results = filteredFtsSearch(toFtsQuery(requestedQuery, " OR "), filter, limit, offset);
         }
         List<KnowledgeSearchResult> snapshot = List.copyOf(results);
-        eventService.recordKnowledgeSearch(requestedQuery.trim().length(), snapshot.size());
+        eventService.recordKnowledgeSearch(requestedQuery.trim().length(), snapshot.size(), requestedQuery.trim());
         return snapshot;
     }
 

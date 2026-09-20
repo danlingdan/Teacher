@@ -2198,6 +2198,76 @@ kbd {
 .class-roster .plain-list {
   margin-top: 8px;
 }
+/* v3.7.0 TFB-T1/T2：班级学情总览与学生学情画像。 */
+.class-overview {
+  margin-top: 4px;
+}
+.class-overview summary {
+  cursor: pointer;
+  padding: 8px 2px;
+}
+.class-overview .plain-list {
+  margin-top: 8px;
+}
+.class-overview-trend {
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  margin-top: 8px;
+  min-height: 64px;
+}
+.class-overview-bar {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+.class-overview-bar span {
+  font-size: 10px;
+  white-space: nowrap;
+}
+.class-overview-fill {
+  width: 100%;
+  max-width: 28px;
+  min-height: 2px;
+  border-radius: 4px 4px 0 0;
+  background: var(--accent, #2aa198);
+}
+.student-profile {
+  margin-top: 12px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-2);
+}
+.student-profile .plain-list li {
+  flex-wrap: wrap;
+}
+.student-profile .plain-list li span {
+  margin-left: 0;
+  flex-basis: 100%;
+}
+.student-profile .plain-list li span:first-of-type {
+  margin-left: auto;
+  flex-basis: auto;
+}
+.student-sql {
+  font-family: ui-monospace, monospace;
+  white-space: pre-wrap;
+  word-break: break-word;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: rgba(127, 127, 127, 0.12);
+}
+.sync-preference {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+  cursor: pointer;
+}
 .button-row {
   display: flex;
   flex-wrap: wrap;

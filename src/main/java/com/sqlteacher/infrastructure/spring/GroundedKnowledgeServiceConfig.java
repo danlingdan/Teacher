@@ -28,9 +28,10 @@ public class GroundedKnowledgeServiceConfig {
         CourseKnowledgeService knowledgeService,
         HybridKnowledgeRetrievalService retrievalService,
         AiTaskService taskService,
-        AiContextPolicy contextPolicy
+        AiContextPolicy contextPolicy,
+        com.sqlteacher.application.event.LearningEventService eventService
     ) {
-        return new DefaultGroundedKnowledgeExplanationService(knowledgeService, retrievalService, taskService, contextPolicy);
+        return new DefaultGroundedKnowledgeExplanationService(knowledgeService, retrievalService, taskService, contextPolicy, eventService);
     }
 
     @Bean

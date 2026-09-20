@@ -50,6 +50,20 @@ final class CloudAdministrationStore extends CloudStoreBase {
         super(database);
     }
 
+    /**
+     * v3.7.0 TFB-S4: automatic retention for synced learning events. Deletes (without archive)
+     * sync_events older than the cutoff; the daily daemon in the server logs the removed count.
+     */
+    int autoPurgeSyncEvents(java.time.Instant cutoff) {
+        try (Connection connection = open(); PreparedStatement statement = connection.prepareStatement(
+            "delete from sync_events where occurred_at < ?")) {
+            statement.setString(1, cutoff.toString());
+            return statement.executeUpdate();
+        } catch (SQLException error) {
+            throw new IllegalStateException("Cloud database operation failed", error);
+        }
+    }
+
     AdminHealthSummary adminHealth(AuthenticatedUser actor) {
         requireAdmin(actor);
         try (Connection connection = open()) {

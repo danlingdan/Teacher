@@ -1,6 +1,8 @@
 package com.sqlteacher.infrastructure.database;
 
+import com.sqlteacher.application.event.DefaultLearningEventService;
 import com.sqlteacher.application.event.LearningEventOwnerProvider;
+import com.sqlteacher.application.event.LearningEventService;
 import com.sqlteacher.application.event.LearningEventType;
 import com.sqlteacher.application.learning.DiagnosisReasonCode;
 import com.sqlteacher.application.learning.ActivityEvidencePolicy;
@@ -41,18 +43,33 @@ public final class JdbcLearningDiagnosisService implements LearningDiagnosisServ
 
     private final JdbcConnectionFactory connectionFactory;
     private final LearningEventOwnerProvider ownerProvider;
+    private final LearningEventService eventService;
     private final Clock clock;
 
     public JdbcLearningDiagnosisService(JdbcConnectionFactory connectionFactory,
                                         LearningEventOwnerProvider ownerProvider) {
-        this(connectionFactory, ownerProvider, Clock.systemUTC());
+        this(connectionFactory, ownerProvider, new DefaultLearningEventService(ignored -> { }), Clock.systemUTC());
+    }
+
+    public JdbcLearningDiagnosisService(JdbcConnectionFactory connectionFactory,
+                                        LearningEventOwnerProvider ownerProvider,
+                                        LearningEventService eventService) {
+        this(connectionFactory, ownerProvider, eventService, Clock.systemUTC());
     }
 
     JdbcLearningDiagnosisService(JdbcConnectionFactory connectionFactory,
                                  LearningEventOwnerProvider ownerProvider,
                                  Clock clock) {
+        this(connectionFactory, ownerProvider, new DefaultLearningEventService(ignored -> { }), clock);
+    }
+
+    JdbcLearningDiagnosisService(JdbcConnectionFactory connectionFactory,
+                                 LearningEventOwnerProvider ownerProvider,
+                                 LearningEventService eventService,
+                                 Clock clock) {
         this.connectionFactory = Objects.requireNonNull(connectionFactory);
         this.ownerProvider = Objects.requireNonNull(ownerProvider);
+        this.eventService = Objects.requireNonNull(eventService);
         this.clock = Objects.requireNonNull(clock);
     }
 
@@ -68,7 +85,16 @@ public final class JdbcLearningDiagnosisService implements LearningDiagnosisServ
                 connection, ownerId, now.minus(WINDOW)
             );
             List<MasterySnapshot> snapshots = calculate(ownerId, exercises, events, activityEvidence, now);
-            persistSnapshots(connection, ownerId, snapshots);
+            List<MasterySnapshot> changed = persistSnapshots(connection, ownerId, snapshots);
+            // v3.7.0 TFB-D3：实质变化（级别或百分比 ≥10）才记事件，教师端按每知识点最新事件重建。
+            for (MasterySnapshot item : changed) {
+                try {
+                    eventService.recordMasteryChanged(item.knowledgePoint(), item.level().name(),
+                        item.masteryPercent(), item.attempts(), item.passes(), item.failures());
+                } catch (RuntimeException ignored) {
+                    // 事件记录失败不阻断诊断主流程。
+                }
+            }
             List<LearningAction> actions = buildActions(
                 connection, ownerId, exercises, events, snapshots, activityEvidence, now
             );
@@ -332,8 +358,27 @@ public final class JdbcLearningDiagnosisService implements LearningDiagnosisServ
         return List.copyOf(result);
     }
 
-    private static void persistSnapshots(Connection connection, String ownerId, List<MasterySnapshot> snapshots)
-        throws SQLException {
+    private static List<MasterySnapshot> persistSnapshots(
+        Connection connection, String ownerId, List<MasterySnapshot> snapshots) throws SQLException {
+        // 读取旧快照用于差异判定（级别变化或百分比变化 ≥10 记 MASTERY_CHANGED）。
+        Map<String, int[]> previous = new HashMap<>();
+        try (PreparedStatement read = connection.prepareStatement(
+            "select knowledge_point,mastery_percent,level from mastery_snapshot where owner_id=? and policy_version=?")) {
+            read.setString(1, ownerId);
+            read.setString(2, POLICY_VERSION);
+            try (ResultSet rows = read.executeQuery()) {
+                while (rows.next()) previous.put(rows.getString(1),
+                    new int[] {rows.getInt(2), rows.getString(3).hashCode()});
+            }
+        }
+        List<MasterySnapshot> changed = new ArrayList<>();
+        for (MasterySnapshot item : snapshots) {
+            int[] old = previous.get(item.knowledgePoint());
+            if (old == null || Math.abs(item.masteryPercent() - old[0]) >= 10
+                || item.level().name().hashCode() != old[1]) {
+                changed.add(item);
+            }
+        }
         // 删除+批量写入必须原子完成：并发刷新时避免读者看到空/半量快照。
         connection.setAutoCommit(false);
         try {
@@ -366,6 +411,7 @@ public final class JdbcLearningDiagnosisService implements LearningDiagnosisServ
         } finally {
             connection.setAutoCommit(true);
         }
+        return changed;
     }
 
     private static String actionState(Connection connection, String id) throws SQLException {

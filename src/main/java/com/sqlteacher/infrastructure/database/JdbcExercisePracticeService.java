@@ -181,7 +181,8 @@ public final class JdbcExercisePracticeService implements ExercisePracticeServic
         recordAttempt(attemptId, session.id(), status, sql, execution, evaluation, occurredAt, evaluation.errorCode());
         learningEventService.recordExerciseAttempt(
             exercise.id(), status.name(), evaluation.passed(),
-            execution.duration().plus(evaluation.duration()), evaluation.errorCode()
+            execution.duration().plus(evaluation.duration()), evaluation.errorCode(),
+            evaluation.score(), sql
         );
         if (evaluation.passed()) {
             completeSession(session.id(), occurredAt);

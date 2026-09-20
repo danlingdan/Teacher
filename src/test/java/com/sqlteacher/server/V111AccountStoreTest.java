@@ -75,13 +75,23 @@ class V111AccountStoreTest {
         store.requestPasswordReset("reset@example.com");
         String token = readTokenFromOutbox();
         assertFalse(token.isBlank());
+
+        byte[] hashBefore;
+        try (var connection = java.sql.DriverManager.getConnection("jdbc:sqlite:" + directory.resolve("cloud.db").toAbsolutePath());
+             var statement = connection.createStatement();
+             var rows = statement.executeQuery("select password_hash from users where id='" + userId + "'")) {
+            assertTrue(rows.next());
+            hashBefore = rows.getBytes(1);
+        }
         store.resetPassword(token, "brand-new-passphrase-123".toCharArray());
 
         try (var connection = java.sql.DriverManager.getConnection("jdbc:sqlite:" + directory.resolve("cloud.db").toAbsolutePath());
              var statement = connection.createStatement();
              var rows = statement.executeQuery("select password_hash from users where id='" + userId + "'")) {
             assertTrue(rows.next());
-            assertNotEquals(1, rows.getBytes(1)[0], "password hash must change after reset");
+            // 对比完整哈希；旧断言只看首字节 ≠1，PBKDF2 随机哈希首字节恰为 1 时会偶发误报。
+            assertFalse(java.util.Arrays.equals(hashBefore, rows.getBytes(1)),
+                "password hash must change after reset");
         }
         try (var connection = java.sql.DriverManager.getConnection("jdbc:sqlite:" + directory.resolve("cloud.db").toAbsolutePath());
              var statement = connection.createStatement();

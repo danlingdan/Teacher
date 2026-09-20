@@ -26,11 +26,18 @@ import { cloudKey, portfolioKey } from "./hooks/cloudShared";
 import { useClassroom } from "./hooks/useClassroom";
 import { useCourseAuthoring } from "./hooks/useCourseAuthoring";
 import { useAccountSecurity } from "./hooks/useAccountSecurity";
+import { ClassLearningOverviewCard, StudentLearningPanel } from "./StudentLearningPanel";
 
 export function CloudPage() {
   const client = useQueryClient();
   const navigate = useNavigate();
   const toast = useToast();
+  // v3.7.0 TFB-T2：当前查看学情画像的学生（成员名单点「学情」进入；切班级即关闭）。
+  const [profileStudent, setProfileStudent] = useState<{
+    userId: string;
+    displayName: string;
+    email: string;
+  }>();
   const query = useQuery({
     queryKey: cloudKey,
     queryFn: () => localAppRequest<CloudWorkspace>("cloud.workspace"),
@@ -55,6 +62,19 @@ export function CloudPage() {
       toast("success", `同步完成：上传 ${value.uploaded} 项，下载 ${value.downloaded} 项`);
     },
     onError: (error: Error) => toast("error", `同步失败：${error.message}`),
+  });
+  // v3.7.0 TFB-C1/C2：同步偏好——暂停上传 / 自动同步（默认开）。
+  const updateSyncPreferences = useMutation({
+    mutationFn: (patch: { uploadPaused?: boolean; autoSyncEnabled?: boolean }) =>
+      localAppRequest<{ uploadPaused: boolean; autoSyncEnabled: boolean }>(
+        "cloud.sync.preferences.update",
+        patch,
+      ),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: cloudKey });
+      toast("success", "同步偏好已保存");
+    },
+    onError: (error: Error) => toast("error", `同步偏好保存失败：${error.message}`),
   });
   const logout = useMutation({
     mutationFn: () => localAppRequest("account.logout"),
@@ -130,6 +150,8 @@ export function CloudPage() {
     workspace: query.data,
     refreshWorkspace: (silent) => refresh.mutate(silent),
   });
+  // 切换班级后关闭学情画像，避免画像内容与选中班级错位。
+  useEffect(() => setProfileStudent(undefined), [classroomId]);
   const {
     courseId,
     setCourseId,
@@ -297,6 +319,36 @@ export function CloudPage() {
       </section>
       <details className="content-card">
         <summary>
+          <strong>同步偏好</strong>
+          {data.syncPaused ? <span className="policy-chip">已暂停上传</span> : null}
+        </summary>
+        {/* v3.7.0 TFB-C1/C2：学生可控的上传开关与自动同步；默认自动开启（2026-09-20 决策）。 */}
+        <label className="sync-preference">
+          <input
+            type="checkbox"
+            checked={!data.syncPaused}
+            onChange={(event) =>
+              updateSyncPreferences.mutate({ uploadPaused: !event.target.checked })
+            }
+          />
+          上传学习记录到云端（关闭后教师端看不到你的新学习记录）
+        </label>
+        <label className="sync-preference">
+          <input
+            type="checkbox"
+            checked={data.autoSyncEnabled}
+            onChange={(event) =>
+              updateSyncPreferences.mutate({ autoSyncEnabled: event.target.checked })
+            }
+          />
+          登录期间自动同步学习记录（约每 5 分钟）
+        </label>
+        <p className="muted">
+          学习记录仅你所在班级的教师可见，教师每次查看明细都会记入云端审计；关闭上传不影响本地练习与作业离线队列。
+        </p>
+      </details>
+      <details className="content-card">
+        <summary>
           <strong>可见班级</strong>
           <span className="policy-chip">{data.classes.length} 个班级</span>
         </summary>
@@ -435,6 +487,20 @@ export function CloudPage() {
                             : "学生"}
                         {member.email ? ` · ${member.email}` : ""}
                       </span>
+                      {member.role === "STUDENT" && (
+                        <Button
+                          variant="secondary"
+                          onClick={() =>
+                            setProfileStudent({
+                              userId: member.userId,
+                              displayName: member.displayName,
+                              email: member.email,
+                            })
+                          }
+                        >
+                          学情画像
+                        </Button>
+                      )}
                     </li>
                   ))}
                 </ul>
@@ -442,6 +508,13 @@ export function CloudPage() {
                 <p className="muted">班级暂无成员。展开「添加成员」通过邮箱邀请学生加入。</p>
               )}
             </details>
+          )}
+          {isTeacherRole && profileStudent && (
+            <StudentLearningPanel
+              classroomId={classroomId}
+              student={profileStudent}
+              onClose={() => setProfileStudent(undefined)}
+            />
           )}
           {(data.role === "TEACHER" || data.role === "ADMINISTRATOR") && (
             <details className="class-members">
@@ -633,6 +706,9 @@ export function CloudPage() {
             </details>
           )}
           {(data.role === "TEACHER" || data.role === "ADMINISTRATOR") && (
+            <ClassLearningOverviewCard classroomId={classroomId} />
+          )}
+          {(data.role === "TEACHER" || data.role === "ADMINISTRATOR") && (
             // v3.6.0 KUI：任务学情筛选默认收起，避免班级任务卡片堆满。
             <details className="content-card class-analytics-panel">
               <summary>
@@ -811,6 +887,7 @@ export function CloudPage() {
                   exercises?: Array<Record<string, unknown>>;
                   knowledgePoints?: Array<Record<string, unknown>>;
                   commonErrors?: Array<Record<string, unknown>>;
+                  rows?: Array<Record<string, unknown>>;
                 }
               }
             />
@@ -1378,6 +1455,7 @@ function AnalyticsStructuredView({
     exercises?: Array<Record<string, unknown>>;
     knowledgePoints?: Array<Record<string, unknown>>;
     commonErrors?: Array<Record<string, unknown>>;
+    rows?: Array<Record<string, unknown>>;
   };
 }) {
   const entries = Object.entries(report.overview);
@@ -1417,6 +1495,22 @@ function AnalyticsStructuredView({
           </ul>
         </>
       )}
+      {(report.rows ?? []).length > 0 && (
+        <>
+          <p className="eyebrow">学生提交</p>
+          <ul className="plain-list">
+            {(report.rows as Array<Record<string, unknown>>).map((row, index) => (
+              <li key={String(row.userId ?? index)}>
+                <strong>{String(row.displayName || row.email || "学生")}</strong>
+                <span>
+                  尝试 {String(row.attemptCount ?? 0)} · 通过 {String(row.passedAttempts ?? 0)}
+                </span>
+                <SubmissionPayload payload={row.lastSubmissionPayload as string | undefined} />
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
       {errors.length > 0 && (
         <>
           <p className="eyebrow">常见错误</p>
@@ -1431,6 +1525,30 @@ function AnalyticsStructuredView({
         </>
       )}
     </div>
+  );
+}
+
+/** v3.7.0 TFB-S3：解析并展示学生最新提交的载荷（截断 SQL + 得分）；无载荷则不渲染。 */
+function SubmissionPayload({ payload }: { payload?: string }) {
+  if (!payload) return null;
+  let sqlText = "";
+  let score: string | number = "";
+  let truncated = false;
+  try {
+    const parsed = JSON.parse(payload) as { sqlText?: string; score?: number; sqlTruncated?: boolean };
+    sqlText = parsed.sqlText ?? "";
+    score = parsed.score ?? "";
+    truncated = Boolean(parsed.sqlTruncated);
+  } catch {
+    return null;
+  }
+  if (!sqlText) return null;
+  return (
+    <span className="student-sql">
+      {sqlText}
+      {truncated ? " …" : ""}
+      {score !== "" ? `（得分 ${score}）` : ""}
+    </span>
   );
 }
 

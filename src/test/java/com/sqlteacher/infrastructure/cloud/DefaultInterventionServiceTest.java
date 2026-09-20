@@ -152,7 +152,7 @@ class DefaultInterventionServiceTest {
                 String assignmentId, AssignmentAnalyticsFilter filter) {
             return new AssignmentAnalyticsReport(classroomId, assignmentId, 1, 0, 0, 0, 0, 0, List.of(),
                 List.of(new AssignmentAnalyticsRow("student-1", "s@example.com", "Student",
-                    AssignmentStudentStatus.NOT_SUBMITTED, attemptCount, 0, lastSubmittedAt)), 0, 200, 1, NOW);
+                    AssignmentStudentStatus.NOT_SUBMITTED, attemptCount, 0, lastSubmittedAt, null)), 0, 200, 1, NOW);
         }
         @Override public ClassroomService.Classroom createClass(String t,String n){throw unsupported();}
         @Override public ClassroomService.Classroom addClassMember(String t,String c,String e,UserRole r){throw unsupported();}
