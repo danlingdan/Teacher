@@ -46,6 +46,7 @@ skill's complete `SKILL.md` before acting. Use the smallest set that covers the 
 | Version bump, installer, ZIP, checksum, tag, or GitHub Release | `sqlteacher-windows-release` |
 | Production deploy, incident, certificate, backup, restore, Qdrant, or systemd | `sqlteacher-cloud-operations` |
 | Documentation creation, reorganization, audit, indexes, plans, gates, or release notes | `sqlteacher-documentation` |
+| Capability audit, implementation-vs-docs reconciliation, capability baseline upkeep | `sqlteacher-capability-audit` |
 
 Agents that do not support automatic skill discovery must treat the matching `SKILL.md` as
 repository instructions and follow it manually.

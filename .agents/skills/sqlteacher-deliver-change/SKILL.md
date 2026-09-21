@@ -37,7 +37,7 @@ Do not run full packaging to preview UI effects. Pick the loop that matches the 
 2. UI plus Java: `mvn -q -DskipTests package`, copy `target/Teacher-<pom.xml version>.jar` into `ui-web/src-tauri/sidecar/app/`, and restart `tauri dev`. Remove the previous version's jar first when the version changed; run `packaging/build-v3-sidecar.ps1` only when dependencies or the JDK change, and note it recreates the sidecar directory.
 3. Cloud-facing changes: verify server logic locally against the loopbound cloud API (`127.0.0.1:18080`); never point UI previews at production `https://api.sqlteacher.tech` and never edit the production server to preview an effect.
 
-`ui-web/src-tauri/sidecar/` is untracked; generate it once with `packaging/build-v3-sidecar.ps1` after a clean checkout. Full `packaging/package-v3.ps1` remains a release gate. Details: `docs/guide/24-v3-tauri-only.md`.
+`ui-web/src-tauri/sidecar/` is untracked; generate it once with `packaging/build-v3-sidecar.ps1` after a clean checkout. Full `packaging/package-v3.ps1` remains a release gate. Details: `docs/guide/24-tauri-desktop-architecture.md`.
 
 ## Implement and verify
 

@@ -29,6 +29,21 @@ Keep `docs/` root small. Do not create a new top-level category when an existing
 - Move completed stage records under `docs/history/stages/`; update every repository-relative Markdown link and inline path reference in the same change.
 - Never infer applicant identity, ownership, publication status, school authorization, or other copyright facts. Mark them for user confirmation.
 
+## Maintain the capability baseline
+
+`docs/guide/00-capability-overview.md` is the single authority for "what the product does now".
+Keep it reachable from `docs/README.md` and `docs/guide/README.md`.
+
+- Update the overview (including its 适用版本 header) as part of every public release write-back,
+  in the same change set as the release notes.
+- A new user-facing capability must be discoverable in the overview; deep guides expand it and
+  remain the per-fact authority (one-sentence summary plus link in the overview, no duplication).
+- Every guide carries an applicability header (适用版本, or a 历史文档 status line). When a guide's
+  header is found stale — for example "尚未发布" after the version shipped — correct it in the same
+  change that notices. Never verify publication state from a guide; check git tags and release notes.
+- Implemented-but-unwired code is not a capability: record it in `docs/plans/backlog.md`, not in
+  the overview (see `sqlteacher-capability-audit`).
+
 ## Validate
 
 Run the bundled link checker from the repository root:
