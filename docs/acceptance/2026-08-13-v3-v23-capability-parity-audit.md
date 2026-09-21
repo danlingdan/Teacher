@@ -8,7 +8,7 @@
 本次直接以旧版现行文档作为能力基线，而不是以 3.0 页面是否存在作为完成依据：
 
 - `docs/guide/08-user-manual.md`、`09-teacher-manual.md`；
-- `docs/guide/13-v1.4-course-collaboration.md` 至 `19-beta-learning-contracts.md`；
+- `docs/history/guides/13-v1.4-course-collaboration.md`、`docs/history/guides/14-v1.5-ui-themes-and-settings.md`（已归档）与 `docs/guide/15-local-ide-and-runner-setup.md` 至 `docs/guide/19-beta-learning-contracts.md`；
 - `docs/releases/v2.3.0.md` 的 UI-001 至 UI-009；
 - 当前 React 路由、IPC v1 清单、`DefaultLocalAppApi`、应用服务和 Cloud API 客户端。
 

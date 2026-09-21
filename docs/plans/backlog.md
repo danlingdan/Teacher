@@ -2,7 +2,7 @@
 
 本文件是跨版本积压的**唯一活跃索引**。各计划"移至后续版本"章节的条目随计划收口汇入此处；启动某项时从本清单领取、写回对应计划，完成后在本文件标记去向。条目保持挂起时的原始理由，不因时间推移改写。
 
-来源计划：[v3.4.2](2026-09-15-v3.4.2-plan.md) · [v3.4.1](2026-09-15-v3.4.1-plan.md) · [v3.4.0](2026-09-14-v3.4.0-optimization-plan.md)。
+来源计划：[v3.4.2](2026-09-15-v3.4.2-plan.md) · [v3.4.1](2026-09-15-v3.4.1-plan.md) · [v3.4.0](2026-09-14-v3.4.0-optimization-plan.md) · [v3.6.0](2026-09-18-v3.6.0-knowledge-quality-plan.md) · 2026-09-21 三路能力审计增补。
 
 ## 功能与产品决策类
 
@@ -18,6 +18,10 @@
 | 班级码增强：有效期、停用开关、一课多班多码、加入审批流 | v3.4.1 | v3.4.1 已交付最小班级码（CLS）；增强项待教学反馈后按需立项。 |
 | 知识页课程树活动可点击跳转 | v3.4.1 | KNW-1 取"移除"方案；若要"可点"需评估 `learning_activity_definition.source_kind='SQL_EXERCISE'` 到练习页的跨页路由设计。 |
 | 表结构浏览增强：按表懒加载列、虚拟滚动、表名点击插入编辑器、右键查看表数据 | v3.4.1 | 教学库表数量级小，v3.4.1 的过滤 + 默认收起已覆盖诉求；表达数百规模再议（届时需扩展 `data.schema` IPC 与 `JdbcDatabaseMetadataService`）。 |
+| 死合同清理：`settings.workspace`、`support.report.export` | 2026-09-21 审计 | 前端无调用点（`support.report.export` 后端具备导出能力但 UI 无入口）；与 `editor.languages` 一致，待 IPC 合同升 v2 一并删除，或为反馈导出补 UI 入口。 |
+| ActivityReviewService 教师活动评审无入口 | 2026-09-21 审计 | `application.activity.ActivityReviewService` + `JdbcActivityReviewService` 已装配 bean，但 desktop bridge 与 server 均无调用方；补 IPC/UI 入口或下线。当前"教师评审"仅云端作业反馈链路成立。 |
+| `NativeNotificationPolicy` 白名单门未接线 | 2026-09-21 审计 | v3 通知经 Tauri 壳层按白名单短语弹出，该 Java 侧策略门在 main 无调用方；确认后删除或接回。 |
+| i18n 英文覆盖缺口 | 2026-09-21 审计 | `uiI18n` 约 364 词条仅覆盖基础框架，v3.5 后新增面板（学情画像、班级学情总览、题库更新、AI 模型、教师身份等）英文模式仍显示中文；与 uiI18n key 化项一并评估。 |
 
 ## 架构与技术债类（v3.4.0 §7 移交 3.5.0+）
 
@@ -30,6 +34,6 @@
 | surefire 按类并行（TST-8 第二项） | v3.4.0 | 与 SQLite 临时目录 / WSL runner 测试存在资源竞争风险，暂不启用。 |
 | Monaco 体积优化（register-\*.js 2.66MB） | v3.4.0 | 收益/风险比一般，挂起。 |
 | `FileAiTaskHistoryService` 整表重写 | v3.4.0 | 性能项；若历史任务量级可感知再立项。 |
-| 本地嵌入链路打通 + 嵌入模型一致性校验（v3.6.0 KBQ-2，含受控 overlap 分块） | v3.6.0 | 用户确认本机 Ollama 未安装向量模型，语义检索暂无运行对象；安装向量模型（如 embeddinggemma）后从本条启动，届时一并启用分块 overlap。 |
+| 本地嵌入链路收尾：嵌入模型一致性校验 + 受控 overlap 分块启用（v3.6.0 KBQ-2） | v3.6.0 | 2026-09-21 审计修正：`OllamaEmbeddingProvider`/`LuceneKnowledgeVectorStore` 已装配并接入知识助教混合检索（默认模型 embeddinggemma），未装模型时自动降级 FTS——链路已通，剩余为一致性校验与 overlap 分块，不再是"从零打通"。 |
 
 返回 [迭代计划索引](README.md) · [文档中心](../README.md)。

@@ -1,6 +1,6 @@
 # SQLTeacher 3 Windows 安装、升级与卸载
 
-> 当前代码基线：`3.0.0`；公开稳定版本仍以 GitHub Releases 的 latest 标记为准。
+> 适用版本：3.8.0 及后续兼容版本（随发布更新）；公开稳定版本以 GitHub Releases 的 latest 标记为准。
 
 ## 安装
 

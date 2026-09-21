@@ -13,7 +13,7 @@
 | v3.3.2 | 启动自动检查更新、题库定时检查默认启用 | [v3.3.2](../../../releases/v3.3.2.md) | — | 发布说明"验证"节 |
 | v3.3.3 | GitHub issues #20–#26（IME 乱码、班级选择、roster 端点、云端错误透传等） | [v3.3.3](../../../releases/v3.3.3.md) | [2026-09-13](../../../operations/2026-09-13-v3.3.3-cloud-deployment.md) | 发布说明 + issues 全部关闭 |
 | v3.3.4 | 2026-09-14 全界面 UI 审计全部修复 | [v3.3.4](../../../releases/v3.3.4.md) | [2026-09-14](../../../operations/2026-09-14-v3.3.4-cloud-deployment.md) | mvn 604（2 固有跳过）/ vitest 59 / cargo / 打包 / CI run 34775054761 |
-| v3.4.0 | 整体优化（bug 修复、巨类拆分、兼容清理、文档规范） | [v3.4.0 计划](../../../plans/2026-09-14-v3.4.0-optimization-plan.md) | 待发布 | 见 [v3.4.0 质量门禁记录](../../../acceptance/2026-09-14-v3.4.0-quality-gate.md) |
+| v3.4.0 | 整体优化（bug 修复、巨类拆分、兼容清理、文档规范） | [v3.4.0](../../../releases/v3.4.0.md) | [2026-09-15](../../../operations/2026-09-15-v3.4.0-cloud-deployment.md) | 见 [v3.4.0 质量门禁记录](../../../acceptance/2026-09-14-v3.4.0-quality-gate.md) |
 
 ## 要点追溯
 

@@ -1,6 +1,6 @@
 # v3 Alpha.7 教学、云端、设置与迁移状态
 
-> 适用代码版本：`3.0.0-alpha.7`；当前仍为本地开发版本，未发布。
+> 初稿于 `3.0.0-alpha.7`；v3.0.0 已于 2026-09-05 正式发布。文中"JavaFX 回退入口"等表述已随 v3 Tauri-only 架构（见 [Tauri 桌面端架构与开发](../../guide/24-tauri-desktop-architecture.md)）失效，本文仅作历史参考。
 
 ## 教学空间
 
@@ -28,6 +28,6 @@ SQL 开发者模式只减少常规确认；禁用语句、多语句、只读连�
 
 “迁移状态”页面读取 Java 生成的功能清单，覆盖学习、知识、练习、数据、教学、云端和设置七个工作区。Alpha.7 不改变生产默认入口、不改变现有 schema 语义，并保留 JavaFX 回退入口。
 
-IPC 合同见 [LocalApp IPC v1](21-local-app-ipc-v1.md)，阶段记录见 [Alpha.6](../history/stages/stage24/2026-08-11-v3-alpha6-teaching-cloud-settings.md) 与 [Alpha.7](../history/stages/stage25/2026-08-11-v3-alpha7-parity-closeout.md)。
+IPC 合同见 [LocalApp IPC v1](../../guide/21-local-app-ipc-v1.md)，阶段记录见 [Alpha.6](../stages/stage24/2026-08-11-v3-alpha6-teaching-cloud-settings.md) 与 [Alpha.7](../stages/stage25/2026-08-11-v3-alpha7-parity-closeout.md)。
 
-返回 [使用与开发指南](README.md)。
+返回 [使用与开发指南](../../guide/README.md)。

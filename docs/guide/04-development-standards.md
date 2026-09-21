@@ -1,5 +1,7 @@
 # 开发规范
 
+> 适用版本：3.8.0 及后续兼容版本（随发布更新）；日常规则以仓库根 [AGENTS.md](../../AGENTS.md) 为准。
+
 ## Java
 
 - 使用 Java 25 构建，保持 `domain`、`application`、`infrastructure`、`desktop.bridge` 和 `server` 的依赖方向。

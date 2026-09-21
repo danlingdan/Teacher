@@ -5,11 +5,12 @@
 ## 当前基线
 
 - 当前代码版本：`3.8.0`（最新 tag）
+- 当前能力基线：[能力总览](guide/00-capability-overview.md)（适用 3.8.0，随公开发布更新）
 - 当前公开正式版本：[v3.8.0](releases/v3.8.0.md)（GitHub Release Latest）
-- 上一稳定版本线：[v3.4.4](releases/v3.4.4.md)（体验补齐版本；v3.4.0–v3.4.4 均已公开发布）
+- 上一公开正式版本：[v3.7.0](releases/v3.7.0.md)（v3.5.0–v3.8.0 均已公开发布）
 - 当前迭代计划：[v3.8.0 账号体系与界面优化计划](plans/2026-09-21-v3.8.0-account-ui-plan.md)（已发布，见 [v3.8.0 发布说明](releases/v3.8.0.md)；上一轮 [v3.7.0 计划](plans/2026-09-20-v3.7.0-teaching-feedback-plan.md) 已发布）
 - 最近一轮功能计划：[v3.3 SQL 教学能力全面提升计划](plans/2026-09-10-v3.3-sql-teaching-capability-plan.md)（已交付，v3.3.0–v3.3.4 均已发布）
-- 当前实施记录：[v3.0 正式版与无控制台启动](history/stages/stage27/2026-08-12-v3-ga-no-console-release-candidate.md)（v3.1 起实施要点内嵌于各发布说明与运维记录）
+- 实施记录：自 [stage29](history/stages/stage29/README.md) 起实施证据收敛为发布说明、验收记录与运维记录三件套；早期阶段见 [阶段实施记录索引](history/stages/README.md)
 - 当前生产部署记录：[v3.8.0-pre 云端服务端部署与 v3.8.0 发布记录](operations/2026-09-21-v3.8.0-pre.1-cloud-deployment.md)（服务端先行部署 + CI 签名清单原子替换并经公网验证）
 
 > “当前”以 `pom.xml`、Git 标签和实际代码为准。计划文档记录制定时的基线，不应被当作实时状态页。
@@ -18,6 +19,7 @@
 
 | 要做什么 | 从哪里开始 | 内容性质 |
 | --- | --- | --- |
+| 想知道产品现在有哪些能力 | [能力总览](guide/00-capability-overview.md) | 当前能力索引：学科课程、活动类型、代码判分、教师与云端闭环 |
 | 安装、使用或配置 SQLTeacher | [使用与开发指南](guide/README.md) | 长期维护的操作说明与工程规范 |
 | 了解某个版本为何开发、范围是什么 | [迭代计划索引](plans/README.md) | 版本实施前的目标、边界与任务拆分 |
 | 查看功能实际上如何落地 | [阶段实施记录](history/stages/README.md) | 实现决策、测试结果与已知限制 |
@@ -44,7 +46,7 @@ plans（计划与范围）
 
 ## 历史资料
 
-Stage 0 至 Stage 29 和早期五人协作方案已集中到 [history/](history/README.md)。`desktop/` 仅保留旧 JavaFX 设计证据，
+Stage 0 至 Stage 29、早期五人协作方案与已归档的早期版本指南（[history/guides/](history/guides/)）已集中到 [history/](history/README.md)。`desktop/` 仅保留旧 JavaFX 设计证据，
 不再描述当前架构。这些资料用于追溯实现和决策；当前开发和交付规则以仓库根目录的 [AGENTS.md](../AGENTS.md) 与当前代码为准。
 
 ## 维护规则

@@ -16,5 +16,5 @@
 
 前端角色守卫只负责导航反馈；教师与管理员操作由 Java 再次授权，云端写操作由服务器第三次授权。SQL 开发者模式不会绕过禁用语句、只读策略、高风险确认、执行上限和审计。
 
-操作说明见 [Alpha.7 教学、云端与设置指南](../../../guide/23-v3-alpha7-teaching-cloud-settings.md)。
+操作说明见 [Alpha.7 教学、云端与设置指南](../../guides/23-v3-alpha7-teaching-cloud-settings.md)。
 验证证据见 [Alpha.6 至 Alpha.7 本地阶段门禁](../../../acceptance/2026-08-11-v3-alpha6-alpha7-stage-gate.md)。

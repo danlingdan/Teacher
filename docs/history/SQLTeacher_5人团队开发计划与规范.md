@@ -6,13 +6,13 @@
 
 建议新成员按以下顺序阅读：
 
-1. [项目范围与里程碑](../guide/01-project-scope-and-roadmap.md)
+1. [项目范围与里程碑](guides/01-project-scope-and-roadmap.md)
 2. [团队分工与协作机制](../guide/02-team-collaboration.md)
 3. [架构与模块设计](../guide/03-architecture-and-modules.md)
 4. [开发规范](../guide/04-development-standards.md)
 5. [SQL 与 AI 安全规范](../guide/05-sql-and-ai-safety.md)
-6. [测试、打包与验收](../guide/06-testing-packaging-acceptance.md)
-7. [交付物与风险管理](../guide/07-delivery-and-risk-management.md)
+6. [测试、打包与验收](guides/06-testing-packaging-acceptance.md)
+7. [交付物与风险管理](guides/07-delivery-and-risk-management.md)
 8. [2026-07-10 至 2026-07-30 隔离式初步版交付计划](../plans/2026-07-30-isolated-delivery-plan.md)
 
 ## 阶段记录
@@ -41,12 +41,12 @@ SQLTeacher 是面向数据库课程教学、实验练习和课后辅导的 Java 
 
 ## 文档维护规则
 
-- 项目范围、里程碑、优先级变更：更新 `01-project-scope-and-roadmap.md`。
+- 项目范围、里程碑、优先级变更：更新 `guides/01-project-scope-and-roadmap.md`。
 - 成员职责、会议机制、接口变更流程：更新 `02-team-collaboration.md`。
 - 模块边界、包结构、接口职责：更新 `03-architecture-and-modules.md`。
 - Java、JavaFX、Git、日志、文档规范：更新 `04-development-standards.md`。
 - SQL 执行、AI 输出、Prompt、安全策略：更新 `05-sql-and-ai-safety.md`。
-- 测试策略、打包、验收指标：更新 `06-testing-packaging-acceptance.md`。
-- 最终交付、风险清单、降级策略：更新 `07-delivery-and-risk-management.md`。
+- 测试策略、打包、验收指标：更新 `guides/06-testing-packaging-acceptance.md`。
+- 最终交付、风险清单、降级策略：更新 `guides/07-delivery-and-risk-management.md`。
 
 任何公共接口、数据库结构、AI 输出格式或 SQL 安全策略变更，都必须同步更新对应文档。

@@ -17,5 +17,5 @@
 
 前端没有 JDBC、模型 Provider、SQL 风险豁免或权威学习状态。模型输出和导入内容继续视为不可信；SQL 确认令牌不可用于不同连接或不同语句；分页结果缓存限时且进程关闭时清理。
 
-操作方法见 [v3 Alpha.5 工作区指南](../../../guide/22-v3-alpha5-workspaces.md)，IPC 规则见 [LocalApp IPC v1](../../../guide/21-local-app-ipc-v1.md)。
+操作方法见 [v3 Alpha.5 工作区指南](../../guides/22-v3-alpha5-workspaces.md)，IPC 规则见 [LocalApp IPC v1](../../../guide/21-local-app-ipc-v1.md)。
 批次验证证据见 [Alpha.3 至 Alpha.5 本地阶段门禁](../../../acceptance/2026-08-11-v3-alpha3-alpha5-stage-gate.md)。

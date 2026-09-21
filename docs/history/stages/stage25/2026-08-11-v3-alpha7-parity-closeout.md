@@ -24,6 +24,6 @@
 - 本批次不改变 SQLite schema 语义，不迁移或删除用户数据。
 - Alpha 门禁覆盖离线启动、角色拒绝、恢复状态、键盘/语义化控件、打包后 E2E 和性能样本。
 
-稳定操作说明见 [Alpha.7 教学、云端与设置指南](../../../guide/23-v3-alpha7-teaching-cloud-settings.md)。
+稳定操作说明见 [Alpha.7 教学、云端与设置指南](../../guides/23-v3-alpha7-teaching-cloud-settings.md)。
 验证证据见 [Alpha.6 至 Alpha.7 本地阶段门禁](../../../acceptance/2026-08-11-v3-alpha6-alpha7-stage-gate.md)。
 发布后的用户可见变化见 [v3.0.0-alpha.7 发布说明](../../../releases/v3.0.0-alpha.7.md)。
