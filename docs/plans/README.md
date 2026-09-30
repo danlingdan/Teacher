@@ -8,7 +8,7 @@
 
 | 版本/主题 | 计划 | 对应实施记录 |
 | --- | --- | --- |
-| v3.9.0 | [一体化界面与体验改进计划](2026-09-23-v3.9.0-integrated-ui-plan.md)（待实施；[调研](2026-09-23-v3.9.0-integrated-ui-research.md)） | 尚未实施 |
+| v3.9.0 | [一体化界面与体验改进计划](2026-09-23-v3.9.0-integrated-ui-plan.md)（首增量已随 v3.9.0 发布——INT-1 任务直达切片 + 两个用户反馈修复，见[发布说明](../releases/v3.9.0.md)；INT-2 至 VIS 批次实施中；[调研](2026-09-23-v3.9.0-integrated-ui-research.md)） | [G0 基线与首条切片](../acceptance/2026-09-23-v3.9.0-ui-baseline.md) |
 | v3.8.0 | [账号体系与界面优化计划](2026-09-21-v3.8.0-account-ui-plan.md)（已发布；调研输入见 [调研报告](2026-09-21-v3.8.0-account-ui-research.md)） | 已发布（2026-09-21，CI 全流程发布），见 [发布说明](../releases/v3.8.0.md)；UIX-1 剩余/深链/ACC-S5 归视觉走查轮与后续 |
 | v3.7.0 | [教师端学情反馈计划](2026-09-20-v3.7.0-teaching-feedback-plan.md) | 已发布（2026-09-20，CI 全流程发布），见 [发布说明](../releases/v3.7.0.md) |
 | v3.6.0 | [知识库质量优化计划](2026-09-18-v3.6.0-knowledge-quality-plan.md) | 已发布（2026-09-18，本地构建发布），见 [发布说明](../releases/v3.6.0.md)；KBQ-2 移回 [积压清单](backlog.md) |
