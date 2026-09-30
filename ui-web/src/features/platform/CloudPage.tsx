@@ -6,7 +6,8 @@
 // write/action mutations stay mutations.
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import { sessionQuery } from "../../app/queries";
 import { localAppRequest } from "../../shared/ipc";
 import { assignmentStatusLabel, syncStateLabel } from "../../shared/labels";
 import { datetimeLocalFromDate } from "../../shared/datetime";
@@ -31,7 +32,10 @@ import { AccountCenterPanel } from "./AccountCenterPanel";
 export function CloudPage() {
   const client = useQueryClient();
   const navigate = useNavigate();
+  const location = useLocation();
+  const [searchParams, setSearchParams] = useSearchParams();
   const toast = useToast();
+  const session = useQuery(sessionQuery);
   // v3.7.0 TFB-T2：当前查看学情画像的学生（成员名单点「学情」进入；切班级即关闭）。
   const [profileStudent, setProfileStudent] = useState<{
     userId: string;
@@ -41,10 +45,39 @@ export function CloudPage() {
   // v3.8.0 UIX-2：重置班级码与 AI 起草覆盖评语的应用内确认状态（原 window.confirm）。
   const [confirmRotate, setConfirmRotate] = useState(false);
   const [overwriteTarget, setOverwriteTarget] = useState<SubmissionFeedback | null>(null);
+  const feedbackHeadingRef = useRef<HTMLHeadingElement>(null);
+  const focusedFeedbackTarget = useRef("");
+  const assignmentItemRef = useRef<HTMLLIElement>(null);
+  const focusedAssignmentTarget = useRef("");
   const query = useQuery({
     queryKey: cloudKey,
     queryFn: () => localAppRequest<CloudWorkspace>("cloud.workspace"),
     staleTime: 15_000,
+  });
+  const targetAssignmentId = searchParams.get("assignment")?.trim() ?? "";
+  const targetClassroomId = searchParams.get("class")?.trim() ?? "";
+  const targetFeedback = searchParams.get("view") === "feedback";
+  // Feedback notifications identify an assignment but omit its classroom.
+  // Resolve only through classrooms visible to the current account.
+  const assignmentTarget = useQuery({
+    queryKey: ["cloud", "assignment-target", session.data?.subjectId,
+      targetAssignmentId, targetClassroomId, query.data?.classes.map((item) => item.id)],
+    queryFn: async () => {
+      const classes = query.data?.classes ?? [];
+      const candidates = targetClassroomId
+        ? classes.filter((item) => item.id === targetClassroomId)
+        : classes;
+      for (const classroom of candidates) {
+        const result = await localAppRequest<{ items: CloudAssignment[] }>("cloud.assignments", {
+          classroomId: classroom.id,
+        });
+        if (result.items.some((item) => item.id === targetAssignmentId)) return classroom.id;
+      }
+      return "";
+    },
+    enabled: Boolean(targetAssignmentId && query.data?.signedIn &&
+      session.data?.authenticated && query.data.classes.length),
+    retry: false,
   });
   // variables 为 silent 标记：创建班级后的自动刷新不弹“班级已刷新”，避免双 toast。
   const refresh = useMutation<CloudWorkspace, Error, boolean | undefined>({
@@ -137,6 +170,7 @@ export function CloudPage() {
     assignmentDueAt,
     setAssignmentDueAt,
     feedbackAssignmentId,
+    setFeedbackAssignmentId,
     feedbackDirtyIds,
     setFeedbackDirtyIds,
     analyticsResult,
@@ -169,7 +203,41 @@ export function CloudPage() {
   } = useClassroom({
     workspace: query.data,
     refreshWorkspace: (silent) => refresh.mutate(silent),
+    subjectId: session.data?.authenticated ? session.data.subjectId : undefined,
   });
+  const appliedTarget = useRef("");
+  useEffect(() => {
+    const resolvedClassroomId = assignmentTarget.data;
+    const targetKey = `${location.key}:${targetAssignmentId}:${targetFeedback}`;
+    if (!resolvedClassroomId || appliedTarget.current === targetKey) return;
+    appliedTarget.current = targetKey;
+    setClassroomId(resolvedClassroomId);
+    if (targetFeedback) setFeedbackAssignmentId(targetAssignmentId);
+  }, [assignmentTarget.data, location.key, targetAssignmentId, targetFeedback, setClassroomId, setFeedbackAssignmentId]);
+  useEffect(() => {
+    const targetKey = `${location.key}:${targetAssignmentId}`;
+    if (!targetFeedback || feedbackAssignmentId !== targetAssignmentId ||
+        !feedbackQuery.isSuccess || focusedFeedbackTarget.current === targetKey) return;
+    focusedFeedbackTarget.current = targetKey;
+    feedbackHeadingRef.current?.focus({ preventScroll: true });
+    feedbackHeadingRef.current?.scrollIntoView?.({ block: "start" });
+  }, [location.key, targetAssignmentId, targetFeedback, feedbackAssignmentId, feedbackQuery.isSuccess]);
+  useEffect(() => {
+    const targetKey = `${location.key}:${targetAssignmentId}`;
+    if (!targetAssignmentId || targetFeedback || assignmentTarget.data !== classroomId ||
+        !assignments.isSuccess || focusedAssignmentTarget.current === targetKey) return;
+    focusedAssignmentTarget.current = targetKey;
+    assignmentItemRef.current?.focus({ preventScroll: true });
+    assignmentItemRef.current?.scrollIntoView?.({ block: "center" });
+  }, [location.key, targetAssignmentId, targetFeedback, assignmentTarget.data, classroomId, assignments.isSuccess]);
+  const showFeedback = (assignmentId: string) => {
+    const params = new URLSearchParams(searchParams);
+    params.set("class", classroomId);
+    params.set("assignment", assignmentId);
+    params.set("view", "feedback");
+    setSearchParams(params);
+    openFeedback(assignmentId);
+  };
   // 切换班级后关闭学情画像，避免画像内容与选中班级错位。
   useEffect(() => setProfileStudent(undefined), [classroomId]);
   const {
@@ -269,7 +337,7 @@ export function CloudPage() {
         <h2>连接你的班级与学习记录</h2>
         <p>登录后同步班级与学习进度；离线功能无需登录。</p>
         <div className="button-row">
-          <Button onClick={() => navigate("/login?returnTo=%2Fcloud")}>登录或创建账号</Button>
+          <Button onClick={() => navigate(`/login?returnTo=${encodeURIComponent(`/cloud${location.search}`)}`)}>登录或创建账号</Button>
           <Button variant="secondary" onClick={() => navigate("/today")}>
             继续离线学习
           </Button>
@@ -311,6 +379,21 @@ export function CloudPage() {
       {data.state === "DEGRADED" && (
         <Feedback tone="warning" title="云端连接降级">
           <p>本地学习不受影响，可稍后手动重试。</p>
+        </Feedback>
+      )}
+      {targetAssignmentId && assignmentTarget.isPending && data.classes.length > 0 && (
+        <Feedback tone="info" title="正在查找任务">正在当前账号可见的班级中查找目标任务。</Feedback>
+      )}
+      {targetAssignmentId && assignmentTarget.isError && (
+        <Feedback tone="error" title="无法打开目标任务">
+          <p>{assignmentTarget.error.message}</p>
+          <Button variant="secondary" onClick={() => void assignmentTarget.refetch()}>重试</Button>
+        </Feedback>
+      )}
+      {targetAssignmentId && assignmentTarget.data === "" && (
+        <Feedback tone="warning" title="找不到目标任务">
+          <p>当前账号的可见班级中没有这项任务。可以刷新班级，或从下方手动选择任务。</p>
+          <Button variant="secondary" busy={refresh.isPending} onClick={() => refresh.mutate(false)}>刷新班级</Button>
         </Feedback>
       )}
       <section className="metric-row">
@@ -780,9 +863,19 @@ export function CloudPage() {
               </div>
             </details>
           )}
+          {assignments.isPending ? (
+            <Loading label="正在读取班级任务" />
+          ) : assignments.isError ? (
+            <Feedback tone="error" title="班级任务不可用">
+              <p>{assignments.error.message}</p>
+              <Button variant="secondary" onClick={() => void assignments.refetch()}>重试</Button>
+            </Feedback>
+          ) : assignmentItems.length === 0 ? (
+            <p className="muted">当前班级还没有任务。</p>
+          ) : (
           <ul className="plain-list">
             {assignmentItems.map((item) => (
-              <li key={item.id}>
+              <li key={item.id} ref={item.id === targetAssignmentId ? assignmentItemRef : undefined} tabIndex={item.id === targetAssignmentId ? -1 : undefined}>
                 <strong>{item.title}</strong>
                 <span>
                   {assignmentStatusLabel(item.status)}
@@ -814,7 +907,7 @@ export function CloudPage() {
                     >
                       导出 CSV
                     </Button>
-                    <Button variant="secondary" onClick={() => openFeedback(item.id)}>
+                    <Button variant="secondary" onClick={() => showFeedback(item.id)}>
                       批阅反馈
                     </Button>
                     {/* v3.4.2 LEG-12：归档任务云端拒绝编辑，入口直接隐藏。 */}
@@ -850,13 +943,14 @@ export function CloudPage() {
                   </>
                 )}
                 {data.role === "STUDENT" && (
-                  <Button variant="secondary" onClick={() => openFeedback(item.id)}>
+                  <Button variant="secondary" onClick={() => showFeedback(item.id)}>
                     查看反馈
                   </Button>
                 )}
               </li>
             ))}
           </ul>
+          )}
           <Dialog
             open={Boolean(pendingTransition)}
             title="确认变更任务状态"
@@ -920,8 +1014,15 @@ export function CloudPage() {
           )}
           {feedbackAssignmentId && (
             <section className="account-section">
-              <h3>任务反馈</h3>
-              {feedbackItems.length === 0 ? (
+              <h3 ref={feedbackHeadingRef} tabIndex={-1}>任务反馈</h3>
+              {feedbackQuery.isPending ? (
+                <Loading label="正在读取任务反馈" />
+              ) : feedbackQuery.isError ? (
+                <Feedback tone="error" title="任务反馈不可用">
+                  <p>{feedbackQuery.error.message}</p>
+                  <Button variant="secondary" onClick={() => void feedbackQuery.refetch()}>重试</Button>
+                </Feedback>
+              ) : feedbackItems.length === 0 ? (
                 <p className="muted">暂无反馈。</p>
               ) : (
                 <ul className="plain-list">

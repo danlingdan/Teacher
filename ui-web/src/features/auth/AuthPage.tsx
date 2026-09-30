@@ -12,6 +12,18 @@ type AuthMode = "login" | "register" | "reset";
 type ResetStep = "request" | "confirm";
 const safeDestinations = new Set(["/today", "/knowledge", "/practice", "/data", "/teaching", "/cloud", "/settings"]);
 
+function safeReturnTo(requested: string): string {
+  try {
+    const origin = "https://sqlteacher.local";
+    const target = new URL(requested, origin);
+    if (target.origin !== origin || !safeDestinations.has(target.pathname)) return "/cloud";
+    // Only the cloud workspace currently preserves an object target across login.
+    return target.pathname === "/cloud" ? target.pathname + target.search : target.pathname;
+  } catch {
+    return "/cloud";
+  }
+}
+
 export default function AuthPage() {
   const appVersion = useAppVersion();
   const client = useQueryClient();
@@ -27,7 +39,7 @@ export default function AuthPage() {
   const [passwordVisible, setPasswordVisible] = useState(false);
   const [message, setMessage] = useState("");
   const requestedReturn = searchParams.get("returnTo") ?? "/cloud";
-  const returnTo = safeDestinations.has(requestedReturn) ? requestedReturn : "/cloud";
+  const returnTo = safeReturnTo(requestedReturn);
 
   // 手动切换 tab 时清提示并复位找回步骤；mutation 成功后设置的提示不会被误清。
   const switchMode = (next: AuthMode) => {

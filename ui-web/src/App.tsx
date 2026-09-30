@@ -13,6 +13,7 @@ import {
 } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { actionRoute } from "./shared/actionRoute";
+import { cloudNotificationRoute } from "./shared/cloudRoute";
 import { healthQuery, homeQuery, sessionQuery, settingsPreferencesQuery } from "./app/queries";
 import { ErrorBoundary } from "./app/ErrorBoundary";
 import { RoleGuard } from "./app/RoleGuard";
@@ -220,7 +221,7 @@ function Shell() {
       message: item.message,
       createdAt: item.createdAt,
       read: Boolean(item.readAt),
-      target: "/cloud",
+      target: cloudNotificationRoute(item),
     })),
     ...localNotifications.map((item) => ({ ...item, cloudId: "" })),
   ].sort((left, right) => right.createdAt.localeCompare(left.createdAt));

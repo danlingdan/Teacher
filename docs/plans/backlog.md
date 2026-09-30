@@ -2,7 +2,7 @@
 
 本文件是跨版本积压的**唯一活跃索引**。各计划"移至后续版本"章节的条目随计划收口汇入此处；启动某项时从本清单领取、写回对应计划，完成后在本文件标记去向。条目保持挂起时的原始理由，不因时间推移改写。
 
-来源计划：[v3.4.2](2026-09-15-v3.4.2-plan.md) · [v3.4.1](2026-09-15-v3.4.1-plan.md) · [v3.4.0](2026-09-14-v3.4.0-optimization-plan.md) · [v3.6.0](2026-09-18-v3.6.0-knowledge-quality-plan.md) · 2026-09-21 三路能力审计增补。
+来源计划：[v3.4.2](2026-09-15-v3.4.2-plan.md) · [v3.4.1](2026-09-15-v3.4.1-plan.md) · [v3.4.0](2026-09-14-v3.4.0-optimization-plan.md) · [v3.6.0](2026-09-18-v3.6.0-knowledge-quality-plan.md) · 2026-09-21 三路能力审计增补 · [2026-09-21 工具链断链崩溃诊断](2026-09-21-toolchain-junction-crash-findings.md) · [2026-09-21 组件安装 winget 缺失诊断](2026-09-21-component-install-winget-unavailable-findings.md)。
 
 ## 功能与产品决策类
 
@@ -27,6 +27,8 @@
 
 | 条目 | 来源 | 挂起理由 / 重启条件 |
 | --- | --- | --- |
+| 工具链扫描断链崩溃修复 | [2026-09-21 用户反馈诊断](2026-09-21-toolchain-junction-crash-findings.md) | `WindowsToolchainDiscovery.addDiscovered` 遍历到悬空 junction（Oracle JDK 卸载残留，如 `C:\Program Files\Java\latest\jdk-25`）时惰性迭代抛 `UncheckedIOException`，`localCodeRunner` 装配失败致 Spring 上下文整体取消，全部 IPC 返回 "Local application operation failed"；v2.3.0–v3.8.0 均受影响，已有一个真实用户中招（临时解法：删除断链并重启，**该用户已验证有效**）。修复方案与回归要求见诊断文档；用户确认排期后按 `sqlteacher-deliver-change` 实施。 |
+| 组件一键安装 winget 缺失体验修复 | [2026-09-21 用户反馈诊断](2026-09-21-component-install-winget-unavailable-findings.md) | 无 winget 的机器（老 Win10/LTSC）上 JDK/Ollama/MSVC 一键安装必败：`WINGET_UNAVAILABLE` 以 `IllegalStateException` 抛出（`WindowsManagedComponentService.java:186`），被协议层兜底成笼统 "Local application operation failed"；且卡片已判定 `INSTALLER_UNAVAILABLE` 仍允许点击。修复：前置异常结构化透传 + 安装器缺失时禁用按钮并给手动安装指引；可选 Ollama 注册表探测兜底与"新装组件需重启"提示。 |
 | app.db 全局 `foreign_keys` 开启 | v3.4.1 | 迁移链 1–23 已大量使用外键，风险预计低，但全局开启影响 app 库全部读写路径，需独立审计后作为独立小版本处理。 |
 | "3.5.0 数据迁移版本"：迁移链 1–22 压缩、`SqliteInstantFormat` Timestamp 回退移除、云端 V\* store 改名 | v3.4.0 | 前两项是高风险 schema 改动，计划本身即建议独立成版本；V\* store 改名为纯可读性项。 |
 | 学习队列 N+1 与 interventions 批量端点、V14CloudStore 行级 N+1、干预状态机产品规则 | v3.4.0 | 需服务端新端点与跨端设计，或产品规则决策。 |

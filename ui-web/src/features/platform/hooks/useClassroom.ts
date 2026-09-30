@@ -1,9 +1,9 @@
 // 班级域 hook（v3.4.0 REF-13）：从 CloudPage.tsx 原样搬移，覆盖班级选择/创建、
 // 成员名单与添加、任务生命周期、学情分析与导出、提交反馈、掌握度；
 // 不改任何用户可见行为。workspace 与静默刷新回调由 CloudPage 注入。
-import { useEffect, useState } from "react";
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useSearchParams } from "react-router-dom";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useLocation, useSearchParams } from "react-router-dom";
 import { localAppRequest } from "../../../shared/ipc";
 import { assignmentStatusLabel } from "../../../shared/labels";
 import { datetimeLocalFromIso } from "../../../shared/datetime";
@@ -21,18 +21,34 @@ import { assignmentsKey, cloudFailureText, cloudKey, masteryKey } from "./cloudS
 export function useClassroom({
   workspace,
   refreshWorkspace,
+  subjectId,
 }: {
   /** cloud.workspace 查询数据；未就绪时为 undefined。 */
   workspace: CloudWorkspace | undefined;
   /** 触发一次 workspace 刷新；silent=true 不弹“班级已刷新”toast。 */
   refreshWorkspace: (silent: boolean) => void;
+  /** Keep account-scoped classroom data out of another signed-in user's cache. */
+  subjectId?: string;
 }) {
   const client = useQueryClient();
+  const location = useLocation();
   const [searchParams] = useSearchParams();
   const toast = useToast();
   const [className, setClassName] = useState("");
   // 命令面板等入口通过 ?class= 深链到指定班级。
-  const [classroomId, setClassroomId] = useState(() => searchParams.get("class") ?? "");
+  const [classroomId, setSelectedClassroomId] = useState(() => searchParams.get("class") ?? "");
+  const classroomIdRef = useRef(classroomId);
+  const appliedClassTarget = useRef("");
+  const [feedbackAssignmentId, setFeedbackAssignmentId] = useState("");
+  const [feedbackDirtyIds, setFeedbackDirtyIds] = useState<string[]>([]);
+  const setClassroomId = useCallback((next: string) => {
+    if (next !== classroomIdRef.current) {
+      classroomIdRef.current = next;
+      setFeedbackAssignmentId("");
+      setFeedbackDirtyIds([]);
+    }
+    setSelectedClassroomId(next);
+  }, []);
   const [memberEmail, setMemberEmail] = useState("");
   const [memberRole, setMemberRole] = useState("STUDENT");
   const [joinCode, setJoinCode] = useState("");
@@ -44,8 +60,6 @@ export function useClassroom({
   const [assignmentExerciseId, setAssignmentExerciseId] = useState("");
   const [assignmentDescription, setAssignmentDescription] = useState("");
   const [assignmentDueAt, setAssignmentDueAt] = useState("");
-  const [feedbackAssignmentId, setFeedbackAssignmentId] = useState("");
-  const [feedbackDirtyIds, setFeedbackDirtyIds] = useState<string[]>([]);
   const [editingAssignment, setEditingAssignment] = useState<CloudAssignment>();
   const [analyticsResult, setAnalyticsResult] = useState<Record<string, unknown>>();
   const [masteryOpen, setMasteryOpen] = useState(false);
@@ -75,14 +89,14 @@ export function useClassroom({
     retry: false,
     staleTime: 30_000,
   });
-  // 班级任务按班级缓存：切换班级即取对应任务，过期响应只会写回各自的缓存键。
+  // 班级任务按账号与班级缓存，避免账号切换时复用前一人的任务。
   const assignments = useQuery({
-    queryKey: [...assignmentsKey, classroomId],
+    queryKey: [...assignmentsKey, subjectId, classroomId],
     queryFn: () =>
       localAppRequest<{ items: CloudAssignment[] }>("cloud.assignments", {
         classroomId,
       }),
-    enabled: Boolean(classroomId),
+    enabled: Boolean(subjectId && workspace?.classes.some((item) => item.id === classroomId)),
     retry: false,
   });
   const addMember = useMutation({
@@ -216,8 +230,7 @@ export function useClassroom({
       void client.invalidateQueries({ queryKey: assignmentsKey });
       toast("success", `任务「${updated.title}」已更新`);
     },
-    onError: (error: Error) =>
-      toast("error", `任务更新失败：${cloudFailureText(error)}`),
+    onError: (error: Error) => toast("error", `任务更新失败：${cloudFailureText(error)}`),
   });
   const classAnalytics = useMutation({
     mutationFn: () =>
@@ -241,15 +254,14 @@ export function useClassroom({
   });
   // 提交反馈按“班级 + 任务”缓存：切换目标即取对应反馈，保存后原地补丁缓存。
   const feedbackQuery = useQuery({
-    queryKey: ["cloud", "feedback", classroomId, feedbackAssignmentId],
+    queryKey: ["cloud", "feedback", subjectId, classroomId, feedbackAssignmentId],
     queryFn: () =>
       localAppRequest<{ items: SubmissionFeedback[]; cached: boolean }>("cloud.feedback.list", {
         classroomId,
         assignmentId: feedbackAssignmentId,
         refreshRemote: true,
       }),
-    enabled: Boolean(classroomId) && Boolean(feedbackAssignmentId),
-    placeholderData: keepPreviousData,
+    enabled: Boolean(subjectId && classroomId && feedbackAssignmentId),
     retry: false,
   });
   useEffect(() => {
@@ -261,7 +273,7 @@ export function useClassroom({
     patch: (item: SubmissionFeedback) => SubmissionFeedback,
   ) => {
     client.setQueryData<{ items: SubmissionFeedback[]; cached: boolean }>(
-      ["cloud", "feedback", classroomId, feedbackAssignmentId],
+      ["cloud", "feedback", subjectId, classroomId, feedbackAssignmentId],
       (current) =>
         current
           ? {
@@ -351,21 +363,23 @@ export function useClassroom({
     onError: (error: Error) => toast("error", `作业分析导出失败：${error.message}`),
   });
   useEffect(() => {
-    if (!classroomId && workspace?.classes[0]) {
+    if (workspace?.classes[0] && !workspace.classes.some((item) => item.id === classroomId)) {
       setClassroomId(workspace.classes[0].id);
     }
-  }, [classroomId, workspace?.classes]);
+  }, [classroomId, workspace?.classes, setClassroomId]);
   // 命令面板深链 ?class=：页面已挂载时参数变化也要切换班级并加载其任务。
   useEffect(() => {
     const fromUrl = searchParams.get("class");
+    const targetKey = `${location.key}:${searchParams.toString()}`;
     if (
       fromUrl &&
-      fromUrl !== classroomId &&
+      targetKey !== appliedClassTarget.current &&
       workspace?.classes.some((item) => item.id === fromUrl)
     ) {
+      appliedClassTarget.current = targetKey;
       setClassroomId(fromUrl);
     }
-  }, [searchParams, classroomId, workspace?.classes]);
+  }, [location.key, searchParams, workspace?.classes, setClassroomId]);
   /** 打开掌握度面板并强制刷新当前班级的掌握度缓存。 */
   const openMastery = () => {
     setMasteryOpen(true);
@@ -375,7 +389,7 @@ export function useClassroom({
   const openFeedback = (assignmentId: string) => {
     setFeedbackAssignmentId(assignmentId);
     void client.invalidateQueries({
-      queryKey: ["cloud", "feedback", classroomId, assignmentId],
+      queryKey: ["cloud", "feedback", subjectId, classroomId, assignmentId],
     });
   };
   return {
@@ -406,6 +420,7 @@ export function useClassroom({
     assignmentDueAt,
     setAssignmentDueAt,
     feedbackAssignmentId,
+    setFeedbackAssignmentId,
     feedbackDirtyIds,
     setFeedbackDirtyIds,
     analyticsResult,

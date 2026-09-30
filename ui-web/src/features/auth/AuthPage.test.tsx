@@ -1,15 +1,20 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import AuthPage from "./AuthPage";
 
 const requestMock = vi.fn();
 vi.mock("../../shared/ipc", () => ({ localAppRequest: (...args: unknown[]) => requestMock(...args) }));
 
-function renderPage() {
+function CloudDestination() {
+  const location = useLocation();
+  return <div>云端工作区{location.search}</div>;
+}
+
+function renderPage(returnTo = "/cloud") {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(<QueryClientProvider client={client}><MemoryRouter initialEntries={["/login?returnTo=/cloud"]}><Routes><Route path="login" element={<AuthPage />} /><Route path="cloud" element={<div>云端工作区</div>} /><Route path="today" element={<div>离线首页</div>} /></Routes></MemoryRouter></QueryClientProvider>);
+  return render(<QueryClientProvider client={client}><MemoryRouter initialEntries={[`/login?returnTo=${encodeURIComponent(returnTo)}`]}><Routes><Route path="login" element={<AuthPage />} /><Route path="cloud" element={<CloudDestination />} /><Route path="today" element={<div>离线首页</div>} /></Routes></MemoryRouter></QueryClientProvider>);
 }
 
 describe("AuthPage", () => {
@@ -32,6 +37,22 @@ describe("AuthPage", () => {
     fireEvent.change(screen.getByLabelText("密码"), { target: { value: "correct horse battery staple" } });
     fireEvent.click(screen.getByRole("button", { name: "登录" }));
     await waitFor(() => expect(requestMock).toHaveBeenCalledWith("account.login", { email: "student@example.com", password: "correct horse battery staple" }));
+    expect(await screen.findByText("云端工作区")).toBeInTheDocument();
+  });
+
+  it("returns to a feedback target after login", async () => {
+    renderPage("/cloud?assignment=a%2F1&view=feedback");
+    fireEvent.change(await screen.findByLabelText("邮箱地址"), { target: { value: "student@example.com" } });
+    fireEvent.change(screen.getByLabelText("密码"), { target: { value: "correct horse battery staple" } });
+    fireEvent.click(screen.getByRole("button", { name: "登录" }));
+    expect(await screen.findByText("云端工作区?assignment=a%2F1&view=feedback")).toBeInTheDocument();
+  });
+
+  it("rejects an external login return destination", async () => {
+    renderPage("https://example.invalid/elsewhere");
+    fireEvent.change(await screen.findByLabelText("邮箱地址"), { target: { value: "student@example.com" } });
+    fireEvent.change(screen.getByLabelText("密码"), { target: { value: "correct horse battery staple" } });
+    fireEvent.click(screen.getByRole("button", { name: "登录" }));
     expect(await screen.findByText("云端工作区")).toBeInTheDocument();
   });
 

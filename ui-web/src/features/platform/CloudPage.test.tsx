@@ -1,8 +1,9 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Toaster } from "../../shared/ui";
+import { sessionQuery } from "../../app/queries";
 import { CloudPage } from "./PlatformPages";
 import type { CloudAssignment, CloudWorkspace } from "../../shared/types";
 
@@ -51,13 +52,20 @@ function studentWorkspace(): CloudWorkspace {
   };
 }
 
-function renderCloudPage() {
+function renderCloudPage(initialEntry = "/cloud") {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
+  client.setQueryData(sessionQuery.queryKey, {
+    subjectId: "teacher-1",
+    displayName: "王老师",
+    role: "TEACHER",
+    authenticated: true,
+    permissions: [],
+  });
   return render(
     <QueryClientProvider client={client}>
-      <MemoryRouter>
+      <MemoryRouter initialEntries={[initialEntry]}>
         <Toaster>
           <CloudPage />
         </Toaster>
@@ -121,6 +129,127 @@ describe("CloudPage", () => {
     expect(await screen.findByText(/章节添加失败/)).toBeInTheDocument();
     expect(screen.getByText(/云端连接中断/)).toBeInTheDocument();
     expect(sectionInput).toHaveValue("第一章 SELECT");
+  });
+
+  it("resolves a feedback link to its visible classroom and opens that assignment", async () => {
+    const classes: CloudWorkspace["classes"] = [
+      { id: "class-a", name: "甲班", createdAt: "2026-09-01T00:00:00Z", members: [] },
+      { id: "class-b", name: "乙班", createdAt: "2026-09-02T00:00:00Z", members: [] },
+    ];
+    requestMock.mockImplementation((method: string, params?: Record<string, unknown>) => {
+      if (method === "cloud.workspace") return Promise.resolve(teacherWorkspace(classes));
+      if (method === "practice.catalog") return Promise.resolve({ items: [] });
+      if (method === "cloud.assignments")
+        return Promise.resolve({
+          items:
+            params?.classroomId === "class-b"
+              ? [
+                  {
+                    id: "assignment-2",
+                    classroomId: "class-b",
+                    exerciseId: "exercise-1",
+                    title: "乙班任务",
+                    description: "",
+                    status: "PUBLISHED",
+                    version: 1,
+                    createdAt: "2026-09-02T00:00:00Z",
+                    updatedAt: "2026-09-02T00:00:00Z",
+                  },
+                ]
+              : [],
+        });
+      if (method === "cloud.feedback.list")
+        return Promise.resolve({
+          items: [
+            {
+              submissionId: "submission-2",
+              assignmentId: "assignment-2",
+              studentUserId: "student-1",
+              status: "REVIEWED",
+              comment: "继续练习",
+              knowledgePointIds: [],
+              version: 1,
+              authorUserId: "teacher-1",
+              updatedAt: "2026-09-02T00:00:00Z",
+            },
+          ],
+          cached: false,
+        });
+      return Promise.reject(new Error(`Unexpected request: ${method}`));
+    });
+    renderCloudPage("/cloud?assignment=assignment-2&view=feedback");
+    expect(await screen.findByRole("heading", { name: "班级任务：乙班" })).toBeInTheDocument();
+    expect(await screen.findByText("继续练习")).toBeInTheDocument();
+    expect(requestMock).toHaveBeenCalledWith(
+      "cloud.feedback.list",
+      expect.objectContaining({
+        classroomId: "class-b",
+        assignmentId: "assignment-2",
+      }),
+    );
+  });
+
+  it("focuses a published assignment linked from a notification", async () => {
+    requestMock.mockImplementation((method: string) => {
+      if (method === "cloud.workspace") return Promise.resolve(teacherWorkspace([
+        { id: "class-a", name: "甲班", createdAt: "2026-09-01T00:00:00Z", members: [] },
+      ]));
+      if (method === "practice.catalog") return Promise.resolve({ items: [] });
+      if (method === "cloud.assignments") return Promise.resolve({ items: [{
+        id: "assignment-1", classroomId: "class-a", exerciseId: "exercise-1", title: "目标任务",
+        description: "", status: "PUBLISHED", version: 1,
+        createdAt: "2026-09-02T00:00:00Z", updatedAt: "2026-09-02T00:00:00Z",
+      }] });
+      return Promise.reject(new Error(`Unexpected request: ${method}`));
+    });
+    renderCloudPage("/cloud?assignment=assignment-1");
+    await waitFor(() => expect(screen.getByText("目标任务").closest("li")).toHaveFocus());
+    expect(requestMock).not.toHaveBeenCalledWith("cloud.feedback.list", expect.anything());
+  });
+
+  it("clears the previous classroom's feedback when the selection changes", async () => {
+    requestMock.mockImplementation((method: string, params?: Record<string, unknown>) => {
+      if (method === "cloud.workspace") return Promise.resolve(teacherWorkspace([
+        { id: "class-a", name: "甲班", createdAt: "2026-09-01T00:00:00Z", members: [] },
+        { id: "class-b", name: "乙班", createdAt: "2026-09-02T00:00:00Z", members: [] },
+      ]));
+      if (method === "practice.catalog") return Promise.resolve({ items: [] });
+      if (method === "cloud.assignments") return Promise.resolve({ items: [{
+        id: `assignment-${params?.classroomId}`, classroomId: String(params?.classroomId),
+        exerciseId: "exercise-1", title: `任务-${params?.classroomId}`, description: "",
+        status: "PUBLISHED", version: 1, createdAt: "2026-09-02T00:00:00Z",
+        updatedAt: "2026-09-02T00:00:00Z",
+      }] });
+      if (method === "cloud.feedback.list") return Promise.resolve({ items: [{
+        submissionId: "submission-a", assignmentId: "assignment-class-a", studentUserId: "student-a",
+        status: "REVIEWED", comment: "甲班私有评语", knowledgePointIds: [], version: 1,
+        authorUserId: "teacher-1", updatedAt: "2026-09-02T00:00:00Z",
+      }], cached: false });
+      return Promise.reject(new Error(`Unexpected request: ${method}`));
+    });
+    renderCloudPage();
+    const assignment = await screen.findByText("任务-class-a");
+    fireEvent.click(within(assignment.closest("li")!).getByRole("button", { name: "批阅反馈" }));
+    expect(await screen.findByText("甲班私有评语")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "乙班" }));
+    expect(screen.queryByText("甲班私有评语")).not.toBeInTheDocument();
+  });
+
+  it("explains when a feedback target is outside the account's visible classrooms", async () => {
+    requestMock.mockImplementation((method: string) => {
+      if (method === "cloud.workspace")
+        return Promise.resolve(
+          teacherWorkspace([
+            { id: "class-a", name: "甲班", createdAt: "2026-09-01T00:00:00Z", members: [] },
+          ]),
+        );
+      if (method === "practice.catalog") return Promise.resolve({ items: [] });
+      if (method === "cloud.assignments") return Promise.resolve({ items: [] });
+      return Promise.reject(new Error(`Unexpected request: ${method}`));
+    });
+    renderCloudPage("/cloud?assignment=other-class&view=feedback");
+    expect(await screen.findByText("找不到目标任务")).toBeInTheDocument();
+    expect(requestMock).not.toHaveBeenCalledWith("cloud.feedback.list", expect.anything());
   });
 
   it("auto-selects the freshly created class so the assignment card opens", async () => {
@@ -516,16 +645,19 @@ describe("CloudPage", () => {
 
   it("fills the editable comment with the AI draft and still saves through cloud.feedback.save", async () => {
     requestMock.mockImplementation((method: string) => {
-      if (method === "cloud.workspace")
-        return Promise.resolve(teacherWorkspace(teacherClass));
+      if (method === "cloud.workspace") return Promise.resolve(teacherWorkspace(teacherClass));
       if (method === "practice.catalog") return Promise.resolve({ items: [] });
-      if (method === "cloud.assignments")
-        return Promise.resolve({ items: [publishedAssignment] });
+      if (method === "cloud.assignments") return Promise.resolve({ items: [publishedAssignment] });
       if (method === "cloud.feedback.list")
         return Promise.resolve({ items: [feedbackItem], cached: false });
       if (method === "cloud.feedback.draft")
-        return Promise.resolve({ text: "该生查询思路正确，注意 WHERE 条件。", evidence: ["sub-1"], aiGenerated: true });
-      if (method === "cloud.feedback.save") return Promise.resolve({ ...feedbackItem, status: "REVIEWED", version: 2 });
+        return Promise.resolve({
+          text: "该生查询思路正确，注意 WHERE 条件。",
+          evidence: ["sub-1"],
+          aiGenerated: true,
+        });
+      if (method === "cloud.feedback.save")
+        return Promise.resolve({ ...feedbackItem, status: "REVIEWED", version: 2 });
       return Promise.reject(new Error(`Unexpected request: ${method}`));
     });
     renderCloudPage();
@@ -552,15 +684,15 @@ describe("CloudPage", () => {
 
   it("keeps the manual feedback path usable when the AI draft fails", async () => {
     requestMock.mockImplementation((method: string) => {
-      if (method === "cloud.workspace")
-        return Promise.resolve(teacherWorkspace(teacherClass));
+      if (method === "cloud.workspace") return Promise.resolve(teacherWorkspace(teacherClass));
       if (method === "practice.catalog") return Promise.resolve({ items: [] });
-      if (method === "cloud.assignments")
-        return Promise.resolve({ items: [publishedAssignment] });
+      if (method === "cloud.assignments") return Promise.resolve({ items: [publishedAssignment] });
       if (method === "cloud.feedback.list")
-        return Promise.resolve({ items: [{ ...feedbackItem, comment: "手写评语" }], cached: false });
-      if (method === "cloud.feedback.draft")
-        return Promise.reject(new Error("AI 服务不可用"));
+        return Promise.resolve({
+          items: [{ ...feedbackItem, comment: "手写评语" }],
+          cached: false,
+        });
+      if (method === "cloud.feedback.draft") return Promise.reject(new Error("AI 服务不可用"));
       return Promise.reject(new Error(`Unexpected request: ${method}`));
     });
     renderCloudPage();
@@ -577,11 +709,9 @@ describe("CloudPage", () => {
 
   it("updates a published assignment through the edit form with an optimistic version", async () => {
     requestMock.mockImplementation((method: string) => {
-      if (method === "cloud.workspace")
-        return Promise.resolve(teacherWorkspace(teacherClass));
+      if (method === "cloud.workspace") return Promise.resolve(teacherWorkspace(teacherClass));
       if (method === "practice.catalog") return Promise.resolve({ items: [] });
-      if (method === "cloud.assignments")
-        return Promise.resolve({ items: [publishedAssignment] });
+      if (method === "cloud.assignments") return Promise.resolve({ items: [publishedAssignment] });
       if (method === "cloud.assignment.update")
         return Promise.resolve({ ...publishedAssignment, title: "SELECT 进阶练习", version: 4 });
       return Promise.reject(new Error(`Unexpected request: ${method}`));
@@ -615,8 +745,7 @@ describe("CloudPage", () => {
 
   it("hides the edit entry for archived assignments", async () => {
     requestMock.mockImplementation((method: string) => {
-      if (method === "cloud.workspace")
-        return Promise.resolve(teacherWorkspace(teacherClass));
+      if (method === "cloud.workspace") return Promise.resolve(teacherWorkspace(teacherClass));
       if (method === "practice.catalog") return Promise.resolve({ items: [] });
       if (method === "cloud.assignments")
         return Promise.resolve({
@@ -635,12 +764,16 @@ describe("CloudPage", () => {
 
   it("imports a single course JSON and refreshes the course list", async () => {
     requestMock.mockImplementation((method: string) => {
-      if (method === "cloud.workspace")
-        return Promise.resolve(teacherWorkspace(teacherClass));
+      if (method === "cloud.workspace") return Promise.resolve(teacherWorkspace(teacherClass));
       if (method === "practice.catalog") return Promise.resolve({ items: [] });
       if (method === "cloud.courses") return Promise.resolve({ items: [], cached: false });
       if (method === "cloud.course.import")
-        return Promise.resolve({ courseId: "course-9", sections: 2, knowledgePoints: 5, exercises: 3 });
+        return Promise.resolve({
+          courseId: "course-9",
+          sections: 2,
+          knowledgePoints: 5,
+          exercises: 3,
+        });
       return Promise.reject(new Error(`Unexpected request: ${method}`));
     });
     renderCloudPage();
@@ -661,8 +794,7 @@ describe("CloudPage", () => {
 
   it("surfaces a readable error when the course JSON import is rejected", async () => {
     requestMock.mockImplementation((method: string) => {
-      if (method === "cloud.workspace")
-        return Promise.resolve(teacherWorkspace(teacherClass));
+      if (method === "cloud.workspace") return Promise.resolve(teacherWorkspace(teacherClass));
       if (method === "practice.catalog") return Promise.resolve({ items: [] });
       if (method === "cloud.courses") return Promise.resolve({ items: [], cached: false });
       if (method === "cloud.course.import")
@@ -677,6 +809,8 @@ describe("CloudPage", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "导入课程 JSON" }));
 
-    expect(await screen.findByText(/课程 JSON 导入失败：课程文件格式不正确或版本不兼容/)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/课程 JSON 导入失败：课程文件格式不正确或版本不兼容/),
+    ).toBeInTheDocument();
   });
 });
