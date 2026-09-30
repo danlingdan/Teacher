@@ -11,7 +11,7 @@
 - 当前迭代计划：[v3.9.0 一体化界面与体验改进计划](plans/2026-09-23-v3.9.0-integrated-ui-plan.md)（首增量已随 v3.9.0 发布：INT-1 任务直达切片 + 两个用户反馈修复，见 [发布说明](releases/v3.9.0.md)；INT-2 至 VIS 批次实施中，[调研报告](plans/2026-09-23-v3.9.0-integrated-ui-research.md)）；上一轮 [v3.8.0 计划](plans/2026-09-21-v3.8.0-account-ui-plan.md) 已发布
 - 最近一轮功能计划：[v3.3 SQL 教学能力全面提升计划](plans/2026-09-10-v3.3-sql-teaching-capability-plan.md)（已交付，v3.3.0–v3.3.4 均已发布）
 - 实施记录：自 [stage29](history/stages/stage29/README.md) 起实施证据收敛为发布说明、验收记录与运维记录三件套；早期阶段见 [阶段实施记录索引](history/stages/README.md)
-- 当前生产部署记录：[v3.8.0-pre 云端服务端部署与 v3.8.0 发布记录](operations/2026-09-21-v3.8.0-pre.1-cloud-deployment.md)（服务端先行部署 + CI 签名清单原子替换并经公网验证）
+- 当前生产部署记录：[v3.9.0 CI 发布与更新清单部署记录](operations/2026-10-01-v3.9.0-release-deployment.md)（LEG-15 回执 + CI 签名清单原子替换并经公网验证；上一轮 [v3.8.0](operations/2026-09-21-v3.8.0-pre.1-cloud-deployment.md)）
 
 > “当前”以 `pom.xml`、Git 标签和实际代码为准。计划文档记录制定时的基线，不应被当作实时状态页。
 
