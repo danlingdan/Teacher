@@ -37,20 +37,30 @@ export { Loading } from "../../shared/ui";
 export function formatAccountDate(value: string) {
   return formatInstant(value);
 }
+// v3.8.0 修复：补充班级/任务学情报告（ClassLearningSummary / AssignmentAnalyticsReport）
+// 实际返回字段的中文标签，供 CloudPage 学情面板归一化概览使用。
 export function analyticsMetricLabel(value: string) {
   return (
     (
       {
+        activeStudentCount: "活跃学员",
         attempts: "尝试",
         averageAttemptsPerCompletedExercise: "完成题目平均尝试",
         averageSubmissionDuration: "平均提交耗时",
         completedExercises: "已完成题目",
         completionRate: "完成率",
         passRate: "通过率",
+        passedStudents: "已通过学员",
         passedSubmissions: "通过提交",
         sessions: "练习会话",
+        studentCount: "学员总数",
         submissions: "提交",
+        submittedStudents: "已提交学员",
+        successfulEvents: "成功事件",
+        syncedEvents: "同步事件",
+        totalAttempts: "尝试总数",
         totalExercises: "题目总数",
+        totalStudents: "学员总数",
       } as Record<string, string>
     )[value] ?? value
   );

@@ -762,6 +762,78 @@ describe("CloudPage", () => {
     expect(screen.getAllByRole("button", { name: "编辑" })).toHaveLength(1);
   });
 
+  // 3.8.0 修复：ClassLearningSummary / AssignmentAnalyticsReport 都没有 overview 字段，
+  // 学情面板不得因 Object.entries(report.overview) 抛错而整页崩溃（页面渲染出现问题）。
+  it("renders assignment analytics from the real report shape without an overview field", async () => {
+    requestMock.mockImplementation((method: string) => {
+      if (method === "cloud.workspace") return Promise.resolve(teacherWorkspace(teacherClass));
+      if (method === "practice.catalog") return Promise.resolve({ items: [] });
+      if (method === "cloud.assignments") return Promise.resolve({ items: [publishedAssignment] });
+      if (method === "cloud.assignment.analytics")
+        return Promise.resolve({
+          classroomId: "class-1",
+          assignmentId: "asg-1",
+          totalStudents: 12,
+          submittedStudents: 9,
+          passedStudents: 6,
+          totalAttempts: 15,
+          completionRate: 0.75,
+          passRate: 0.65,
+          commonErrors: [{ errorCode: "SQL_SYNTAX_ERROR", count: 4 }],
+          rows: [],
+          page: 0,
+          pageSize: 50,
+          totalRows: 9,
+          generatedAt: "2026-10-01T00:00:00Z",
+        });
+      return Promise.reject(new Error(`Unexpected request: ${method}`));
+    });
+    renderCloudPage();
+
+    const assignmentItem = await screen.findByText("SELECT 查询练习");
+    fireEvent.click(
+      within(assignmentItem.closest("li")!).getByRole("button", { name: "查看学情" }),
+    );
+
+    expect(await screen.findByText("学员总数")).toBeInTheDocument();
+    expect(screen.getByText("12")).toBeInTheDocument();
+    expect(screen.getByText("已提交学员")).toBeInTheDocument();
+    expect(screen.getByText("完成率")).toBeInTheDocument();
+    expect(screen.getByText("75%")).toBeInTheDocument();
+    expect(screen.getByText("65%")).toBeInTheDocument();
+    expect(screen.getByText("SQL_SYNTAX_ERROR")).toBeInTheDocument();
+    expect(screen.queryByText("页面渲染出现问题")).not.toBeInTheDocument();
+  });
+
+  it("renders class analytics summary metrics from the class report shape", async () => {
+    requestMock.mockImplementation((method: string) => {
+      if (method === "cloud.workspace") return Promise.resolve(teacherWorkspace(teacherClass));
+      if (method === "practice.catalog") return Promise.resolve({ items: [] });
+      if (method === "cloud.assignments") return Promise.resolve({ items: [] });
+      // 与 ClassLearningSummary 真实形状一致：无 overview、无任务字段。
+      if (method === "cloud.class.analytics")
+        return Promise.resolve({
+          classroomId: "class-1",
+          studentCount: 30,
+          activeStudentCount: 22,
+          syncedEvents: 140,
+          successfulEvents: 132,
+          generatedAt: "2026-10-01T00:00:00Z",
+        });
+      return Promise.reject(new Error(`Unexpected request: ${method}`));
+    });
+    renderCloudPage();
+
+    fireEvent.click(await screen.findByText("任务学情", { selector: "summary strong" }));
+    fireEvent.click(screen.getByRole("button", { name: "查看学情" }));
+
+    expect(await screen.findByText("学员总数")).toBeInTheDocument();
+    expect(screen.getByText("30")).toBeInTheDocument();
+    expect(screen.getByText("活跃学员")).toBeInTheDocument();
+    expect(screen.getByText("22")).toBeInTheDocument();
+    expect(screen.queryByText("页面渲染出现问题")).not.toBeInTheDocument();
+  });
+
   it("imports a single course JSON and refreshes the course list", async () => {
     requestMock.mockImplementation((method: string) => {
       if (method === "cloud.workspace") return Promise.resolve(teacherWorkspace(teacherClass));

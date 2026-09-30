@@ -117,6 +117,11 @@ export default function AuthPage() {
           {error && <Feedback tone="error" title="账号操作失败"><p>{error.message}</p></Feedback>}
           {message && <Feedback tone="info" title={confirming || mode === "reset" ? "请检查邮箱" : "提示"}><p>{message}</p></Feedback>}
           <Button type="submit" busy={busy} disabled={disabled}>{submitLabel}</Button>
+          {/* 3.8.0 修复：发码失败（限流/网络/代理）后，若邮箱已收到验证码，允许直接进入输码步骤；
+              重置仍由服务端校验验证码，绕过入口不会带来额外风险。 */}
+          {mode === "reset" && resetStep === "request" && reset.isError && (
+            <button type="button" className="auth-back" onClick={() => { reset.reset(); setResetStep("confirm"); }}>已收到验证码？直接输入验证码 →</button>
+          )}
           {confirming && <button type="button" className="auth-back" onClick={() => { setResetStep("request"); setMessage(""); }}>← 返回重新发送</button>}
         </form>
         <p className="auth-privacy">离线学习无需登录。<button type="button" className="auth-back" onClick={() => navigate("/today", { replace: true })}>← 继续离线学习</button></p>

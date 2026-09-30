@@ -982,19 +982,7 @@ export function CloudPage() {
               </Button>
             </div>
           </Dialog>
-          {analyticsResult && (
-            <AnalyticsStructuredView
-              report={
-                analyticsResult as unknown as {
-                  overview: Record<string, number>;
-                  exercises?: Array<Record<string, unknown>>;
-                  knowledgePoints?: Array<Record<string, unknown>>;
-                  commonErrors?: Array<Record<string, unknown>>;
-                  rows?: Array<Record<string, unknown>>;
-                }
-              }
-            />
-          )}
+          {analyticsResult && <AnalyticsStructuredView report={analyticsResult} />}
           <div className="button-row class-actions">
             <Button variant="secondary" busy={mastery.isFetching} onClick={openMastery}>
               {data.role === "STUDENT" ? "我的掌握度" : "当前账号掌握度"}
@@ -1464,21 +1452,34 @@ function feedbackStatusLabel(value: SubmissionFeedback["status"]) {
   return ({ NEEDS_WORK: "需要改进", REVIEWED: "已批阅", RESOLVED: "已解决" } as const)[value];
 }
 /**
+ * cloud.class.analytics（ClassLearningSummary）与 cloud.assignment.analytics
+ * （AssignmentAnalyticsReport）都没有 overview 字段，直接 Object.entries(report.overview)
+ * 会抛 "Cannot convert undefined or null to object" 并整页崩溃（3.8.0 修复）。
+ * 按报告实际字段归一化概览指标；无法识别的形状回退为空表而不是抛错。
+ */
+function reportOverviewEntries(report: Record<string, unknown>): Array<[string, string | number]> {
+  if (report.overview && typeof report.overview === "object") {
+    return Object.entries(report.overview as Record<string, string | number>);
+  }
+  const keys =
+    "assignmentId" in report
+      ? ["totalStudents", "submittedStudents", "passedStudents", "totalAttempts", "completionRate", "passRate"]
+      : ["studentCount", "activeStudentCount", "syncedEvents", "successfulEvents"];
+  return keys
+    .filter((key) => typeof report[key] === "number")
+    .map((key) => [key, report[key] as string | number]);
+}
+
+/**
  * 学情报告结构化呈现（W5.1）：概览指标中文化 + 知识点/常见错误分表，
  * 替代直接把报告 JSON dump 给教师查看的旧形态。
  */
 function AnalyticsStructuredView({
   report,
 }: {
-  report: {
-    overview: Record<string, number>;
-    exercises?: Array<Record<string, unknown>>;
-    knowledgePoints?: Array<Record<string, unknown>>;
-    commonErrors?: Array<Record<string, unknown>>;
-    rows?: Array<Record<string, unknown>>;
-  };
+  report: Record<string, unknown>;
 }) {
-  const entries = Object.entries(report.overview);
+  const entries = reportOverviewEntries(report);
   const points = (report.knowledgePoints ?? []) as Array<Record<string, unknown>>;
   const errors = (report.commonErrors ?? []) as Array<Record<string, unknown>>;
   return (
@@ -1515,7 +1516,7 @@ function AnalyticsStructuredView({
           </ul>
         </>
       )}
-      {(report.rows ?? []).length > 0 && (
+      {((report.rows ?? []) as Array<Record<string, unknown>>).length > 0 && (
         <>
           <p className="eyebrow">学生提交</p>
           <ul className="plain-list">

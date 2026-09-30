@@ -72,4 +72,32 @@ describe("AuthPage", () => {
     expect(await screen.findByText("密码已重置，请使用新密码登录。")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "欢迎回来" })).toBeInTheDocument();
   });
+
+  // 3.8.0 修复：发码请求失败（服务端限流/代理断网）时 UI 停在第一步，邮箱里已收到的
+  // 验证码无处可输。必须提供手动进入输码步骤的入口；验证码正确性仍由服务端校验。
+  it("still offers the code entry step when sending the reset code fails", async () => {
+    requestMock.mockImplementation((method: string) => {
+      if (method === "session.current") return Promise.resolve({ subjectId: "guest", displayName: "本地学习者", role: "STUDENT", authenticated: false, permissions: [] });
+      if (method === "account.password.reset.request") return Promise.reject(new Error("尝试过于频繁，请稍后再试"));
+      if (method === "account.password.reset") return Promise.resolve({ reset: true });
+      throw new Error(`Unexpected request: ${method}`);
+    });
+    renderPage();
+    fireEvent.click(screen.getByRole("tab", { name: "找回密码" }));
+    fireEvent.change(screen.getByLabelText("邮箱地址"), { target: { value: "student@example.com" } });
+    fireEvent.click(screen.getByRole("button", { name: "发送验证码" }));
+    expect(await screen.findByText(/尝试过于频繁/)).toBeInTheDocument();
+    expect(screen.queryByLabelText("验证码")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /已收到验证码/ }));
+    expect(screen.getByRole("heading", { name: "设置新密码" })).toBeInTheDocument();
+    expect(screen.queryByText(/尝试过于频繁/)).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("验证码"), { target: { value: "654321" } });
+    fireEvent.change(screen.getByLabelText("新密码"), { target: { value: "another passphrase 123" } });
+    fireEvent.click(screen.getByRole("button", { name: "重置密码" }));
+    await waitFor(() =>
+      expect(requestMock).toHaveBeenCalledWith("account.password.reset", { email: "student@example.com", code: "654321", newPassword: "another passphrase 123" }),
+    );
+    expect(await screen.findByText("密码已重置，请使用新密码登录。")).toBeInTheDocument();
+  });
 });
