@@ -541,12 +541,13 @@ class SqlTeacherCloudServerTest {
 
         String payload = "{\"connectionId\":\"demo\",\"successful\":true,"
             + "\"attributes\":{\"statementType\":\"SELECT\",\"sqlText\":\"SELECT 1\"}}";
+        // activeStudents7d 按服务端当前时间开窗，事件时间必须相对 now（写死日期会随时间腐烂）。
         post("sync/events", studentToken, JSON.writeValueAsString(java.util.Map.of("items", java.util.List.of(
             java.util.Map.of("id", "dev:e1", "type", "SQL_EXECUTION", "payloadJson", payload,
-                "occurredAt", "2026-09-20T01:00:00Z"),
+                "occurredAt", Instant.now().minusSeconds(90 * 60).toString()),
             java.util.Map.of("id", "dev:e2", "type", "EXERCISE_FAILED", "payloadJson",
                 "{\"connectionId\":\"demo\",\"successful\":false,\"attributes\":{\"errorCode\":\"RESULT_MISMATCH\"}}",
-                "occurredAt", "2026-09-20T02:00:00Z")))));
+                "occurredAt", Instant.now().minusSeconds(60 * 60).toString())))));
 
         JsonNode overview = sendJson("GET", "classes/" + classroomId + "/analytics/overview", teacherToken);
         assertEquals(2, overview.at("/summary/syncedEvents").asInt());
