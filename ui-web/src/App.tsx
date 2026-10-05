@@ -23,6 +23,7 @@ import { localAppRequest } from "./shared/ipc";
 import { formatInstant } from "./shared/instant";
 import type { CloudNotification, LearningActionSummary } from "./shared/types";
 import { deliverNativeNotifications } from "./shared/nativeNotifications";
+import TopbarAiEngine from "./features/data-sql/TopbarAiEngine";
 import TopbarConnection from "./features/data-sql/TopbarConnection";
 import { useAppearanceEffects } from "./shared/useAppearanceEffects";
 import {
@@ -354,6 +355,7 @@ function Shell() {
             <h1>{active?.label ?? "SQLTeacher"}</h1>
           </div>
           <div className="topbar-actions">
+            <TopbarAiEngine />
             <TopbarConnection />
             <div className="notification-anchor" ref={notificationAnchorRef}>
               <button

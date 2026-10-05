@@ -118,7 +118,13 @@ final class DataSqlApiSection extends ApiSection {
 
     private JsonNode dataConnectionTest(JsonNode params, CancellationToken cancellation) {
         cancellation.throwIfCancelled();
-        DatabaseConnectionProfile profile = connectionProfile(params);
+        // v3.10.0 HAJ-5：顶栏弹层的"测试当前连接/重新输入密码"按 connectionId 直取已存配置，
+        // 免重建完整表单参数；省略 connectionId 时仍走表单草稿路径（行为不变）。
+        String connectionId = params.path("connectionId").asText("").trim();
+        DatabaseConnectionProfile profile = connectionId.isEmpty()
+            ? connectionProfile(params)
+            : context().getBean(ConnectionManagementService.class).findProfile(connectionId)
+                .orElseThrow(() -> new IllegalArgumentException("Database connection was not found"));
         char[] password = params.path("password").asText("").toCharArray();
         // 表单密码为空时回退到本进程已验证的会话凭据，让“仅测试/保存即测试”
         // 在编辑已有连接、未重新输入密码时也能走通。

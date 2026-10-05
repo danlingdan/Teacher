@@ -18,6 +18,30 @@
 当前事件信封开放 `progress`、`import.progress`、`runner.progress` 和 `ai.delta`；未知事件由前端忽略。取消使用 `system.cancel`，目标请求通过
 `targetRequestId` 指定。
 
+## 方法：v3.10.0 加法扩展
+
+v3.10.0 沿用“v1 内仅做加法扩展”策略新增以下方法（供顶栏「AI 引擎」弹层消费），四端同步点
+（`contracts/ipc/v1/manifest.json`、Java `LocalAppContract`、Rust 白名单、TypeScript 方法联合类型）
+均已收录：
+
+- `ai.engine.status` — 无参数；返回只读的当前 AI 引擎状态快照：
+  `{networkActive, activeKind, displayName, selectedModel, ollamaAvailable, ollamaModelCount, message}`，
+  其中 `activeKind` 为 `OLLAMA` 或 `OPENAI_COMPATIBLE`。响应不含端点 URL 与任何凭据材料。
+- `ai.model.list` — 无参数；触发一次本地 Ollama 模型刷新探测，返回
+  `{installedModels, selectedModel, message}`。
+- `ai.model.select` — 参数 `{model}`（1–120 字符，必须是已安装的本地模型）；返回结构与
+  `ai.model.list` 相同。切换会卸载上一个选中的模型（既有 `OllamaModelSelectionService` 语义，
+  v3.10.0 起首次暴露给 UI）。
+- `ai.provider.models` — 参数 `{endpoint (1–512), id? (已存供应商 id), credential?}`；行为与
+  `ai.provider.test` 同源：以端点+密钥（`id` 给出且 `credential` 为空时借用该已存供应商的 DPAPI
+  解密密钥，借用副本按单次使用契约在调用后清零）探测 `{endpoint}/models`，返回
+  `{success, message, models[], errorCode?}`。它是既有有界模型发现以独立动作形式暴露给
+  新建/编辑供应商表单的「发现模型」按钮，响应不含任何密钥材料。
+
+同一批次内 `data.connection.test` 新增可选参数 `connectionId`：提供时按 id 加载已存连接配置进行测试
+（未知 id 报 “Database connection was not found”），无需重建整份表单字段；省略时行为不变（表单字段 +
+可选密码，密码为空时回退到本进程会话凭据）。
+
 ## 变更门禁
 
 修改合同必须同时更新 JSON Schema/manifest、Java `LocalAppContract`、Rust 白名单、TypeScript 方法联合类型及三端测试。

@@ -407,7 +407,8 @@ public final class Nl2SqlServiceImpl implements Nl2SqlService {
             "",
             "No local Ollama model is installed. Install a model or refresh the model list.",
             model,
-            PROMPT_VERSION
+            PROMPT_VERSION,
+            true
         );
     }
 

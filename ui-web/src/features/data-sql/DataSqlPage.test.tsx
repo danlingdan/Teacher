@@ -364,7 +364,14 @@ describe("DataSqlPage schema sidebar", () => {
       if (method === "ai.sql.generate") {
         return Promise.resolve({
           accepted: true,
-          plan: { sqlDraft: "SELECT 1;", explanation: "草稿" },
+          plan: {
+            sqlDraft: "SELECT 1;",
+            intent: "QUERY",
+            explanation: "草稿",
+            model: "test-model",
+            promptVersion: "v4",
+            modelUnavailable: false,
+          },
           riskAnalysis: { level: "LOW", statementType: "SELECT", reasons: [] },
         });
       }
@@ -386,6 +393,50 @@ describe("DataSqlPage schema sidebar", () => {
     fireEvent.click(screen.getByText(/本次使用的上下文/));
     expect(screen.getByText(/467 个字符/)).toBeInTheDocument();
     expect(screen.getByText(/无需额外脱敏/)).toBeInTheDocument();
+  });
+
+  it("guides to the topbar AI engine panel when the plan reports modelUnavailable", async () => {
+    requestMock.mockImplementation((method: string) => {
+      if (method === "data.connections") return Promise.resolve({ items: [demoConnection] });
+      if (method === "data.connection.dialects") return Promise.resolve(dialectItems);
+      if (method === "data.schema") return Promise.resolve({ tables: [] });
+      if (method === "ai.sql.preview") {
+        return Promise.resolve({
+          taskType: "NL2SQL",
+          categories: ["USER_REQUEST"],
+          sources: ["用户当前请求"],
+          characterCount: 12,
+          redactions: [],
+        });
+      }
+      // v3.10.0 HAJ-3：AI 引擎未就绪时 Java 侧返回确定性标记，前端给配置引导而非空草稿。
+      if (method === "ai.sql.generate") {
+        return Promise.resolve({
+          accepted: false,
+          plan: {
+            sqlDraft: "",
+            intent: "",
+            explanation: "No local Ollama model is installed.",
+            model: "test-model",
+            promptVersion: "v4",
+            modelUnavailable: true,
+          },
+          riskAnalysis: { level: "FORBIDDEN", statementType: "UNKNOWN", reasons: [] },
+          draftAvailable: false,
+        });
+      }
+      throw new Error(`Unexpected request: ${method}`);
+    });
+    renderPage();
+
+    await screen.findByText("当前连接");
+    const input = screen.getByLabelText(/查询目标/);
+    fireEvent.change(input, { target: { value: "查询全部学生" } });
+    fireEvent.click(screen.getByRole("button", { name: "生成 SQL 草稿" }));
+
+    expect(await screen.findByText("AI 引擎未就绪")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "打开 AI 引擎" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "复制到 SQL 工作台" })).not.toBeInTheDocument();
   });
 
   it("prompts first-run users to choose an SQL safety mode and persists the choice", async () => {

@@ -3,6 +3,8 @@ package com.sqlteacher.infrastructure.ai;
 import com.sqlteacher.application.ai.AiCompletionRequest;
 import com.sqlteacher.application.ai.AiCompletionResult;
 import com.sqlteacher.application.ai.AiModelProvider;
+import com.sqlteacher.application.ai.AiModelSelection;
+import com.sqlteacher.application.ai.AiModelSelectionService;
 import com.sqlteacher.application.config.AiConfiguration;
 import com.sqlteacher.application.event.LearningEventService;
 import com.sqlteacher.application.metadata.DatabaseColumn;
@@ -18,6 +20,7 @@ import java.time.Duration;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -47,6 +50,41 @@ class Nl2SqlServiceImplTest {
         assertEquals("查询所有学生", result.explanation());
         assertEquals("test-model", result.model());
         assertEquals("v4", result.promptVersion());
+        // v3.10.0 HAJ-3：正常生成永远不携带"引擎未就绪"标记。
+        assertFalse(result.modelUnavailable());
+    }
+
+    @Test
+    void shouldMarkModelUnavailableWhenNoModelIsSelected() {
+        AiModelSelectionService emptySelection = new AiModelSelectionService() {
+            @Override
+            public AiModelSelection refresh() {
+                return new AiModelSelection(List.of(), "", "Ollama is running, but no local model is installed");
+            }
+
+            @Override
+            public AiModelSelection current() {
+                return new AiModelSelection(List.of(), "", "Models have not been detected");
+            }
+
+            @Override
+            public AiModelSelection select(String model) {
+                throw new IllegalArgumentException("model is not installed: " + model);
+            }
+        };
+        // 无选定模型时不应消耗任何模型调用：provider 收到请求即测试失败。
+        AiModelProvider provider = new MockProvider(AiCompletionResult.success(
+            "{\"sqlDraft\": \"SELECT 1\", \"intent\": \"QUERY\", \"explanation\": \"不应被调用\"}",
+            "test-model"
+        ));
+
+        Nl2SqlServiceImpl service = new Nl2SqlServiceImpl(
+            provider, CONFIG, emptySelection, EMPTY_METADATA_SERVICE, NO_OP_EVENT_SERVICE);
+        Nl2SqlPlan result = service.generate(new Nl2SqlRequest("查询所有学生", "demo"));
+
+        assertTrue(result.modelUnavailable());
+        assertTrue(result.sqlDraft().isEmpty());
+        assertTrue(result.explanation().contains("No local Ollama model"));
     }
 
     @Test

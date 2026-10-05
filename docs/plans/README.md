@@ -8,6 +8,7 @@
 
 | 版本/主题 | 计划 | 对应实施记录 |
 | --- | --- | --- |
+| v3.10.0（目标） | [顶栏 AI 引擎与数据连接完善计划](2026-10-06-topbar-ai-engine-and-connection-plan.md)（**已实施并手测通过，发布准备完成**：AI 引擎独立顶栏按钮 + 弹层、19 家厂商预设、发现模型、连接认证快捷恢复；依据 [AI 功能优化调研](2026-10-06-ai-capability-optimization-research.md)） | 发布说明见 [v3.10.0](../releases/v3.10.0.md)（本地候选）；实施记录见计划文档头部 |
 | v3.9.0 | [一体化界面与体验改进计划](2026-09-23-v3.9.0-integrated-ui-plan.md)（首增量已随 v3.9.0 发布——INT-1 任务直达切片 + 两个用户反馈修复，见[发布说明](../releases/v3.9.0.md)；INT-2 至 VIS 批次实施中；[调研](2026-09-23-v3.9.0-integrated-ui-research.md)） | [G0 基线与首条切片](../acceptance/2026-09-23-v3.9.0-ui-baseline.md) |
 | v3.8.0 | [账号体系与界面优化计划](2026-09-21-v3.8.0-account-ui-plan.md)（已发布；调研输入见 [调研报告](2026-09-21-v3.8.0-account-ui-research.md)） | 已发布（2026-09-21，CI 全流程发布），见 [发布说明](../releases/v3.8.0.md)；UIX-1 剩余/深链/ACC-S5 归视觉走查轮与后续 |
 | v3.7.0 | [教师端学情反馈计划](2026-09-20-v3.7.0-teaching-feedback-plan.md) | 已发布（2026-09-20，CI 全流程发布），见 [发布说明](../releases/v3.7.0.md) |
@@ -36,6 +37,7 @@
 
 ## 全项目审查
 
+- [2026-10-06 AI 功能优化调研报告](2026-10-06-ai-capability-optimization-research.md)：基于 `main` @ `63ac6c2`（v3.9.0）的三路调研——竞品 AI 应用盘点（教育平台/数据库工具/国内生态）、本软件 AI 能力与 `ui-web` 界面实现只读走查、AI 交互形态参考；结论与 P0–P2 建议（提示阶梯、SQL 反向讲解、KBQ-2 收尾、NL2SQL 上下文增强、教师起草工具箱等）供后续 AI 优化计划引用。
 - [2026-09-21 组件一键安装 winget 缺失问题诊断](2026-09-21-component-install-winget-unavailable-findings.md)：用户点"安装或修复"报笼统失败的根因——winget 缺失机器上 `WINGET_UNAVAILABLE` 以 `IllegalStateException` 抛出被协议层兜底、卡片已知 `INSTALLER_UNAVAILABLE` 仍可点击；含组件识别与单实例重启语义的关联发现，修复项挂 [积压清单](backlog.md)。
 - [2026-09-21 工具链扫描断链崩溃问题诊断](2026-09-21-toolchain-junction-crash-findings.md)：用户反馈注册失败的根因诊断——`WindowsToolchainDiscovery.addDiscovered` 遍历到悬空 junction 抛 `UncheckedIOException`，`localCodeRunner` 装配失败拖死整个 Spring 上下文，全部 IPC 报 "Local application operation failed"；v2.3.0–v3.8.0 均受影响，修复项挂 [积压清单](backlog.md)，临时解决已提供。
 - [2026-09-21 v3.8.0 账号体系与界面优化调研报告](2026-09-21-v3.8.0-account-ui-research.md)：基于 `main` @ `ce488b8`（v3.7.0）的四路调研——教育软件账号体系行业模式、本软件账号体系现状、教育软件 UI 设计模式、本软件 UI 现状；结论供 v3.8.0 计划引用。

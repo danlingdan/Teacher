@@ -1,10 +1,13 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { Toaster } from "../../shared/ui";
 import TopbarConnection from "./TopbarConnection";
 import { openConnectionPanel, subscribeConnectionPanel } from "./connectionPanel";
 
 // v3.4.4 CTB-1：顶栏连接入口——chip 状态、清单快速切换、Dialog 表单、删除确认。
+// v3.10.0 HAJ-1 修订：AI 引擎分区撤出本弹层（独立顶栏按钮 TopbarAiEngine，
+// 见 TopbarAiEngine.test.tsx），这里只保留连接清单、快速测试与重新输入密码行为。
 const requestMock = vi.fn();
 vi.mock("../../shared/ipc", () => ({
   localAppRequest: (...args: unknown[]) => requestMock(...args),
@@ -47,9 +50,21 @@ function renderTopbar() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
     <QueryClientProvider client={client}>
-      <TopbarConnection />
+      <Toaster>
+        <TopbarConnection />
+      </Toaster>
     </QueryClientProvider>,
   );
+}
+
+// 清单行内定位：chip 标签与行 strong 同文，取落在 li 内的那个。
+async function findPopoverRow(displayName: string) {
+  const matches = await screen.findAllByText(displayName);
+  const row = matches
+    .map((el) => el.closest("li"))
+    .find((el): el is HTMLLIElement => el !== null);
+  if (!row) throw new Error(`popover row not found: ${displayName}`);
+  return row;
 }
 
 describe("TopbarConnection", () => {
@@ -102,9 +117,95 @@ describe("TopbarConnection", () => {
     unsubscribe();
   });
 
+  it("keeps re-enter-password available only for server-based rows", async () => {
+    requestMock.mockImplementation((method: string) => {
+      if (method === "data.connections")
+        return Promise.resolve({ items: [connectionA, connectionB] });
+      if (method === "data.connection.dialects") return Promise.resolve(dialectItems);
+      throw new Error(`Unexpected request: ${method}`);
+    });
+    renderTopbar();
+
+    fireEvent.click(await screen.findByRole("button", { name: /数据库连接：SQLite 演示数据库/ }));
+
+    // 文件型（SQLite）无凭据，没有「重新输入密码」；服务器型（MySQL）才有。
+    const sqliteRow = await findPopoverRow("SQLite 演示数据库");
+    expect(within(sqliteRow).queryByRole("button", { name: "重新输入密码" })).not.toBeInTheDocument();
+    const mysqlRow = await findPopoverRow("MySQL 课程库");
+    expect(within(mysqlRow).getByRole("button", { name: "重新输入密码" })).toBeInTheDocument();
+  });
+
+  it("re-verifies a server connection password and confirms within the run", async () => {
+    requestMock.mockImplementation((method: string) => {
+      if (method === "data.connections")
+        return Promise.resolve({ items: [connectionA, connectionB] });
+      if (method === "data.connection.dialects") return Promise.resolve(dialectItems);
+      if (method === "data.connection.test") {
+        return Promise.resolve({
+          successful: true,
+          message: "连接成功。",
+          databaseProduct: "MySQL",
+          databaseVersion: "8.0.36",
+          elapsed: 3,
+        });
+      }
+      throw new Error(`Unexpected request: ${method}`);
+    });
+    renderTopbar();
+
+    fireEvent.click(await screen.findByRole("button", { name: /数据库连接：SQLite 演示数据库/ }));
+    const reauthButtons = await screen.findAllByRole("button", { name: "重新输入密码" });
+    expect(reauthButtons).toHaveLength(1);
+    fireEvent.click(reauthButtons[0]!);
+
+    expect(await screen.findByText("重新输入数据库密码")).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("数据库密码"), { target: { value: "s3cret-pw" } });
+    fireEvent.click(screen.getByRole("button", { name: "验证密码" }));
+
+    await waitFor(() =>
+      expect(requestMock).toHaveBeenCalledWith("data.connection.test", {
+        connectionId: "mysql.course",
+        password: "s3cret-pw",
+      }),
+    );
+    expect(await screen.findByText("密码已验证，本次运行内有效")).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.queryByText("重新输入数据库密码")).not.toBeInTheDocument(),
+    );
+  });
+
+  it("tests the current connection from the popover footer", async () => {
+    requestMock.mockImplementation((method: string) => {
+      if (method === "data.connections") return Promise.resolve({ items: [connectionA] });
+      if (method === "data.connection.dialects") return Promise.resolve(dialectItems);
+      if (method === "data.connection.test") {
+        return Promise.resolve({
+          successful: true,
+          message: "连接成功。",
+          databaseProduct: "SQLite",
+          databaseVersion: "3.45",
+          elapsed: 1,
+        });
+      }
+      throw new Error(`Unexpected request: ${method}`);
+    });
+    renderTopbar();
+
+    fireEvent.click(await screen.findByRole("button", { name: /数据库连接：SQLite 演示数据库/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "测试当前连接" }));
+
+    await waitFor(() =>
+      expect(requestMock).toHaveBeenCalledWith("data.connection.test", {
+        connectionId: "sqlite-demo",
+      }),
+    );
+    expect(await screen.findByText(/✓ 连接成功。/)).toBeInTheDocument();
+  });
+
   it("switches the current connection by clicking a list row", async () => {
     requestMock.mockImplementation((method: string) => {
-      if (method === "data.connections") return Promise.resolve({ items: [connectionA, connectionB] });
+      if (method === "data.connections")
+        return Promise.resolve({ items: [connectionA, connectionB] });
       if (method === "data.connection.dialects") return Promise.resolve(dialectItems);
       throw new Error(`Unexpected request: ${method}`);
     });

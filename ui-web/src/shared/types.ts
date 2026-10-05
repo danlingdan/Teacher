@@ -506,6 +506,39 @@ export interface AiContextPreview {
   characterCount: number;
   redactions: string[];
 }
+// v3.10.0 HAJ-3/4：顶栏「AI 引擎」弹层的引擎状态与本地模型选择。
+// 状态只含类型/显示名/选定模型与 Ollama 可达性，不携带 endpoint 与密钥材料。
+export interface AiEngineStatus {
+  networkActive: boolean;
+  activeKind: string;
+  displayName: string;
+  selectedModel: string;
+  ollamaAvailable: boolean;
+  ollamaModelCount: number;
+  message: string;
+}
+export interface AiModelSelectionState {
+  installedModels: string[];
+  selectedModel: string;
+  message: string;
+}
+export interface AiProviderView {
+  id: string;
+  displayName: string;
+  kind: string;
+  endpoint: string;
+  model: string;
+  enabled: boolean;
+  active: boolean;
+}
+// v3.10.0 HAJ-9：「发现模型」（ai.provider.models）与 ai.provider.test 同构的有界发现响应。
+// success:false 时 message 携带 Java 侧分类文案（认证失败/限流/超时等），errorCode 为稳定枚举名。
+export interface AiProviderModelDiscovery {
+  success: boolean;
+  message: string;
+  models: string[];
+  errorCode?: string;
+}
 export interface Nl2SqlSafetyResult {
   plan: {
     sqlDraft: string;
@@ -513,6 +546,8 @@ export interface Nl2SqlSafetyResult {
     explanation: string;
     model: string;
     promptVersion: string;
+    // v3.10.0 HAJ-3：AI 引擎未就绪（无选定模型且无网络供应商）的确定性标记。
+    modelUnavailable: boolean;
   };
   riskAnalysis: SqlRisk;
   accepted: boolean;

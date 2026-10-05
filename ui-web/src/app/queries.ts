@@ -1,6 +1,7 @@
 import { queryOptions } from "@tanstack/react-query";
 import { localAppRequest } from "../shared/ipc";
 import type {
+  AiEngineStatus,
   ConnectionDialectOption,
   ConnectionSummary,
   CourseWorkspace,
@@ -45,4 +46,10 @@ export const connectionDialectsQuery = queryOptions({
   queryKey: ["data", "connection-dialects"],
   queryFn: () => localAppRequest<{ items: ConnectionDialectOption[] }>("data.connection.dialects"),
   staleTime: Infinity,
+});
+// v3.10.0 HAJ-3：AI 引擎状态（当前生效通道/选定模型/Ollama 可达性），顶栏弹层与失败引导消费。
+export const aiEngineStatusQuery = queryOptions({
+  queryKey: ["ai", "engine-status"],
+  queryFn: () => localAppRequest<AiEngineStatus>("ai.engine.status"),
+  staleTime: 10_000,
 });

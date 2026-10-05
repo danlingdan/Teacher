@@ -12,6 +12,7 @@ import { formatInstant } from "../../shared/instant";
 import { connectionsQuery, settingsPreferencesQuery } from "../../app/queries";
 import { dialectLabel, useConnectionDialects } from "./ConnectionManager";
 import { openConnectionPanel } from "./connectionPanel";
+import { openAiEnginePanel } from "./aiPanel";
 import { splitTeachingNote } from "../../shared/teachingNote";
 import { formatSql } from "./formatSql";
 import { buildErDiagramSource, hasForeignKeys } from "./erDiagram";
@@ -939,7 +940,8 @@ function AiAssistant({
   const [requestId, setRequestId] = useState<string>();
   const [result, setResult] = useState<Nl2SqlSafetyResult>();
   // v3.4.4：生成一步完成——先在本地构建上下文（不发任何网络请求），再生成草稿；
-  // 组装明细折叠收纳，未配置 AI 时由本地确定性生成兜底。
+  // 组装明细折叠收纳。AI 引擎未就绪时 Java 侧返回确定性标记（plan.modelUnavailable），
+  // 前端给出配置引导而非空草稿（v3.10.0 HAJ-3；代码中并无"本地确定性生成兜底"）。
   const generate = useMutation({
     mutationFn: async () => {
       const id = crypto.randomUUID();
@@ -973,7 +975,7 @@ function AiAssistant({
           </Button>
         )}
       </div>
-      <FormField label="查询目标" hint="生成时在本地组装上下文（仅结构信息，不含表数据）；未配置 AI 时由本地确定性生成">
+      <FormField label="查询目标" hint="生成时在本地组装上下文（仅结构信息，不含表数据）">
         {(ids) => (
           <textarea
             {...ids}
@@ -1009,7 +1011,17 @@ function AiAssistant({
           {generate.error?.message}
         </Feedback>
       )}
-      {result && (
+      {/* v3.10.0 HAJ-3（修订）：AI 引擎未就绪（无本地选定模型且无网络供应商）时给出就地配置引导。 */}
+      {result?.plan.modelUnavailable && (
+        <Feedback tone="warning" title="AI 引擎未就绪">
+          <p>{result.plan.explanation}</p>
+          <p>可在顶栏「AI 引擎」弹层中选择本地模型或添加网络 AI 供应商；数据库未执行任何语句。</p>
+          <Button variant="secondary" onClick={() => openAiEnginePanel()}>
+            打开 AI 引擎
+          </Button>
+        </Feedback>
+      )}
+      {result && !result.plan.modelUnavailable && (
         <div className="ai-answer">
           <pre>{result.plan.sqlDraft || "（模型没有返回 SQL 草稿）"}</pre>
           <p>{result.plan.explanation}</p>

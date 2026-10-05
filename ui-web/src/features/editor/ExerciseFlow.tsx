@@ -20,6 +20,7 @@ import type {
 } from "../../shared/types";
 import { difficultyLabel, exerciseTypeTitleLabel } from "../../shared/labels";
 import { Button, Dialog, EmptyState, Feedback, Stepper, useToast } from "../../shared/ui";
+import { openAiEnginePanel } from "../data-sql/aiPanel";
 import { ExerciseCatalogPanel } from "./ExerciseCatalog";
 import { LearningPathPanel } from "./LearningPath";
 import { CodeEditor } from "./EditorPage";
@@ -560,6 +561,16 @@ export function ExerciseFlow() {
                 title={`AI 讲解草稿 · ${explain.data.model}（仅供参考，不影响判分）`}
               >
                 {explain.data.explanation}
+              </Feedback>
+            )}
+            {/* v3.10.0 HAJ-3：AI 讲解失败（常见为引擎未配置）时给出一键配置入口；
+                讲解只是草稿，失败不阻塞本地练习主流程。 */}
+            {explain.isError && (
+              <Feedback tone="warning" title="AI 讲解未生成">
+                <p>{explain.error?.message}</p>
+                <Button variant="secondary" onClick={() => openAiEnginePanel()}>
+                  打开 AI 引擎
+                </Button>
               </Feedback>
             )}
           </Feedback>

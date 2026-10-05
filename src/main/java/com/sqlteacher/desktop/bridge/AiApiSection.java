@@ -3,11 +3,16 @@ package com.sqlteacher.desktop.bridge;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.sqlteacher.application.ai.AiAvailability;
+import com.sqlteacher.application.ai.AiModelSelectionService;
 import com.sqlteacher.application.ai.AiProviderKind;
 import com.sqlteacher.application.ai.AiProviderProfile;
 import com.sqlteacher.application.ai.AiProviderProfileDraft;
 import com.sqlteacher.application.ai.AiProviderProfileService;
 import com.sqlteacher.application.ai.AiProviderProbeService;
+import com.sqlteacher.application.ai.AiStatus;
+import com.sqlteacher.application.ai.AiStatusService;
+import com.sqlteacher.application.ai.OpenAiCompatibleConfiguration;
 import com.sqlteacher.application.connection.ConnectionManagementService;
 import com.sqlteacher.application.exercise.ExerciseExplainRequest;
 import com.sqlteacher.application.exercise.ExerciseTextDraftingService;
@@ -19,6 +24,7 @@ import com.sqlteacher.application.nl2sql.Nl2SqlSafetyService;
 import java.net.URI;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Consumer;
@@ -34,7 +40,8 @@ final class AiApiSection extends ApiSection {
     public Set<String> supportedMethods() {
         return Set.of("ai.knowledge.ask", "ai.sql.preview", "ai.sql.generate", "ai.exercise.explain",
             "ai.provider.list", "ai.provider.save", "ai.provider.activate", "ai.provider.deactivate",
-            "ai.provider.remove", "ai.provider.test");
+            "ai.provider.remove", "ai.provider.test", "ai.provider.models",
+            "ai.engine.status", "ai.model.list", "ai.model.select");
     }
 
     @Override
@@ -51,6 +58,10 @@ final class AiApiSection extends ApiSection {
             case "ai.provider.deactivate" -> aiProviderDeactivate(cancellation);
             case "ai.provider.remove" -> aiProviderRemove(params, cancellation);
             case "ai.provider.test" -> aiProviderTest(params, cancellation);
+            case "ai.provider.models" -> aiProviderModels(params, cancellation);
+            case "ai.engine.status" -> aiEngineStatus(cancellation);
+            case "ai.model.list" -> aiModelList(cancellation);
+            case "ai.model.select" -> aiModelSelect(params, cancellation);
             default -> throw new IllegalStateException("Method whitelist and dispatcher are inconsistent");
         };
     }
@@ -189,6 +200,74 @@ final class AiApiSection extends ApiSection {
         } finally {
             Arrays.fill(credential, '\u0000');
         }
+    }
+
+    /**
+     * v3.10.0 HAJ-9: 「发现模型」——与 ai.provider.test 同源的有界模型发现，独立动作供新建/编辑
+     * 供应商表单拉取 {endpoint}/models 真实列表。编辑已存供应商且未重输 Key 时，借用其 DPAPI
+     * 解密密钥做发现，避免被迫重新粘贴。configuration() 返回的是一次性临时副本
+     * （SwitchableAiModelProvider 单次使用契约）：借用的 apiKey() 克隆在本方法 finally 清零，
+     * 副本本体经 destroy() 清零，不残留于任何可达缓冲区。
+     */
+    private JsonNode aiProviderModels(JsonNode params, CancellationToken cancellation) {
+        cancellation.throwIfCancelled();
+        URI endpoint = URI.create(requiredText(params, "endpoint", 512));
+        String id = params.path("id").asText("").trim();
+        char[] credential = params.path("credential").asText("").toCharArray();
+        char[] working = credential;
+        Optional<OpenAiCompatibleConfiguration> stored = Optional.empty();
+        try {
+            if (credential.length == 0 && !id.isEmpty()) {
+                stored = context().getBean(AiProviderProfileService.class).configuration(id);
+                if (stored.isPresent()) working = stored.get().apiKey();
+            }
+            var draft = new AiProviderProfileDraft("model-discovery", "模型发现",
+                AiProviderKind.OPENAI_COMPATIBLE, endpoint, "-", true);
+            var result = context().getBean(AiProviderProbeService.class).probe(draft, working);
+            ObjectNode node = mapper.createObjectNode();
+            node.put("success", result.success());
+            node.put("message", result.message());
+            node.set("models", mapper.valueToTree(result.models()));
+            if (result.errorCode() != null) node.put("errorCode", result.errorCode().name());
+            return node;
+        } finally {
+            Arrays.fill(credential, '\u0000');
+            if (working != credential) Arrays.fill(working, '\u0000');
+            stored.ifPresent(OpenAiCompatibleConfiguration::destroy);
+        }
+    }
+
+    // ---- v3.10.0 HAJ-3/4：引擎状态与本地模型选择，供顶栏「连接与 AI 引擎」弹层消费。
+    // 状态只含类型/显示名/选定模型与 Ollama 可达性，不含 endpoint 与任何密钥材料；
+    // 模型列表/选择包装既有 AiModelSelectionService（切换时卸载旧模型的语义不变）。 ----
+
+    private JsonNode aiEngineStatus(CancellationToken cancellation) {
+        cancellation.throwIfCancelled();
+        var active = context().getBean(AiProviderProfileService.class).activeProfile();
+        AiStatus ollama = context().getBean(AiStatusService.class).checkStatus();
+        ObjectNode node = mapper.createObjectNode();
+        node.put("networkActive", active.isPresent());
+        node.put("activeKind", active.isPresent() ? active.get().kind().name() : "OLLAMA");
+        node.put("displayName", active.isPresent() ? active.get().displayName() : "本地 Ollama");
+        String selectedModel = active.isPresent()
+            ? active.get().model()
+            : context().getBean(AiModelSelectionService.class).refresh().selectedModel();
+        node.put("selectedModel", selectedModel);
+        node.put("ollamaAvailable", ollama.available());
+        node.put("ollamaModelCount", ollama.modelCount());
+        node.put("message", ollama.message());
+        return node;
+    }
+
+    private JsonNode aiModelList(CancellationToken cancellation) {
+        cancellation.throwIfCancelled();
+        return mapper.valueToTree(context().getBean(AiModelSelectionService.class).refresh());
+    }
+
+    private JsonNode aiModelSelect(JsonNode params, CancellationToken cancellation) {
+        cancellation.throwIfCancelled();
+        String model = requiredText(params, "model", 120);
+        return mapper.valueToTree(context().getBean(AiModelSelectionService.class).select(model));
     }
 
     private AiProviderProfileDraft providerDraft(JsonNode params) {

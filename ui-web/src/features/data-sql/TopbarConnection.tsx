@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
-import { Button, Dialog, useToast } from "../../shared/ui";
+import { Button, Dialog, Feedback, FormField, useToast } from "../../shared/ui";
 import { localAppRequest } from "../../shared/ipc";
 import { connectionsQuery } from "../../app/queries";
 import {
@@ -12,11 +12,14 @@ import {
 } from "./ConnectionManager";
 import { subscribeConnectionPanel } from "./connectionPanel";
 import type { ConnectionDraft } from "./ConnectionManager";
-import type { ConnectionSummary } from "../../shared/types";
+import type { ConnectionSummary, ConnectionTestResult } from "../../shared/types";
 
 // v3.4.4 CTB-1：数据库连接提升为全局顶栏入口，紧邻通知按钮。chip 显示当前连接，
 // popover 负责清单与快速切换（点行即设为当前），新建/编辑在 Dialog 中承载表单。
+// v3.10.0 HAJ-5：另加"测试当前连接"一键校验与服务器型连接的"重新输入密码"快捷恢复。
+// v3.10.0 HAJ-1 修订：AI 引擎分区撤出本弹层，移至独立顶栏按钮 TopbarAiEngine。
 type EditingTarget = { key: number; isNew: boolean; builtIn: boolean; draft: ConnectionDraft };
+type ReauthTarget = { id: string; displayName: string };
 
 // v3.4.4：清单行显示连接目标（文件名 / 主机:端口/库），让内置库与用户自建库一眼可辨。
 function connectionTargetDetail(item: ConnectionSummary): string {
@@ -39,23 +42,32 @@ export default function TopbarConnection() {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<EditingTarget>();
   const [deleteTarget, setDeleteTarget] = useState<ConnectionSummary>();
+  const [reauth, setReauth] = useState<ReauthTarget>();
+  const [reauthPassword, setReauthPassword] = useState("");
+  const [reauthError, setReauthError] = useState("");
+  const [quickTest, setQuickTest] = useState<ConnectionTestResult | null>(null);
   const items = connections.data?.items ?? [];
   const current = items.find((item) => item.selected);
+  // 服务器型连接（非文件型）才有"重新输入密码"的恢复语义；文件型无凭据。
+  const isFileBased = (dialect: string) =>
+    dialects.find((option) => option.name === dialect)?.fileBased ?? false;
 
   // 数据页侧栏「管理」按钮与空态「连接数据库」按钮都走这个通道唤起面板。
   useEffect(() => subscribeConnectionPanel(() => setOpen(true)), []);
-  // v3.5.0 反馈：面板点击外部即关闭；表单/删除确认对话框打开时不抢它们的交互。
+  // v3.5.0 反馈：面板点击外部即关闭。连接表单与重新输入密码的 Dialog 渲染在弹层
+  // DOM 之外的固定背板上，背板内的按下不算"点击外部"（AI 弹层同规则，见 TopbarAiEngine）。
   const anchorRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    if (!open || editing || deleteTarget) return;
+    if (!open) return;
     const onPointerDown = (event: MouseEvent) => {
-      if (!anchorRef.current?.contains(event.target as Node)) {
-        setOpen(false);
-      }
+      const target = event.target as HTMLElement;
+      if (anchorRef.current?.contains(target)) return;
+      if (target.closest(".ui-dialog-backdrop")) return;
+      setOpen(false);
     };
     document.addEventListener("mousedown", onPointerDown);
     return () => document.removeEventListener("mousedown", onPointerDown);
-  }, [open, editing, deleteTarget]);
+  }, [open]);
 
   const refresh = () => client.invalidateQueries({ queryKey: connectionsQuery.queryKey });
   const select = useMutation({
@@ -74,6 +86,38 @@ export default function TopbarConnection() {
     },
     onError: (error: Error) => toast("error", `删除连接失败：${error.message}`),
   });
+  // v3.10.0 HAJ-5：一键校验当前连接。密码为空时 Java 侧回退本进程会话凭据，语义不变。
+  const testCurrent = useMutation({
+    mutationFn: (connectionId: string) =>
+      localAppRequest<ConnectionTestResult>("data.connection.test", { connectionId }),
+    onSuccess: (result) => setQuickTest(result),
+    onError: (error: Error) => toast("error", `测试失败：${error.message}`),
+  });
+  // v3.10.0 HAJ-5：认证失败快捷恢复——只输密码重验，成功即回写本进程会话凭据。
+  const reauthTest = useMutation({
+    mutationFn: (input: { connectionId: string; password: string }) =>
+      localAppRequest<ConnectionTestResult>("data.connection.test", {
+        connectionId: input.connectionId,
+        password: input.password,
+      }),
+    onSuccess: (result) => {
+      if (result.successful) {
+        setReauth(undefined);
+        setReauthPassword("");
+        setReauthError("");
+        void refresh();
+        toast("success", "密码已验证，本次运行内有效");
+      } else {
+        setReauthError(result.message);
+      }
+    },
+    onError: (error: Error) => setReauthError(error.message),
+  });
+  const startReauth = (item: ConnectionSummary) => {
+    setReauth({ id: item.id, displayName: item.displayName });
+    setReauthPassword("");
+    setReauthError("");
+  };
   const openEditor = (draft: ConnectionDraft, isNew: boolean, builtIn = false) => {
     setEditing({ key: Date.now(), isNew, builtIn, draft });
   };
@@ -148,6 +192,11 @@ export default function TopbarConnection() {
                   >
                     编辑
                   </Button>
+                  {!isFileBased(item.dialect) && (
+                    <Button variant="secondary" onClick={() => startReauth(item)}>
+                      重新输入密码
+                    </Button>
+                  )}
                   {!item.builtIn && (
                     <Button variant="secondary" onClick={() => copyConnection(item)}>
                       复制
@@ -168,8 +217,25 @@ export default function TopbarConnection() {
             )}
           </ul>
           <div className="connection-popover-footer">
+            <Button
+              variant="secondary"
+              disabled={!current}
+              busy={testCurrent.isPending}
+              onClick={() => current && testCurrent.mutate(current.id)}
+            >
+              测试当前连接
+            </Button>
             <Button onClick={() => openEditor(emptyConnection(), true)}>新建连接</Button>
           </div>
+          {quickTest && (
+            <p
+              className={`connection-test-result ${quickTest.successful ? "ok" : "bad"}`}
+              role="status"
+            >
+              {quickTest.successful ? "✓ " : "✕ "}
+              {quickTest.message}
+            </p>
+          )}
         </section>
       )}
       <Dialog
@@ -206,6 +272,43 @@ export default function TopbarConnection() {
             onClick={() => deleteTarget && remove.mutate(deleteTarget.id)}
           >
             确认删除
+          </Button>
+        </div>
+      </Dialog>
+      <Dialog
+        open={Boolean(reauth)}
+        title="重新输入数据库密码"
+        onClose={() => setReauth(undefined)}
+      >
+        <p className="muted">
+          “{reauth?.displayName}”的密码只暂存在本进程内存中，应用重启后需重新验证；验证成功后本次运行内可直接使用。
+        </p>
+        <FormField label="数据库密码">
+          {(ids) => (
+            <input
+              {...ids}
+              type="password"
+              autoComplete="current-password"
+              value={reauthPassword}
+              onChange={(event) => setReauthPassword(event.target.value)}
+            />
+          )}
+        </FormField>
+        {reauthError && (
+          <Feedback tone="error" title="验证失败">
+            {reauthError}
+          </Feedback>
+        )}
+        <div className="button-row">
+          <Button variant="secondary" onClick={() => setReauth(undefined)}>
+            取消
+          </Button>
+          <Button
+            busy={reauthTest.isPending}
+            disabled={!reauthPassword}
+            onClick={() => reauth && reauthTest.mutate({ connectionId: reauth.id, password: reauthPassword })}
+          >
+            验证密码
           </Button>
         </div>
       </Dialog>

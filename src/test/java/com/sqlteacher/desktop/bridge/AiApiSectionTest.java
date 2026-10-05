@@ -3,15 +3,22 @@ package com.sqlteacher.desktop.bridge;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.sqlteacher.application.ai.AiAvailability;
 import com.sqlteacher.application.ai.AiContextCategory;
 import com.sqlteacher.application.ai.AiContextPreview;
+import com.sqlteacher.application.ai.AiModelSelection;
+import com.sqlteacher.application.ai.AiModelSelectionService;
 import com.sqlteacher.application.ai.AiProviderKind;
 import com.sqlteacher.application.ai.AiProviderProfile;
 import com.sqlteacher.application.ai.AiProviderProfileDraft;
 import com.sqlteacher.application.ai.AiProviderProfileService;
 import com.sqlteacher.application.ai.AiProviderProbeResult;
 import com.sqlteacher.application.ai.AiProviderProbeService;
+import com.sqlteacher.application.ai.AiStatus;
+import com.sqlteacher.application.ai.AiStatusService;
+import com.sqlteacher.application.ai.AiTaskErrorCode;
 import com.sqlteacher.application.ai.AiTaskType;
+import com.sqlteacher.application.ai.OpenAiCompatibleConfiguration;
 import com.sqlteacher.application.connection.ConnectionManagementService;
 import com.sqlteacher.application.connection.DatabaseConnectionProfile;
 import com.sqlteacher.application.connection.DatabaseDialect;
@@ -326,6 +333,207 @@ class AiApiSectionTest {
             assertTrue(result.path("success").asBoolean());
             assertEquals(1, result.path("models").size());
             assertFalse(result.toString().contains("sk-live"));
+        }
+    }
+
+    // v3.10.0 HAJ-9：「发现模型」——ai.provider.models 复用同一探测服务，响应不含密钥材料。
+    @Test
+    void aiProviderModelsProbesTheTypedEndpointAndZeroesTheCredential() throws Exception {
+        List<Object[]> probes = new ArrayList<>();
+        var probe = fake(AiProviderProbeService.class, Map.of(
+            "probe", args -> {
+                probes.add(args);
+                AiProviderProfileDraft draft = (AiProviderProfileDraft) args[0];
+                if (draft.kind() != AiProviderKind.OPENAI_COMPATIBLE
+                    || !draft.endpoint().equals(URI.create("https://api.example.com"))) {
+                    throw new IllegalArgumentException("probe must receive the typed kind and endpoint");
+                }
+                if (!new String((char[]) args[1]).equals("sk-live")) {
+                    throw new IllegalArgumentException("probe must receive the typed credential");
+                }
+                return new AiProviderProbeResult(true,
+                    List.of("example-chat", "example-mini"), "连接成功，发现 2 个模型。", null);
+            }));
+        try (var host = hostWithBeans(probe)) {
+            AiApiSection section = new AiApiSection(host);
+            ObjectNode params = mapper.createObjectNode();
+            params.put("endpoint", "https://api.example.com");
+            params.put("credential", "sk-live");
+
+            JsonNode result = section.handle("ai.provider.models", params, () -> false, ignored -> { });
+
+            assertTrue(result.path("success").asBoolean());
+            assertEquals("连接成功，发现 2 个模型。", result.path("message").asText());
+            assertEquals(List.of("example-chat", "example-mini"), mapper.convertValue(
+                result.path("models"), mapper.getTypeFactory().constructCollectionType(List.class, String.class)));
+            assertFalse(result.hasNonNull("errorCode"));
+            assertFalse(result.toString().contains("sk-live"));
+        }
+        // 调用返回后凭据数组被清零，不在前端可达的任何缓冲区残留。
+        assertEquals("\u0000\u0000\u0000\u0000\u0000\u0000\u0000", new String((char[]) probes.get(0)[1]));
+    }
+
+    @Test
+    void aiProviderModelsBorrowsTheStoredCredentialWhenEditingWithoutRetyping() throws Exception {
+        List<Object[]> probes = new ArrayList<>();
+        List<String> probedCredentials = new ArrayList<>();
+        var probe = fake(AiProviderProbeService.class, Map.of(
+            "probe", args -> {
+                probes.add(args);
+                // probe 消费密钥后，AiApiSection 的 finally 会把数组清零，因此必须在调用内快照。
+                probedCredentials.add(new String((char[]) args[1]));
+                return new AiProviderProbeResult(true, List.of("stored-chat"), "连接成功，发现 1 个模型。", null);
+            }));
+        List<String> configurationIds = new ArrayList<>();
+        var providers = fake(AiProviderProfileService.class, Map.of(
+            "configuration", args -> {
+                configurationIds.add((String) args[0]);
+                return Optional.of(new OpenAiCompatibleConfiguration(
+                    URI.create("https://api.example.com"), "stored-chat", "sk-stored".toCharArray()));
+            }));
+        try (var host = hostWithBeans(providers, probe)) {
+            AiApiSection section = new AiApiSection(host);
+            ObjectNode params = mapper.createObjectNode();
+            params.put("id", "deepseek");
+            params.put("endpoint", "https://api.example.com");
+
+            JsonNode result = section.handle("ai.provider.models", params, () -> false, ignored -> { });
+
+            assertTrue(result.path("success").asBoolean());
+            assertEquals(1, result.path("models").size());
+            assertEquals(List.of("deepseek"), configurationIds);
+            assertEquals(List.of("sk-stored"), probedCredentials);
+            // 借用的密钥副本是一次性契约：probe 消费后清零，响应与可达缓冲区均无残留。
+            assertEquals("\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000", new String((char[]) probes.get(0)[1]));
+            assertFalse(result.toString().contains("sk-stored"));
+        }
+    }
+
+    @Test
+    void aiProviderModelsProbesWithAnEmptyCredentialWhenNothingIsStoredOrTyped() throws Exception {
+        List<Object[]> probes = new ArrayList<>();
+        var probe = fake(AiProviderProbeService.class, Map.of(
+            "probe", args -> {
+                probes.add(args);
+                return new AiProviderProbeResult(false, List.of(),
+                    "认证失败，请检查 API Key。", AiTaskErrorCode.AUTHENTICATION_FAILED);
+            }));
+        try (var host = hostWithBeans(probe)) {
+            AiApiSection section = new AiApiSection(host);
+            ObjectNode params = mapper.createObjectNode();
+            params.put("endpoint", "https://api.example.com");
+
+            JsonNode result = section.handle("ai.provider.models", params, () -> false, ignored -> { });
+
+            assertEquals("", new String((char[]) probes.get(0)[1]));
+            assertFalse(result.path("success").asBoolean());
+            assertEquals("认证失败，请检查 API Key。", result.path("message").asText());
+            assertEquals("AUTHENTICATION_FAILED", result.path("errorCode").asText());
+        }
+    }
+
+    @Test
+    void aiProviderModelsSurfacesTheClassifiedProbeFailure() throws Exception {
+        var probe = fake(AiProviderProbeService.class, Map.of(
+            "probe", args -> new AiProviderProbeResult(false, List.of(),
+                "Provider 正在限流，请稍后重试。", AiTaskErrorCode.RATE_LIMITED)));
+        try (var host = hostWithBeans(probe)) {
+            AiApiSection section = new AiApiSection(host);
+            ObjectNode params = mapper.createObjectNode();
+            params.put("endpoint", "https://api.example.com");
+            params.put("credential", "sk-live");
+
+            JsonNode result = section.handle("ai.provider.models", params, () -> false, ignored -> { });
+
+            assertFalse(result.path("success").asBoolean());
+            assertEquals("Provider 正在限流，请稍后重试。", result.path("message").asText());
+            assertEquals("RATE_LIMITED", result.path("errorCode").asText());
+            assertEquals(0, result.path("models").size());
+        }
+    }
+
+    @Test
+    void aiEngineStatusReportsActiveNetworkProfileWithoutEndpointLeak() throws Exception {
+        var providers = fake(AiProviderProfileService.class, Map.of(
+            "activeProfile", args -> Optional.of(new AiProviderProfile("deepseek", "DeepSeek",
+                AiProviderKind.OPENAI_COMPATIBLE, URI.create("https://api.deepseek.com"),
+                "deepseek-chat", true, "dpapi:device-reference"))));
+        var ollama = fake(AiStatusService.class, Map.of(
+            "checkStatus", args -> new AiStatus(AiAvailability.AVAILABLE, "ollama",
+                "http://localhost:11434", 3, "Ollama service reachable, models=3")));
+        try (var host = hostWithBeans(providers, ollama)) {
+            AiApiSection section = new AiApiSection(host);
+
+            JsonNode result = section.handle("ai.engine.status", mapper.createObjectNode(),
+                () -> false, ignored -> { });
+
+            // v3.10.0 HAJ-3：网络供应商生效时状态携带显示名与模型，不携带 endpoint/密钥材料。
+            assertTrue(result.path("networkActive").asBoolean());
+            assertEquals("OPENAI_COMPATIBLE", result.path("activeKind").asText());
+            assertEquals("DeepSeek", result.path("displayName").asText());
+            assertEquals("deepseek-chat", result.path("selectedModel").asText());
+            assertTrue(result.path("ollamaAvailable").asBoolean());
+            assertEquals(3, result.path("ollamaModelCount").asInt());
+            assertFalse(result.toString().contains("api.deepseek.com"));
+            assertFalse(result.toString().toLowerCase().contains("credential"));
+        }
+    }
+
+    @Test
+    void aiEngineStatusFallsBackToLocalOllamaAndRefreshesModelSelection() throws Exception {
+        List<Object[]> refreshes = new ArrayList<>();
+        var providers = fake(AiProviderProfileService.class, Map.of(
+            "activeProfile", args -> Optional.empty()));
+        var ollama = fake(AiStatusService.class, Map.of(
+            "checkStatus", args -> new AiStatus(AiAvailability.UNAVAILABLE, "ollama",
+                "http://localhost:11434", 0, "Ollama service unavailable: ConnectException")));
+        var selection = fake(AiModelSelectionService.class, Map.of(
+            "refresh", args -> {
+                refreshes.add(args);
+                return new AiModelSelection(List.of(), "", "Ollama is running, but no local model is installed");
+            }));
+        try (var host = hostWithBeans(providers, ollama, selection)) {
+            AiApiSection section = new AiApiSection(host);
+
+            JsonNode result = section.handle("ai.engine.status", mapper.createObjectNode(),
+                () -> false, ignored -> { });
+
+            assertFalse(result.path("networkActive").asBoolean());
+            assertEquals("OLLAMA", result.path("activeKind").asText());
+            assertEquals("本地 Ollama", result.path("displayName").asText());
+            assertEquals("", result.path("selectedModel").asText());
+            assertFalse(result.path("ollamaAvailable").asBoolean());
+            // 状态打开即探测一次本地模型选择，避免首页长期展示过期缓存。
+            assertEquals(1, refreshes.size());
+        }
+    }
+
+    @Test
+    void aiModelListAndSelectWrapTheSelectionService() throws Exception {
+        List<String> selected = new ArrayList<>();
+        var selection = fake(AiModelSelectionService.class, Map.of(
+            "refresh", args -> new AiModelSelection(
+                List.of("qwen2.5:7b", "llama3:8b"), "qwen2.5:7b", "Detected 2 local model(s)"),
+            "select", args -> {
+                selected.add((String) args[0]);
+                return new AiModelSelection(
+                    List.of("qwen2.5:7b", "llama3:8b"), (String) args[0], "Selected model: " + args[0]);
+            }));
+        try (var host = hostWithBeans(selection)) {
+            AiApiSection section = new AiApiSection(host);
+
+            JsonNode list = section.handle("ai.model.list", mapper.createObjectNode(),
+                () -> false, ignored -> { });
+            assertEquals(2, list.path("installedModels").size());
+            assertEquals("qwen2.5:7b", list.path("selectedModel").asText());
+
+            JsonNode picked = section.handle("ai.model.select",
+                mapper.createObjectNode().put("model", "llama3:8b"), () -> false, ignored -> { });
+            assertEquals(List.of("llama3:8b"), selected);
+            assertEquals("llama3:8b", picked.path("selectedModel").asText());
+
+            assertThrows(IllegalArgumentException.class, () -> section.handle("ai.model.select",
+                mapper.createObjectNode().put("model", "  "), () -> false, ignored -> { }));
         }
     }
 }
