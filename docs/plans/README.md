@@ -8,7 +8,7 @@
 
 | 版本/主题 | 计划 | 对应实施记录 |
 | --- | --- | --- |
-| v3.11.0 | [自然语言建模生成 E-R 图计划](2026-10-27-v3.11.0-er-modeling-plan.md)（实施中，2026-10-27 启动：自然语言需求 → 教材陈氏记号 E-R 图，React Flow + elkjs 渲染、Java 确定性校验；含 v3.5.0 "不做 ER 建模" 决策变更声明） | 实施中 |
+| v3.11.0 | [自然语言建模生成 E-R 图计划](2026-10-27-v3.11.0-er-modeling-plan.md)（已发布（2026-10-28，CI 全流程发布 + 签名清单部署）：自然语言需求 → 教材陈氏记号 E-R 图，React Flow + elkjs 渲染、Java 确定性校验；含 v3.5.0 "不做 ER 建模" 决策变更声明） | [v3.11.0 部署记录](../operations/2026-10-28-v3.11.0-release-deployment.md)，见 [发布说明](../releases/v3.11.0.md) |
 | v3.10.0 | [顶栏 AI 引擎与数据连接完善计划](2026-10-06-topbar-ai-engine-and-connection-plan.md)（已发布（2026-10-06，CI 全流程发布）：AI 引擎独立顶栏按钮 + 弹层、19 家厂商预设、发现模型、连接认证快捷恢复；依据 [AI 功能优化调研](2026-10-06-ai-capability-optimization-research.md)） | [v3.10.0 部署记录](../operations/2026-10-06-v3.10.0-release-deployment.md)，见 [发布说明](../releases/v3.10.0.md) |
 | v3.9.0 | [一体化界面与体验改进计划](2026-09-23-v3.9.0-integrated-ui-plan.md)（首增量已随 v3.9.0 发布——INT-1 任务直达切片 + 两个用户反馈修复，见[发布说明](../releases/v3.9.0.md)；INT-2 至 VIS 批次实施中；[调研](2026-09-23-v3.9.0-integrated-ui-research.md)） | [G0 基线与首条切片](../acceptance/2026-09-23-v3.9.0-ui-baseline.md) |
 | v3.8.0 | [账号体系与界面优化计划](2026-09-21-v3.8.0-account-ui-plan.md)（已发布；调研输入见 [调研报告](2026-09-21-v3.8.0-account-ui-research.md)） | 已发布（2026-09-21，CI 全流程发布），见 [发布说明](../releases/v3.8.0.md)；UIX-1 剩余/深链/ACC-S5 归视觉走查轮与后续 |

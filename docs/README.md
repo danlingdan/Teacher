@@ -4,14 +4,14 @@
 
 ## 当前基线
 
-- 当前代码版本：`3.10.0`（最新 tag）
-- 当前能力基线：[能力总览](guide/00-capability-overview.md)（适用 3.10.0，随公开发布更新）
-- 当前公开正式版本：[v3.10.0](releases/v3.10.0.md)（GitHub Release Latest）
-- 上一公开正式版本：[v3.9.0](releases/v3.9.0.md)（v3.5.0–v3.10.0 均已公开发布）
-- 当前迭代计划：[自然语言建模生成 E-R 图计划](plans/2026-10-27-v3.11.0-er-modeling-plan.md)（实施中，2026-10-27 启动：自然语言需求 → 教材陈氏记号 E-R 图）；上一轮 [v3.10.0 顶栏 AI 引擎与数据连接完善计划](plans/2026-10-06-topbar-ai-engine-and-connection-plan.md) 已发布（2026-10-06，CI 全流程发布 + ECS 清单部署，见 [发布说明](releases/v3.10.0.md)；其输入为 [AI 功能优化调研](plans/2026-10-06-ai-capability-optimization-research.md)，其余建议（提示阶梯、KBQ-2 收尾等）未排期）；再上一轮 [v3.9.0 计划](plans/2026-09-23-v3.9.0-integrated-ui-plan.md) 首增量已发布，INT-2 至 VIS 批次实施中
+- 当前代码版本：`3.11.0`（最新 tag）
+- 当前能力基线：[能力总览](guide/00-capability-overview.md)（适用 3.11.0，随公开发布更新）
+- 当前公开正式版本：[v3.11.0](releases/v3.11.0.md)（GitHub Release Latest）
+- 上一公开正式版本：[v3.10.0](releases/v3.10.0.md)（v3.5.0–v3.11.0 均已公开发布）
+- 当前迭代计划：[自然语言建模生成 E-R 图计划](plans/2026-10-27-v3.11.0-er-modeling-plan.md)（已发布（2026-10-28，CI 全流程发布 + 签名清单部署），见 [发布说明](releases/v3.11.0.md)）；上一轮 [v3.10.0 顶栏 AI 引擎与数据连接完善计划](plans/2026-10-06-topbar-ai-engine-and-connection-plan.md) 已发布（2026-10-06，CI 全流程发布 + ECS 清单部署，见 [发布说明](releases/v3.10.0.md)；其输入为 [AI 功能优化调研](plans/2026-10-06-ai-capability-optimization-research.md)，其余建议（提示阶梯、KBQ-2 收尾等）未排期）；再上一轮 [v3.9.0 计划](plans/2026-09-23-v3.9.0-integrated-ui-plan.md) 首增量已发布，INT-2 至 VIS 批次实施中
 - 最近一轮功能计划：[v3.3 SQL 教学能力全面提升计划](plans/2026-09-10-v3.3-sql-teaching-capability-plan.md)（已交付，v3.3.0–v3.3.4 均已发布）
 - 实施记录：自 [stage29](history/stages/stage29/README.md) 起实施证据收敛为发布说明、验收记录与运维记录三件套；早期阶段见 [阶段实施记录索引](history/stages/README.md)
-- 当前生产部署记录：[v3.10.0 CI 发布与更新清单部署记录](operations/2026-10-06-v3.10.0-release-deployment.md)（LEG-15 回执 + CI 签名清单原子替换并经公网验证；上一轮 [v3.9.0](operations/2026-10-01-v3.9.0-release-deployment.md)）
+- 当前生产部署记录：[v3.11.0 CI 发布与更新清单部署记录](operations/2026-10-28-v3.11.0-release-deployment.md)（LEG-15 回执 + CI 签名清单原子替换并经公网验证；首跑 npm audit 拦下 dompurify 关键漏洞，修复后 tag 重打；上一轮 [v3.10.0](operations/2026-10-06-v3.10.0-release-deployment.md)）
 
 > “当前”以 `pom.xml`、Git 标签和实际代码为准。计划文档记录制定时的基线，不应被当作实时状态页。
 
