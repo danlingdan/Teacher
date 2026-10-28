@@ -36,6 +36,7 @@
     "ai.knowledge.ask",
     "ai.model.list",
     "ai.model.select",
+    "ai.modeling.er.generate",
     "ai.provider.activate",
     "ai.provider.deactivate",
     "ai.provider.list",

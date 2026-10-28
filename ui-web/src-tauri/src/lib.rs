@@ -242,6 +242,7 @@ const ALLOWED_METHODS: &[&str] = &[
     "ai.engine.status",
     "ai.model.list",
     "ai.model.select",
+    "ai.modeling.er.generate",
     "teaching.workspace",
     "teaching.exercise.toggle",
     "teaching.exercise.detail",

@@ -14,6 +14,8 @@ import com.sqlteacher.application.ai.AiStatus;
 import com.sqlteacher.application.ai.AiStatusService;
 import com.sqlteacher.application.ai.OpenAiCompatibleConfiguration;
 import com.sqlteacher.application.connection.ConnectionManagementService;
+import com.sqlteacher.application.ermodel.ErModelingRequest;
+import com.sqlteacher.application.ermodel.ErModelingService;
 import com.sqlteacher.application.exercise.ExerciseExplainRequest;
 import com.sqlteacher.application.exercise.ExerciseTextDraftingService;
 import com.sqlteacher.application.knowledge.CourseKnowledgeSearchFilter;
@@ -41,7 +43,7 @@ final class AiApiSection extends ApiSection {
         return Set.of("ai.knowledge.ask", "ai.sql.preview", "ai.sql.generate", "ai.exercise.explain",
             "ai.provider.list", "ai.provider.save", "ai.provider.activate", "ai.provider.deactivate",
             "ai.provider.remove", "ai.provider.test", "ai.provider.models",
-            "ai.engine.status", "ai.model.list", "ai.model.select");
+            "ai.engine.status", "ai.model.list", "ai.model.select", "ai.modeling.er.generate");
     }
 
     @Override
@@ -62,6 +64,7 @@ final class AiApiSection extends ApiSection {
             case "ai.engine.status" -> aiEngineStatus(cancellation);
             case "ai.model.list" -> aiModelList(cancellation);
             case "ai.model.select" -> aiModelSelect(params, cancellation);
+            case "ai.modeling.er.generate" -> aiModelingErGenerate(params, cancellation);
             default -> throw new IllegalStateException("Method whitelist and dispatcher are inconsistent");
         };
     }
@@ -128,6 +131,19 @@ final class AiApiSection extends ApiSection {
             .orElseThrow(() -> new IllegalArgumentException("Database connection was not found"));
         if (!profile.enabled()) throw new IllegalArgumentException("Database connection is disabled");
         return new Nl2SqlRequest(requiredText(params, "question", 2_000), profile.id(), profile.dialect());
+    }
+
+    /**
+     * v3.11.0 ERM-4: E-R 建模生成。需求文本在此做边界校验（trim 非空、≤2000 字符）；
+     * AI 草稿已在 Java 服务侧完成确定性校验后才允许出桥，失败态不抛异常，按契约结构透传
+     * （erModel 仅在 OK 态非空，errors 为聚合校验原因，message 为脱敏中文摘要）。
+     */
+    private JsonNode aiModelingErGenerate(JsonNode params, CancellationToken cancellation) {
+        cancellation.throwIfCancelled();
+        String requirement = requiredText(params, "requirement", 2_000);
+        var result = context().getBean(ErModelingService.class).generate(new ErModelingRequest(requirement));
+        cancellation.throwIfCancelled();
+        return mapper.valueToTree(result);
     }
 
     private JsonNode aiExerciseExplain(JsonNode params, CancellationToken cancellation) {

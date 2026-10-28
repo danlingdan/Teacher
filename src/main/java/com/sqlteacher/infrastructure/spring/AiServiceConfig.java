@@ -12,6 +12,7 @@ import com.sqlteacher.application.ai.AiProviderProbeService;
 import com.sqlteacher.application.collaboration.FeedbackDraftEnhancer;
 import com.sqlteacher.application.config.SqlTeacherConfiguration;
 import com.sqlteacher.application.connection.ConnectionManagementService;
+import com.sqlteacher.application.ermodel.ErModelingService;
 import com.sqlteacher.application.event.LearningEventService;
 import com.sqlteacher.application.exercise.ExerciseManagementService;
 import com.sqlteacher.application.exercise.ExerciseTextDraftingService;
@@ -124,6 +125,22 @@ public class AiServiceConfig {
         return new DefaultNl2SqlSafetyService(
             nl2SqlService,
             riskAnalysisService,
+            learningEventService
+        );
+    }
+
+    /** v3.11.0 ERM-3: AI 起草、Java 确定性校验的 E-R 建模服务；装配方式与 NL2SQL 一致。 */
+    @Bean
+    public ErModelingService erModelingService(
+        AiModelProvider aiModelProvider,
+        SqlTeacherConfiguration properties,
+        AiModelSelectionService modelSelectionService,
+        LearningEventService learningEventService
+    ) {
+        return new ErModelingServiceImpl(
+            aiModelProvider,
+            properties.ai(),
+            modelSelectionService,
             learningEventService
         );
     }

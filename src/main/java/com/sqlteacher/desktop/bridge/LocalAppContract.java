@@ -32,7 +32,7 @@ public final class LocalAppContract {
         "sql.result.export", "ai.knowledge.ask", "ai.sql.preview", "ai.sql.generate", "ai.exercise.explain",
         "ai.provider.list", "ai.provider.save", "ai.provider.activate", "ai.provider.deactivate",
         "ai.provider.remove", "ai.provider.test", "ai.provider.models",
-        "ai.engine.status", "ai.model.list", "ai.model.select",
+        "ai.engine.status", "ai.model.list", "ai.model.select", "ai.modeling.er.generate",
         "account.login", "account.register", "account.logout", "account.password.change",
         "account.password.reset.request", "account.password.reset",
         "account.email.bind", "account.email.verify", "account.profile.update",

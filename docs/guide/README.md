@@ -16,6 +16,7 @@
 - [专业基础离线实验](17-professional-foundation-labs.md)
 - [项目学习、课程包与 Cloud 2.0](18-project-course-package-cloud2.md)
 - [Beta 学习活动、证据与兼容契约](19-beta-learning-contracts.md)
+- [数据建模：AI 生成 E-R 图](25-er-modeling.md)
 
 ## 使用指南：教师
 

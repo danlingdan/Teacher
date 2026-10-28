@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
-import { Bell, BookOpen, Braces, Cloud, Database, GraduationCap, Home, Settings as SettingsIcon, type LucideIcon } from "lucide-react";
+import { Bell, BookOpen, Braces, Cloud, Database, GraduationCap, Home, Network, Settings as SettingsIcon, type LucideIcon } from "lucide-react";
 import { UpdateDialog } from "./shared/UpdateDialog";
 import { useAppVersion } from "./shared/appVersion";
 import {
@@ -37,6 +37,7 @@ import {
 const KnowledgePage = lazy(() => import("./features/knowledge/KnowledgePage"));
 const EditorPage = lazy(() => import("./features/editor/EditorPage"));
 const DataSqlPage = lazy(() => import("./features/data-sql/DataSqlPage"));
+const ModelingPage = lazy(() => import("./features/data-modeling/ModelingPage"));
 const TeachingPage = lazy(() =>
   import("./features/platform/PlatformPages").then((module) => ({
     default: module.TeachingPage,
@@ -66,6 +67,7 @@ const navigation: NavigationItem[] = [
   { to: "/knowledge", label: "课程与知识", detail: "阅读与检索", icon: BookOpen },
   { to: "/practice", label: "练习与实验", detail: "编码与活动", icon: Braces },
   { to: "/data", label: "数据与 SQL", detail: "连接与查询", icon: Database },
+  { to: "/modeling", label: "数据建模", detail: "AI 生成 E-R 图", icon: Network },
   {
     to: "/teaching",
     label: "教学空间",
@@ -122,6 +124,14 @@ export default function App() {
             element={
               <ErrorBoundary>
                 <DataSqlPage />
+              </ErrorBoundary>
+            }
+          />
+          <Route
+            path="modeling"
+            element={
+              <ErrorBoundary>
+                <ModelingPage />
               </ErrorBoundary>
             }
           />

@@ -8,7 +8,7 @@
 
 | 条目 | 来源 | 挂起理由 / 重启条件 |
 | --- | --- | --- |
-| databaselearning 三件套处置（接线或下线） | v3.4.2 排查 | `WebDataLabService`（网页表格数据预览 + INSERT 草稿）、`DatabaseModelingService`（需求 → 建模草稿/DDL）、`LearningGoalCatalogService`（学习目标目录）——v2.1.0 引入，现无桥接、无 Spring 装配、无消费方（289 行生产代码 + 126 行测试仍随 `mvn test` 执行）。接线前 WebDataLab 须先过"不可信内容"安全评估；下线则删除并归档测试。需产品决策。 |
+| databaselearning 三件套处置（接线或下线） | v3.4.2 排查 | `WebDataLabService`（网页表格数据预览 + INSERT 草稿）、`DatabaseModelingService`（需求 → 建模草稿/DDL）、`LearningGoalCatalogService`（学习目标目录）——v2.1.0 引入，现无桥接、无 Spring 装配、无消费方（289 行生产代码 + 126 行测试仍随 `mvn test` 执行）。接线前 WebDataLab 须先过"不可信内容"安全评估；下线则删除并归档测试。需产品决策。2026-10-27 留痕：[v3.11.0 ER 建模计划](2026-10-27-v3.11.0-er-modeling-plan.md) 立项（自然语言 → 教材陈氏记号 E-R 图，独立新建接口），三件套**维持现状（不接线、不下线）**，待 ER 建模上线后再决策去留。 |
 | `editor.languages` 端点清理 | v3.4.2 排查 | 前端已静态 import monaco 语言定义，IPC 闲置。合同策略 `additive-within-v1` 不允许 v1 内删方法，待 IPC 合同升版（v2）时随版删除。 |
 | 首次启动一次性隐私提示 | v3.4.2 | 非阻塞、可关闭；当前 PRIVACY 全文已经设置页帮助与关于面板可达，无强制同意诉求。 |
 | 反馈截图附件 | v3.4.2 | `ScreenshotAttachment` 域模型与服务端已支持（PNG/JPEG、2 MiB、须无 EXIF），但 v3 桥 1 MiB IPC 请求上限装不下——需放宽上限或加图片压缩管线。 |

@@ -536,4 +536,88 @@ class AiApiSectionTest {
                 mapper.createObjectNode().put("model", "  "), () -> false, ignored -> { }));
         }
     }
+
+    // v3.11.0 ERM-4: E-R 建模生成——需求边界在桥接层校验，结果按 §4 契约字段名原样映射。
+
+    @Test
+    void aiModelingErGenerateMapsTheValidatedModelShape() throws Exception {
+        var model = new com.sqlteacher.domain.ermodel.ErModel("学生选课系统", "建模思路说明",
+            List.of(new com.sqlteacher.domain.ermodel.ErEntity("student", "学生", false,
+                List.of(new com.sqlteacher.domain.ermodel.ErAttribute("学号", true),
+                    new com.sqlteacher.domain.ermodel.ErAttribute("电话", false, List.of(), true, false)))),
+            List.of(new com.sqlteacher.domain.ermodel.ErRelationship("elective", "选修", false,
+                List.of(new com.sqlteacher.domain.ermodel.ErRelationshipMember("student", "m", false),
+                    new com.sqlteacher.domain.ermodel.ErRelationshipMember("course", "n", false)),
+                List.of(new com.sqlteacher.domain.ermodel.ErAttribute("成绩", false)))),
+            List.of(new com.sqlteacher.domain.ermodel.ErHierarchy("h_student", "ISA", "student",
+                List.of("undergraduate"))));
+        List<Object[]> generates = new ArrayList<>();
+        var service = fake(com.sqlteacher.application.ermodel.ErModelingService.class, Map.of(
+            "generate", args -> {
+                generates.add(args);
+                return com.sqlteacher.application.ermodel.ErModelingResult.ok(
+                    "test-model", "er-modeling-v1", model, "已生成 E-R 图：1 个实体、1 个联系。");
+            }));
+        try (var host = hostWithBeans(service)) {
+            AiApiSection section = new AiApiSection(host);
+
+            JsonNode result = section.handle("ai.modeling.er.generate", mapper.createObjectNode()
+                .put("requirement", "  设计一个学生选课系统 "), () -> false, ignored -> { });
+
+            assertEquals("OK", result.path("status").asText());
+            assertEquals("test-model", result.path("model").asText());
+            assertEquals("er-modeling-v1", result.path("promptVersion").asText());
+            assertEquals("学生选课系统", result.path("erModel").path("title").asText());
+            var student = result.path("erModel").path("entities").get(0);
+            assertEquals("student", student.path("id").asText());
+            assertEquals("学生", student.path("name").asText());
+            assertTrue(student.path("attributes").get(0).path("key").asBoolean());
+            assertTrue(student.path("attributes").get(1).path("multivalued").asBoolean());
+            var elective = result.path("erModel").path("relationships").get(0);
+            assertEquals("选修", elective.path("name").asText());
+            assertEquals("m", elective.path("members").get(0).path("cardinality").asText());
+            assertEquals("ISA", result.path("erModel").path("hierarchies").get(0).path("name").asText());
+            assertEquals("undergraduate",
+                result.path("erModel").path("hierarchies").get(0).path("subclasses").get(0).asText());
+            assertEquals(0, result.path("errors").size());
+        }
+        // 桥接层只做 trim 与上限校验，服务收到的是清洗后的需求文本。
+        assertEquals("设计一个学生选课系统",
+            ((com.sqlteacher.application.ermodel.ErModelingRequest) generates.get(0)[0]).requirement());
+    }
+
+    @Test
+    void aiModelingErGenerateRejectsBlankAndOversizedRequirementWithoutTheCore() {
+        AiApiSection section = new AiApiSection(hostWithoutCore());
+
+        assertThrows(IllegalArgumentException.class, () -> section.handle("ai.modeling.er.generate",
+            mapper.createObjectNode().put("requirement", "   "), () -> false, ignored -> { }));
+        assertThrows(IllegalArgumentException.class, () -> section.handle("ai.modeling.er.generate",
+            mapper.createObjectNode().put("requirement", "需".repeat(2001)), () -> false, ignored -> { }));
+        assertThrows(IllegalArgumentException.class, () -> section.handle("ai.modeling.er.generate",
+            mapper.createObjectNode(), () -> false, ignored -> { }));
+    }
+
+    @Test
+    void aiModelingErGeneratePassesFailureStatusThroughWithoutErModel() throws Exception {
+        var service = fake(com.sqlteacher.application.ermodel.ErModelingService.class, Map.of(
+            "generate", args -> com.sqlteacher.application.ermodel.ErModelingResult.failure(
+                com.sqlteacher.application.ermodel.ErGenerationStatus.VALIDATION_FAILED,
+                "test-model", "er-modeling-v1",
+                "AI 生成的 E-R 模型未通过校验，请调整需求后重试。",
+                List.of("联系 elective 的成员基数必须是 1、n、m 之一：N"))));
+        try (var host = hostWithBeans(service)) {
+            AiApiSection section = new AiApiSection(host);
+
+            JsonNode result = section.handle("ai.modeling.er.generate", mapper.createObjectNode()
+                .put("requirement", "设计一个学生选课系统"), () -> false, ignored -> { });
+
+            assertEquals("VALIDATION_FAILED", result.path("status").asText());
+            assertTrue(result.path("erModel").isNull(), "failed generations never carry a model");
+            assertEquals(1, result.path("errors").size());
+            assertTrue(result.path("errors").get(0).asText().contains("成员基数"));
+            assertTrue(result.path("message").asText().contains("未通过校验"));
+            assertEquals("er-modeling-v1", result.path("promptVersion").asText());
+        }
+    }
 }
