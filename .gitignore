@@ -9,6 +9,7 @@ docs/copyright/generated/
 .workbuddy/
 .reasonix/
 .qoder/
+.env/
 
 ### IntelliJ IDEA ###
 .idea/modules.xml
